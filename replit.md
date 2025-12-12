@@ -39,12 +39,20 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 - `ID_COLLISION` → ID Collision
 - `MISSING_PRIMARY_ID` → Missing ID
 
-### Finding Types (Non-Blocking)
+### Finding Types (Multi-Label)
+Findings are additive - one asset can trigger multiple findings:
 - **shadow_it**: Unauthorized/unmanaged applications
 - **governance_gap**: Missing ownership or unmapped vendor
 - **data_conflicts**: Data quality issues detected
 - **ops_risk**: High anomaly score (≥0.4)
 - **low_confidence**: Low classification confidence (<0.5)
+
+### Farm Bucket Classification (Mutually Exclusive)
+Persisted directly from Farm's classification - each asset belongs to exactly one bucket:
+- **clean**: No issues detected
+- **non_blocking**: Has findings but not blocked
+- **blocking**: Parked due to critical issues
+- **shadow**: Shadow IT assets
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
@@ -66,6 +74,9 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 - `GET /api/ingest/runs` - Get all catalog runs
 - `POST /api/farm/ingest` - Trigger Farm ingestion
 - `POST /api/reset` - Reset all assets and findings (preserves catalog history)
+- `GET /validation` - Validation page UI (Farm bucket counts)
+- `GET /api/validation/buckets` - Farm bucket counts JSON
+- `GET /api/validation/metrics` - Validation metrics JSON
 
 ## Running Locally
 ```bash
@@ -73,6 +84,10 @@ python main.py
 ```
 
 ## Recent Changes
+- **Dec 12, 2025**: Added farm_bucket column for Farm's mutually exclusive bucket classification (clean, non_blocking, blocking, shadow)
+- **Dec 12, 2025**: Created Validation page showing Farm's exclusive bucket counts with clear labeling
+- **Dec 12, 2025**: Updated Dashboard/Triage to show "X assets / Y findings" format for multi-label findings
+- **Dec 12, 2025**: Fixed Shadow IT to count across ALL lifecycle states (PARKED + CATALOGED)
 - **Dec 12, 2025**: Added "Reset All Data" button and Catalogs tab with full run history (company name, archetype, scale, duration, all counts)
 - **Dec 12, 2025**: Enhanced findings display with detailed evidence (shadow reasons, conflict types, anomaly scores, confidence levels)
 - **Dec 12, 2025**: Stage 2 complete - Real Farm contract, canonical lifecycle router, findings generation, reconciled dashboard counts

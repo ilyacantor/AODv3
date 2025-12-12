@@ -198,8 +198,12 @@ async function showAssetDetail(assetId) {
                 <h4 style="margin-bottom: 16px; color: var(--cyan-400);">Core Identity</h4>
                 <div class="detail-grid">
                     <div class="detail-item">
-                        <div class="detail-label">Asset ID</div>
-                        <div class="detail-value">${asset.id}</div>
+                        <div class="detail-label">Asset ID (AOD)</div>
+                        <div class="detail-value" style="font-size: 12px;">${asset.id}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Farm Asset ID</div>
+                        <div class="detail-value" style="font-size: 12px;">${asset.farm_asset_id || '-'}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Name</div>

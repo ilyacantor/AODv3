@@ -83,6 +83,49 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
     }
 
 
+def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entity_hint: str, 
+                                   vendor_hint: str, lens_coverage: Dict[str, bool]) -> Dict[str, Any]:
+    """Build asset from ground truth data which has authoritative is_shadow_it flag."""
+    farm_asset_id = signals.get("farm_asset_id", str(uuid.uuid4()))
+    
+    vendor = signals.get("vendor") or vendor_hint
+    owner_team = signals.get("owner_team")
+    asset_kind = signals.get("asset_kind", "unknown")
+    
+    lifecycle_state, parked_reason = route_lifecycle(signals)
+    
+    shadow_flag = signals.get("is_shadow_it", False)
+    
+    return {
+        "tenant_id": tenant_id,
+        "farm_asset_id": farm_asset_id,
+        "name": signals.get("asset_name") or entity_hint or f"Asset-{farm_asset_id[:8]}",
+        "asset_kind": asset_kind,
+        "asset_type": signals.get("catalog_asset_type", asset_kind),
+        "vendor": vendor,
+        "environment": signals.get("environment", "unknown"),
+        "business_domain": derive_business_domain(owner_team, vendor),
+        "tech_domain": derive_tech_domain(vendor, asset_kind),
+        "system_role": derive_system_role(vendor),
+        "owner": signals.get("owner"),
+        "owner_email": signals.get("owner_email"),
+        "owner_team": owner_team,
+        "lifecycle_state": lifecycle_state,
+        "parked_reason": parked_reason,
+        "is_shadow_it": shadow_flag,
+        "has_data_conflicts": signals.get("has_data_conflicts", False),
+        "lens_coverage": lens_coverage,
+        "metadata": {
+            "rules_triggered": signals.get("rules_triggered", []),
+            "conflict_types": signals.get("conflict_types", []),
+            "anomaly_score": signals.get("anomaly_score"),
+            "prob_kind": signals.get("prob_kind"),
+            "shadow_reasons": signals.get("shadow_reasons", []),
+            "sources": signals.get("sources", [])
+        }
+    }
+
+
 async def upsert_asset(asset: Dict[str, Any]) -> str:
     import json
     
@@ -152,26 +195,61 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
     run_id = await create_ingest_run(tenant_id, archetype, scale)
     
     try:
+        ground_truth = await farm_client.get_ground_truth(tenant_id)
+        expected_assets = ground_truth.get("ground_truth", {}).get("expected_assets", [])
+        
         surfaces = snapshot.get("surfaces", {})
+        
+        cmdb_signals_map = {}
         cmdb_data = surfaces.get("cmdb", {})
-        cmdb_evidence = cmdb_data.get("evidence", [])
+        for record in cmdb_data.get("evidence", []):
+            signals = record.get("signals", {})
+            farm_asset_id = signals.get("farm_asset_id")
+            if farm_asset_id:
+                cmdb_signals_map[farm_asset_id] = {
+                    "signals": signals,
+                    "entity_hint": record.get("entity_hint", ""),
+                    "vendor_hint": record.get("vendor_hint", "")
+                }
         
         total_assets = 0
         shadow_count = 0
         parked_count = 0
         
-        for record in cmdb_evidence:
-            signals = record.get("signals", {})
-            entity_hint = record.get("entity_hint", "")
-            vendor_hint = record.get("vendor_hint", "")
-            
-            farm_asset_id = signals.get("farm_asset_id")
+        for gt_asset in expected_assets:
+            farm_asset_id = gt_asset.get("farm_asset_id")
             if not farm_asset_id:
                 continue
             
             lens_coverage = extract_lens_coverage(surfaces, farm_asset_id)
             
-            asset_data = build_asset_from_signals(
+            cmdb_info = cmdb_signals_map.get(farm_asset_id, {})
+            cmdb_signals = cmdb_info.get("signals", {})
+            
+            signals = {
+                "farm_asset_id": farm_asset_id,
+                "asset_name": gt_asset.get("asset_name"),
+                "asset_kind": gt_asset.get("asset_kind"),
+                "catalog_asset_type": gt_asset.get("catalog_asset_type"),
+                "vendor": gt_asset.get("vendor"),
+                "environment": gt_asset.get("environment"),
+                "owner": gt_asset.get("owner"),
+                "owner_email": gt_asset.get("owner_email"),
+                "owner_team": gt_asset.get("owner_team"),
+                "is_shadow_it": gt_asset.get("is_shadow_it", False),
+                "has_data_conflicts": gt_asset.get("has_data_conflicts", False),
+                "conflict_types": gt_asset.get("conflict_types", []),
+                "rules_triggered": gt_asset.get("rules_triggered", []),
+                "parked_reason": gt_asset.get("parked_reason"),
+                "anomaly_score": cmdb_signals.get("anomaly_score", 0),
+                "prob_kind": cmdb_signals.get("prob_kind", 1.0),
+                "shadow_reasons": gt_asset.get("shadow_reasons", []),
+            }
+            
+            entity_hint = cmdb_info.get("entity_hint") or gt_asset.get("asset_name", "")
+            vendor_hint = cmdb_info.get("vendor_hint") or gt_asset.get("vendor", "")
+            
+            asset_data = build_asset_from_ground_truth(
                 tenant_id, signals, entity_hint, vendor_hint, lens_coverage
             )
             

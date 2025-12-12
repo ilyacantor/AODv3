@@ -147,7 +147,8 @@ def derive_farm_bucket(signals: Dict[str, Any], parked_reason: Optional[str] = N
 
 
 def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entity_hint: str, 
-                                   vendor_hint: str, lens_coverage: Dict[str, bool]) -> Dict[str, Any]:
+                                   vendor_hint: str, lens_coverage: Dict[str, bool],
+                                   company_name: str = "", archetype: str = "") -> Dict[str, Any]:
     """Build asset from ground truth data which has authoritative is_shadow_it flag."""
     farm_asset_id = signals.get("farm_asset_id", str(uuid.uuid4()))
     
@@ -181,6 +182,8 @@ def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entit
         "has_data_conflicts": signals.get("has_data_conflicts", False),
         "lens_coverage": lens_coverage,
         "farm_bucket": farm_bucket,
+        "company_name": company_name,
+        "archetype": archetype,
         "metadata": {
             "rules_triggered": signals.get("rules_triggered", []),
             "conflict_types": signals.get("conflict_types", []),
@@ -208,29 +211,32 @@ async def upsert_asset(asset: Dict[str, Any]) -> str:
                 system_role = $8, owner = $9, owner_email = $10, owner_team = $11,
                 lifecycle_state = $12, parked_reason = $13, is_shadow_it = $14,
                 has_data_conflicts = $15, lens_coverage = $16, metadata = $17,
-                farm_bucket = $18, updated_at = NOW()
-            WHERE id = $19
+                farm_bucket = $18, company_name = $19, archetype = $20, updated_at = NOW()
+            WHERE id = $21
         """, asset["name"], asset["asset_kind"], asset["asset_type"], asset["vendor"],
             asset["environment"], asset["business_domain"], asset["tech_domain"],
             asset["system_role"], asset["owner"], asset["owner_email"], asset["owner_team"],
             asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
             asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
-            json.dumps(asset["metadata"]), asset.get("farm_bucket"), asset_id)
+            json.dumps(asset["metadata"]), asset.get("farm_bucket"), 
+            asset.get("company_name", ""), asset.get("archetype", ""), asset_id)
     else:
         asset_id = str(uuid.uuid4())
         await execute("""
             INSERT INTO assets (id, tenant_id, farm_asset_id, name, asset_kind, asset_type,
                 vendor, environment, business_domain, tech_domain, system_role,
                 owner, owner_email, owner_team, lifecycle_state, parked_reason,
-                is_shadow_it, has_data_conflicts, lens_coverage, metadata, farm_bucket)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                is_shadow_it, has_data_conflicts, lens_coverage, metadata, farm_bucket,
+                company_name, archetype)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         """, asset_id, asset["tenant_id"], asset["farm_asset_id"], asset["name"],
             asset["asset_kind"], asset["asset_type"], asset["vendor"], asset["environment"],
             asset["business_domain"], asset["tech_domain"], asset["system_role"],
             asset["owner"], asset["owner_email"], asset["owner_team"],
             asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
             asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
-            json.dumps(asset["metadata"]), asset.get("farm_bucket"))
+            json.dumps(asset["metadata"]), asset.get("farm_bucket"),
+            asset.get("company_name", ""), asset.get("archetype", ""))
     
     return asset_id
 
@@ -322,7 +328,8 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
             vendor_hint = cmdb_info.get("vendor_hint") or gt_asset.get("vendor", "")
             
             asset_data = build_asset_from_ground_truth(
-                tenant_id, signals, entity_hint, vendor_hint, lens_coverage
+                tenant_id, signals, entity_hint, vendor_hint, lens_coverage,
+                company_name=stats["company_name"], archetype=archetype
             )
             
             asset_id = await upsert_asset(asset_data)

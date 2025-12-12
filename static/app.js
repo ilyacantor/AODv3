@@ -206,6 +206,14 @@ async function showAssetDetail(assetId) {
                         <div class="detail-value" style="font-size: 12px;">${asset.farm_asset_id || '-'}</div>
                     </div>
                     <div class="detail-item">
+                        <div class="detail-label">Enterprise Tenant</div>
+                        <div class="detail-value">${asset.company_name || '-'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Archetype</div>
+                        <div class="detail-value">${asset.archetype ? asset.archetype.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}</div>
+                    </div>
+                    <div class="detail-item">
                         <div class="detail-label">Name</div>
                         <div class="detail-value">${asset.name}</div>
                     </div>

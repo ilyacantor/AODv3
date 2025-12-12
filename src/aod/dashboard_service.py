@@ -208,3 +208,37 @@ async def get_ingest_runs() -> List[Dict[str, Any]]:
     """)
     
     return [dict(row) for row in rows]
+
+
+async def get_assets_by_inventory(field: str, value: str) -> List[Dict[str, Any]]:
+    """Get assets filtered by an inventory field (vendor, asset_kind, tech_domain, business_domain)."""
+    valid_fields = ["vendor", "asset_kind", "tech_domain", "business_domain"]
+    if field not in valid_fields:
+        return []
+    
+    rows = await fetch(f"""
+        SELECT id, name, vendor, asset_kind, environment, lifecycle_state, 
+               parked_reason, is_shadow_it, owner, owner_team, tech_domain, business_domain
+        FROM assets
+        WHERE {field} = $1 AND lifecycle_state = 'CATALOGED'
+        ORDER BY updated_at DESC
+    """, value)
+    
+    return [dict(row) for row in rows]
+
+
+async def get_shadow_it_by_field(field: str, value: str) -> List[Dict[str, Any]]:
+    """Get shadow IT assets filtered by tech_domain or business_domain."""
+    valid_fields = ["tech_domain", "business_domain"]
+    if field not in valid_fields:
+        return []
+    
+    rows = await fetch(f"""
+        SELECT id, name, vendor, asset_kind, environment, lifecycle_state, 
+               parked_reason, is_shadow_it, owner, owner_team, tech_domain, business_domain
+        FROM assets
+        WHERE is_shadow_it = true AND {field} = $1
+        ORDER BY updated_at DESC
+    """, value)
+    
+    return [dict(row) for row in rows]

@@ -178,6 +178,22 @@ nav a:hover, nav a.active {
     gap: 12px;
 }
 
+.bar-item.clickable {
+    cursor: pointer;
+    padding: 6px 8px;
+    margin: -6px -8px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.bar-item.clickable:hover {
+    background-color: var(--slate-700);
+}
+
+.bar-item.clickable:hover .bar-fill {
+    filter: brightness(1.2);
+}
+
 .bar-label {
     width: 100px;
     font-size: 12px;

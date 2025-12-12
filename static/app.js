@@ -46,6 +46,7 @@ async function handleIngest(e) {
 async function showAssets(type, value) {
     const container = document.getElementById('assetListContainer');
     let url;
+    let displayValue = value;
     
     switch(type) {
         case 'lifecycle':
@@ -59,6 +60,14 @@ async function showAssets(type, value) {
             break;
         case 'shadow':
             url = `/api/assets/shadow-it`;
+            break;
+        case 'inventory':
+            url = `/api/assets/inventory/${value}`;
+            displayValue = value.split('/').pop();
+            break;
+        case 'shadow_inventory':
+            url = `/api/assets/shadow-it/${value}`;
+            displayValue = 'Shadow IT - ' + value.split('/').pop();
             break;
         default:
             return;
@@ -74,7 +83,7 @@ async function showAssets(type, value) {
         }
         
         let html = `
-            <h3 class="section-title" style="margin-top: 24px;">${value} (${data.count} assets)</h3>
+            <h3 class="section-title" style="margin-top: 24px;">${displayValue} (${data.count} assets)</h3>
             <div class="asset-list">
                 <div class="asset-list-header">
                     <div>Name</div>

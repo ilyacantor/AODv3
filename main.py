@@ -9,7 +9,8 @@ from src.aod.models import IngestRequest
 from src.aod.ingest_service import ingest_full_pull
 from src.aod.dashboard_service import (
     get_dashboard_data, get_assets_by_lifecycle, get_assets_by_parked_reason,
-    get_assets_by_finding_type, get_shadow_it_assets, get_asset_detail, get_ingest_runs
+    get_assets_by_finding_type, get_shadow_it_assets, get_asset_detail, get_ingest_runs,
+    get_assets_by_inventory, get_shadow_it_by_field
 )
 
 
@@ -94,6 +95,18 @@ async def api_ingest(request: IngestRequest):
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Ingestion failed"))
     return result
+
+
+@app.get("/api/assets/inventory/{field}/{value}")
+async def api_assets_by_inventory(field: str, value: str):
+    assets = await get_assets_by_inventory(field, value)
+    return {"assets": assets, "count": len(assets)}
+
+
+@app.get("/api/assets/shadow-it/{field}/{value}")
+async def api_shadow_it_by_field(field: str, value: str):
+    assets = await get_shadow_it_by_field(field, value)
+    return {"assets": assets, "count": len(assets)}
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@
         <div class="chart-title">Inventory by Vendor</div>
         <div class="bar-chart">
             {% for item in data.inventory.by_vendor[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('inventory', 'vendor/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
@@ -113,7 +113,7 @@
         <div class="chart-title">Inventory by Asset Kind</div>
         <div class="bar-chart">
             {% for item in data.inventory.by_kind[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('inventory', 'asset_kind/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
@@ -127,7 +127,7 @@
         <div class="chart-title">Inventory by Tech Domain</div>
         <div class="bar-chart">
             {% for item in data.inventory.by_tech_domain[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('inventory', 'tech_domain/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
@@ -141,7 +141,7 @@
         <div class="chart-title">Inventory by Business Domain</div>
         <div class="bar-chart">
             {% for item in data.inventory.by_business_domain[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('inventory', 'business_domain/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
@@ -155,7 +155,7 @@
         <div class="chart-title">Shadow IT by Tech Domain</div>
         <div class="bar-chart">
             {% for item in data.shadow_it.by_tech_domain[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('shadow_inventory', 'tech_domain/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill shadow" style="width: {{ (item.count / (data.findings.shadow_it or 1) * 100)|int }}%">{{ item.count }}</div>
@@ -169,7 +169,7 @@
         <div class="chart-title">Shadow IT by Business Domain</div>
         <div class="bar-chart">
             {% for item in data.shadow_it.by_business_domain[:5] %}
-            <div class="bar-item">
+            <div class="bar-item clickable" onclick="showAssets('shadow_inventory', 'business_domain/{{ item.label }}')">
                 <span class="bar-label">{{ item.label }}</span>
                 <div class="bar-container">
                     <div class="bar-fill shadow" style="width: {{ (item.count / (data.findings.shadow_it or 1) * 100)|int }}%">{{ item.count }}</div>

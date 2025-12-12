@@ -105,6 +105,43 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
     }
 
 
+def derive_farm_bucket(signals: Dict[str, Any], parked_reason: str = None) -> str:
+    """Derive Farm's mutually exclusive bucket classification.
+    
+    Priority order (mutually exclusive):
+    1. shadow - if is_shadow_it is true
+    2. blocking - if parked_reason exists (blocking issues)
+    3. non_blocking - if has findings (data conflicts, governance gaps, ops risk, low confidence)
+    4. clean - no issues
+    """
+    if signals.get("is_shadow_it", False):
+        return "shadow"
+    
+    if parked_reason:
+        return "blocking"
+    
+    has_data_conflicts = signals.get("has_data_conflicts", False)
+    has_governance_gap = not signals.get("owner") or not signals.get("owner_team")
+    conflict_types = signals.get("conflict_types", [])
+    rules_triggered = signals.get("rules_triggered", [])
+    anomaly_score = signals.get("anomaly_score", 0) or 0
+    prob_kind = signals.get("prob_kind", 1.0) or 1.0
+    
+    has_findings = (
+        has_data_conflicts or
+        has_governance_gap or
+        len(conflict_types) > 0 or
+        len(rules_triggered) > 0 or
+        anomaly_score > 0.7 or
+        prob_kind < 0.8
+    )
+    
+    if has_findings:
+        return "non_blocking"
+    
+    return "clean"
+
+
 def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entity_hint: str, 
                                    vendor_hint: str, lens_coverage: Dict[str, bool]) -> Dict[str, Any]:
     """Build asset from ground truth data which has authoritative is_shadow_it flag."""
@@ -117,6 +154,8 @@ def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entit
     lifecycle_state, parked_reason = route_lifecycle(signals)
     
     shadow_flag = signals.get("is_shadow_it", False)
+    
+    farm_bucket = derive_farm_bucket(signals, parked_reason)
     
     return {
         "tenant_id": tenant_id,
@@ -137,6 +176,7 @@ def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entit
         "is_shadow_it": shadow_flag,
         "has_data_conflicts": signals.get("has_data_conflicts", False),
         "lens_coverage": lens_coverage,
+        "farm_bucket": farm_bucket,
         "metadata": {
             "rules_triggered": signals.get("rules_triggered", []),
             "conflict_types": signals.get("conflict_types", []),
@@ -164,29 +204,29 @@ async def upsert_asset(asset: Dict[str, Any]) -> str:
                 system_role = $8, owner = $9, owner_email = $10, owner_team = $11,
                 lifecycle_state = $12, parked_reason = $13, is_shadow_it = $14,
                 has_data_conflicts = $15, lens_coverage = $16, metadata = $17,
-                updated_at = NOW()
-            WHERE id = $18
+                farm_bucket = $18, updated_at = NOW()
+            WHERE id = $19
         """, asset["name"], asset["asset_kind"], asset["asset_type"], asset["vendor"],
             asset["environment"], asset["business_domain"], asset["tech_domain"],
             asset["system_role"], asset["owner"], asset["owner_email"], asset["owner_team"],
             asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
             asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
-            json.dumps(asset["metadata"]), asset_id)
+            json.dumps(asset["metadata"]), asset.get("farm_bucket"), asset_id)
     else:
         asset_id = str(uuid.uuid4())
         await execute("""
             INSERT INTO assets (id, tenant_id, farm_asset_id, name, asset_kind, asset_type,
                 vendor, environment, business_domain, tech_domain, system_role,
                 owner, owner_email, owner_team, lifecycle_state, parked_reason,
-                is_shadow_it, has_data_conflicts, lens_coverage, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                is_shadow_it, has_data_conflicts, lens_coverage, metadata, farm_bucket)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         """, asset_id, asset["tenant_id"], asset["farm_asset_id"], asset["name"],
             asset["asset_kind"], asset["asset_type"], asset["vendor"], asset["environment"],
             asset["business_domain"], asset["tech_domain"], asset["system_role"],
             asset["owner"], asset["owner_email"], asset["owner_team"],
             asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
             asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
-            json.dumps(asset["metadata"]))
+            json.dumps(asset["metadata"]), asset.get("farm_bucket"))
     
     return asset_id
 

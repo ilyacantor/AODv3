@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Farm Validation - AOD Discover{% endblock %}
+
+{% block content %}
+<h3 class="section-title">Farm Classification (Mutually Exclusive Buckets)</h3>
+
+<p class="validation-description">
+    These counts represent Farm's exclusive bucket classification. Each asset belongs to exactly one bucket.
+</p>
+
+<div class="stats-row">
+    <div class="stat-card validation clean">
+        <div class="stat-label">Clean</div>
+        <div class="stat-value">{{ bucket_counts.clean }}</div>
+        <div class="stat-desc">No issues detected</div>
+    </div>
+    <div class="stat-card validation non-blocking">
+        <div class="stat-label">Non-Blocking</div>
+        <div class="stat-value">{{ bucket_counts.non_blocking }}</div>
+        <div class="stat-desc">Has findings but cataloged</div>
+    </div>
+    <div class="stat-card validation blocking">
+        <div class="stat-label">Blocking</div>
+        <div class="stat-value">{{ bucket_counts.blocking }}</div>
+        <div class="stat-desc">Parked due to blocking issues</div>
+    </div>
+    <div class="stat-card validation shadow">
+        <div class="stat-label">Shadow IT</div>
+        <div class="stat-value">{{ bucket_counts.shadow }}</div>
+        <div class="stat-desc">Unapproved/unmanaged assets</div>
+    </div>
+</div>
+
+<div class="validation-summary">
+    <h4>Classification Summary</h4>
+    <div class="summary-stats">
+        <div class="summary-item">
+            <span class="summary-label">Total Classified:</span>
+            <span class="summary-value">{{ metrics.total_classified }}</span>
+        </div>
+    </div>
+</div>
+
+<div class="validation-info">
+    <h4>Bucket Definitions</h4>
+    <div class="info-grid">
+        <div class="info-item">
+            <strong>Clean:</strong> Assets with no issues - fully compliant and well-documented.
+        </div>
+        <div class="info-item">
+            <strong>Non-Blocking:</strong> Assets with findings (governance gaps, data conflicts, ops risk, low confidence) but still cataloged.
+        </div>
+        <div class="info-item">
+            <strong>Blocking:</strong> Assets parked due to critical issues (SoR Conflict, Schema Mismatch, ID Collision, Missing ID).
+        </div>
+        <div class="info-item">
+            <strong>Shadow IT:</strong> Unapproved or unmanaged assets detected outside official channels.
+        </div>
+    </div>
+</div>
+{% endblock %}

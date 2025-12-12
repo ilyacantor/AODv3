@@ -252,3 +252,41 @@ async def get_shadow_it_by_field(field: str, value: str) -> List[Dict[str, Any]]
     """, value)
     
     return [dict(row) for row in rows]
+
+
+async def get_farm_bucket_counts() -> Dict[str, int]:
+    """Get counts for Farm's mutually exclusive bucket classification."""
+    rows = await fetch("""
+        SELECT farm_bucket, COUNT(*) as count
+        FROM assets
+        WHERE farm_bucket IS NOT NULL
+        GROUP BY farm_bucket
+    """)
+    
+    counts = {
+        "clean": 0,
+        "non_blocking": 0,
+        "blocking": 0,
+        "shadow": 0
+    }
+    
+    for row in rows:
+        bucket = row["farm_bucket"]
+        if bucket in counts:
+            counts[bucket] = row["count"]
+    
+    return counts
+
+
+async def get_validation_metrics() -> Dict[str, Any]:
+    """Get validation metrics for precision/recall calculations (placeholder for future)."""
+    bucket_counts = await get_farm_bucket_counts()
+    total = sum(bucket_counts.values())
+    
+    return {
+        "bucket_counts": bucket_counts,
+        "total_classified": total,
+        "precision": None,
+        "recall": None,
+        "f1_score": None
+    }

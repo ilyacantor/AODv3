@@ -858,3 +858,122 @@ nav a:hover, nav a.active {
         grid-template-columns: 1fr;
     }
 }
+
+.stat-card.validation {
+    border-left: 4px solid var(--purple-500);
+}
+
+.stat-card.validation.clean {
+    border-left-color: var(--green-500);
+}
+
+.stat-card.validation.clean .stat-value {
+    color: var(--green-400);
+}
+
+.stat-card.validation.non-blocking {
+    border-left-color: var(--yellow-500);
+}
+
+.stat-card.validation.non-blocking .stat-value {
+    color: var(--yellow-400);
+}
+
+.stat-card.validation.blocking {
+    border-left-color: var(--red-500);
+}
+
+.stat-card.validation.blocking .stat-value {
+    color: var(--red-400);
+}
+
+.stat-card.validation.shadow {
+    border-left-color: var(--purple-500);
+}
+
+.stat-card.validation.shadow .stat-value {
+    color: var(--purple-400);
+}
+
+.stat-desc {
+    font-size: 11px;
+    color: var(--slate-500);
+    margin-top: 4px;
+}
+
+.validation-description {
+    color: var(--slate-400);
+    font-size: 14px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 8px;
+    border-left: 3px solid var(--cyan-500);
+}
+
+.validation-summary {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--slate-700);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+}
+
+.validation-summary h4 {
+    font-size: 16px;
+    color: var(--slate-300);
+    margin-bottom: 16px;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+}
+
+.summary-item {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+.summary-label {
+    color: var(--slate-400);
+    font-size: 14px;
+}
+
+.summary-value {
+    color: var(--cyan-400);
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.validation-info {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--slate-700);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+}
+
+.validation-info h4 {
+    font-size: 16px;
+    color: var(--slate-300);
+    margin-bottom: 16px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.info-item {
+    font-size: 13px;
+    color: var(--slate-400);
+    line-height: 1.6;
+}
+
+.info-item strong {
+    color: var(--slate-300);
+}

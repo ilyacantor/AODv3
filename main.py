@@ -10,7 +10,7 @@ from src.aod.ingest_service import ingest_full_pull, reset_all_data
 from src.aod.dashboard_service import (
     get_dashboard_data, get_assets_by_lifecycle, get_assets_by_parked_reason,
     get_assets_by_finding_type, get_shadow_it_assets, get_asset_detail, get_ingest_runs,
-    get_assets_by_inventory, get_shadow_it_by_field
+    get_assets_by_inventory, get_shadow_it_by_field, get_farm_bucket_counts, get_validation_metrics
 )
 
 
@@ -119,6 +119,27 @@ async def api_reset():
 async def catalogs(request: Request):
     runs = await get_ingest_runs()
     return templates.TemplateResponse("catalogs.html", {"request": request, "runs": runs})
+
+
+@app.get("/validation", response_class=HTMLResponse)
+async def validation(request: Request):
+    bucket_counts = await get_farm_bucket_counts()
+    metrics = await get_validation_metrics()
+    return templates.TemplateResponse("validation.html", {
+        "request": request,
+        "bucket_counts": bucket_counts,
+        "metrics": metrics
+    })
+
+
+@app.get("/api/validation/buckets")
+async def api_validation_buckets():
+    return await get_farm_bucket_counts()
+
+
+@app.get("/api/validation/metrics")
+async def api_validation_metrics():
+    return await get_validation_metrics()
 
 
 if __name__ == "__main__":

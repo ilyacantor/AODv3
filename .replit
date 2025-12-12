@@ -33,3 +33,10 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+FARM_URL = "https://40614582-9a7c-4ba9-a679-4a777bd05b41-00-2fmaco814jvdf.janeway.replit.dev"
+AOD_BASE_URL = "https://discover.autonomos.software"
+TZ = "America/Los_Angeles"

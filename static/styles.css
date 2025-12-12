@@ -537,6 +537,43 @@ nav a:hover, nav a.active {
     color: var(--slate-400);
 }
 
+.finding-evidence {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--slate-800);
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.evidence-section {
+    margin-bottom: 8px;
+    color: var(--slate-300);
+}
+
+.evidence-section:last-child {
+    margin-bottom: 0;
+}
+
+.evidence-section strong {
+    color: var(--cyan-400);
+}
+
+.evidence-section ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+
+.evidence-section li {
+    margin: 4px 0;
+    color: var(--slate-400);
+}
+
+.finding-rule {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--slate-500);
+}
+
 .empty-state {
     text-align: center;
     padding: 48px;

@@ -120,6 +120,25 @@ async function showAssets(type, value) {
     }
 }
 
+function formatReason(reason) {
+    const reasonMap = {
+        'no_idp_but_billing_only': 'Detected via billing only, no identity provider integration',
+        'not_in_cmdb_or_approved_saas': 'Not registered in CMDB or approved SaaS list',
+        'no_idp': 'No identity provider integration found',
+        'no_cmdb': 'Not registered in configuration management database',
+        'finance_only': 'Detected via finance/billing signals only',
+        'personal_email': 'Registered with personal email address',
+        'few_users': 'Very low user count (potential shadow usage)',
+        'no_owner': 'No owner assigned to this asset',
+        'No ownership information': 'No owner, email, or team assigned',
+        'MULTIPLE_OWNERS': 'Multiple conflicting owners detected',
+        'SOR_CONFLICT': 'System of Record conflict - multiple sources claim authority',
+        'SCHEMA_MISMATCH': 'Data schema does not match expected structure',
+        'DATA_SCHEMA_DRIFT': 'Schema has drifted from expected definition'
+    };
+    return reasonMap[reason] || reason.replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+}
+
 async function showAssetDetail(assetId) {
     const modal = document.getElementById('assetModal');
     const title = document.getElementById('modalTitle');
@@ -234,16 +253,37 @@ async function showAssetDetail(assetId) {
             <div id="findingsTab" style="display: none;">
                 ${findings.length > 0 ? `
                     <div class="findings-list">
-                        ${findings.map(f => `
+                        ${findings.map(f => {
+                            let evidence = {};
+                            try {
+                                evidence = typeof f.evidence === 'string' ? JSON.parse(f.evidence) : f.evidence || {};
+                            } catch(e) {}
+                            
+                            let evidenceHtml = '';
+                            if (evidence.reasons && evidence.reasons.length > 0) {
+                                evidenceHtml += `<div class="evidence-section"><strong>Reasons:</strong><ul>${evidence.reasons.map(r => `<li>${formatReason(r)}</li>`).join('')}</ul></div>`;
+                            }
+                            if (evidence.conflict_types && evidence.conflict_types.length > 0) {
+                                evidenceHtml += `<div class="evidence-section"><strong>Conflict Types:</strong> ${evidence.conflict_types.map(c => formatReason(c)).join(', ')}</div>`;
+                            }
+                            if (evidence.anomaly_score !== undefined) {
+                                evidenceHtml += `<div class="evidence-section"><strong>Anomaly Score:</strong> ${(evidence.anomaly_score * 100).toFixed(0)}%</div>`;
+                            }
+                            if (evidence.prob_kind !== undefined) {
+                                evidenceHtml += `<div class="evidence-section"><strong>Classification Confidence:</strong> ${(evidence.prob_kind * 100).toFixed(0)}%</div>`;
+                            }
+                            
+                            return `
                             <div class="finding-item ${f.severity}">
                                 <div class="finding-header">
                                     <span class="finding-type">${f.finding_type.replace('_', ' ').toUpperCase()}</span>
                                     <span class="badge badge-${f.severity === 'critical' ? 'parked' : f.severity === 'warn' ? 'shadow' : 'discovered'}">${f.severity}</span>
                                 </div>
                                 <div class="finding-description">${f.description}</div>
-                                ${f.rule_id ? `<div style="margin-top: 8px; font-size: 12px; color: var(--slate-500);">Rule: ${f.rule_id}</div>` : ''}
+                                ${evidenceHtml ? `<div class="finding-evidence">${evidenceHtml}</div>` : ''}
+                                ${f.rule_id ? `<div class="finding-rule">Rule: ${f.rule_id}</div>` : ''}
                             </div>
-                        `).join('')}
+                        `}).join('')}
                     </div>
                 ` : '<div class="empty-state"><h3>No Findings</h3><p>This asset has no open findings.</p></div>'}
             </div>

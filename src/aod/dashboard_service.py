@@ -207,7 +207,17 @@ async def get_ingest_runs() -> List[Dict[str, Any]]:
         LIMIT 20
     """)
     
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        r = dict(row)
+        if r.get('id'):
+            r['id'] = str(r['id'])
+        if r.get('started_at'):
+            r['started_at'] = r['started_at'].isoformat()
+        if r.get('finished_at'):
+            r['finished_at'] = r['finished_at'].isoformat()
+        results.append(r)
+    return results
 
 
 async def get_assets_by_inventory(field: str, value: str) -> List[Dict[str, Any]]:

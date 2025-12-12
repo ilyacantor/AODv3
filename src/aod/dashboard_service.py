@@ -159,7 +159,8 @@ async def get_assets_by_parked_reason(reason: str) -> List[Dict[str, Any]]:
 async def get_assets_by_finding_type(finding_type: str) -> List[Dict[str, Any]]:
     rows = await fetch("""
         SELECT DISTINCT a.id, a.name, a.vendor, a.asset_kind, a.environment, 
-               a.lifecycle_state, a.parked_reason, a.is_shadow_it, a.owner, a.owner_team
+               a.lifecycle_state, a.parked_reason, a.is_shadow_it, a.owner, a.owner_team,
+               a.updated_at
         FROM assets a
         JOIN findings f ON f.asset_id = a.id
         WHERE f.finding_type = $1 AND f.status = 'open' AND a.lifecycle_state = 'CATALOGED'

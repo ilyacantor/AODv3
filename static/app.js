@@ -69,7 +69,7 @@ async function handleIngest(e) {
     }
 }
 
-async function showAssets(type, value) {
+async function showAssets(type, value, key) {
     const container = document.getElementById('assetListContainer');
     let url;
     let displayValue = value;
@@ -88,12 +88,18 @@ async function showAssets(type, value) {
             url = `/api/assets/shadow-it`;
             break;
         case 'inventory':
-            url = `/api/assets/inventory/${value}`;
-            displayValue = value.split('/').pop();
+            const [field, label] = value.split(':');
+            if (key) {
+                url = `/api/assets/inventory?field=${encodeURIComponent(field)}&key=${encodeURIComponent(key)}`;
+            } else {
+                url = `/api/assets/inventory?field=${encodeURIComponent(field)}&value=${encodeURIComponent(label)}`;
+            }
+            displayValue = label;
             break;
         case 'shadow_inventory':
-            url = `/api/assets/shadow-it/${value}`;
-            displayValue = 'Shadow IT - ' + value.split('/').pop();
+            const [shadowField, shadowLabel] = value.split(':');
+            url = `/api/assets/shadow-it/${shadowField}/${encodeURIComponent(shadowLabel)}`;
+            displayValue = 'Shadow IT - ' + shadowLabel;
             break;
         default:
             return;
@@ -103,13 +109,20 @@ async function showAssets(type, value) {
         const response = await fetch(url);
         const data = await response.json();
         
-        if (data.assets.length === 0) {
-            container.innerHTML = `<div class="empty-state"><h3>No Assets Found</h3></div>`;
+        if (!response.ok) {
+            container.innerHTML = `<div class="status-message error">Error: ${data.detail || 'Failed to load assets'}</div>`;
+            return;
+        }
+        
+        const assets = data.assets || [];
+        
+        if (assets.length === 0) {
+            container.innerHTML = `<div class="empty-state"><h3>No Assets Found</h3><p>No assets match the selected filter.</p></div>`;
             return;
         }
         
         let html = `
-            <h3 class="section-title" style="margin-top: 24px;">${displayValue} (${data.count} assets)</h3>
+            <h3 class="section-title" style="margin-top: 24px;">${displayValue} (${assets.length} assets)</h3>
             <div class="asset-list">
                 <div class="asset-list-header">
                     <div>Name</div>
@@ -120,7 +133,7 @@ async function showAssets(type, value) {
                 </div>
         `;
         
-        for (const asset of data.assets) {
+        for (const asset of assets) {
             const stateClass = asset.lifecycle_state === 'CATALOGED' ? 'cataloged' : 
                               asset.lifecycle_state === 'PARKED' ? 'parked' : 'discovered';
             html += `

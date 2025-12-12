@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
+from typing import Optional
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -10,7 +11,8 @@ from src.aod.ingest_service import ingest_full_pull, reset_all_data
 from src.aod.dashboard_service import (
     get_dashboard_data, get_assets_by_lifecycle, get_assets_by_parked_reason,
     get_assets_by_finding_type, get_shadow_it_assets, get_asset_detail, get_ingest_runs,
-    get_assets_by_inventory, get_shadow_it_by_field, get_farm_bucket_counts, get_validation_metrics
+    get_assets_by_inventory, get_shadow_it_by_field, get_farm_bucket_counts, get_validation_metrics,
+    filter_assets_by_inventory
 )
 
 
@@ -75,6 +77,34 @@ async def api_shadow_it_assets():
     return {"assets": assets, "count": len(assets)}
 
 
+@app.get("/api/assets/inventory")
+async def api_filter_assets_inventory(
+    field: str = Query(..., description="Field to filter by: vendor, asset_kind, tech_domain, business_domain"),
+    key: Optional[str] = Query(None, description="Stable key for the filter value"),
+    value: Optional[str] = Query(None, description="Display value (use key instead when possible)")
+):
+    """Filter assets by inventory field using query parameters.
+    Preferred: Use 'key' parameter for stable URL-safe lookups.
+    Always returns 200 with {assets: [], total: 0, filters: {...}}
+    """
+    result = await filter_assets_by_inventory(field, value=value, key=key)
+    return result
+
+
+@app.get("/api/assets/inventory/{field}/{value:path}")
+async def api_assets_by_inventory(field: str, value: str):
+    """DEPRECATED: Use /api/assets/inventory?field=...&key=... instead.
+    This endpoint is kept for backward compatibility only."""
+    assets = await get_assets_by_inventory(field, value)
+    return {"assets": assets, "count": len(assets)}
+
+
+@app.get("/api/assets/shadow-it/{field}/{value}")
+async def api_shadow_it_by_field(field: str, value: str):
+    assets = await get_shadow_it_by_field(field, value)
+    return {"assets": assets, "count": len(assets)}
+
+
 @app.get("/api/assets/{asset_id}")
 async def api_asset_detail(asset_id: str):
     detail = await get_asset_detail(asset_id)
@@ -95,18 +125,6 @@ async def api_ingest(request: IngestRequest):
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Ingestion failed"))
     return result
-
-
-@app.get("/api/assets/inventory/{field}/{value}")
-async def api_assets_by_inventory(field: str, value: str):
-    assets = await get_assets_by_inventory(field, value)
-    return {"assets": assets, "count": len(assets)}
-
-
-@app.get("/api/assets/shadow-it/{field}/{value}")
-async def api_shadow_it_by_field(field: str, value: str):
-    assets = await get_shadow_it_by_field(field, value)
-    return {"assets": assets, "count": len(assets)}
 
 
 @app.post("/api/reset")

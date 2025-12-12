@@ -1,0 +1,57 @@
+Copy/paste this to the AOD Replit agent:
+
+---
+
+## Prompt: Vendor drilldown that works every time “in the wild”
+
+**Goal**
+Make “Inventory by Vendor → click vendor row → load assets” robust for *all* vendor strings (slashes, spaces, unicode, etc.) across real deployments (proxies/CDNs). Stop relying on path parameters for vendor names.
+
+**Required design**
+
+1. **Do not use vendor display strings in URL path params.**
+   Replace `/api/assets/inventory/vendor/<vendor>` with a **query-parameter** filter endpoint:
+
+   * `GET /api/assets/inventory?vendor_id=<id>` (preferred)
+   * If no ID exists yet, use `vendor_key=<stable_slug>` (preferred)
+   * Only if necessary as a temporary bridge: `vendor=<display_string>` as a query param.
+
+2. **Return 200 for “no matches.”**
+   List/filter endpoints must never 404 just because nothing matched. Always return a consistent JSON shape:
+
+   * `{ assets: [], total: 0, filters: {...} }`
+
+3. **Frontend must never assume `data.assets` exists.**
+
+   * If `!response.ok`, show a friendly error (include server `detail` if present)
+   * Otherwise default `assets = data.assets || []`
+
+**Migration plan**
+
+* Keep the current `/vendor/{vendor:path}` route **only for backward compatibility** (optional), but internally route it to the same handler as the query-param endpoint and mark it deprecated in comments/logs.
+* Update the vendor-inventory list API/UI so each row includes a stable identifier:
+
+  * `vendor_id` or `vendor_key`, plus `vendor_display`
+* Update the click handler to call:
+
+  * `/api/assets/inventory?vendor_id=...` (or `vendor_key=...`) — NOT the display string path route.
+
+**Acceptance tests / regression checklist**
+
+* Clicking these vendors must work and load assets (or show “no assets”) without errors:
+
+  * `Dell/HP`
+  * `AT&T`
+  * `Foo Bar`
+  * `Vendor#1`
+  * a unicode example (e.g., `Müller/Österreich`)
+* Confirm the network request is the new query-param endpoint (not `/vendor/...`).
+* Confirm “no results” returns **200** with empty list.
+* Confirm UI shows a clean message instead of crashing on any non-200.
+
+**Non-goals**
+
+* Don’t “fix” with cache-busting as the core solution.
+* Don’t rely on encoded slashes in a single path segment.
+
+---

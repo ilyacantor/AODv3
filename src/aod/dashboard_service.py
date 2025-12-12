@@ -94,6 +94,18 @@ async def get_shadow_it_count() -> Dict[str, Any]:
     }
 
 
+def generate_stable_key(value: str) -> str:
+    """Generate a stable URL-safe key from a display value."""
+    import re
+    import hashlib
+    key = value.lower().strip()
+    key = re.sub(r'[^a-z0-9]+', '_', key)
+    key = key.strip('_')
+    if not key or len(key) < 2:
+        key = hashlib.md5(value.encode()).hexdigest()[:8]
+    return key
+
+
 async def get_inventory_by_field(field: str) -> List[Dict[str, Any]]:
     valid_fields = ["vendor", "asset_kind", "tech_domain", "business_domain"]
     if field not in valid_fields:
@@ -108,7 +120,14 @@ async def get_inventory_by_field(field: str) -> List[Dict[str, Any]]:
         LIMIT 10
     """)
     
-    return [{"label": row["label"] or "Unknown", "count": row["count"]} for row in rows]
+    return [
+        {
+            "label": row["label"] or "Unknown", 
+            "key": generate_stable_key(row["label"] or "Unknown"),
+            "count": row["count"]
+        } 
+        for row in rows
+    ]
 
 
 async def get_shadow_it_breakdown(field: str) -> List[Dict[str, Any]]:
@@ -125,7 +144,14 @@ async def get_shadow_it_breakdown(field: str) -> List[Dict[str, Any]]:
         LIMIT 10
     """)
     
-    return [{"label": row["label"] or "Unknown", "count": row["count"]} for row in rows]
+    return [
+        {
+            "label": row["label"] or "Unknown",
+            "key": generate_stable_key(row["label"] or "Unknown"),
+            "count": row["count"]
+        }
+        for row in rows
+    ]
 
 
 async def get_dashboard_data() -> Dict[str, Any]:
@@ -242,7 +268,8 @@ async def get_ingest_runs() -> List[Dict[str, Any]]:
 
 
 async def get_assets_by_inventory(field: str, value: str) -> List[Dict[str, Any]]:
-    """Get assets filtered by an inventory field (vendor, asset_kind, tech_domain, business_domain)."""
+    """Get assets filtered by an inventory field (vendor, asset_kind, tech_domain, business_domain).
+    DEPRECATED: Use filter_assets_by_inventory with query params instead."""
     valid_fields = ["vendor", "asset_kind", "tech_domain", "business_domain"]
     if field not in valid_fields:
         return []
@@ -256,6 +283,53 @@ async def get_assets_by_inventory(field: str, value: str) -> List[Dict[str, Any]
     """, value)
     
     return [dict(row) for row in rows]
+
+
+async def filter_assets_by_inventory(
+    field: str, 
+    value: Optional[str] = None,
+    key: Optional[str] = None
+) -> Dict[str, Any]:
+    """Filter assets by inventory field using either display value or stable key.
+    Always returns 200 with consistent shape: {assets: [], total: 0, filters: {...}}
+    """
+    valid_fields = ["vendor", "asset_kind", "tech_domain", "business_domain"]
+    if field not in valid_fields:
+        return {"assets": [], "total": 0, "filters": {"field": field, "error": "invalid_field"}}
+    
+    if key:
+        rows = await fetch(f"""
+            SELECT id, name, vendor, asset_kind, environment, lifecycle_state, 
+                   parked_reason, is_shadow_it, owner, owner_team, tech_domain, business_domain
+            FROM assets
+            WHERE lifecycle_state = 'CATALOGED'
+            ORDER BY updated_at DESC
+        """)
+        matching = []
+        for row in rows:
+            field_value = row[field]
+            if field_value and generate_stable_key(field_value) == key:
+                matching.append(dict(row))
+        return {
+            "assets": matching, 
+            "total": len(matching), 
+            "filters": {"field": field, "key": key}
+        }
+    elif value:
+        rows = await fetch(f"""
+            SELECT id, name, vendor, asset_kind, environment, lifecycle_state, 
+                   parked_reason, is_shadow_it, owner, owner_team, tech_domain, business_domain
+            FROM assets
+            WHERE {field} = $1 AND lifecycle_state = 'CATALOGED'
+            ORDER BY updated_at DESC
+        """, value)
+        return {
+            "assets": [dict(row) for row in rows], 
+            "total": len(rows), 
+            "filters": {"field": field, "value": value}
+        }
+    else:
+        return {"assets": [], "total": 0, "filters": {"field": field, "error": "no_filter"}}
 
 
 async def get_shadow_it_by_field(field: str, value: str) -> List[Dict[str, Any]]:

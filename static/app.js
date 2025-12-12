@@ -88,12 +88,16 @@ async function showAssets(type, value) {
             url = `/api/assets/shadow-it`;
             break;
         case 'inventory':
-            url = `/api/assets/inventory/${value}`;
-            displayValue = value.split('/').pop();
+            const [field, ...valueParts] = value.split('/');
+            const fieldValue = valueParts.join('/');
+            url = `/api/assets/inventory/${field}/${encodeURIComponent(fieldValue)}`;
+            displayValue = fieldValue;
             break;
         case 'shadow_inventory':
-            url = `/api/assets/shadow-it/${value}`;
-            displayValue = 'Shadow IT - ' + value.split('/').pop();
+            const [sField, ...sValueParts] = value.split('/');
+            const sFieldValue = sValueParts.join('/');
+            url = `/api/assets/shadow-it/${sField}/${encodeURIComponent(sFieldValue)}`;
+            displayValue = 'Shadow IT - ' + sFieldValue;
             break;
         default:
             return;

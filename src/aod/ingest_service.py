@@ -76,6 +76,9 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
     
     shadow_flag = is_shadow_it({**signals, "lens_coverage": lens_coverage})
     
+    signals_with_shadow = {**signals, "is_shadow_it": shadow_flag}
+    farm_bucket = derive_farm_bucket(signals_with_shadow, parked_reason)
+    
     return {
         "tenant_id": tenant_id,
         "farm_asset_id": farm_asset_id,
@@ -95,6 +98,7 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
         "is_shadow_it": shadow_flag,
         "has_data_conflicts": signals.get("has_data_conflicts", False),
         "lens_coverage": lens_coverage,
+        "farm_bucket": farm_bucket,
         "metadata": {
             "rules_triggered": signals.get("rules_triggered", []),
             "conflict_types": signals.get("conflict_types", []),

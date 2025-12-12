@@ -50,29 +50,48 @@ async def get_blocking_summary() -> Dict[str, int]:
     return summary
 
 
-async def get_findings_summary() -> Dict[str, int]:
+async def get_findings_summary() -> Dict[str, Dict[str, int]]:
     rows = await fetch("""
-        SELECT f.finding_type, COUNT(DISTINCT f.asset_id) as count
+        SELECT f.finding_type, 
+               COUNT(DISTINCT f.asset_id) as asset_count, 
+               COUNT(*) as finding_count
         FROM findings f
         JOIN assets a ON f.asset_id = a.id
-        WHERE a.lifecycle_state = 'CATALOGED' AND f.status = 'open'
+        WHERE f.status = 'open'
         GROUP BY f.finding_type
     """)
     
     summary = {
-        "shadow_it": 0,
-        "governance_gap": 0,
-        "data_conflicts": 0,
-        "ops_risk": 0,
-        "low_confidence": 0
+        "shadow_it": {"assets": 0, "findings": 0},
+        "governance_gap": {"assets": 0, "findings": 0},
+        "data_conflicts": {"assets": 0, "findings": 0},
+        "ops_risk": {"assets": 0, "findings": 0},
+        "low_confidence": {"assets": 0, "findings": 0}
     }
     
     for row in rows:
         finding_type = row["finding_type"]
         if finding_type in summary:
-            summary[finding_type] = row["count"]
+            summary[finding_type] = {
+                "assets": row["asset_count"],
+                "findings": row["finding_count"]
+            }
     
     return summary
+
+
+async def get_shadow_it_count() -> Dict[str, Any]:
+    """Get shadow IT counts across all lifecycle states."""
+    total = await fetchval("SELECT COUNT(*) FROM assets WHERE is_shadow_it = true")
+    by_lifecycle = await fetch("""
+        SELECT lifecycle_state, COUNT(*) as count 
+        FROM assets WHERE is_shadow_it = true 
+        GROUP BY lifecycle_state
+    """)
+    return {
+        "total": total or 0,
+        "by_lifecycle": {row["lifecycle_state"]: row["count"] for row in by_lifecycle}
+    }
 
 
 async def get_inventory_by_field(field: str) -> List[Dict[str, Any]]:
@@ -113,11 +132,13 @@ async def get_dashboard_data() -> Dict[str, Any]:
     lifecycle = await get_lifecycle_counts()
     blocking = await get_blocking_summary()
     findings = await get_findings_summary()
+    shadow_it_count = await get_shadow_it_count()
     
     return {
         "lifecycle": lifecycle,
         "blocking": blocking,
         "findings": findings,
+        "shadow_it_count": shadow_it_count,
         "inventory": {
             "by_vendor": await get_inventory_by_field("vendor"),
             "by_kind": await get_inventory_by_field("asset_kind"),

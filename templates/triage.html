@@ -34,8 +34,8 @@
 </div>
 {% endif %}
 
-<h3 class="section-title findings">Non-Blocking Findings (Review Recommended)</h3>
-{% set has_findings = data.findings.shadow_it + data.findings.governance_gap + data.findings.data_conflicts + data.findings.ops_risk + data.findings.low_confidence > 0 %}
+<h3 class="section-title findings">Findings (Multi-Label)</h3>
+{% set has_findings = data.shadow_it_count.total + data.findings.governance_gap.assets + data.findings.data_conflicts.assets + data.findings.ops_risk.assets + data.findings.low_confidence.assets > 0 %}
 {% if has_findings %}
 <div class="asset-list">
     <div class="asset-list-header">
@@ -45,46 +45,46 @@
         <div>Action</div>
         <div></div>
     </div>
-    {% if data.findings.shadow_it > 0 %}
-    <div class="asset-row" onclick="showAssets('finding', 'shadow_it')">
+    {% if data.shadow_it_count.total > 0 %}
+    <div class="asset-row" onclick="showAssets('shadow-it', '')">
         <div class="asset-name">Shadow IT</div>
-        <div>{{ data.findings.shadow_it }} assets</div>
+        <div>{{ data.shadow_it_count.total }} assets (all states)</div>
         <div><span class="badge badge-shadow">Warning</span></div>
         <div>View All</div>
         <div></div>
     </div>
     {% endif %}
-    {% if data.findings.governance_gap > 0 %}
+    {% if data.findings.governance_gap.assets > 0 %}
     <div class="asset-row" onclick="showAssets('finding', 'governance_gap')">
         <div class="asset-name">Governance Gap</div>
-        <div>{{ data.findings.governance_gap }} assets</div>
+        <div>{{ data.findings.governance_gap.assets }} assets / {{ data.findings.governance_gap.findings }} findings</div>
         <div><span class="badge badge-shadow">Warning</span></div>
         <div>View All</div>
         <div></div>
     </div>
     {% endif %}
-    {% if data.findings.data_conflicts > 0 %}
+    {% if data.findings.data_conflicts.assets > 0 %}
     <div class="asset-row" onclick="showAssets('finding', 'data_conflicts')">
         <div class="asset-name">Data Conflicts</div>
-        <div>{{ data.findings.data_conflicts }} assets</div>
+        <div>{{ data.findings.data_conflicts.assets }} assets / {{ data.findings.data_conflicts.findings }} findings</div>
         <div><span class="badge badge-shadow">Warning</span></div>
         <div>View All</div>
         <div></div>
     </div>
     {% endif %}
-    {% if data.findings.ops_risk > 0 %}
+    {% if data.findings.ops_risk.assets > 0 %}
     <div class="asset-row" onclick="showAssets('finding', 'ops_risk')">
         <div class="asset-name">Ops Risk</div>
-        <div>{{ data.findings.ops_risk }} assets</div>
+        <div>{{ data.findings.ops_risk.assets }} assets / {{ data.findings.ops_risk.findings }} findings</div>
         <div><span class="badge badge-parked">Critical</span></div>
         <div>View All</div>
         <div></div>
     </div>
     {% endif %}
-    {% if data.findings.low_confidence > 0 %}
+    {% if data.findings.low_confidence.assets > 0 %}
     <div class="asset-row" onclick="showAssets('finding', 'low_confidence')">
         <div class="asset-name">Low Confidence</div>
-        <div>{{ data.findings.low_confidence }} assets</div>
+        <div>{{ data.findings.low_confidence.assets }} assets / {{ data.findings.low_confidence.findings }} findings</div>
         <div><span class="badge badge-discovered">Info</span></div>
         <div>View All</div>
         <div></div>
@@ -94,7 +94,7 @@
 {% else %}
 <div class="empty-state">
     <h3>No Findings</h3>
-    <p>No non-blocking findings detected for cataloged assets.</p>
+    <p>No findings detected across assets.</p>
 </div>
 {% endif %}
 

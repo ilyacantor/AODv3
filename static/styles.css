@@ -135,6 +135,12 @@ nav a:hover, nav a.active {
 .stat-card.blocking .stat-value { color: var(--red-400); }
 .stat-card.finding .stat-value { color: var(--orange-400); }
 
+.stat-sublabel {
+    font-size: 0.75rem;
+    color: var(--slate-400);
+    margin-top: 0.25rem;
+}
+
 .section-title {
     font-size: 18px;
     font-weight: 600;

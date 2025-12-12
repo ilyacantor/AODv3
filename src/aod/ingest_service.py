@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from src.aod.db import execute, fetch, fetchrow
 from src.aod.farm_client import farm_client
 from src.aod.lifecycle import (
@@ -105,7 +105,7 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
     }
 
 
-def derive_farm_bucket(signals: Dict[str, Any], parked_reason: str = None) -> str:
+def derive_farm_bucket(signals: Dict[str, Any], parked_reason: Optional[str] = None) -> str:
     """Derive Farm's mutually exclusive bucket classification.
     
     Priority order (mutually exclusive):

@@ -35,21 +35,52 @@
     <div id="ingestStatus"></div>
 </div>
 
-<h3 class="section-title">Asset Lifecycle</h3>
-<div class="stats-row">
-    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'DISCOVERED')">
-        <div class="stat-label">Discovered</div>
-        <div class="stat-value">{{ data.lifecycle.DISCOVERED }}</div>
+<section class="kpi-section">
+    <div class="kpi-section-header">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+        Asset Lifecycle
     </div>
-    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'PARKED')">
-        <div class="stat-label">Parked (Blocking)</div>
-        <div class="stat-value">{{ data.lifecycle.PARKED }}</div>
+    <div class="lifecycle-grid">
+        <div class="lifecycle-card discovered" onclick="showAssets('lifecycle', 'DISCOVERED')">
+            <div class="accent-bar"></div>
+            <div class="top-glow"></div>
+            <div class="lifecycle-header">
+                <div class="lifecycle-label">Discovered</div>
+                <svg class="lifecycle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+            </div>
+            <div class="lifecycle-value">{{ data.lifecycle.DISCOVERED }}</div>
+            <div class="lifecycle-desc">Total assets ingested</div>
+        </div>
+        <div class="lifecycle-card parked" onclick="showAssets('lifecycle', 'PARKED')">
+            <div class="accent-bar"></div>
+            <div class="top-glow"></div>
+            <div class="lifecycle-header">
+                <div class="lifecycle-label">Parked (Blocking)</div>
+                <svg class="lifecycle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>
+                </svg>
+            </div>
+            <div class="lifecycle-value">{{ data.lifecycle.PARKED }}</div>
+            <div class="lifecycle-desc">Requires HITL intervention</div>
+        </div>
+        <div class="lifecycle-card cataloged" onclick="showAssets('lifecycle', 'CATALOGED')">
+            <div class="accent-bar"></div>
+            <div class="top-glow"></div>
+            <div class="lifecycle-header">
+                <div class="lifecycle-label">Cataloged</div>
+                <svg class="lifecycle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div class="lifecycle-value">{{ data.lifecycle.CATALOGED }}</div>
+            <div class="lifecycle-desc">Validated & active</div>
+        </div>
     </div>
-    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'CATALOGED')">
-        <div class="stat-label">Cataloged</div>
-        <div class="stat-value">{{ data.lifecycle.CATALOGED }}</div>
-    </div>
-</div>
+</section>
 
 <div class="kpi-row">
     <!-- Blocking Issues Section -->

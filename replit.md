@@ -18,12 +18,16 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 │   ├── farm_client.py     # Farm API HTTP client
 │   ├── models.py          # Pydantic models
 │   ├── lifecycle.py       # Lifecycle routing & findings logic
+│   ├── breaches.py        # Observed Breach Ledger taxonomy & evidence gates
 │   ├── ingest_service.py  # Asset ingestion pipeline
 │   ├── dashboard_service.py # Dashboard queries
+│   ├── ledger_service.py  # Run-scoped breach queries for Farm grading
 │   └── migrate.py         # Database migration runner
 ├── migrations/            # SQL migration files
 ├── templates/             # Jinja2 HTML templates
-└── static/                # CSS and JavaScript
+├── static/                # CSS and JavaScript
+├── tests/                 # Unit tests
+└── docs/                  # Documentation (defect dictionary)
 ```
 
 ## Key Concepts
@@ -78,13 +82,44 @@ Persisted directly from Farm's classification - each asset belongs to exactly on
 - `GET /validation` - Validation page UI (Farm bucket counts)
 - `GET /api/validation/buckets` - Farm bucket counts JSON
 - `GET /api/validation/metrics` - Validation metrics JSON
+- `GET /api/runs` - All runs with breach summary
+- `GET /api/runs/{run_id}/observed-breaches` - Observed breaches for Farm grading
+- `GET /api/runs/{run_id}/observed-breaches/summary` - Breach summary counts
 
 ## Running Locally
 ```bash
 python main.py
 ```
 
+## Observed Breach Ledger
+
+Contract-grade breach taxonomy with evidence gates. No anomaly_score in contract outputs.
+
+### Blocking Breaches (BLOCKER)
+| Breach ID | Name | Source Rules |
+|-----------|------|--------------|
+| B-ONT-001 | SOR_CONFLICT_CRITICAL_FIELD | SOR_CONFLICT, ONT_SOR_CONFLICT |
+| B-DATA-001 | SCHEMA_DRIFT_BREAKING | SCHEMA_MISMATCH, SCHEMA_OR_SHAPE_MISMATCH, DATA_SCHEMA_DRIFT |
+| B-ID-001 | ID_COLLISION | ID_COLLISION |
+| B-ID-002 | MISSING_REQUIRED_ID | MISSING_PRIMARY_ID |
+
+### Non-Blocking Breaches (NON_BLOCKING)
+| Breach ID | Name | Evidence Required |
+|-----------|------|-------------------|
+| S-SHADOW-001 | OBSERVED_NOT_REGISTERED | presence_source AND absence_source |
+| S-GOV-001 | MISSING_OWNER | missing_fields |
+| S-DATA-001 | NONBLOCKING_CONFLICT | conflict_types |
+
+### Evidence Gates
+- **Shadow IT**: Requires BOTH presence evidence (telemetry/spend) AND absence evidence (not in IdP/CMDB)
+- **SoR Conflict**: Requires conflicting SoTs and field diffs
+- **Data Conflicts**: Requires conflict_types list
+
 ## Recent Changes
+- **Dec 12, 2025**: Implemented Observed Breach Ledger with evidence gates and run-scoped export endpoint
+- **Dec 12, 2025**: Added breach taxonomy (src/aod/breaches.py) mapping findings to standardized breach IDs
+- **Dec 12, 2025**: Added GET /api/runs/{run_id}/observed-breaches endpoint for Farm grading
+- **Dec 12, 2025**: Added 22 unit tests for breach mapper, evidence gates, and output schema
 - **Dec 12, 2025**: Fixed route ordering - specific routes (inventory, shadow-it) now declared before wildcard {asset_id} route
 - **Dec 12, 2025**: Added robust vendor drilldown using query params (/api/assets/inventory?field=vendor&key=...) to handle special characters
 - **Dec 12, 2025**: Added farm_bucket column for Farm's mutually exclusive bucket classification (clean, non_blocking, blocking, shadow)

@@ -1,0 +1,141 @@
+Prompt 2 — AODv3 Replit Agent (Observed Breach Ledger + Robust parsing)
+
+You are the AODv3 senior engineer. Your job is to make AOD’s output contract-grade, deterministic, explainable, and robust for Farm to grade. No black-box anomaly_score in user-facing or contract outputs.
+
+Non-negotiables
+
+Do not use anomaly_score for any contract output. If it exists internally, fine, but contract outputs must be rule breaches with explicit definitions.
+
+No % targets. No “we aimed for 10% blocking.” Only breached/not + materiality handled by Farm.
+
+AOD must be robust to Farm response shape drift and must never crash due to list vs dict etc.
+
+Minimal noise: err on too little reporting; do not explode “Data Conflicts” into most assets unless materiality gates (Farm will do materiality; AOD must still provide accurate raw breaches and evidence).
+
+Don’t change overall product flow beyond exporting the structured breach ledger.
+
+Deliverables (end-to-end MVP)
+Phase A — Stable Observed Breach Ledger export
+
+For each asset in a run, produce observed_breaches[] matching Farm’s expected schema:
+
+breach_id (stable strings, align to Farm)
+
+is_breached boolean
+
+severity_base (BLOCKER, NON_BLOCKING, TAG)
+
+evidence minimal fields required
+
+source (which lens/fields triggered it)
+
+Implement mapping from current AOD findings into breach IDs:
+
+Blocking
+
+B-ONT-001 SOR_CONFLICT_CRITICAL_FIELD ← existing SoR Conflict
+
+B-DATA-001 SCHEMA_DRIFT_BREAKING ← existing Schema Mismatch
+
+B-ID-001 ID_COLLISION
+
+B-ID-002 MISSING_REQUIRED_ID
+
+Non-blocking / Tag
+
+S-SHADOW-001 OBSERVED_NOT_REGISTERED ← Shadow IT (but enforce evidence gate below)
+
+S-GOV-001 MISSING_OWNER
+
+S-DATA-001 NONBLOCKING_CONFLICT (use conflict_types but do not promote)
+
+S-SEC-001/2/3 if AOD currently receives those fields; if not, ensure AOD passes through security evidence when provided by Farm
+
+Phase B — Evidence gates (prevent hallucinations)
+
+AOD must not emit a breach unless the minimum evidence exists.
+
+Critical gate: Shadow IT
+
+Do not emit shadow unless you have:
+
+presence evidence (telemetry/spend) AND
+
+absence evidence (not in IdP and/or CMDB)
+
+Enforce carve-out: never mark shadow for categories flagged “never shadow” by Farm.
+
+For SoR Conflict / Schema Drift:
+
+Evidence must include conflicting SoTs and field(s)/diff summary.
+
+For Data conflicts:
+
+Evidence must include conflict_types (capped list is okay).
+
+Phase C — Robust Farm response normalization (no crashes)
+
+Implement a single adapter function for Farm ground truth responses that handles:
+
+{"ground_truth":{"expected_assets":[...]}}
+
+{"ground_truth":[...]}
+
+[...]
+
+{} / []
+
+error envelopes / non-json handled gracefully
+
+No .get() calls on non-dicts.
+
+On invalid shapes:
+
+produce controlled error state and continue server operation
+
+return empty list + warn with shape signature (no full payload logging)
+
+Phase D — Run identity + export endpoint
+
+Ensure AOD can be graded:
+
+AOD must include run_id in its run outputs and in the observed_breaches export.
+
+Provide a machine-readable endpoint or artifact Farm can fetch:
+
+GET /runs/{run_id}/observed-breaches (or equivalent)
+Return:
+
+list of assets with asset_id and observed_breaches[]
+
+Phase E — Tests (must pass)
+
+Add unit tests for:
+
+Farm response shape normalization (all shapes above) → no crashes
+
+Shadow evidence gate
+
+Output schema stability (observed breach objects always valid)
+
+Mapping correctness for blocker breaches
+
+Required output from you (in chat)
+
+File list changed
+
+How to run tests
+
+Sample observed_breaches JSON (small)
+
+Example warning log for unexpected Farm shape
+
+Acceptance Criteria
+
+AOD never throws “list has no attribute get” (or similar) from Farm payload drift.
+
+Observed breach ledger exists and is fetchable by run_id.
+
+Shadow cannot be emitted without presence+absence evidence.
+
+Blocking breaches include concrete evidence fields.

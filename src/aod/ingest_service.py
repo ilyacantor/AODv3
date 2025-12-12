@@ -1,4 +1,5 @@
 import uuid
+import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from src.aod.db import execute, fetch, fetchrow
@@ -7,10 +8,12 @@ from src.aod.lifecycle import (
     route_lifecycle, derive_tech_domain, derive_system_role,
     derive_business_domain, is_shadow_it, derive_findings
 )
+from src.aod.breaches import assemble_observed_breaches
 
 
 async def reset_all_data() -> Dict[str, Any]:
     """Reset all assets and findings but preserve catalog run history."""
+    await execute("DELETE FROM observed_breaches")
     await execute("DELETE FROM findings")
     await execute("DELETE FROM assets")
     return {"success": True, "message": "All assets and findings have been reset. Catalog history preserved."}
@@ -242,8 +245,6 @@ async def upsert_asset(asset: Dict[str, Any]) -> str:
 
 
 async def save_findings(asset_id: str, findings: List[Dict[str, Any]]):
-    import json
-    
     await execute("DELETE FROM findings WHERE asset_id = $1", asset_id)
     
     for finding in findings:
@@ -252,6 +253,20 @@ async def save_findings(asset_id: str, findings: List[Dict[str, Any]]):
             VALUES ($1, $2, $3, $4, $5, 'open', $6, $7)
         """, str(uuid.uuid4()), asset_id, finding["finding_type"], finding.get("rule_id"),
             finding["severity"], finding["description"], json.dumps(finding.get("evidence", {})))
+
+
+async def save_observed_breaches(run_id: str, asset_id: str, breaches: List[Dict[str, Any]]):
+    """Save observed breaches for an asset in a run."""
+    await execute("DELETE FROM observed_breaches WHERE asset_id = $1 AND run_id = $2", asset_id, run_id)
+    
+    for breach in breaches:
+        await execute("""
+            INSERT INTO observed_breaches (id, run_id, asset_id, breach_id, name, is_breached, severity_base, evidence, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """, str(uuid.uuid4()), run_id, asset_id, 
+            breach["breach_id"], breach["name"], breach["is_breached"], 
+            breach["severity_base"], json.dumps(breach.get("evidence", {})),
+            breach.get("source"))
 
 
 async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
@@ -345,6 +360,9 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
             
             findings = derive_findings(asset_data, signals)
             await save_findings(asset_id, findings)
+            
+            breaches = assemble_observed_breaches(asset_data, signals, lens_coverage)
+            await save_observed_breaches(run_id, asset_id, breaches)
             
             stats["total"] += 1
             if asset_data["is_shadow_it"]:

@@ -14,6 +14,9 @@ from src.aod.dashboard_service import (
     get_assets_by_inventory, get_shadow_it_by_field, get_farm_bucket_counts, get_validation_metrics,
     filter_assets_by_inventory
 )
+from src.aod.ledger_service import (
+    get_observed_breaches_by_run, get_breach_summary_by_run, get_all_runs_with_breaches
+)
 
 
 @asynccontextmanager
@@ -158,6 +161,33 @@ async def api_validation_buckets():
 @app.get("/api/validation/metrics")
 async def api_validation_metrics():
     return await get_validation_metrics()
+
+
+@app.get("/api/runs")
+async def api_runs_with_breaches():
+    """Get all runs with breach summary."""
+    runs = await get_all_runs_with_breaches()
+    return {"runs": runs}
+
+
+@app.get("/api/runs/{run_id}/observed-breaches")
+async def api_observed_breaches_by_run(run_id: str):
+    """
+    Get observed breaches for a specific run.
+    
+    Machine-readable endpoint for Farm grading.
+    Returns assets with their observed_breaches[] array.
+    """
+    result = await get_observed_breaches_by_run(run_id)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/api/runs/{run_id}/observed-breaches/summary")
+async def api_breach_summary_by_run(run_id: str):
+    """Get just the breach summary counts for a run."""
+    return await get_breach_summary_by_run(run_id)
 
 
 if __name__ == "__main__":

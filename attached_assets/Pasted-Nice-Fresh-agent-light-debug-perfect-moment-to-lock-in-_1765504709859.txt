@@ -1,0 +1,371 @@
+Nice. Fresh agent, light debug = perfect moment to lock in what **Stage 2** is before things drift again.
+
+Here’s how I’d tee up the **next stage** and then a **copy-paste Replit prompt** for when you’re ready.
+
+---
+
+## Stage 2: “Real Farm + Lifecycle + Findings That Actually Match”
+
+**Goal of Stage 2:**
+Turn AOD v3 from “toy ingest + counts” into a **credible mini-product**:
+
+* Use the **real Farm enterprise snapshot** shape (surfaces, signals, farm_asset_id)
+* Persist **one clean asset row per `farm_asset_id`** with lens coverage and core ontology.
+* Apply a **single lifecycle router** with the correct blocking rules.
+* Generate **Findings** from CMDB signals (shadow_it, governance_gap, data_conflicts, ops_risk, low_confidence).
+* Make the **dashboard, triage cards, and asset detail drilldowns all agree numerically**.
+
+No ML / Training Center / experiments. Just rules + Farm.
+
+Concretely, Stage 2 should give you:
+
+1. **Farm ingest uses real contract**
+
+   From Farm docs: AOD should consume `POST /api/farm/enterprise/new` with `archetype` + `scale`, and read CMDB conflict signals from `surfaces.cmdb.evidence[*].signals`.
+
+   Key signals you must wire:
+
+   * `signals.farm_asset_id` → `assets.farm_asset_id` (stable identity)
+   * `signals.parked_reason`
+   * `signals.has_data_conflicts`
+   * `signals.conflict_types[]`
+   * `signals.rules_triggered[]`
+   * `signals.is_shadow_it`
+   * `signals.anomaly_score`
+   * `signals.prob_kind`
+
+2. **Lens coverage & shadow IT basics**
+
+   * Build `lens_coverage` per asset, keyed by lens name (`cmdb`, `idp`, `saas_api`, `billing`, `edr`, `browser`, `network`, `observability`).
+   * For now:
+
+     * **Primary truth** for `is_shadow_it` = Farm’s `signals.is_shadow_it` (if present).
+     * Later you can add lens-pattern heuristics, but Stage 2 can just mirror Farm.
+
+3. **Canonical lifecycle routing (one place only)**
+
+   Implement **one** router that decides `lifecycle_state` + `parked_reason` from CMDB signals:
+
+   * Blocking → `PARKED`:
+
+     * Rule IDs: `SOR_CONFLICT`, `ONT_SOR_CONFLICT`, `SCHEMA_MISMATCH`, `SCHEMA_OR_SHAPE_MISMATCH`, `DATA_SCHEMA_DRIFT`, `ID_COLLISION`, `MISSING_PRIMARY_ID`.
+   * Everything else → `CATALOGED`.
+   * No one else in the codebase is allowed to mutate lifecycle_state (except a future explicit HITL endpoint).
+
+4. **Findings generation from signals**
+
+   For each asset, based on CMDB signals + derived fields, generate rows in `findings`:
+
+   * `shadow_it`
+
+     * Condition: `is_shadow_it = true`.
+     * Severity: `warn` unless conflict types escalate it.
+   * `governance_gap`
+
+     * Condition: all of `owner`, `owner_email`, `owner_team` are null/empty **or** the vendor is unmapped.
+   * `data_conflicts`
+
+     * Condition: `has_data_conflicts = true` or `conflict_types` non-empty.
+   * `ops_risk`
+
+     * Condition: `anomaly_score >= 0.4`. 
+   * `low_confidence`
+
+     * Condition: `prob_kind < 0.5`.
+
+   All of these **must** leave lifecycle_state alone. They’re **reports**, not blockers.
+
+5. **Dashboard & triage that actually reconcile**
+
+   Update the dashboard + triage queries so that:
+
+   * Lifecycle cards:
+
+     * `PARKED` = count of assets with `lifecycle_state='PARKED'`.
+     * `CATALOGED` = ditto.
+   * Blocking triage cards:
+
+     * SoR Conflict: `PARKED` with `parked_reason` including `SOR_CONFLICT` / `ONT_SOR_CONFLICT`.
+     * Schema Mismatch: `parked_reason` includes `SCHEMA_MISMATCH` / `SCHEMA_OR_SHAPE_MISMATCH` / `DATA_SCHEMA_DRIFT`.
+     * ID Collision: `parked_reason='ID_COLLISION'`.
+     * Missing ID: `parked_reason='MISSING_PRIMARY_ID'`.
+   * Non-blocking triage cards:
+
+     * Shadow IT: count of `findings.finding_type='shadow_it'`.
+     * Governance Gap: `finding_type='governance_gap'`.
+     * Data Conflicts: `finding_type='data_conflicts'`.
+     * Ops Risk: `finding_type='ops_risk'`.
+     * Low Confidence: `finding_type='low_confidence'`.
+
+   Clicking any card → asset list → asset detail, with numbers that line up 1:1 with those queries.
+
+---
+
+## Prompt for Replit Agent – Stage 2 Upgrade (AOD v3)
+
+Use this once your light debugging on Stage 1 is done.
+
+---
+
+**PROMPT TO PASTE INTO REPLIT**
+
+You are working in an existing AOD v3 codebase that already has:
+
+* FastAPI + Jinja2 UI
+* Supabase Postgres (via `DATABASE_URL` or `SUPABASE_DB_URL`)
+* Basic `assets` and `findings` tables and a `/dashboard` page
+* A simple `/farm/ingest` flow using a stub JSON shape
+
+Your job in this stage is to **wire AOD v3 to the real Farm contract and implement canonical lifecycle + findings**, without introducing new complexity or side systems.
+
+### Absolute rules
+
+1. **Database**
+
+   * Use ONLY the existing external Postgres (Supabase).
+   * Do NOT add:
+
+     * Neon
+     * Replit DB
+     * SQLite or any second DB
+
+2. **Scope**
+
+   * Do NOT re-architect or introduce ML / Training Center / RQ / experiments.
+   * Touch the minimum number of files needed to:
+
+     * Parse the real Farm payload
+     * Compute lifecycle_state + findings
+     * Fix the dashboard/triage queries
+
+3. **Docs to read first (read-only)**
+
+   * `FARM_AOD_INTEGRATION (2).md`
+   * `FARM_API_INTEGRATION.md`
+   * `FARM_DATA_SCHEMAS.md`
+   * `replit (18).md` (for lifecycle + findings philosophy ONLY, not code)
+
+Do NOT pull in any old Python code from prior repos; just follow the contracts and rules described there.
+
+---
+
+### Step 1 – Confirm & if needed extend schema
+
+1. Inspect the current schema for `assets` and `findings` in Postgres.
+
+2. Compare against what we now need from Farm CMDB signals:
+
+   From `surfaces.cmdb.evidence[*].signals`: 
+
+   * `farm_asset_id` (stable ID)
+   * `parked_reason`
+   * `has_data_conflicts`
+   * `conflict_types[]`
+   * `rules_triggered[]`
+   * `is_shadow_it`
+   * `anomaly_score`
+   * `prob_kind`
+
+3. If any required columns are missing on `assets` or `findings`, create a single migration to add them. Prefer:
+
+   * `assets.farm_asset_id` (text, NOT NULL within tenant, unique for our MVP)
+   * `assets.parked_reason` (text, nullable)
+   * `assets.has_data_conflicts` (boolean, default false)
+   * `assets.lens_coverage` (jsonb, default `{}`)
+   * `assets.metadata` (jsonb, default `{}`) to hold raw signals like `rules_triggered`, `conflict_types`, `anomaly_score`, `prob_kind`
+   * `findings.finding_type`, `findings.rule_id`, `findings.severity`, `findings.status`, `findings.description`, `findings.evidence` (jsonb)
+
+4. Run the migration, and verify the columns exist before proceeding.
+
+---
+
+### Step 2 – Implement a real Farm client + ingest wrapper
+
+1. Create or update a `farm_client` module that:
+
+   * Reads `FARM_URL` from env.
+   * Implements:
+
+     * `create_enterprise(archetype, scale)` → calls `POST /api/farm/enterprise/new` and returns the JSON snapshot.
+
+       * For now, hardcode `archetype="hybrid_sprawl"` and `scale="medium"` in a simple `/farm/ingest/full-pull` endpoint, or read from query/body.
+
+2. Replace the current stub `/farm/ingest` logic with:
+
+   * Call `create_enterprise(...)`.
+   * Pass the entire response JSON into a new `ingest_from_farm_snapshot(snapshot)` function in an ingest service.
+
+---
+
+### Step 3 – Map Farm snapshot → AOD assets (one row per farm_asset_id)
+
+In the ingest service:
+
+1. Iterate over `snapshot.surfaces.cmdb.evidence[*]`. For each evidence record:
+
+   * Read `signals = evidence.signals`.
+   * Extract:
+
+     * `farm_asset_id = signals.farm_asset_id`
+     * `name = signals.asset_name` (or nearest equivalent)
+     * `asset_kind` (db/service/app/saas/host)
+     * `vendor`
+     * `environment`
+     * Ownership fields: `owner`, `owner_email`, `owner_team`
+     * Conflict signals listed above.
+
+2. Lens coverage:
+
+   * Build a `lens_coverage` JSON for each asset keyed by lens name:
+
+     * For now: any CMDB evidence for a `farm_asset_id` → `{"cmdb": true}`.
+     * If you can easily see other lenses referencing the same `farm_asset_id`, include them too, but don’t overcomplicate.
+
+3. Upsert into `assets` by `farm_asset_id`:
+
+   * If asset exists: update fields.
+   * If not: insert.
+
+Do NOT compute lifecycle_state yet in this step; just load data and raw signals.
+
+---
+
+### Step 4 – Canonical lifecycle router (single function)
+
+Implement a single pure function, e.g. `route_lifecycle(signals) -> (state, parked_reason)`:
+
+* Inputs:
+
+  * `signals.parked_reason` (string or null)
+  * `signals.rules_triggered[]`
+  * `signals.conflict_types[]`
+
+* Logic:
+
+  * Define `BLOCKING_RULE_IDS` exactly as:
+
+    * `SOR_CONFLICT`
+    * `ONT_SOR_CONFLICT`
+    * `SCHEMA_MISMATCH`
+    * `SCHEMA_OR_SHAPE_MISMATCH`
+    * `DATA_SCHEMA_DRIFT`
+    * `ID_COLLISION`
+    * `MISSING_PRIMARY_ID`
+
+  * If any of these appear in `signals.rules_triggered` or equal `signals.parked_reason`:
+
+    * `lifecycle_state = "PARKED"`
+    * `parked_reason = signals.parked_reason or the first blocking rule id`
+
+  * Else:
+
+    * `lifecycle_state = "CATALOGED"`
+    * `parked_reason = null`
+
+Apply this after ingesting signals, and persist `lifecycle_state` + `parked_reason` to `assets`.
+
+No other module is allowed to change `lifecycle_state`.
+
+---
+
+### Step 5 – Findings generation from CMDB signals
+
+Create a function `derive_findings(asset, signals) -> list[Finding]` with these rules:
+
+* `shadow_it`
+
+  * If `signals.is_shadow_it is True` or `asset.is_shadow_it is True`:
+
+    * Add finding type `shadow_it`, severity `warn`, description summarizing why (e.g., “Marked as shadow IT by Farm CMDB signals.”).
+
+* `governance_gap`
+
+  * If all of `owner`, `owner_email`, `owner_team` are null/empty **or** vendor cannot be mapped to a known vendor taxonomy:
+
+    * Add finding type `governance_gap`, severity `warn`.
+
+* `data_conflicts`
+
+  * If `signals.has_data_conflicts is True` or `signals.conflict_types` non-empty:
+
+    * Add finding type `data_conflicts`, severity `warn` (or `critical` if `SOR_CONFLICT` is present but still non-blocking for whatever reason).
+
+* `ops_risk`
+
+  * If `signals.anomaly_score >= 0.4`:
+
+    * Add finding type `ops_risk`, severity `warn`, with `evidence.anomaly_score`.
+
+* `low_confidence`
+
+  * If `signals.prob_kind < 0.5`:
+
+    * Add finding type `low_confidence`, severity `info`, with `evidence.prob_kind`.
+
+Persist findings after you upsert each asset:
+
+* Soft-delete or overwrite old findings for that asset for Stage 2 (e.g., delete existing + insert new), to avoid duplicates.
+
+---
+
+### Step 6 – Fix dashboard & triage queries to use assets + findings
+
+Update the backend services/routes powering:
+
+1. **Lifecycle cards**
+
+   * `PARKED` = `COUNT(*) FROM assets WHERE lifecycle_state='PARKED'`.
+   * `CATALOGED` = same for `'CATALOGED'`.
+
+2. **Blocking triage cards** (PARKED-only)
+
+   * SoR Conflict: PARKED where `parked_reason` IN (`SOR_CONFLICT`, `ONT_SOR_CONFLICT`).
+   * Schema Mismatch: PARKED where `parked_reason` IN (`SCHEMA_MISMATCH`, `SCHEMA_OR_SHAPE_MISMATCH`, `DATA_SCHEMA_DRIFT`).
+   * ID Collision: PARKED where `parked_reason = 'ID_COLLISION'`.
+   * Missing ID: PARKED where `parked_reason = 'MISSING_PRIMARY_ID'`.
+
+3. **Non-blocking triage cards** (CATALOGED-only, from findings)
+
+   * Query `findings` joined to `assets` where `assets.lifecycle_state='CATALOGED'`.
+   * Count rows per `finding_type`:
+
+     * `shadow_it`, `governance_gap`, `data_conflicts`, `ops_risk`, `low_confidence`.
+
+4. **Asset drilldowns**
+
+   * When clicking a card, use the same WHERE clauses as above for the list query.
+   * When clicking an asset, hit one canonical `GET /assets/{id}` endpoint that:
+
+     * Returns catalog fields from `assets`,
+     * And an array of findings from `findings` for that `asset_id`.
+
+Ensure the UI tabs “Catalog” vs “Findings” are populated from these two sources.
+
+---
+
+### Step 7 – Sanity checks
+
+After implementation, you must:
+
+1. Run a Farm full-pull ingest via your new endpoint.
+
+2. Verify via SQL (or debug prints):
+
+   * Total assets = number returned in CMDB surface.
+   * PARKED count = number of assets whose signals contain at least one blocking rule.
+   * CATALOGED count = everything else.
+   * Shadow IT count in the triage card = number of assets where Farm `is_shadow_it` is true.
+
+3. Click-path verification:
+
+   * Dashboard card → asset list → asset detail:
+
+     * Counts match between card and list.
+     * Asset detail shows lifecycle_state consistent with how it was counted.
+     * Findings tab explains why an asset is shadow_it / governance_gap / etc. in plain language.
+
+Only once these checks pass should you consider Stage 2 complete.
+
+---
+
+When you’re done with your current light debugging, you can drop this prompt into the Replit agent as is. Next stage after this will be ground-truth comparison (recall/precision/F1 vs Farm’s GT), but first we just need **one truthful ingest + lifecycle + findings path** that behaves like a real product.

@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from src.aod.db import fetch, fetchrow, fetchval
 
 
@@ -128,7 +128,7 @@ async def get_dashboard_data() -> Dict[str, Any]:
             "by_tech_domain": await get_shadow_it_breakdown("tech_domain"),
             "by_business_domain": await get_shadow_it_breakdown("business_domain")
         },
-        "total_assets": lifecycle["DISCOVERED"] + lifecycle["PARKED"] + lifecycle["CATALOGED"]
+        "total_assets": lifecycle["DISCOVERED"]
     }
 
 
@@ -182,7 +182,7 @@ async def get_shadow_it_assets() -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-async def get_asset_detail(asset_id: str) -> Dict[str, Any]:
+async def get_asset_detail(asset_id: str) -> Optional[Dict[str, Any]]:
     asset = await fetchrow("""
         SELECT * FROM assets WHERE id = $1
     """, asset_id)

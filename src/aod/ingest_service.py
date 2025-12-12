@@ -18,7 +18,7 @@ async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
     return run_id
 
 
-async def update_ingest_run(run_id: str, status: str, total: int, shadow: int, parked: int, message: str = None):
+async def update_ingest_run(run_id: str, status: str, total: int, shadow: int, parked: int, message: str = ""):
     await execute("""
         UPDATE ingest_runs 
         SET status = $1, finished_at = NOW(), total_assets = $2, 

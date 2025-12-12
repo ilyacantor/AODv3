@@ -105,9 +105,12 @@ async function showAssets(type, value) {
     
     try {
         const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         
-        if (data.assets.length === 0) {
+        if (!data.assets || data.assets.length === 0) {
             container.innerHTML = `<div class="empty-state"><h3>No Assets Found</h3></div>`;
             return;
         }

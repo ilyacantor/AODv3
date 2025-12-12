@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Triage Center - AOD Discover{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 24px;">Triage Center</h2>
+
+<h3 class="section-title blocking">Blocking Issues (Requires Resolution)</h3>
+{% if data.lifecycle.PARKED > 0 %}
+<div class="asset-list" style="margin-bottom: 32px;">
+    <div class="asset-list-header">
+        <div>Parked Reason</div>
+        <div>Count</div>
+        <div>Priority</div>
+        <div>Action</div>
+        <div></div>
+    </div>
+    {% for reason, count in data.blocking.items() %}
+    {% if count > 0 %}
+    <div class="asset-row" onclick="showAssets('parked', '{{ reason }}')">
+        <div class="asset-name">{{ reason }}</div>
+        <div>{{ count }} assets</div>
+        <div><span class="badge badge-parked">Critical</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state" style="margin-bottom: 32px;">
+    <h3>No Blocking Issues</h3>
+    <p>All assets have passed blocking validation rules.</p>
+</div>
+{% endif %}
+
+<h3 class="section-title findings">Non-Blocking Findings (Review Recommended)</h3>
+{% set has_findings = data.findings.shadow_it + data.findings.governance_gap + data.findings.data_conflicts + data.findings.ops_risk + data.findings.low_confidence > 0 %}
+{% if has_findings %}
+<div class="asset-list">
+    <div class="asset-list-header">
+        <div>Finding Type</div>
+        <div>Count</div>
+        <div>Severity</div>
+        <div>Action</div>
+        <div></div>
+    </div>
+    {% if data.findings.shadow_it > 0 %}
+    <div class="asset-row" onclick="showAssets('finding', 'shadow_it')">
+        <div class="asset-name">Shadow IT</div>
+        <div>{{ data.findings.shadow_it }} assets</div>
+        <div><span class="badge badge-shadow">Warning</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+    {% if data.findings.governance_gap > 0 %}
+    <div class="asset-row" onclick="showAssets('finding', 'governance_gap')">
+        <div class="asset-name">Governance Gap</div>
+        <div>{{ data.findings.governance_gap }} assets</div>
+        <div><span class="badge badge-shadow">Warning</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+    {% if data.findings.data_conflicts > 0 %}
+    <div class="asset-row" onclick="showAssets('finding', 'data_conflicts')">
+        <div class="asset-name">Data Conflicts</div>
+        <div>{{ data.findings.data_conflicts }} assets</div>
+        <div><span class="badge badge-shadow">Warning</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+    {% if data.findings.ops_risk > 0 %}
+    <div class="asset-row" onclick="showAssets('finding', 'ops_risk')">
+        <div class="asset-name">Ops Risk</div>
+        <div>{{ data.findings.ops_risk }} assets</div>
+        <div><span class="badge badge-parked">Critical</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+    {% if data.findings.low_confidence > 0 %}
+    <div class="asset-row" onclick="showAssets('finding', 'low_confidence')">
+        <div class="asset-name">Low Confidence</div>
+        <div>{{ data.findings.low_confidence }} assets</div>
+        <div><span class="badge badge-discovered">Info</span></div>
+        <div>View All</div>
+        <div></div>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state">
+    <h3>No Findings</h3>
+    <p>No non-blocking findings detected for cataloged assets.</p>
+</div>
+{% endif %}
+
+<div id="assetListContainer" style="margin-top: 32px;"></div>
+{% endblock %}

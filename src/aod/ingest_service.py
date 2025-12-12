@@ -1,0 +1,205 @@
+import uuid
+from datetime import datetime
+from typing import Dict, Any, List
+from src.aod.db import execute, fetch, fetchrow
+from src.aod.farm_client import farm_client
+from src.aod.lifecycle import (
+    route_lifecycle, derive_tech_domain, derive_system_role,
+    derive_business_domain, is_shadow_it, derive_findings
+)
+
+
+async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
+    run_id = str(uuid.uuid4())
+    await execute("""
+        INSERT INTO ingest_runs (id, tenant_id, archetype, scale, status, started_at)
+        VALUES ($1, $2, $3, $4, 'running', NOW())
+    """, run_id, tenant_id, archetype, scale)
+    return run_id
+
+
+async def update_ingest_run(run_id: str, status: str, total: int, shadow: int, parked: int, message: str = None):
+    await execute("""
+        UPDATE ingest_runs 
+        SET status = $1, finished_at = NOW(), total_assets = $2, 
+            shadow_it_count = $3, parked_count = $4, message = $5
+        WHERE id = $6
+    """, status, total, shadow, parked, message, run_id)
+
+
+def extract_lens_coverage(surfaces: Dict[str, Any], farm_asset_id: str) -> Dict[str, bool]:
+    coverage = {}
+    lens_names = ["idp", "cmdb", "billing", "edr", "browser", "network", "observability", "saas_api"]
+    
+    for lens in lens_names:
+        lens_data = surfaces.get(lens, {})
+        evidence = lens_data.get("evidence", [])
+        coverage[lens] = any(
+            e.get("signals", {}).get("farm_asset_id") == farm_asset_id 
+            for e in evidence
+        )
+    
+    return coverage
+
+
+def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hint: str, 
+                             vendor_hint: str, lens_coverage: Dict[str, bool]) -> Dict[str, Any]:
+    farm_asset_id = signals.get("farm_asset_id", str(uuid.uuid4()))
+    
+    vendor = signals.get("vendor") or vendor_hint
+    owner_team = signals.get("owner_team")
+    asset_kind = signals.get("asset_kind", "unknown")
+    
+    lifecycle_state, parked_reason = route_lifecycle(signals)
+    
+    shadow_flag = is_shadow_it({**signals, "lens_coverage": lens_coverage})
+    
+    return {
+        "tenant_id": tenant_id,
+        "farm_asset_id": farm_asset_id,
+        "name": signals.get("asset_name") or entity_hint or f"Asset-{farm_asset_id[:8]}",
+        "asset_kind": asset_kind,
+        "asset_type": signals.get("catalog_asset_type", asset_kind),
+        "vendor": vendor,
+        "environment": signals.get("environment", "unknown"),
+        "business_domain": derive_business_domain(owner_team, vendor),
+        "tech_domain": derive_tech_domain(vendor, asset_kind),
+        "system_role": derive_system_role(vendor),
+        "owner": signals.get("owner"),
+        "owner_email": signals.get("owner_email"),
+        "owner_team": owner_team,
+        "lifecycle_state": lifecycle_state,
+        "parked_reason": parked_reason,
+        "is_shadow_it": shadow_flag,
+        "has_data_conflicts": signals.get("has_data_conflicts", False),
+        "lens_coverage": lens_coverage,
+        "metadata": {
+            "rules_triggered": signals.get("rules_triggered", []),
+            "conflict_types": signals.get("conflict_types", []),
+            "anomaly_score": signals.get("anomaly_score"),
+            "prob_kind": signals.get("prob_kind"),
+            "sources": signals.get("sources", [])
+        }
+    }
+
+
+async def upsert_asset(asset: Dict[str, Any]) -> str:
+    import json
+    
+    existing = await fetchrow("""
+        SELECT id FROM assets WHERE tenant_id = $1 AND farm_asset_id = $2
+    """, asset["tenant_id"], asset["farm_asset_id"])
+    
+    if existing:
+        asset_id = str(existing["id"])
+        await execute("""
+            UPDATE assets SET
+                name = $1, asset_kind = $2, asset_type = $3, vendor = $4,
+                environment = $5, business_domain = $6, tech_domain = $7,
+                system_role = $8, owner = $9, owner_email = $10, owner_team = $11,
+                lifecycle_state = $12, parked_reason = $13, is_shadow_it = $14,
+                has_data_conflicts = $15, lens_coverage = $16, metadata = $17,
+                updated_at = NOW()
+            WHERE id = $18
+        """, asset["name"], asset["asset_kind"], asset["asset_type"], asset["vendor"],
+            asset["environment"], asset["business_domain"], asset["tech_domain"],
+            asset["system_role"], asset["owner"], asset["owner_email"], asset["owner_team"],
+            asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
+            asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
+            json.dumps(asset["metadata"]), asset_id)
+    else:
+        asset_id = str(uuid.uuid4())
+        await execute("""
+            INSERT INTO assets (id, tenant_id, farm_asset_id, name, asset_kind, asset_type,
+                vendor, environment, business_domain, tech_domain, system_role,
+                owner, owner_email, owner_team, lifecycle_state, parked_reason,
+                is_shadow_it, has_data_conflicts, lens_coverage, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        """, asset_id, asset["tenant_id"], asset["farm_asset_id"], asset["name"],
+            asset["asset_kind"], asset["asset_type"], asset["vendor"], asset["environment"],
+            asset["business_domain"], asset["tech_domain"], asset["system_role"],
+            asset["owner"], asset["owner_email"], asset["owner_team"],
+            asset["lifecycle_state"], asset["parked_reason"], asset["is_shadow_it"],
+            asset["has_data_conflicts"], json.dumps(asset["lens_coverage"]), 
+            json.dumps(asset["metadata"]))
+    
+    return asset_id
+
+
+async def save_findings(asset_id: str, findings: List[Dict[str, Any]]):
+    import json
+    
+    await execute("DELETE FROM findings WHERE asset_id = $1", asset_id)
+    
+    for finding in findings:
+        await execute("""
+            INSERT INTO findings (id, asset_id, finding_type, rule_id, severity, status, description, evidence)
+            VALUES ($1, $2, $3, $4, $5, 'open', $6, $7)
+        """, str(uuid.uuid4()), asset_id, finding["finding_type"], finding.get("rule_id"),
+            finding["severity"], finding["description"], json.dumps(finding.get("evidence", {})))
+
+
+async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
+    try:
+        snapshot = await farm_client.create_enterprise(archetype, scale)
+    except Exception as e:
+        return {"success": False, "error": f"Failed to fetch from Farm: {str(e)}"}
+    
+    tenant_id = snapshot.get("tenant_id")
+    if not tenant_id:
+        return {"success": False, "error": "No tenant_id in Farm response"}
+    
+    run_id = await create_ingest_run(tenant_id, archetype, scale)
+    
+    try:
+        surfaces = snapshot.get("surfaces", {})
+        cmdb_data = surfaces.get("cmdb", {})
+        cmdb_evidence = cmdb_data.get("evidence", [])
+        
+        total_assets = 0
+        shadow_count = 0
+        parked_count = 0
+        
+        for record in cmdb_evidence:
+            signals = record.get("signals", {})
+            entity_hint = record.get("entity_hint", "")
+            vendor_hint = record.get("vendor_hint", "")
+            
+            farm_asset_id = signals.get("farm_asset_id")
+            if not farm_asset_id:
+                continue
+            
+            lens_coverage = extract_lens_coverage(surfaces, farm_asset_id)
+            
+            asset_data = build_asset_from_signals(
+                tenant_id, signals, entity_hint, vendor_hint, lens_coverage
+            )
+            
+            asset_id = await upsert_asset(asset_data)
+            
+            findings = derive_findings(asset_data, signals)
+            await save_findings(asset_id, findings)
+            
+            total_assets += 1
+            if asset_data["is_shadow_it"]:
+                shadow_count += 1
+            if asset_data["lifecycle_state"] == "PARKED":
+                parked_count += 1
+        
+        await update_ingest_run(run_id, "success", total_assets, shadow_count, parked_count)
+        
+        return {
+            "success": True,
+            "tenant_id": tenant_id,
+            "run_id": run_id,
+            "total_assets": total_assets,
+            "shadow_it_count": shadow_count,
+            "parked_count": parked_count,
+            "company_name": snapshot.get("company_name"),
+            "archetype": archetype,
+            "scale": scale
+        }
+        
+    except Exception as e:
+        await update_ingest_run(run_id, "failed", 0, 0, 0, str(e))
+        return {"success": False, "error": str(e), "run_id": run_id}

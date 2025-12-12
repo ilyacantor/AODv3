@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AOD Discover{% endblock %}
+
+{% block content %}
+<div class="ingest-panel">
+    <h3 class="section-title">Farm Data Ingestion</h3>
+    <form class="ingest-form" id="ingestForm">
+        <div class="form-group">
+            <label for="archetype">Enterprise Archetype</label>
+            <select id="archetype" name="archetype">
+                <option value="hybrid_sprawl">Hybrid Sprawl (~35% Shadow IT)</option>
+                <option value="k8s_mesh">K8s Mesh (~25% Shadow IT)</option>
+                <option value="legacy_monolith">Legacy Monolith (~15% Shadow IT)</option>
+                <option value="saas_heavy">SaaS Heavy (~30% Shadow IT)</option>
+                <option value="startup_lean">Startup Lean (~20% Shadow IT)</option>
+                <option value="regulated_bank">Regulated Bank (~10% Shadow IT)</option>
+                <option value="healthcare_network">Healthcare Network (~12% Shadow IT)</option>
+                <option value="retail_chain">Retail Chain (~25% Shadow IT)</option>
+                <option value="media_streaming">Media Streaming (~20% Shadow IT)</option>
+                <option value="manufacturing_iot">Manufacturing IoT (~18% Shadow IT)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="scale">Scale</label>
+            <select id="scale" name="scale">
+                <option value="small">Small (~30 assets)</option>
+                <option value="medium" selected>Medium (~100 assets)</option>
+                <option value="large">Large (~300 assets)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" id="ingestBtn">Pull from Farm</button>
+    </form>
+    <div id="ingestStatus"></div>
+</div>
+
+<h3 class="section-title">Asset Lifecycle</h3>
+<div class="stats-row">
+    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'DISCOVERED')">
+        <div class="stat-label">Discovered</div>
+        <div class="stat-value">{{ data.lifecycle.DISCOVERED }}</div>
+    </div>
+    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'PARKED')">
+        <div class="stat-label">Parked (Blocking)</div>
+        <div class="stat-value">{{ data.lifecycle.PARKED }}</div>
+    </div>
+    <div class="stat-card lifecycle" onclick="showAssets('lifecycle', 'CATALOGED')">
+        <div class="stat-label">Cataloged</div>
+        <div class="stat-value">{{ data.lifecycle.CATALOGED }}</div>
+    </div>
+</div>
+
+<h3 class="section-title blocking">Blocking Issues (PARKED)</h3>
+<div class="stats-row">
+    <div class="stat-card blocking" onclick="showAssets('parked', 'SoR Conflict')">
+        <div class="stat-label">SoR Conflict</div>
+        <div class="stat-value">{{ data.blocking['SoR Conflict'] }}</div>
+    </div>
+    <div class="stat-card blocking" onclick="showAssets('parked', 'Schema Mismatch')">
+        <div class="stat-label">Schema Mismatch</div>
+        <div class="stat-value">{{ data.blocking['Schema Mismatch'] }}</div>
+    </div>
+    <div class="stat-card blocking" onclick="showAssets('parked', 'ID Collision')">
+        <div class="stat-label">ID Collision</div>
+        <div class="stat-value">{{ data.blocking['ID Collision'] }}</div>
+    </div>
+    <div class="stat-card blocking" onclick="showAssets('parked', 'Missing ID')">
+        <div class="stat-label">Missing ID</div>
+        <div class="stat-value">{{ data.blocking['Missing ID'] }}</div>
+    </div>
+</div>
+
+<h3 class="section-title findings">Non-Blocking Findings (CATALOGED)</h3>
+<div class="stats-row">
+    <div class="stat-card finding" onclick="showAssets('finding', 'shadow_it')">
+        <div class="stat-label">Shadow IT</div>
+        <div class="stat-value">{{ data.findings.shadow_it }}</div>
+    </div>
+    <div class="stat-card finding" onclick="showAssets('finding', 'governance_gap')">
+        <div class="stat-label">Governance Gap</div>
+        <div class="stat-value">{{ data.findings.governance_gap }}</div>
+    </div>
+    <div class="stat-card finding" onclick="showAssets('finding', 'data_conflicts')">
+        <div class="stat-label">Data Conflicts</div>
+        <div class="stat-value">{{ data.findings.data_conflicts }}</div>
+    </div>
+    <div class="stat-card finding" onclick="showAssets('finding', 'ops_risk')">
+        <div class="stat-label">Ops Risk</div>
+        <div class="stat-value">{{ data.findings.ops_risk }}</div>
+    </div>
+    <div class="stat-card finding" onclick="showAssets('finding', 'low_confidence')">
+        <div class="stat-label">Low Confidence</div>
+        <div class="stat-value">{{ data.findings.low_confidence }}</div>
+    </div>
+</div>
+
+<div class="charts-grid">
+    <div class="chart-card">
+        <div class="chart-title">Inventory by Vendor</div>
+        <div class="bar-chart">
+            {% for item in data.inventory.by_vendor[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <div class="chart-title">Inventory by Asset Kind</div>
+        <div class="bar-chart">
+            {% for item in data.inventory.by_kind[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <div class="chart-title">Inventory by Tech Domain</div>
+        <div class="bar-chart">
+            {% for item in data.inventory.by_tech_domain[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <div class="chart-title">Inventory by Business Domain</div>
+        <div class="bar-chart">
+            {% for item in data.inventory.by_business_domain[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill" style="width: {{ (item.count / (data.total_assets or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <div class="chart-title">Shadow IT by Tech Domain</div>
+        <div class="bar-chart">
+            {% for item in data.shadow_it.by_tech_domain[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill shadow" style="width: {{ (item.count / (data.findings.shadow_it or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <div class="chart-title">Shadow IT by Business Domain</div>
+        <div class="bar-chart">
+            {% for item in data.shadow_it.by_business_domain[:5] %}
+            <div class="bar-item">
+                <span class="bar-label">{{ item.label }}</span>
+                <div class="bar-container">
+                    <div class="bar-fill shadow" style="width: {{ (item.count / (data.findings.shadow_it or 1) * 100)|int }}%">{{ item.count }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div id="assetListContainer"></div>
+{% endblock %}

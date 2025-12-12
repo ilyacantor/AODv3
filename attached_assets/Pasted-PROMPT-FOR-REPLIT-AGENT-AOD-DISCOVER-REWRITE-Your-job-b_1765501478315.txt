@@ -1,0 +1,518 @@
+PROMPT FOR REPLIT AGENT – AOD DISCOVER REWRITE 
+
+Your job: build a new simpler version of AOD that:
+
+Pulls assets from Farm via HTTP per the Farm→AOD contract. 
+
+see FARM_AOD_INTEGRATION (2).md
+
+Stores them in Supabase Postgres (single DB for everything).
+
+Applies a simple, deterministic lifecycle + findings model aligned with the ontology-first spec. 
+
+
+Renders a clean dashboard + triage + asset detail UI that actually matches the data.
+
+
+0. Environment & Frameworks
+
+Language / Backend
+
+Python 3.11
+
+FastAPI (API + server-side rendered pages via Jinja2)
+
+Uvicorn (ASGI server)
+
+Pydantic v2
+
+httpx (for Farm HTTP calls)
+
+psycopg / asyncpg directly (no ORM). Use simple query helpers.
+
+Front-end
+
+Jinja2 templates (templates/)
+
+Static CSS + a little vanilla JS only (static/).
+
+Use simple layout and cards.  See COLOR_PALETTE.md
+
+
+Database
+
+External Supabase Postgres ONLY.
+
+Do NOT use:
+
+Neon
+
+Replit DB
+
+Any embedded/in-memory DB for app state
+
+Get the connection string from an existing secret:
+
+Prefer DATABASE_URL. If not present, read SUPABASE_DB_URL.
+
+Never hard-code a URL; never create a Neon project.
+
+Migrations
+
+Use a simple, repo-local migration mechanism:
+
+Either plain SQL files in migrations/ with a tiny schema_version table, or Alembic.
+
+Keep it minimal: just enough to create/update schema in Supabase safely.
+
+1. Overall Scope (V1)
+
+V1 AOD should do exactly this:
+
+Farm integration
+
+Call Farm endpoints to create a new enterprise and pull surfaces data:
+
+POST /api/farm/enterprise/new (archetype + scale)
+
+GET /api/farm/enterprise/{tenant_id}/ground-truth for validation later 
+
+FARM_AOD_INTEGRATION (2)
+
+Only support full-pull for now (no incremental poll).
+
+Ingest & Normalize Assets
+
+Ingest CMDB surface evidence as the primary source:
+
+surfaces.cmdb.evidence[*].signals is the core signals payload. 
+
+FARM_AOD_INTEGRATION (2)
+
+Extract:
+
+farm_asset_id (stable ID – treat as external_id)
+
+asset_name, asset_kind (db/service/app/saas/host/etc.)
+
+vendor, environment
+
+Ownership fields: owner, owner_email, owner_team
+
+Conflict/signals:
+
+parked_reason
+
+has_data_conflicts
+
+conflict_types[]
+
+rules_triggered[]
+
+is_shadow_it
+
+anomaly_score
+
+prob_kind 
+
+FARM_AOD_INTEGRATION (2)
+
+Derive:
+
+business_domain (from vendor + owner_team; simple mapping)
+
+tech_domain (from asset_kind/vendor; simple mapping)
+
+system_role (SoR/SoE/SoI/exhaust based on vendor mapping)
+
+Lifecycle & Findings (Ontology-first) 
+
+Lifecycle states: DISCOVERED, PARKED, CATALOGED.
+
+Only these are BLOCKING → PARKED:
+
+ONT_SOR_CONFLICT, SOR_CONFLICT
+
+SCHEMA_MISMATCH, SCHEMA_OR_SHAPE_MISMATCH, DATA_SCHEMA_DRIFT
+
+ID_COLLISION, MISSING_PRIMARY_ID
+
+Everything else is non-blocking findings on CATALOGED assets:
+
+shadow_it
+
+governance_gap
+
+data_conflicts
+
+ops_risk (from anomaly_score ≥ 0.4)
+
+low_confidence (prob_kind < 0.5)
+
+Shadow IT:
+
+If Farm sets is_shadow_it → respect that.
+
+Otherwise: simple heuristic (edge-only / no owner / etc.) is OK, but keep it deterministic and documented.
+
+Governance gap:
+
+Missing all of owner, owner_email, owner_team OR
+
+Vendor not found in vendor taxonomy (UNMAPPED).
+
+Data conflicts:
+
+has_data_conflicts = true or conflict_types non-empty.
+
+Dashboard + Triage + Asset Detail
+
+Main Dashboard
+
+Top row:
+
+Asset Lifecycle: counts by state (DISCOVERED, PARKED, CATALOGED)
+
+Blocking (PARKED) cards:
+
+SoR Conflict
+
+Schema Mismatch
+
+ID Collision
+
+Missing ID
+
+Non-blocking (CATALOGED) cards:
+
+Shadow IT
+
+Governance Gap
+
+Data Conflicts
+
+Ops Risk
+
+Low Confidence
+
+Middle row charts (CATALOGED only):
+
+Inventory by Vendor
+
+Inventory by Asset Kind
+
+Inventory by Tech Domain
+
+Inventory by Business Domain
+
+Shadow IT mini-charts:
+
+Shadow IT by Tech Domain
+
+Shadow IT by Business Domain
+
+Triage Center
+
+Simple list/table views grouped by:
+
+Blocking signals (PARKED assets)
+
+Non-blocking findings (CATALOGED assets) per finding_type.
+
+Asset Detail Drawer/Modal
+
+Single endpoint: GET /dashboard/assets/{asset_id}.
+
+Tabs:
+
+Catalog View – ontology view:
+
+Core identity: id, name, vendor, environment, kind
+
+Classification: asset_type, business_domain, tech_domain, system_role
+
+Governance: lifecycle_state, is_shadow_it, data_conflicts flag
+
+Ownership: owner, owner_email, owner_team
+
+Findings – list of findings for that asset:
+
+finding_type, rule_id, severity, description, evidence summary.
+
+Drill-downs must be consistent
+
+Clicking any card on dashboard → list of matching assets.
+
+Counts on cards must match queries used for drill-down.
+
+2. Data Model (Postgres)
+
+Create a minimal but explicit schema. Use schema aod if you prefer, but be consistent.
+
+Tables (suggested):
+
+assets
+
+id (PK, UUID)
+
+tenant_id (text) – Farm tenant ID
+
+farm_asset_id (text, unique per tenant)
+
+name (text)
+
+asset_kind (text) – e.g., db/service/app/saas/host
+
+asset_type (text) – human label, can mirror kind for now
+
+vendor (text)
+
+environment (text)
+
+business_domain (text)
+
+tech_domain (text)
+
+system_role (text) – SoR/SoE/SoI/exhaust/unknown
+
+Ownership:
+
+owner (text)
+
+owner_email (text)
+
+owner_team (text)
+
+Lifecycle:
+
+lifecycle_state (text CHECK in ('DISCOVERED','PARKED','CATALOGED'))
+
+parked_reason (text, nullable)
+
+is_shadow_it (boolean, default false)
+
+Quality flags:
+
+has_data_conflicts (boolean, default false)
+
+lens_coverage (jsonb) – e.g., { "cmdb": true, "idp": true, "billing": false }
+
+metadata (jsonb) – raw extra signals (rules_triggered, conflict_types, anomaly_score, prob_kind)
+
+created_at, updated_at (timestamptz)
+
+findings
+
+id (PK, UUID)
+
+asset_id (FK → assets.id)
+
+finding_type (text) – e.g., shadow_it, governance_gap, data_conflicts, ops_risk, low_confidence
+
+rule_id (text, nullable – e.g., GOV_NO_OWNER, SHADOW_EDGE_ONLY)
+
+severity (text) – critical|warn|info
+
+status (text) – open|acknowledged|resolved|suppressed
+
+description (text)
+
+evidence (jsonb)
+
+created_at, updated_at (timestamptz)
+
+ingest_runs
+
+id (PK, UUID)
+
+tenant_id (text)
+
+archetype (text)
+
+scale (text)
+
+status (text) – running|success|failed
+
+started_at, finished_at (timestamptz)
+
+total_assets (int)
+
+shadow_it_count (int)
+
+parked_count (int)
+
+message (text)
+
+If you feel another table is strictly necessary, define it clearly and keep the schema small.
+
+3. Change Discipline (VERY IMPORTANT)
+
+You must follow these rules from the spec, interpreted for a fresh build: 
+
+replit (18)
+
+Fundamental fixes only – no hacks, no band-aids.
+
+DB Change Checklist (even in a new repo):
+
+Before any query or schema change:
+
+List tables/columns involved.
+
+Confirm they exist (read the migration SQL, don’t assume).
+
+After migrations:
+
+Run a quick connection + schema sanity check.
+
+Avoid doomed-to-fail changes:
+
+Do not add filters on columns not yet created.
+
+Do not add UI elements that the API doesn’t support.
+
+Verification on each step:
+
+After implementing an endpoint, test it via curl or the built-in HTTP client in Replit.
+
+For UI:
+
+Dashboard card count → click → drill-down list → click → asset detail. Make sure all three agree.
+
+4. Implementation Plan (Sequential)
+
+Implement in small, locked steps. Don’t jump ahead.
+
+Step 1 – Skeleton App
+
+Create FastAPI app with:
+
+main.py → FastAPI instance + mounted static files + Jinja2 templates.
+
+Health endpoint: GET /health → {status:"ok"}.
+
+Set up requirements.txt with minimal libs.
+
+Confirm the app runs in Replit and health check passes.
+
+Step 2 – DB Connection & Schema
+
+Implement a db.py module:
+
+Read env var (DATABASE_URL or SUPABASE_DB_URL).
+
+Provide async connection helpers using asyncpg or sync psycopg.
+
+Create migrations:
+
+SQL files for assets, findings, ingest_runs.
+
+Simple migration runner script (CLI) to apply them once.
+
+Run migrations against Supabase; confirm tables exist.
+
+Step 3 – Farm Client
+
+Implement farm_client.py:
+
+Read FARM_URL from env.
+
+Functions:
+
+create_enterprise(archetype, scale) -> snapshot calls POST /api/farm/enterprise/new
+
+get_ground_truth(tenant_id) -> ground_truth
+
+Handle errors with clear logs.
+
+Step 4 – Ingestion Pipeline
+
+Implement ingest_service.py with:
+
+ingest_full_pull(archetype, scale):
+
+Create ingest_run row (status=running).
+
+Call Farm.
+
+For each CMDB evidence record:
+
+Build or update assets row (by tenant_id + farm_asset_id).
+
+Apply lifecycle routing + findings rules.
+
+Save counts on ingest_run row (status=success/failed).
+
+Lifecycle routing:
+
+Dedicated function route_lifecycle(signals) -> (lifecycle_state, parked_reason) implementing the blocking rules table.
+
+Findings generation:
+
+Dedicated function derive_findings(asset, signals) -> list[Finding].
+
+Step 5 – Dashboard API
+
+Implement dashboard_service.py with:
+
+get_lifecycle_counts()
+
+get_blocking_summary() – counts by parked_reason category.
+
+get_findings_summary() – counts by finding_type for CATALOGED assets.
+
+get_inventory_breakdown() – vendor, asset_kind, tech_domain, business_domain, shadow_it by domain.
+
+Add FastAPI routes under /dashboard/* returning JSON.
+
+Step 6 – UI Templates
+
+Create templates:
+
+dashboard.html – uses /dashboard/* endpoints via a small fetch/JS layer or server-side render.
+
+triage.html – lists blocking/non-blocking assets.
+
+asset_detail.html – partial template for asset detail modal.
+
+Wire routes:
+
+GET / → dashboard page.
+
+GET /triage → triage page.
+
+GET /assets/{asset_id} → asset detail JSON used by the modal.
+
+Step 7 – End-to-End Sanity Checks
+
+Run a full pull:
+
+Add a simple button or CLI endpoint POST /farm/ingest taking archetype + scale.
+
+After ingest:
+
+Verify:
+
+Lifecycle counts add up and match DB counts.
+
+Number of PARKED equals number of assets with blocking parked_reason.
+
+Shadow IT count in card matches count of assets with is_shadow_it = true.
+
+Clicking on any card produces a correct asset list; clicking asset shows expected detail.
+
+5. What NOT To Do (For Now)
+
+No Training Center UI.
+
+No ML training pipeline.
+
+No Experiments tab.
+
+No Neon, Replit DB, or any second database.
+
+No extra abstractions or ORMs.
+
+No “smart” auto-migrations that guess schemas.
+
+Build this sequentially, keep the codebase small and readable, and make sure the numbers on the dashboard actually match what’s in the database.

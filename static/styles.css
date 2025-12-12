@@ -163,7 +163,18 @@ nav a:hover, nav a.active {
     height: 16px;
 }
 
-.section-count {
+.kpi-section-header .section-count {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--slate-300);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 4px;
+    text-transform: lowercase;
+}
+
+.chart-title .section-count {
     background: rgba(148, 163, 184, 0.15);
     color: var(--slate-300);
     padding: 2px 8px;

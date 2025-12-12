@@ -68,7 +68,8 @@ Persisted directly from Farm's classification - each asset belongs to exactly on
 - `GET /api/assets/parked/{reason}` - Assets by parked reason
 - `GET /api/assets/finding/{type}` - Assets by finding type
 - `GET /api/assets/shadow-it` - All Shadow IT assets
-- `GET /api/assets/inventory/{field}/{value}` - Assets by inventory field
+- `GET /api/assets/inventory?field=X&key=Y` - Assets by inventory field (preferred, uses stable keys)
+- `GET /api/assets/inventory/{field}/{value}` - DEPRECATED: Assets by inventory field (path params)
 - `GET /api/assets/shadow-it/{field}/{value}` - Shadow IT by field
 - `GET /api/assets/{id}` - Asset detail
 - `GET /api/ingest/runs` - Get all catalog runs
@@ -84,6 +85,8 @@ python main.py
 ```
 
 ## Recent Changes
+- **Dec 12, 2025**: Fixed route ordering - specific routes (inventory, shadow-it) now declared before wildcard {asset_id} route
+- **Dec 12, 2025**: Added robust vendor drilldown using query params (/api/assets/inventory?field=vendor&key=...) to handle special characters
 - **Dec 12, 2025**: Added farm_bucket column for Farm's mutually exclusive bucket classification (clean, non_blocking, blocking, shadow)
 - **Dec 12, 2025**: Created Validation page showing Farm's exclusive bucket counts with clear labeling
 - **Dec 12, 2025**: Updated Dashboard/Triage to show "X assets / Y findings" format for multi-label findings

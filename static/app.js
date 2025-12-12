@@ -6,10 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function resetData() {
-    if (!confirm('Are you sure you want to reset ALL data? This will delete all assets and findings. Catalog run history will be preserved.')) {
-        return;
-    }
-    
     const btn = document.getElementById('resetBtn');
     const status = document.getElementById('ingestStatus');
     

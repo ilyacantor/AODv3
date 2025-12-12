@@ -110,16 +110,19 @@ Contract-grade breach taxonomy with evidence gates. No anomaly_score in contract
 | S-GOV-001 | MISSING_OWNER | missing_fields |
 | S-DATA-001 | NONBLOCKING_CONFLICT | conflict_types |
 
-### Evidence Gates
-- **Shadow IT**: Requires BOTH presence evidence (telemetry/spend) AND absence evidence (not in IdP/CMDB)
-- **SoR Conflict**: Requires conflicting SoTs and field diffs
+### Evidence Gates (Fail Closed)
+All evidence gates fail closed - breaches are NOT emitted without concrete evidence.
+- **Shadow IT**: Requires BOTH presence evidence (browser_history/billing_records) AND absence evidence (not in IdP/CMDB)
+- **SoR Conflict**: Requires concrete field_diffs OR conflicting_sots - rule triggers alone are NOT sufficient
+- **Schema Drift**: Requires schema-related rule trigger OR parked_reason match
 - **Data Conflicts**: Requires conflict_types list
 
 ## Recent Changes
+- **Dec 12, 2025**: Strengthened SoR Conflict evidence gate - now requires concrete field_diffs or conflicting_sots (rule trigger + parked_reason alone no longer sufficient)
 - **Dec 12, 2025**: Implemented Observed Breach Ledger with evidence gates and run-scoped export endpoint
 - **Dec 12, 2025**: Added breach taxonomy (src/aod/breaches.py) mapping findings to standardized breach IDs
 - **Dec 12, 2025**: Added GET /api/runs/{run_id}/observed-breaches endpoint for Farm grading
-- **Dec 12, 2025**: Added 22 unit tests for breach mapper, evidence gates, and output schema
+- **Dec 12, 2025**: Added 44 unit tests for breach mapper, evidence gates, ground truth parsing, and output schema
 - **Dec 12, 2025**: Fixed route ordering - specific routes (inventory, shadow-it) now declared before wildcard {asset_id} route
 - **Dec 12, 2025**: Added robust vendor drilldown using query params (/api/assets/inventory?field=vendor&key=...) to handle special characters
 - **Dec 12, 2025**: Added farm_bucket column for Farm's mutually exclusive bucket classification (clean, non_blocking, blocking, shadow)

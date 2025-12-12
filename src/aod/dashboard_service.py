@@ -3,15 +3,26 @@ from src.aod.db import fetch, fetchrow, fetchval
 
 
 async def get_lifecycle_counts() -> Dict[str, int]:
+    """
+    Get lifecycle counts. DISCOVERED = total assets (all states combined).
+    In V1 full-pull mode, assets go directly to PARKED or CATALOGED.
+    """
     rows = await fetch("""
         SELECT lifecycle_state, COUNT(*) as count
         FROM assets
         GROUP BY lifecycle_state
     """)
     
-    counts = {"DISCOVERED": 0, "PARKED": 0, "CATALOGED": 0}
+    counts = {"PARKED": 0, "CATALOGED": 0}
+    total = 0
     for row in rows:
-        counts[row["lifecycle_state"]] = row["count"]
+        state = row["lifecycle_state"]
+        count = row["count"]
+        if state in counts:
+            counts[state] = count
+        total += count
+    
+    counts["DISCOVERED"] = total
     
     return counts
 

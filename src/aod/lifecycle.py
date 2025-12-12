@@ -7,6 +7,7 @@ BLOCKING_RULES = {
     "SCHEMA_MISMATCH": "Schema Mismatch",
     "SCHEMA_OR_SHAPE_MISMATCH": "Schema Mismatch",
     "DATA_SCHEMA_DRIFT": "Schema Mismatch",
+    "ONT_AMBIGUOUS_TYPE": "Schema Mismatch",
     "ID_COLLISION": "ID Collision",
     "MISSING_PRIMARY_ID": "Missing ID"
 }

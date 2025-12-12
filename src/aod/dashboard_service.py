@@ -80,6 +80,21 @@ async def get_findings_summary() -> Dict[str, Dict[str, int]]:
     return summary
 
 
+async def get_unique_assets_with_findings() -> int:
+    """Count unique assets that have at least one open finding OR are shadow IT."""
+    row = await fetchrow("""
+        SELECT COUNT(DISTINCT asset_id) as unique_count
+        FROM (
+            SELECT f.asset_id FROM findings f
+            JOIN assets a ON f.asset_id = a.id
+            WHERE f.status = 'open'
+            UNION
+            SELECT id as asset_id FROM assets WHERE is_shadow_it = true
+        ) combined
+    """)
+    return row["unique_count"] if row else 0
+
+
 async def get_shadow_it_count() -> Dict[str, Any]:
     """Get shadow IT counts across all lifecycle states."""
     total = await fetchval("SELECT COUNT(*) FROM assets WHERE is_shadow_it = true")
@@ -159,12 +174,14 @@ async def get_dashboard_data() -> Dict[str, Any]:
     blocking = await get_blocking_summary()
     findings = await get_findings_summary()
     shadow_it_count = await get_shadow_it_count()
+    unique_assets_with_findings = await get_unique_assets_with_findings()
     
     return {
         "lifecycle": lifecycle,
         "blocking": blocking,
         "findings": findings,
         "shadow_it_count": shadow_it_count,
+        "unique_assets_with_findings": unique_assets_with_findings,
         "inventory": {
             "by_vendor": await get_inventory_by_field("vendor"),
             "by_kind": await get_inventory_by_field("asset_kind"),

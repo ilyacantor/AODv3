@@ -117,38 +117,33 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
             </svg>
-            Non-Blocking (Findings) <span class="section-count">{{ data.shadow_it_count.total + data.findings.governance_gap.assets + data.findings.data_conflicts.assets + data.findings.ops_risk.assets + data.findings.low_confidence.assets }}</span>
+            Non-Blocking (Findings) <span class="section-count">{{ data.unique_assets_with_findings }}</span>
         </div>
         <div class="kpi-grid-3col">
             <div class="kpi-card finding {% if data.shadow_it_count.total > 0 %}has-value{% endif %}" onclick="showAssets('shadow-it', '')">
                 {% if data.shadow_it_count.total > 0 %}<div class="corner-indicator"></div>{% endif %}
                 <div class="kpi-label">Shadow IT</div>
                 <div class="kpi-value {% if data.shadow_it_count.total > 0 %}amber{% else %}muted{% endif %}">{{ data.shadow_it_count.total }}</div>
-                <div class="kpi-sub">across all states</div>
             </div>
             <div class="kpi-card finding {% if data.findings.governance_gap.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'governance_gap')">
                 {% if data.findings.governance_gap.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
                 <div class="kpi-label">Governance Gap</div>
                 <div class="kpi-value {% if data.findings.governance_gap.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.governance_gap.assets }}</div>
-                <div class="kpi-sub">{{ data.findings.governance_gap.findings }} findings</div>
             </div>
             <div class="kpi-card finding {% if data.findings.data_conflicts.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'data_conflicts')">
                 {% if data.findings.data_conflicts.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
                 <div class="kpi-label">Data Conflicts</div>
                 <div class="kpi-value {% if data.findings.data_conflicts.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.data_conflicts.assets }}</div>
-                <div class="kpi-sub">{{ data.findings.data_conflicts.findings }} findings</div>
             </div>
             <div class="kpi-card finding {% if data.findings.ops_risk.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'ops_risk')">
                 {% if data.findings.ops_risk.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
                 <div class="kpi-label">Ops Risk</div>
                 <div class="kpi-value {% if data.findings.ops_risk.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.ops_risk.assets }}</div>
-                <div class="kpi-sub">{{ data.findings.ops_risk.findings }} findings</div>
             </div>
             <div class="kpi-card finding {% if data.findings.low_confidence.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'low_confidence')">
                 {% if data.findings.low_confidence.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
                 <div class="kpi-label">Low Confidence</div>
                 <div class="kpi-value {% if data.findings.low_confidence.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.low_confidence.assets }}</div>
-                <div class="kpi-sub">{{ data.findings.low_confidence.findings }} findings</div>
             </div>
         </div>
     </section>

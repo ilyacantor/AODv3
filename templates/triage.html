@@ -34,7 +34,7 @@
 </div>
 {% endif %}
 
-<h3 class="section-title findings">Findings (Multi-Label)</h3>
+<h3 class="section-title findings">Findings (Non-Blocking)</h3>
 {% set has_findings = data.shadow_it_count.total + data.findings.governance_gap.assets + data.findings.data_conflicts.assets + data.findings.ops_risk.assets + data.findings.low_confidence.assets > 0 %}
 {% if has_findings %}
 <div class="asset-list">

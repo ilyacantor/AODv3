@@ -1,0 +1,97 @@
+AOD Replit Agent Prompt (safe, non-breaking)
+
+You are the AOD senior engineer. Your job is to make AOD robust to Farm response-shape drift so this class of runtime crash (“list has no .get”) can’t happen again.
+
+Goal
+
+AOD must never crash when Farm returns a different JSON shape for ground truth. AOD should:
+
+accept the old shape
+
+accept the new shape
+
+handle unexpected shapes gracefully (no stacktrace to user)
+
+Constraints (non-negotiable)
+
+Do not change Farm code. AOD must be tolerant.
+
+Minimal change surface area: isolate changes to a single “Farm ground truth parsing” adapter (plus tests).
+
+No schema migrations. No DB changes.
+
+No behavior drift beyond eliminating the crash. Same run flow, same endpoints, same outputs.
+
+No “disable tenant isolation” hacks. Do not broaden data access.
+
+What to implement
+
+Create a single parser/adapter function for the Farm ground truth response (in farm_client.py or a small utils module) that returns one normalized dict shape to the rest of AOD:
+
+Always return: {"expected_assets": [...], "raw_shape": "...", "schema_version": "...?"}
+
+Accept all these inbound shapes:
+
+{"ground_truth": {"expected_assets": [...]}} ✅ old
+
+{"ground_truth": [...]} ✅ new
+
+[...] ✅ worst-case list top-level
+
+Any error envelope / malformed content ✅ must not crash
+
+Type-check explicitly before any .get() call.
+
+Add structured warning logs when Farm shape ≠ expected:
+
+include: endpoint, tenant_id, run_id (if present), detected “shape signature” (e.g., dict:ground_truth=list)
+
+but do not log full payload (PII/noise)
+
+Graceful failure behavior:
+
+If parsing succeeds → proceed normally.
+
+If parsing fails / unknown shape → return an empty expected_assets AND raise/return a controlled error that marks the ingest/run as failed in a user-visible way without crashing the server (no uncaught AttributeError).
+
+Tests (required to merge)
+
+Add unit tests for the parser covering:
+
+old shape
+
+new shape
+
+top-level list
+
+missing keys / null / empty
+
+error response (string / html / non-json should be handled upstream or fail gracefully)
+
+Add one integration/smoke test (or a small harness) that simulates the ingest call path using each payload shape and proves:
+
+no exception
+
+expected_assets normalization works
+
+logs emitted when shape is unexpected
+
+Verification checklist (run before declaring done)
+
+Reproduce the current failure locally (confirm the error exists pre-fix).
+
+After fix: run the same command → confirm no crash.
+
+Confirm that when Farm returns the old shape, AOD behavior is unchanged.
+
+Confirm that when Farm returns the new shape, AOD proceeds and shows expected_assets correctly (or fails gracefully with a clear message, not a traceback).
+
+Deliverables in your response
+
+A short explanation of root cause in 2–3 bullets (no essays)
+
+The exact files changed (list)
+
+What tests you added and how you ran them
+
+Evidence: one example log line showing shape detection and normalization working

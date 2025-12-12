@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from src.aod.db import execute, fetch, fetchrow
-from src.aod.farm_client import farm_client
+from src.aod.farm_client import farm_client, normalize_ground_truth
 from src.aod.lifecycle import (
     route_lifecycle, derive_tech_domain, derive_system_role,
     derive_business_domain, is_shadow_it, derive_findings
@@ -267,8 +267,17 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
     run_id = await create_ingest_run(tenant_id, archetype, scale)
     
     try:
-        ground_truth = await farm_client.get_ground_truth(tenant_id)
-        expected_assets = ground_truth.get("ground_truth", {}).get("expected_assets", [])
+        ground_truth_raw = await farm_client.get_ground_truth(tenant_id)
+        parsed = normalize_ground_truth(ground_truth_raw, tenant_id=tenant_id, run_id=run_id)
+        expected_assets = parsed["expected_assets"]
+        
+        if parsed["parse_error"]:
+            await update_ingest_run(run_id, "failed", {"total": 0}, parsed["parse_error"])
+            return {
+                "success": False, 
+                "error": f"Farm ground truth parse error: {parsed['parse_error']}",
+                "raw_shape": parsed["raw_shape"]
+            }
         
         surfaces = snapshot.get("surfaces", {})
         

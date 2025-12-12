@@ -5,6 +5,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+async function resetData() {
+    if (!confirm('Are you sure you want to reset ALL data? This will delete all assets and findings. Catalog run history will be preserved.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('resetBtn');
+    const status = document.getElementById('ingestStatus');
+    
+    btn.disabled = true;
+    btn.textContent = 'Resetting...';
+    status.innerHTML = '<div class="status-message loading">Resetting all data...</div>';
+    
+    try {
+        const response = await fetch('/api/reset', { method: 'POST' });
+        const data = await response.json();
+        
+        if (response.ok) {
+            status.innerHTML = '<div class="status-message success">All data has been reset. Catalog history preserved.</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            status.innerHTML = `<div class="status-message error">Error: ${data.detail || 'Reset failed'}</div>`;
+        }
+    } catch (err) {
+        status.innerHTML = `<div class="status-message error">Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Reset All Data';
+    }
+}
+
 async function handleIngest(e) {
     e.preventDefault();
     

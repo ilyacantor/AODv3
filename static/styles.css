@@ -585,6 +585,143 @@ nav a:hover, nav a.active {
     color: var(--slate-400);
 }
 
+.btn-danger {
+    background: var(--red-600);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 8px;
+}
+
+.btn-danger:hover {
+    background: var(--red-500);
+}
+
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.catalogs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.catalog-card {
+    background: var(--slate-800);
+    border-radius: 12px;
+    padding: 24px;
+    border-left: 4px solid var(--green-500);
+}
+
+.catalog-card.failed {
+    border-left-color: var(--red-500);
+}
+
+.catalog-card.running {
+    border-left-color: var(--blue-500);
+}
+
+.catalog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.catalog-company {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--slate-100);
+}
+
+.catalog-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--slate-700);
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.meta-label {
+    font-size: 12px;
+    color: var(--slate-500);
+    text-transform: uppercase;
+}
+
+.meta-value {
+    font-size: 14px;
+    color: var(--slate-200);
+}
+
+.catalog-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+}
+
+.catalog-stat-group h4 {
+    color: var(--cyan-400);
+    font-size: 14px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+}
+
+.catalog-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--slate-700);
+}
+
+.stat-name {
+    color: var(--slate-400);
+    font-size: 13px;
+}
+
+.stat-val {
+    color: var(--slate-200);
+    font-weight: 500;
+}
+
+.stat-val.success {
+    color: var(--green-400);
+}
+
+.stat-val.warning {
+    color: var(--orange-400);
+}
+
+.stat-val.shadow {
+    color: var(--purple-400);
+}
+
+.catalog-error {
+    padding: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 6px;
+    color: var(--red-400);
+    font-size: 14px;
+}
+
+.catalog-id {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--slate-600);
+    font-family: monospace;
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 16px;

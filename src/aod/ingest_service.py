@@ -9,6 +9,13 @@ from src.aod.lifecycle import (
 )
 
 
+async def reset_all_data() -> Dict[str, Any]:
+    """Reset all assets and findings but preserve catalog run history."""
+    await execute("DELETE FROM findings")
+    await execute("DELETE FROM assets")
+    return {"success": True, "message": "All assets and findings have been reset. Catalog history preserved."}
+
+
 async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
     run_id = str(uuid.uuid4())
     await execute("""
@@ -18,13 +25,28 @@ async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
     return run_id
 
 
-async def update_ingest_run(run_id: str, status: str, total: int, shadow: int, parked: int, message: str = ""):
+async def update_ingest_run(run_id: str, status: str, stats: Dict[str, Any], message: str = ""):
     await execute("""
         UPDATE ingest_runs 
-        SET status = $1, finished_at = NOW(), total_assets = $2, 
-            shadow_it_count = $3, parked_count = $4, message = $5
-        WHERE id = $6
-    """, status, total, shadow, parked, message, run_id)
+        SET status = $1, finished_at = NOW(), 
+            total_assets = $2, shadow_it_count = $3, parked_count = $4,
+            cataloged_count = $5, company_name = $6,
+            findings_shadow_it = $7, findings_governance = $8, 
+            findings_data_conflicts = $9, findings_ops_risk = $10, 
+            findings_low_confidence = $11,
+            blocking_sor_conflict = $12, blocking_schema_mismatch = $13,
+            blocking_id_collision = $14, blocking_missing_id = $15,
+            message = $16
+        WHERE id = $17
+    """, status, 
+        stats.get("total", 0), stats.get("shadow", 0), stats.get("parked", 0),
+        stats.get("cataloged", 0), stats.get("company_name", ""),
+        stats.get("findings_shadow_it", 0), stats.get("findings_governance", 0),
+        stats.get("findings_data_conflicts", 0), stats.get("findings_ops_risk", 0),
+        stats.get("findings_low_confidence", 0),
+        stats.get("blocking_sor_conflict", 0), stats.get("blocking_schema_mismatch", 0),
+        stats.get("blocking_id_collision", 0), stats.get("blocking_missing_id", 0),
+        message, run_id)
 
 
 def extract_lens_coverage(surfaces: Dict[str, Any], farm_asset_id: str) -> Dict[str, bool]:
@@ -212,9 +234,15 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
                     "vendor_hint": record.get("vendor_hint", "")
                 }
         
-        total_assets = 0
-        shadow_count = 0
-        parked_count = 0
+        stats = {
+            "total": 0, "shadow": 0, "parked": 0, "cataloged": 0,
+            "company_name": snapshot.get("company_name", ""),
+            "findings_shadow_it": 0, "findings_governance": 0,
+            "findings_data_conflicts": 0, "findings_ops_risk": 0,
+            "findings_low_confidence": 0,
+            "blocking_sor_conflict": 0, "blocking_schema_mismatch": 0,
+            "blocking_id_collision": 0, "blocking_missing_id": 0
+        }
         
         for gt_asset in expected_assets:
             farm_asset_id = gt_asset.get("farm_asset_id")
@@ -258,26 +286,51 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
             findings = derive_findings(asset_data, signals)
             await save_findings(asset_id, findings)
             
-            total_assets += 1
+            stats["total"] += 1
             if asset_data["is_shadow_it"]:
-                shadow_count += 1
+                stats["shadow"] += 1
             if asset_data["lifecycle_state"] == "PARKED":
-                parked_count += 1
+                stats["parked"] += 1
+                pr = asset_data.get("parked_reason", "")
+                if pr == "SoR Conflict":
+                    stats["blocking_sor_conflict"] += 1
+                elif pr == "Schema Mismatch":
+                    stats["blocking_schema_mismatch"] += 1
+                elif pr == "ID Collision":
+                    stats["blocking_id_collision"] += 1
+                elif pr == "Missing ID":
+                    stats["blocking_missing_id"] += 1
+            else:
+                stats["cataloged"] += 1
+            
+            for f in findings:
+                ft = f.get("finding_type", "")
+                if ft == "shadow_it":
+                    stats["findings_shadow_it"] += 1
+                elif ft == "governance_gap":
+                    stats["findings_governance"] += 1
+                elif ft == "data_conflicts":
+                    stats["findings_data_conflicts"] += 1
+                elif ft == "ops_risk":
+                    stats["findings_ops_risk"] += 1
+                elif ft == "low_confidence":
+                    stats["findings_low_confidence"] += 1
         
-        await update_ingest_run(run_id, "success", total_assets, shadow_count, parked_count)
+        await update_ingest_run(run_id, "success", stats)
         
         return {
             "success": True,
             "tenant_id": tenant_id,
             "run_id": run_id,
-            "total_assets": total_assets,
-            "shadow_it_count": shadow_count,
-            "parked_count": parked_count,
-            "company_name": snapshot.get("company_name"),
+            "total_assets": stats["total"],
+            "shadow_it_count": stats["shadow"],
+            "parked_count": stats["parked"],
+            "cataloged_count": stats["cataloged"],
+            "company_name": stats["company_name"],
             "archetype": archetype,
             "scale": scale
         }
         
     except Exception as e:
-        await update_ingest_run(run_id, "failed", 0, 0, 0, str(e))
+        await update_ingest_run(run_id, "failed", {"company_name": ""}, str(e))
         return {"success": False, "error": str(e), "run_id": run_id}

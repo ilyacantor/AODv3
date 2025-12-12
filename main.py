@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from src.aod.db import init_db, close_db
 from src.aod.models import IngestRequest
-from src.aod.ingest_service import ingest_full_pull
+from src.aod.ingest_service import ingest_full_pull, reset_all_data
 from src.aod.dashboard_service import (
     get_dashboard_data, get_assets_by_lifecycle, get_assets_by_parked_reason,
     get_assets_by_finding_type, get_shadow_it_assets, get_asset_detail, get_ingest_runs,
@@ -107,6 +107,18 @@ async def api_assets_by_inventory(field: str, value: str):
 async def api_shadow_it_by_field(field: str, value: str):
     assets = await get_shadow_it_by_field(field, value)
     return {"assets": assets, "count": len(assets)}
+
+
+@app.post("/api/reset")
+async def api_reset():
+    result = await reset_all_data()
+    return result
+
+
+@app.get("/catalogs", response_class=HTMLResponse)
+async def catalogs(request: Request):
+    runs = await get_ingest_runs()
+    return templates.TemplateResponse("catalogs.html", {"request": request, "runs": runs})
 
 
 if __name__ == "__main__":

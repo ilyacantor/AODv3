@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Catalogs - AOD Discover{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 24px;">Catalog Run History</h2>
+
+<p style="color: var(--slate-400); margin-bottom: 24px;">
+    Historical record of all Farm ingestion runs. Each run captures a snapshot of assets discovered, their lifecycle states, blocking issues, and findings.
+</p>
+
+{% if runs %}
+<div class="catalogs-list">
+    {% for run in runs %}
+    <div class="catalog-card {{ run.status }}">
+        <div class="catalog-header">
+            <div class="catalog-company">{{ run.company_name or 'Enterprise' }}</div>
+            <span class="badge badge-{{ 'cataloged' if run.status == 'success' else 'parked' if run.status == 'failed' else 'discovered' }}">{{ run.status | upper }}</span>
+        </div>
+        
+        <div class="catalog-meta">
+            <div class="meta-item">
+                <span class="meta-label">Archetype:</span>
+                <span class="meta-value">{{ run.archetype | replace('_', ' ') | title }}</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Scale:</span>
+                <span class="meta-value">{{ run.scale | title }}</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Started:</span>
+                <span class="meta-value">{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-' }}</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Duration:</span>
+                <span class="meta-value">
+                    {% if run.finished_at and run.started_at %}
+                        {{ ((run.finished_at - run.started_at).total_seconds() | round(1)) }}s
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        
+        {% if run.status == 'success' %}
+        <div class="catalog-stats">
+            <div class="catalog-stat-group">
+                <h4>Assets</h4>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Total Discovered</span>
+                    <span class="stat-val">{{ run.total_assets or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Cataloged</span>
+                    <span class="stat-val success">{{ run.cataloged_count or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Parked (Blocking)</span>
+                    <span class="stat-val warning">{{ run.parked_count or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Shadow IT</span>
+                    <span class="stat-val shadow">{{ run.shadow_it_count or 0 }}</span>
+                </div>
+            </div>
+            
+            <div class="catalog-stat-group">
+                <h4>Blocking Issues</h4>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">SoR Conflict</span>
+                    <span class="stat-val">{{ run.blocking_sor_conflict or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Schema Mismatch</span>
+                    <span class="stat-val">{{ run.blocking_schema_mismatch or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">ID Collision</span>
+                    <span class="stat-val">{{ run.blocking_id_collision or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Missing ID</span>
+                    <span class="stat-val">{{ run.blocking_missing_id or 0 }}</span>
+                </div>
+            </div>
+            
+            <div class="catalog-stat-group">
+                <h4>Findings Generated</h4>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Shadow IT</span>
+                    <span class="stat-val">{{ run.findings_shadow_it or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Governance Gap</span>
+                    <span class="stat-val">{{ run.findings_governance or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Data Conflicts</span>
+                    <span class="stat-val">{{ run.findings_data_conflicts or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Ops Risk</span>
+                    <span class="stat-val">{{ run.findings_ops_risk or 0 }}</span>
+                </div>
+                <div class="catalog-stat-row">
+                    <span class="stat-name">Low Confidence</span>
+                    <span class="stat-val">{{ run.findings_low_confidence or 0 }}</span>
+                </div>
+            </div>
+        </div>
+        {% elif run.status == 'failed' and run.message %}
+        <div class="catalog-error">
+            <strong>Error:</strong> {{ run.message }}
+        </div>
+        {% endif %}
+        
+        <div class="catalog-id">
+            Run ID: {{ run.id }} | Tenant: {{ run.tenant_id }}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <h3>No Catalog Runs Yet</h3>
+    <p>Pull data from Farm on the Dashboard to create your first catalog run.</p>
+</div>
+{% endif %}
+{% endblock %}

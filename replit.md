@@ -53,6 +53,7 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 ## API Endpoints
 - `GET /` - Dashboard UI
 - `GET /triage` - Triage center UI
+- `GET /catalogs` - Catalog run history UI
 - `GET /health` - Health check
 - `GET /api/dashboard` - Dashboard data JSON
 - `GET /api/assets/lifecycle/{state}` - Assets by lifecycle
@@ -62,7 +63,9 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 - `GET /api/assets/inventory/{field}/{value}` - Assets by inventory field
 - `GET /api/assets/shadow-it/{field}/{value}` - Shadow IT by field
 - `GET /api/assets/{id}` - Asset detail
+- `GET /api/ingest/runs` - Get all catalog runs
 - `POST /api/farm/ingest` - Trigger Farm ingestion
+- `POST /api/reset` - Reset all assets and findings (preserves catalog history)
 
 ## Running Locally
 ```bash
@@ -70,6 +73,8 @@ python main.py
 ```
 
 ## Recent Changes
+- **Dec 12, 2025**: Added "Reset All Data" button and Catalogs tab with full run history (company name, archetype, scale, duration, all counts)
+- **Dec 12, 2025**: Enhanced findings display with detailed evidence (shadow reasons, conflict types, anomaly scores, confidence levels)
 - **Dec 12, 2025**: Stage 2 complete - Real Farm contract, canonical lifecycle router, findings generation, reconciled dashboard counts
 - **Dec 12, 2025**: Added clickable bar charts for inventory drill-down
 - **Dec 12, 2025**: Initial v3 rewrite with simplified architecture

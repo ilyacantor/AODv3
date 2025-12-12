@@ -88,16 +88,12 @@ async function showAssets(type, value) {
             url = `/api/assets/shadow-it`;
             break;
         case 'inventory':
-            const [field, ...valueParts] = value.split('/');
-            const fieldValue = valueParts.join('/');
-            url = `/api/assets/inventory/${field}/${encodeURIComponent(fieldValue)}`;
-            displayValue = fieldValue;
+            url = `/api/assets/inventory/${value}`;
+            displayValue = value.split('/').pop();
             break;
         case 'shadow_inventory':
-            const [sField, ...sValueParts] = value.split('/');
-            const sFieldValue = sValueParts.join('/');
-            url = `/api/assets/shadow-it/${sField}/${encodeURIComponent(sFieldValue)}`;
-            displayValue = 'Shadow IT - ' + sFieldValue;
+            url = `/api/assets/shadow-it/${value}`;
+            displayValue = 'Shadow IT - ' + value.split('/').pop();
             break;
         default:
             return;
@@ -105,12 +101,9 @@ async function showAssets(type, value) {
     
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
         const data = await response.json();
         
-        if (!data.assets || data.assets.length === 0) {
+        if (data.assets.length === 0) {
             container.innerHTML = `<div class="empty-state"><h3>No Assets Found</h3></div>`;
             return;
         }

@@ -97,13 +97,13 @@ async def api_ingest(request: IngestRequest):
     return result
 
 
-@app.get("/api/assets/inventory/{field}/{value:path}")
+@app.get("/api/assets/inventory/{field}/{value}")
 async def api_assets_by_inventory(field: str, value: str):
     assets = await get_assets_by_inventory(field, value)
     return {"assets": assets, "count": len(assets)}
 
 
-@app.get("/api/assets/shadow-it/{field}/{value:path}")
+@app.get("/api/assets/shadow-it/{field}/{value}")
 async def api_shadow_it_by_field(field: str, value: str):
     assets = await get_shadow_it_by_field(field, value)
     return {"assets": assets, "count": len(assets)}

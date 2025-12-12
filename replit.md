@@ -28,10 +28,16 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 
 ## Key Concepts
 
-### Lifecycle States
-- **DISCOVERED**: Initial state when asset is first seen
-- **PARKED**: Blocked by critical issues (SoR Conflict, Schema Mismatch, ID Collision, Missing ID)
+### Lifecycle States (V1 Full-Pull Model)
+- **DISCOVERED**: Total assets count metric (all assets regardless of end state)
+- **PARKED**: Blocked by critical issues - requires HITL intervention
 - **CATALOGED**: Validated and ready for use
+
+### Blocking Rules (PARKED)
+- `SOR_CONFLICT`, `ONT_SOR_CONFLICT` → SoR Conflict
+- `SCHEMA_MISMATCH`, `SCHEMA_OR_SHAPE_MISMATCH`, `DATA_SCHEMA_DRIFT`, `ONT_AMBIGUOUS_TYPE` → Schema Mismatch
+- `ID_COLLISION` → ID Collision
+- `MISSING_PRIMARY_ID` → Missing ID
 
 ### Finding Types (Non-Blocking)
 - **shadow_it**: Unauthorized/unmanaged applications
@@ -52,6 +58,9 @@ AOD Discover v3 is an enterprise-grade microservice for automated IT asset disco
 - `GET /api/assets/lifecycle/{state}` - Assets by lifecycle
 - `GET /api/assets/parked/{reason}` - Assets by parked reason
 - `GET /api/assets/finding/{type}` - Assets by finding type
+- `GET /api/assets/shadow-it` - All Shadow IT assets
+- `GET /api/assets/inventory/{field}/{value}` - Assets by inventory field
+- `GET /api/assets/shadow-it/{field}/{value}` - Shadow IT by field
 - `GET /api/assets/{id}` - Asset detail
 - `POST /api/farm/ingest` - Trigger Farm ingestion
 
@@ -61,4 +70,6 @@ python main.py
 ```
 
 ## Recent Changes
+- **Dec 12, 2025**: Stage 2 complete - Real Farm contract, canonical lifecycle router, findings generation, reconciled dashboard counts
+- **Dec 12, 2025**: Added clickable bar charts for inventory drill-down
 - **Dec 12, 2025**: Initial v3 rewrite with simplified architecture

@@ -51,53 +51,76 @@
     </div>
 </div>
 
-<h3 class="section-title blocking">Blocking Issues (PARKED)</h3>
-<div class="stats-row">
-    <div class="stat-card blocking" onclick="showAssets('parked', 'SoR Conflict')">
-        <div class="stat-label">SoR Conflict</div>
-        <div class="stat-value">{{ data.blocking['SoR Conflict'] }}</div>
-    </div>
-    <div class="stat-card blocking" onclick="showAssets('parked', 'Schema Mismatch')">
-        <div class="stat-label">Schema Mismatch</div>
-        <div class="stat-value">{{ data.blocking['Schema Mismatch'] }}</div>
-    </div>
-    <div class="stat-card blocking" onclick="showAssets('parked', 'ID Collision')">
-        <div class="stat-label">ID Collision</div>
-        <div class="stat-value">{{ data.blocking['ID Collision'] }}</div>
-    </div>
-    <div class="stat-card blocking" onclick="showAssets('parked', 'Missing ID')">
-        <div class="stat-label">Missing ID</div>
-        <div class="stat-value">{{ data.blocking['Missing ID'] }}</div>
-    </div>
-</div>
+<div class="kpi-row">
+    <!-- Blocking Issues Section -->
+    <section class="kpi-section">
+        <div class="kpi-section-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+            </svg>
+            Blocking Issues (Parked)
+        </div>
+        <div class="kpi-grid-2x2">
+            <div class="kpi-card blocking" onclick="showAssets('parked', 'SoR Conflict')">
+                <div class="kpi-label">SOR Conflict</div>
+                <div class="kpi-value {% if data.blocking['SoR Conflict'] > 0 %}orange{% else %}muted{% endif %}">{{ data.blocking['SoR Conflict'] }}</div>
+            </div>
+            <div class="kpi-card blocking" onclick="showAssets('parked', 'Schema Mismatch')">
+                <div class="kpi-label">Schema Mismatch</div>
+                <div class="kpi-value {% if data.blocking['Schema Mismatch'] > 0 %}orange{% else %}muted{% endif %}">{{ data.blocking['Schema Mismatch'] }}</div>
+            </div>
+            <div class="kpi-card blocking" onclick="showAssets('parked', 'ID Collision')">
+                <div class="kpi-label">ID Collision</div>
+                <div class="kpi-value {% if data.blocking['ID Collision'] > 0 %}orange{% else %}muted{% endif %}">{{ data.blocking['ID Collision'] }}</div>
+            </div>
+            <div class="kpi-card blocking" onclick="showAssets('parked', 'Missing ID')">
+                <div class="kpi-label">Missing ID</div>
+                <div class="kpi-value {% if data.blocking['Missing ID'] > 0 %}orange{% else %}muted{% endif %}">{{ data.blocking['Missing ID'] }}</div>
+            </div>
+        </div>
+    </section>
 
-<h3 class="section-title findings">Findings (Multi-Label)</h3>
-<div class="stats-row">
-    <div class="stat-card finding shadow" onclick="showAssets('shadow-it', '')">
-        <div class="stat-label">Shadow IT</div>
-        <div class="stat-value">{{ data.shadow_it_count.total }}</div>
-        <div class="stat-sublabel">across all states</div>
-    </div>
-    <div class="stat-card finding" onclick="showAssets('finding', 'governance_gap')">
-        <div class="stat-label">Governance Gap</div>
-        <div class="stat-value">{{ data.findings.governance_gap.assets }}</div>
-        <div class="stat-sublabel">{{ data.findings.governance_gap.findings }} findings</div>
-    </div>
-    <div class="stat-card finding" onclick="showAssets('finding', 'data_conflicts')">
-        <div class="stat-label">Data Conflicts</div>
-        <div class="stat-value">{{ data.findings.data_conflicts.assets }}</div>
-        <div class="stat-sublabel">{{ data.findings.data_conflicts.findings }} findings</div>
-    </div>
-    <div class="stat-card finding" onclick="showAssets('finding', 'ops_risk')">
-        <div class="stat-label">Ops Risk</div>
-        <div class="stat-value">{{ data.findings.ops_risk.assets }}</div>
-        <div class="stat-sublabel">{{ data.findings.ops_risk.findings }} findings</div>
-    </div>
-    <div class="stat-card finding" onclick="showAssets('finding', 'low_confidence')">
-        <div class="stat-label">Low Confidence</div>
-        <div class="stat-value">{{ data.findings.low_confidence.assets }}</div>
-        <div class="stat-sublabel">{{ data.findings.low_confidence.findings }} findings</div>
-    </div>
+    <!-- Non-Blocking Findings Section -->
+    <section class="kpi-section">
+        <div class="kpi-section-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+            </svg>
+            Non-Blocking (Findings)
+        </div>
+        <div class="kpi-grid-3col">
+            <div class="kpi-card finding {% if data.shadow_it_count.total > 0 %}has-value{% endif %}" onclick="showAssets('shadow-it', '')">
+                {% if data.shadow_it_count.total > 0 %}<div class="corner-indicator"></div>{% endif %}
+                <div class="kpi-label">Shadow IT</div>
+                <div class="kpi-value {% if data.shadow_it_count.total > 0 %}amber{% else %}muted{% endif %}">{{ data.shadow_it_count.total }}</div>
+                <div class="kpi-sub">across all states</div>
+            </div>
+            <div class="kpi-card finding {% if data.findings.governance_gap.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'governance_gap')">
+                {% if data.findings.governance_gap.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
+                <div class="kpi-label">Governance Gap</div>
+                <div class="kpi-value {% if data.findings.governance_gap.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.governance_gap.assets }}</div>
+                <div class="kpi-sub">{{ data.findings.governance_gap.findings }} findings</div>
+            </div>
+            <div class="kpi-card finding {% if data.findings.data_conflicts.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'data_conflicts')">
+                {% if data.findings.data_conflicts.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
+                <div class="kpi-label">Data Conflicts</div>
+                <div class="kpi-value {% if data.findings.data_conflicts.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.data_conflicts.assets }}</div>
+                <div class="kpi-sub">{{ data.findings.data_conflicts.findings }} findings</div>
+            </div>
+            <div class="kpi-card finding {% if data.findings.ops_risk.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'ops_risk')">
+                {% if data.findings.ops_risk.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
+                <div class="kpi-label">Ops Risk</div>
+                <div class="kpi-value {% if data.findings.ops_risk.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.ops_risk.assets }}</div>
+                <div class="kpi-sub">{{ data.findings.ops_risk.findings }} findings</div>
+            </div>
+            <div class="kpi-card finding {% if data.findings.low_confidence.assets > 0 %}has-value{% endif %}" onclick="showAssets('finding', 'low_confidence')">
+                {% if data.findings.low_confidence.assets > 0 %}<div class="corner-indicator"></div>{% endif %}
+                <div class="kpi-label">Low Confidence</div>
+                <div class="kpi-value {% if data.findings.low_confidence.assets > 0 %}amber{% else %}muted{% endif %}">{{ data.findings.low_confidence.assets }}</div>
+                <div class="kpi-sub">{{ data.findings.low_confidence.findings }} findings</div>
+            </div>
+        </div>
+    </section>
 </div>
 
 <div class="charts-grid">

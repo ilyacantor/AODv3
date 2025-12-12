@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Quicksand:wght@400;500;600;700&display=swap');
 
 :root {
     --cyan-400: #22d3ee;
@@ -139,6 +139,119 @@ nav a:hover, nav a.active {
     font-size: 0.75rem;
     color: var(--slate-400);
     margin-top: 0.25rem;
+}
+
+/* New Compact KPI Styles for Blocking Issues and Findings */
+.kpi-section {
+    margin-bottom: 24px;
+}
+
+.kpi-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--slate-400);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+}
+
+.kpi-section-header svg {
+    width: 16px;
+    height: 16px;
+}
+
+.kpi-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.kpi-grid-3col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .kpi-grid-2x2 {
+        grid-template-columns: 1fr;
+    }
+    .kpi-grid-3col {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.kpi-card {
+    position: relative;
+    background: #0d1117;
+    border: 1px solid var(--slate-700);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kpi-card:hover {
+    background: var(--slate-900);
+    border-color: var(--slate-600);
+    transform: translateY(-1px);
+}
+
+.kpi-card.blocking {
+    border-color: rgba(249, 115, 22, 0.3);
+}
+
+.kpi-card.finding {
+    border-color: var(--slate-800);
+}
+
+.kpi-card.has-value .corner-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-top: 8px solid rgba(251, 191, 36, 0.5);
+    border-left: 8px solid transparent;
+    border-top-right-radius: 8px;
+}
+
+.kpi-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--slate-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kpi-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.kpi-value.orange { color: var(--orange-400); }
+.kpi-value.amber { color: #fbbf24; }
+.kpi-value.muted { color: var(--slate-600); }
+
+.kpi-sub {
+    font-size: 10px;
+    color: var(--slate-600);
+    margin-top: 4px;
+}
+
+.kpi-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
 }
 
 .section-title {

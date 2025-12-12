@@ -1,0 +1,71 @@
+Copy/paste this to your Replit AOD agent:
+
+---
+
+**Task (UI only): Reorganize the dashboard KPI tiles so they’re compact, aligned, and scannable (no backend/logic changes).**
+Target screen: **Dashboard** showing **Asset Lifecycle**, **Blocking Issues (Parked)**, **Findings (Multi-Label)**.
+
+### Goal
+
+The current KPI boxes are visually bulky (too tall + too much padding) and force unnecessary scrolling. Redesign them into a **tight, consistent KPI tile system** with clear hierarchy.
+
+### Hard constraints
+
+* **Do not change any metric computation or API calls.**
+* **No new libraries.** Use existing React/Tailwind patterns.
+* Keep the existing dark theme + accent colors, but **reduce glow/border heaviness**.
+* Match the visual language of our **AI Startup Ecosystem graphics**: clean grid, thin neon edge accents, restrained glow.
+
+### Design changes to implement
+
+1. **Create one reusable KPI tile component** (one source of truth) with variants:
+
+   * `hero` (for the 3 lifecycle tiles)
+   * `danger` (blocking)
+   * `warning` (findings)
+   * Supports: label, value, optional sublabel, optional tooltip, optional click action.
+
+2. **Make tiles compact**
+
+   * Reduce vertical padding and overall height (aim: **~70–90px tall** tiles).
+   * Use a **thin left accent border** (not thick outlines).
+   * Keep label small (uppercase), value prominent, sublabel tiny.
+
+3. **Use a real grid with responsive breakpoints**
+
+   * **Asset Lifecycle:** 3 columns on desktop; 2 on tablet; 1 on mobile.
+   * **Blocking Issues:** 4 cols desktop; 2 cols tablet; 1 col mobile.
+   * **Findings:** 5 cols desktop; 3 cols laptop; 2 cols tablet; 1 col mobile.
+   * All tiles in a row must be **equal height** and **aligned baselines**.
+
+4. **Add a “Dense / Comfortable” toggle**
+
+   * Default to **Dense**.
+   * Persist in `localStorage`.
+   * Dense reduces padding/height; Comfortable slightly larger.
+
+5. **Improve scanability**
+
+   * Section headers become a single row: title (left) + optional action (right).
+   * Ensure consistent spacing between sections (no random extra gaps).
+   * Values should not jitter: use tabular numbers if available.
+
+6. **Make tiles actionable (lightweight)**
+
+   * If tiles already map to a filter/view: make the whole tile clickable with hover state.
+   * Hover: subtle lift or brighter edge (no heavy glow).
+
+7. **Number formatting**
+
+   * Abbreviate big counts (e.g., 1.2k) in the tile if needed.
+   * Show exact value on hover tooltip.
+
+### Acceptance criteria
+
+* On a 1440×900 viewport, the KPI sections should feel **“above the fold”** (dramatically less scrolling).
+* Tiles are **consistent**, **aligned**, and **responsive** with no horizontal scroll.
+* Minimal diff: mostly component + layout refactor, not a rewrite.
+
+**Deliverable:** update the dashboard KPI layout + new reusable KPI tile component + dense toggle.
+
+---

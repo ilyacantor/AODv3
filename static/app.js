@@ -3,7 +3,38 @@ document.addEventListener('DOMContentLoaded', function() {
     if (ingestForm) {
         ingestForm.addEventListener('submit', handleIngest);
     }
+    initDensityToggle();
 });
+
+function initDensityToggle() {
+    const mode = localStorage.getItem('aod_density_mode') || 'dense';
+    document.body.classList.add('density-' + mode);
+    updateToggleButton(mode);
+}
+
+function toggleDensity() {
+    const current = document.body.classList.contains('density-dense') ? 'dense' : 'comfortable';
+    const next = current === 'dense' ? 'comfortable' : 'dense';
+    document.body.classList.remove('density-' + current);
+    document.body.classList.add('density-' + next);
+    localStorage.setItem('aod_density_mode', next);
+    updateToggleButton(next);
+}
+
+function updateToggleButton(mode) {
+    const btn = document.getElementById('densityToggle');
+    if (btn) {
+        const icon = mode === 'dense' ? '▤' : '▦';
+        const label = mode === 'dense' ? 'Comfortable' : 'Dense';
+        btn.innerHTML = `<span class="icon">${icon}</span>${label}`;
+    }
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return num.toString();
+}
 
 async function resetData() {
     const btn = document.getElementById('resetBtn');

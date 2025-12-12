@@ -163,6 +163,16 @@ nav a:hover, nav a.active {
     height: 16px;
 }
 
+.section-count {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--slate-300);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 4px;
+}
+
 .kpi-grid-2x2 {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

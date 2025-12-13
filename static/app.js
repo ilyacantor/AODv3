@@ -85,7 +85,9 @@ async function showAssets(type, value, key) {
             url = `/api/assets/finding/${value}`;
             break;
         case 'shadow':
+        case 'shadow-it':
             url = `/api/assets/shadow-it`;
+            displayValue = 'Shadow IT';
             break;
         case 'inventory':
             const [field, label] = value.split(':');

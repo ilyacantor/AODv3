@@ -123,10 +123,12 @@ Uses AutonomOS palette:
 
 ## Recent Changes
 
+- Updated `/api/runs/from-farm` to persist run provenance (farm_url, snapshot_id, schema_version, fetch_duration_ms)
+- Pipeline now uses `COMPLETED_WITH_RESULTS` when assets admitted, `COMPLETED_NO_ASSETS` when none
 - Added snapshot list proxy endpoint (`GET /api/farm/snapshots`)
 - Updated RunStatus enum with IRL semantics
 - Refactored UI: removed sample data button, added snapshot picker with "Load Snapshots"
 - Added outcome panel with status badges
 - Added collapsible "Advanced" section for manual snapshot ID entry
-- 27 tests passing (added 4 new tests for snapshot list proxy)
+- 30 tests passing (added provenance and status tests)
 - FarmClient now has `list_snapshots()` method

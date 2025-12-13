@@ -298,5 +298,130 @@ class TestRunLogCounts:
         assert len(filtered) == 1
 
 
+class TestProvenanceAndStatus:
+    """Test provenance persistence and new status values"""
+    
+    @pytest.mark.asyncio
+    async def test_pipeline_uses_completed_with_results_status(self):
+        """Pipeline uses COMPLETED_WITH_RESULTS when assets are admitted"""
+        from aod.pipeline.pipeline_executor import execute_pipeline
+        from aod.db.database import Database
+        from aod.models.output_contracts import RunStatus
+        import tempfile
+        from pathlib import Path
+        
+        data = {
+            "meta": {"tenant_id": "t1", "run_id": "test_with_results", "generated_at": "2024-01-01T00:00:00Z"},
+            "planes": {
+                "discovery": {"observations": [
+                    {"observation_id": "o1", "name": "Salesforce", "source": "proxy", "domain": "salesforce.com"}
+                ]},
+                "idp": {"objects": [{"idp_id": "idp-1", "name": "Salesforce", "has_sso": True}]},
+                "cmdb": {"cis": []},
+                "cloud": {"resources": []},
+                "endpoint": {"devices": [], "installed_apps": []},
+                "network": {"dns": [], "proxy": [], "certs": []},
+                "finance": {"vendors": [], "contracts": [], "transactions": []}
+            }
+        }
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(Path(tmpdir) / "test.db")
+            await db.initialize()
+            
+            result = await execute_pipeline(data, db)
+            
+            assert result.success
+            if len(result.assets) > 0:
+                assert result.run_log.status == RunStatus.COMPLETED_WITH_RESULTS
+            else:
+                assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
+            
+            await db.close()
+    
+    @pytest.mark.asyncio
+    async def test_pipeline_uses_completed_no_assets_status(self):
+        """Pipeline uses COMPLETED_NO_ASSETS when no assets are admitted"""
+        from aod.pipeline.pipeline_executor import execute_pipeline
+        from aod.db.database import Database
+        from aod.models.output_contracts import RunStatus
+        import tempfile
+        from pathlib import Path
+        
+        data = {
+            "meta": {"tenant_id": "t1", "run_id": "test_no_assets", "generated_at": "2024-01-01T00:00:00Z"},
+            "planes": {
+                "discovery": {"observations": [
+                    {"observation_id": "o1", "name": "Sales Dashboard", "source": "proxy"}
+                ]},
+                "idp": {"objects": []},
+                "cmdb": {"cis": []},
+                "cloud": {"resources": []},
+                "endpoint": {"devices": [], "installed_apps": []},
+                "network": {"dns": [], "proxy": [], "certs": []},
+                "finance": {"vendors": [], "contracts": [], "transactions": []}
+            }
+        }
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(Path(tmpdir) / "test.db")
+            await db.initialize()
+            
+            result = await execute_pipeline(data, db)
+            
+            assert result.success
+            assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
+            
+            await db.close()
+    
+    @pytest.mark.asyncio
+    async def test_provenance_persisted_in_run_log(self):
+        """Provenance data is persisted in run log input_meta"""
+        from aod.pipeline.pipeline_executor import execute_pipeline
+        from aod.db.database import Database
+        import tempfile
+        from pathlib import Path
+        
+        data = {
+            "meta": {"tenant_id": "t1", "run_id": "test_provenance", "generated_at": "2024-01-01T00:00:00Z"},
+            "planes": {
+                "discovery": {"observations": []},
+                "idp": {"objects": []},
+                "cmdb": {"cis": []},
+                "cloud": {"resources": []},
+                "endpoint": {"devices": [], "installed_apps": []},
+                "network": {"dns": [], "proxy": [], "certs": []},
+                "finance": {"vendors": [], "contracts": [], "transactions": []}
+            }
+        }
+        
+        provenance = {
+            "source": "farm",
+            "farm_url": "https://farm.example.com",
+            "snapshot_id": "snap-123",
+            "schema_version": "farm.v1",
+            "fetch_duration_ms": 150
+        }
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(Path(tmpdir) / "test.db")
+            await db.initialize()
+            
+            result = await execute_pipeline(data, db, provenance=provenance)
+            
+            assert result.success
+            assert "provenance" in result.run_log.input_meta
+            assert result.run_log.input_meta["provenance"]["source"] == "farm"
+            assert result.run_log.input_meta["provenance"]["farm_url"] == "https://farm.example.com"
+            assert result.run_log.input_meta["provenance"]["snapshot_id"] == "snap-123"
+            assert result.run_log.input_meta["provenance"]["fetch_duration_ms"] == 150
+            
+            stored_run = await db.get_run("test_provenance")
+            assert stored_run is not None
+            assert "provenance" in stored_run.input_meta
+            
+            await db.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

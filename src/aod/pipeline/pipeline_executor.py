@@ -32,7 +32,8 @@ class PipelineResult:
 
 async def execute_pipeline(
     data: dict[str, Any],
-    db: Database
+    db: Database,
+    provenance: dict[str, Any] | None = None
 ) -> PipelineResult:
     """
     Execute the full AOD discovery pipeline.
@@ -50,6 +51,7 @@ async def execute_pipeline(
     Args:
         data: Raw snapshot JSON data
         db: Database instance
+        provenance: Optional provenance data for Farm runs (farm_url, snapshot_id, fetch_duration_ms, schema_version)
         
     Returns:
         PipelineResult with run log, assets, artifacts, and findings
@@ -57,12 +59,16 @@ async def execute_pipeline(
     run_id = data.get("meta", {}).get("run_id", f"run_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}")
     tenant_id = data.get("meta", {}).get("tenant_id", "unknown")
     
+    input_meta = data.get("meta", {}).copy()
+    if provenance:
+        input_meta["provenance"] = provenance
+    
     run_log = RunLog(
         run_id=run_id,
         tenant_id=tenant_id,
         status=RunStatus.RUNNING,
         started_at=datetime.utcnow(),
-        input_meta=data.get("meta", {}),
+        input_meta=input_meta,
         counts=RunCounts()
     )
     
@@ -128,7 +134,10 @@ async def execute_pipeline(
         for finding in findings:
             await db.create_finding(finding)
         
-        run_log.status = RunStatus.COMPLETED
+        if len(assets) > 0:
+            run_log.status = RunStatus.COMPLETED_WITH_RESULTS
+        else:
+            run_log.status = RunStatus.COMPLETED_NO_ASSETS
         run_log.completed_at = datetime.utcnow()
         await db.update_run(run_log)
         

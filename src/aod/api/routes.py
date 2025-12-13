@@ -4,6 +4,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import json
+import os
+import time
 
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
@@ -12,9 +14,6 @@ from ..farm_client import FarmClient, FarmListResult, validate_schema_version
 
 
 router = APIRouter(prefix="/api")
-
-
-import os
 
 class FarmRunRequest(BaseModel):
     """Request for creating a run from Farm"""
@@ -175,6 +174,8 @@ async def create_run_from_farm(request: FarmRunRequest):
     Validates HTTP status, Content-Type, non-empty JSON body.
     Requires meta.schema_version == "farm.v1"
     
+    Persists provenance: farm_url, snapshot_id, schema_version, fetch_duration_ms
+    
     Returns run_id + summary counts.
     """
     farm_url = request.farm_base_url or os.environ.get("FARM_URL")
@@ -182,7 +183,10 @@ async def create_run_from_farm(request: FarmRunRequest):
         raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable or provide farm_base_url.")
     
     farm_client = FarmClient(farm_url)
+    
+    fetch_start = time.time()
     fetch_result = await farm_client.fetch_snapshot(request.snapshot_id)
+    fetch_duration_ms = int((time.time() - fetch_start) * 1000)
     
     if not fetch_result.success:
         raise HTTPException(
@@ -201,11 +205,21 @@ async def create_run_from_farm(request: FarmRunRequest):
             detail=f"INVALID_INPUT_CONTRACT: {schema_error}"
         )
     
+    schema_version = snapshot_data.get("meta", {}).get("schema_version", "unknown")
+    
     if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
         snapshot_data["meta"]["tenant_id"] = request.tenant_id
     
+    provenance = {
+        "source": "farm",
+        "farm_url": farm_url,
+        "snapshot_id": request.snapshot_id,
+        "schema_version": schema_version,
+        "fetch_duration_ms": fetch_duration_ms
+    }
+    
     db = await get_db()
-    result = await execute_pipeline(snapshot_data, db)
+    result = await execute_pipeline(snapshot_data, db, provenance=provenance)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:

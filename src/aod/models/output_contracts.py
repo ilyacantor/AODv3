@@ -129,9 +129,13 @@ class Finding(BaseModel):
 
 
 class RunStatus(str, Enum):
-    """Run status enumeration"""
+    """Run status enumeration with IRL semantics"""
     PENDING = "pending"
     RUNNING = "running"
+    UPSTREAM_ERROR = "upstream_error"
+    INVALID_SNAPSHOT = "invalid_snapshot"
+    COMPLETED_NO_ASSETS = "completed_no_assets"
+    COMPLETED_WITH_RESULTS = "completed_with_results"
     COMPLETED = "completed"
     FAILED = "failed"
     INVALID_INPUT_CONTRACT = "invalid_input_contract"

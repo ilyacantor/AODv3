@@ -14,6 +14,15 @@ class FarmFetchResult:
     error_type: str = ""
 
 
+@dataclass
+class FarmListResult:
+    """Result of listing snapshots from Farm"""
+    success: bool
+    snapshots: list[dict[str, Any]] | None = None
+    error: str = ""
+    error_type: str = ""
+
+
 class FarmClientError(Exception):
     """Error from Farm client operations"""
     def __init__(self, message: str, error_type: str = "FARM_ERROR"):
@@ -28,6 +37,73 @@ class FarmClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
     
+    async def list_snapshots(self, tenant_id: str, limit: int = 20) -> FarmListResult:
+        """
+        List available snapshots from Farm for a tenant.
+        
+        Args:
+            tenant_id: The tenant ID to list snapshots for
+            limit: Maximum number of snapshots to return (default 20)
+            
+        Returns:
+            FarmListResult with success status and snapshots list or error
+        """
+        url = f"{self.base_url}/api/snapshots?tenant_id={tenant_id}&limit={limit}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url)
+                
+                if response.status_code >= 400:
+                    return FarmListResult(
+                        success=False,
+                        error=f"Farm server returned HTTP {response.status_code}: {response.text[:200]}",
+                        error_type="UPSTREAM_ERROR"
+                    )
+                
+                content_type = response.headers.get("content-type", "")
+                if "json" not in content_type.lower():
+                    return FarmListResult(
+                        success=False,
+                        error=f"Farm server returned non-JSON content-type: {content_type}",
+                        error_type="UPSTREAM_ERROR"
+                    )
+                
+                try:
+                    data = response.json()
+                except Exception as e:
+                    return FarmListResult(
+                        success=False,
+                        error=f"Farm server returned invalid JSON: {str(e)}",
+                        error_type="UPSTREAM_ERROR"
+                    )
+                
+                if isinstance(data, list):
+                    return FarmListResult(success=True, snapshots=data)
+                elif isinstance(data, dict) and "snapshots" in data:
+                    return FarmListResult(success=True, snapshots=data["snapshots"])
+                else:
+                    return FarmListResult(success=True, snapshots=[data] if isinstance(data, dict) else [])
+                
+        except httpx.TimeoutException:
+            return FarmListResult(
+                success=False,
+                error=f"Timeout connecting to Farm server at {self.base_url}",
+                error_type="UPSTREAM_ERROR"
+            )
+        except httpx.ConnectError as e:
+            return FarmListResult(
+                success=False,
+                error=f"Failed to connect to Farm server at {self.base_url}: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+        except Exception as e:
+            return FarmListResult(
+                success=False,
+                error=f"Unexpected error fetching from Farm: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+
     async def fetch_snapshot(self, snapshot_id: str) -> FarmFetchResult:
         """
         Fetch a snapshot from Farm.

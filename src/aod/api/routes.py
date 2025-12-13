@@ -8,7 +8,7 @@ import json
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
 from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus
-from ..farm_client import FarmClient, validate_schema_version
+from ..farm_client import FarmClient, FarmListResult, validate_schema_version
 
 
 router = APIRouter(prefix="/api")
@@ -64,12 +64,46 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class SnapshotListResponse(BaseModel):
+    """Response for snapshot listing"""
+    snapshots: list[dict[str, Any]]
+    count: int
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
     return HealthResponse(
         status="healthy",
         version="1.0.0"
+    )
+
+
+@router.get("/farm/snapshots", response_model=SnapshotListResponse)
+async def list_farm_snapshots(tenant_id: str):
+    """
+    List available snapshots from Farm for a tenant.
+    
+    Proxies to {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20
+    Returns metadata list with snapshot_id, tenant_id, created_at, schema_version.
+    """
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
+    
+    farm_client = FarmClient(farm_url)
+    result = await farm_client.list_snapshots(tenant_id)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
+        )
+    
+    snapshots = result.snapshots or []
+    return SnapshotListResponse(
+        snapshots=snapshots,
+        count=len(snapshots)
     )
 
 
@@ -157,6 +191,8 @@ async def create_run_from_farm(request: FarmRunRequest):
         )
     
     snapshot_data = fetch_result.data
+    if snapshot_data is None:
+        raise HTTPException(status_code=502, detail="Farm returned empty data")
     
     schema_valid, schema_error = validate_schema_version(snapshot_data)
     if not schema_valid:

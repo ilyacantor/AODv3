@@ -117,7 +117,29 @@ All evidence gates fail closed - breaches are NOT emitted without concrete evide
 - **Schema Drift**: Requires schema-related rule trigger OR parked_reason match
 - **Data Conflicts**: Requires conflict_types list
 
+## Evidence-Based Anomaly Detection
+
+AOD no longer accepts numeric anomaly_score from Farm. Instead, it requires concrete anomaly indicators.
+
+### Accepted Indicator Types
+- `unusual_access_patterns` - Abnormal user/access counts
+- `data_volume_spike` - Unusual data transfer volumes  
+- `off_hours_activity` - Activity outside normal business hours
+- `auth_fail_storm` - High rate of authentication failures
+- `latency_regression` - Performance degradation
+- `permission_escalation` - Unexpected privilege changes
+- `geo_anomaly` - Access from unusual locations
+- `rate_limit_breach` - API rate limit violations
+
+### Risk Score Calculation
+- Indicators are validated (must have type, timestamp, evidence)
+- Each indicator has severity weights (low/medium/high)
+- Risk score compounds: `1 - Π(1 - weight_i)` capped at 1.0
+- Stale indicators (>7 days) are ignored
+- Thresholds: warn ≥0.35, critical ≥0.7
+
 ## Recent Changes
+- **Dec 13, 2025**: Replaced numeric anomaly_score with evidence-based anomaly_indicators and deterministic risk scoring
 - **Dec 12, 2025**: Strengthened SoR Conflict evidence gate - now requires concrete field_diffs or conflicting_sots (rule trigger + parked_reason alone no longer sufficient)
 - **Dec 12, 2025**: Implemented Observed Breach Ledger with evidence gates and run-scoped export endpoint
 - **Dec 12, 2025**: Added breach taxonomy (src/aod/breaches.py) mapping findings to standardized breach IDs

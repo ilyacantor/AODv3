@@ -62,6 +62,7 @@ tests/
 - `POST /api/runs` - Create discovery run (file upload)
 - `POST /api/runs/json` - Create discovery run (JSON body)
 - `POST /api/runs/from-farm` - Create discovery run from Farm HTTP pull
+- `GET /api/farm/snapshots?tenant_id=...` - List available snapshots from Farm (proxy)
 - `GET /api/runs` - List all runs
 - `GET /api/runs/{run_id}` - Get run details
 - `GET /api/catalog?run_id=...` - Get assets for run
@@ -110,11 +111,22 @@ Uses AutonomOS palette:
 - Dark foundation: Slate-900/950
 - Font: Quicksand
 
+## Run Status Values (IRL Semantics)
+
+- `UPSTREAM_ERROR` - Farm unreachable / non-JSON / HTTP error
+- `INVALID_SNAPSHOT` - Schema mismatch / wrong version / missing planes  
+- `COMPLETED_NO_ASSETS` - Pipeline completed; nothing admitted
+- `COMPLETED_WITH_RESULTS` - Normal success with assets
+- `COMPLETED` - General success (legacy)
+- `FAILED` - Pipeline execution failed
+- `INVALID_INPUT_CONTRACT` - Snapshot doesn't conform to input contract
+
 ## Recent Changes
 
-- Initial implementation of AOD Fresh
-- Complete pipeline with 7 stages
-- SQLite persistence layer
-- FastAPI REST API
-- AOD Console UI with AutonomOS theming
-- Comprehensive test suite
+- Added snapshot list proxy endpoint (`GET /api/farm/snapshots`)
+- Updated RunStatus enum with IRL semantics
+- Refactored UI: removed sample data button, added snapshot picker with "Load Snapshots"
+- Added outcome panel with status badges
+- Added collapsible "Advanced" section for manual snapshot ID entry
+- 27 tests passing (added 4 new tests for snapshot list proxy)
+- FarmClient now has `list_snapshots()` method

@@ -1,0 +1,284 @@
+Copy/paste this into the **AOD Replit agent**. It is a **fresh-build prompt** with **full context**, **strict contracts**, **modern enterprise assumptions**, and **no legacy drift**. It also includes the **AutonomOS palette + Quicksand** from your palette file. 
+
+---
+
+## Replit Prompt — Build “AOD Fresh” from Scratch (AutonomOS Discover, IRL-First)
+
+You are building **AOD Fresh** from scratch. You have **no prior context**. This is a net-new implementation of **AutonomOS Discover (AOD)**.
+
+### Context in AutonomOS (AOS)
+
+AutonomOS is an enterprise operating system. AOD is the discovery module that ingests raw enterprise evidence and produces:
+
+* an **Asset Catalog** (systems only; not internal objects like dashboards)
+* a **Run Log** (what happened on each run)
+* **Explainable findings** (rule-based; no anomaly scores)
+
+AOD must work against **IRL enterprise evidence** produced by **AOS Farm** (or real connectors later). Farm is not omniscient; AOD must infer.
+
+---
+
+# Non-Negotiables (Fail the build if violated)
+
+1. **No ground truth ingestion.**
+   Reject any inputs that look like conclusions/adjudications, including but not limited to:
+
+* `is_shadow_it`, `shadowScenario`, `shadowReasons`
+* `inCMDB`, `rulesTriggered`, `conflictTypes`
+* `sourcePresence`, `parked_reason`
+* any `ground_truth` fields
+  If any such fields are present, AOD must mark the run as `INVALID_INPUT_CONTRACT` and return a clear error.
+
+2. **No ML. No anomaly scores. No black boxes.**
+   Only deterministic rules and explainable correlation.
+
+3. **Deterministic.**
+   Same snapshot + same config ⇒ same outputs (stable ordering).
+
+4. **Evidence-only decisions.**
+   Admission, “managedness”, and findings must be derived only from:
+
+* observations (discovery stream)
+* plane evidence (IdP/CMDB/Cloud/Endpoint/Network/Finance)
+  Never from upstream labels.
+
+5. **Assets vs Artifacts.**
+   AOD catalogs **systems** as assets. Objects inside systems (dashboards, reports, files, calculators) are **artifacts** and must never inflate asset counts.
+
+---
+
+# Tech Stack (dictate exactly)
+
+## Backend
+
+* **Python 3.11**
+* **FastAPI**
+* **Pydantic v2** models for all inputs/outputs
+* **SQLite** persistence (Replit-friendly), structured so it can move to Postgres later
+* **Uvicorn**
+* `src/` layout with `src/main.py`
+
+## Frontend (minimal AOD Console)
+
+Serve a small UI at `/` that:
+
+* uploads or fetches a snapshot JSON (from Farm)
+* runs discovery
+* shows counts + top findings
+* lets user download the resulting catalog JSON
+
+Use AutonomOS palette + Quicksand:
+
+* Primary accent cyan `#0bcad9` and cyan-400 `#22d3ee` 
+* Slate/dark background foundation (slate-900/950) 
+* Optional purple accent `#a855f7` for “intelligence” 
+  Default dark mode.
+
+---
+
+# Input Contract (Snapshot JSON)
+
+AOD accepts a single snapshot JSON with shape:
+
+```json
+{
+  "meta": { "tenant_id": "...", "run_id": "...", "seed": 123, "generated_at": "..." },
+  "planes": {
+    "discovery": { "observations": [ ... ] },
+    "idp": { "objects": [ ... ] },
+    "cmdb": { "cis": [ ... ] },
+    "cloud": { "resources": [ ... ] },
+    "endpoint": { "devices": [ ... ], "installed_apps": [ ... ] },
+    "network": { "dns": [ ... ], "proxy": [ ... ], "certs": [ ... ] },
+    "finance": { "vendors": [ ... ], "contracts": [ ... ], "transactions": [ ... ] }
+  }
+}
+```
+
+AOD must validate this strictly with Pydantic models and produce clear errors.
+
+---
+
+# Output Products
+
+## 1) Run Log
+
+Persist each run with:
+
+* `run_id`, `tenant_id`, `started_at`, `completed_at`, `status`
+* `input_meta` (seed, profile, etc.)
+* counts:
+
+  * observations_in
+  * candidates_out
+  * assets_admitted
+  * artifacts_recorded
+  * rejected
+  * ambiguous_matches
+* failure reasons (if any)
+
+## 2) Asset Catalog
+
+Assets are systems only.
+
+Asset minimal schema:
+
+* `asset_id` (uuid)
+* `tenant_id`
+* `name`
+* `asset_type` enum: `saas|service|database|infra|cloud_resource|unknown`
+* `identifiers`:
+
+  * `domains[]`, `hostnames[]`, `uris[]`
+* `vendor` (nullable)
+* `environment` enum `prod|staging|dev|unknown`
+* `evidence_refs` (IDs of evidence records used)
+* `lens_status`:
+
+  * `idp: matched|ambiguous|unmatched`
+  * `cmdb: matched|ambiguous|unmatched`
+  * `cloud: matched|ambiguous|unmatched`
+  * `finance: matched|ambiguous|unmatched`
+* `lens_coverage` booleans (true only if matched AND evidence content supports)
+* `tags[]` (explainable)
+* `created_at`
+
+## 3) Findings (Explainable)
+
+Finding schema:
+
+* `finding_id`
+* `asset_id`
+* `type` enum:
+
+  * `governance_gap` (e.g., no owner/system record)
+  * `identity_gap` (no SSO/SCIM)
+  * `cmdb_gap` (not in CMDB when should be)
+  * `finance_gap` (paid for but not in CMDB/IdP)
+  * `data_conflict` (conflicting evidence)
+  * `duplication_risk` (multiple systems match same identity)
+* `severity` enum `low|med|high`
+* `explanation` (short text)
+* `evidence_refs[]`
+
+No anomaly scores.
+
+---
+
+# Core Pipeline (must be implemented as stages)
+
+Implement the pipeline as pure, testable stages:
+
+1. **ValidateSnapshot**
+
+* schema validate
+* reject banned fields anywhere in payload
+
+2. **NormalizeObservations**
+
+* normalize names/domains/hostnames
+* derive candidate “system entities” from raw observations
+* maintain provenance (observation IDs)
+
+3. **BuildPlaneIndexes**
+
+* IdP index: by domain, by canonical name
+* CMDB index: by canonical name
+* Cloud index: by uri/name
+* Finance index: by vendor+product and memo tokens
+
+4. **CorrelateEntitiesToPlanes (Real-world simple matcher)**
+   Per plane, per entity:
+
+* Pass 1: domain match (if applicable)
+* Pass 2: exact canonical normalized name match
+* Pass 3: unique contains match (strict; if >1 candidate → ambiguous)
+  Return matched/ambiguous/unmatched plus evidence refs.
+
+No shared IDs across planes. No truth keys.
+
+5. **Admission (AAC)**
+   Admit as **asset** only if it satisfies at least one hard criterion based on evidence content:
+
+* Identity plane: IdP match AND (has_sso OR has_scim OR idp_type==service_principal)
+* CMDB plane: CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
+* Cloud plane: cloud match AND resource_type indicates real system/resource
+* Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
+  Important: **vendor alone is not admission.**
+
+If none satisfied:
+
+* If it’s a known non-asset object (dashboard/report/calculator/file) → record as artifact (optional)
+* Else reject
+
+6. **Artifact Handling**
+   Global negative list (dashboards/reports/calculators/worksheets/views/saved queries/files) must never be assets.
+   Artifacts are optionally persisted with:
+
+* `artifact_id`, `parent_asset_id` (nullable), `name`, `artifact_type`, `source`, `evidence_ref`
+
+7. **Findings Engine**
+   Generate findings deterministically from catalog + lens statuses:
+
+* Example rules:
+
+  * `identity_gap`: admitted via CMDB/cloud/finance but no IdP match
+  * `cmdb_gap`: admitted via IdP/finance but no CMDB match
+  * `finance_gap`: finance evidence exists but no corresponding asset admitted
+  * `duplication_risk`: multiple entities ambiguous-match same plane record
+  * `data_conflict`: plane evidence contradicts (e.g., env/lifecycle mismatch)
+    All findings must include explanation + evidence refs.
+
+8. **Persist**
+   Write run log, assets, artifacts, findings, evidence refs to SQLite
+
+---
+
+# API Endpoints
+
+* `POST /api/runs`
+
+  * body: snapshot JSON OR reference URL (optional)
+  * returns run_id + summary counts
+
+* `GET /api/runs/{run_id}`
+
+  * returns run detail + counts
+
+* `GET /api/catalog?run_id=...`
+
+  * returns assets
+
+* `GET /api/findings?run_id=...`
+
+  * returns findings
+
+* `GET /api/health`
+
+---
+
+# Tests (must ship)
+
+* Schema validation rejects banned fields anywhere in snapshot
+* Determinism test: same snapshot yields identical catalog + findings
+* “Vendor does not admit” test: vendor without billing/license/contract doesn’t satisfy finance plane
+* Artifacts never become assets test: “commission calculator” observation becomes artifact or rejected
+* Ambiguous correlation test: “Salesforce CRM” vs “Salesforce Marketing Cloud” with discovered “Salesforce” → ambiguous, no forced match
+* Run log counts correctness
+
+---
+
+# Definition of Done
+
+AOD Fresh is done when:
+
+* It runs end-to-end on Farm snapshot JSON
+* Produces catalog + findings + run log
+* No ingestion of adjudicated fields is possible
+* No anomaly scores exist anywhere
+* Tests pass
+* UI works minimally to run and display results
+
+---
+
+Build this as a clean, readable codebase with a small number of well-named modules (pipeline stages). Avoid scattered business logic.

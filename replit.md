@@ -79,9 +79,6 @@ Persisted directly from Farm's classification - each asset belongs to exactly on
 - `GET /api/ingest/runs` - Get all catalog runs
 - `POST /api/farm/ingest` - Trigger Farm ingestion
 - `POST /api/reset` - Reset all assets and findings (preserves catalog history)
-- `GET /validation` - Validation page UI (Farm bucket counts)
-- `GET /api/validation/buckets` - Farm bucket counts JSON
-- `GET /api/validation/metrics` - Validation metrics JSON
 - `GET /api/runs` - All runs with breach summary
 - `GET /api/runs/{run_id}/observed-breaches` - Observed breaches for Farm grading
 - `GET /api/runs/{run_id}/observed-breaches/summary` - Breach summary counts
@@ -148,7 +145,6 @@ AOD no longer accepts numeric anomaly_score from Farm. Instead, it requires conc
 - **Dec 12, 2025**: Fixed route ordering - specific routes (inventory, shadow-it) now declared before wildcard {asset_id} route
 - **Dec 12, 2025**: Added robust vendor drilldown using query params (/api/assets/inventory?field=vendor&key=...) to handle special characters
 - **Dec 12, 2025**: Added farm_bucket column for Farm's mutually exclusive bucket classification (clean, non_blocking, blocking, shadow)
-- **Dec 12, 2025**: Created Validation page showing Farm's exclusive bucket counts with clear labeling
 - **Dec 12, 2025**: Updated Dashboard/Triage to show "X assets / Y findings" format for multi-label findings
 - **Dec 12, 2025**: Fixed Shadow IT to count across ALL lifecycle states (PARKED + CATALOGED)
 - **Dec 12, 2025**: Added "Reset All Data" button and Catalogs tab with full run history (company name, archetype, scale, duration, all counts)

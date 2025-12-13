@@ -8,9 +8,17 @@ import json
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
 from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus
+from ..farm_client import FarmClient, validate_schema_version
 
 
 router = APIRouter(prefix="/api")
+
+
+class FarmRunRequest(BaseModel):
+    """Request for creating a run from Farm"""
+    tenant_id: str
+    farm_base_url: str
+    snapshot_id: str
 
 
 class RunResponse(BaseModel):
@@ -118,6 +126,55 @@ async def create_run_json(snapshot: dict[str, Any]):
         status=result.run_log.status.value,
         counts=result.run_log.counts,
         message=f"Discovery completed. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated."
+    )
+
+
+@router.post("/runs/from-farm", response_model=RunResponse)
+async def create_run_from_farm(request: FarmRunRequest):
+    """
+    Create a new discovery run by fetching snapshot from Farm.
+    
+    Fetches snapshot from {farm_base_url}/api/snapshots/{snapshot_id}
+    Validates HTTP status, Content-Type, non-empty JSON body.
+    Requires meta.schema_version == "farm.v1"
+    
+    Returns run_id + summary counts.
+    """
+    farm_client = FarmClient(request.farm_base_url)
+    fetch_result = await farm_client.fetch_snapshot(request.snapshot_id)
+    
+    if not fetch_result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{fetch_result.error_type}: {fetch_result.error}"
+        )
+    
+    snapshot_data = fetch_result.data
+    
+    schema_valid, schema_error = validate_schema_version(snapshot_data)
+    if not schema_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"INVALID_INPUT_CONTRACT: {schema_error}"
+        )
+    
+    if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
+        snapshot_data["meta"]["tenant_id"] = request.tenant_id
+    
+    db = await get_db()
+    result = await execute_pipeline(snapshot_data, db)
+    
+    if not result.success:
+        if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
+            raise HTTPException(status_code=400, detail=result.error)
+        raise HTTPException(status_code=500, detail=result.error)
+    
+    return RunResponse(
+        run_id=result.run_log.run_id,
+        tenant_id=result.run_log.tenant_id,
+        status=result.run_log.status.value,
+        counts=result.run_log.counts,
+        message=f"Discovery completed from Farm. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated."
     )
 
 

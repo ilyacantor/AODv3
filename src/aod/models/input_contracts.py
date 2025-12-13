@@ -48,6 +48,7 @@ class SnapshotMeta(BaseModel):
     seed: Optional[int] = None
     generated_at: datetime
     profile: Optional[str] = None
+    schema_version: Optional[str] = None
 
 
 class Observation(BaseModel):

@@ -32,25 +32,16 @@
             --gray-900: #111827;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Quicksand', sans-serif;
             background: linear-gradient(135deg, var(--slate-950) 0%, var(--slate-900) 100%);
             color: white;
             min-height: 100vh;
-            -webkit-tap-highlight-color: rgba(11, 202, 217, 0.3);
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 
         header {
             display: flex;
@@ -61,56 +52,24 @@
             border-bottom: 1px solid var(--gray-800);
         }
 
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
+        .logo { display: flex; align-items: center; gap: 0.75rem; }
 
         .logo-icon {
-            width: 40px;
-            height: 40px;
+            width: 40px; height: 40px;
             background: linear-gradient(135deg, var(--cyan-600) 0%, var(--purple-600) 100%);
             border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1.2rem;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 1.2rem;
         }
 
-        .logo-text {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: white;
-        }
+        .logo-text { font-size: 1.5rem; font-weight: 700; color: white; }
+        .logo-text span { color: var(--cyan-400); }
 
-        .logo-text span {
-            color: var(--cyan-400);
-        }
+        .health-status { display: flex; align-items: center; gap: 0.5rem; color: var(--slate-400); font-size: 0.875rem; }
+        .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-400); }
+        .health-dot.error { background: var(--red-400); }
 
-        .health-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--slate-400);
-            font-size: 0.875rem;
-        }
-
-        .health-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green-400);
-        }
-
-        .health-dot.error {
-            background: var(--red-400);
-        }
-
-        main {
-            padding: 2rem;
-        }
+        main { padding: 2rem; }
 
         .section {
             background: rgba(30, 41, 59, 0.4);
@@ -120,375 +79,119 @@
             margin-bottom: 1.5rem;
         }
 
-        .section:hover {
-            border-color: rgba(6, 182, 212, 0.5);
-        }
+        .section:hover { border-color: rgba(6, 182, 212, 0.5); }
 
         .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--cyan-400);
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 1.25rem; font-weight: 600; color: var(--cyan-400);
+            margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;
         }
 
-        .upload-area {
-            border: 2px dashed var(--slate-700);
-            border-radius: 8px;
-            padding: 2rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .form-group { margin-bottom: 1rem; }
+        .form-label { display: block; margin-bottom: 0.5rem; color: var(--slate-400); font-weight: 500; }
+
+        .form-input {
+            width: 100%; padding: 0.75rem 1rem;
+            background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: 8px; color: white; font-family: 'Quicksand', sans-serif; font-size: 1rem;
         }
 
-        .upload-area:hover {
-            border-color: var(--cyan-500);
-            background: rgba(6, 182, 212, 0.1);
-        }
+        .form-input:focus { outline: none; border-color: var(--cyan-500); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2); }
+        .form-input::placeholder { color: var(--slate-500); }
 
-        .upload-area.dragover {
-            border-color: var(--cyan-400);
-            background: rgba(6, 182, 212, 0.2);
-        }
-
-        .upload-icon {
-            font-size: 3rem;
-            color: var(--slate-500);
-            margin-bottom: 1rem;
-        }
-
-        .upload-text {
-            color: var(--slate-400);
-            margin-bottom: 0.5rem;
-        }
-
-        .upload-hint {
-            color: var(--slate-500);
-            font-size: 0.875rem;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
+        .form-row { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
 
         .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-family: 'Quicksand', sans-serif;
-            font-weight: 600;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: none;
+            padding: 0.75rem 1.5rem; border-radius: 8px;
+            font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem;
+            cursor: pointer; transition: all 0.2s ease; border: none;
         }
 
-        .btn-primary {
-            background: var(--cyan-600);
-            color: white;
-        }
+        .btn-primary { background: var(--cyan-600); color: white; }
+        .btn-primary:hover { background: var(--cyan-500); }
+        .btn-primary:disabled { background: var(--slate-700); color: var(--slate-500); cursor: not-allowed; }
 
-        .btn-primary:hover {
-            background: var(--cyan-500);
-        }
+        .btn-secondary { background: var(--gray-800); color: var(--slate-400); }
+        .btn-secondary:hover { background: var(--gray-700); color: white; }
 
-        .btn-primary:disabled {
-            background: var(--slate-700);
-            color: var(--slate-500);
-            cursor: not-allowed;
-        }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; }
 
-        .btn-secondary {
-            background: var(--gray-800);
-            color: var(--slate-400);
-        }
+        .stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
+        .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
 
-        .btn-secondary:hover {
-            background: var(--gray-700);
-            color: white;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .stat-card {
-            background: var(--slate-800);
-            border-radius: 8px;
-            padding: 1rem;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--cyan-400);
-        }
-
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--slate-400);
-            margin-top: 0.25rem;
-        }
-
-        .findings-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
+        .findings-list { max-height: 400px; overflow-y: auto; }
 
         .finding-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            padding: 1rem;
-            background: var(--slate-800);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+            display: flex; align-items: flex-start; gap: 1rem;
+            padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem;
         }
 
-        .severity-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
+        .severity-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .severity-high { background: rgba(239, 68, 68, 0.2); color: var(--red-400); border: 1px solid rgba(239, 68, 68, 0.4); }
+        .severity-med { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); border: 1px solid rgba(245, 158, 11, 0.4); }
+        .severity-low { background: rgba(34, 197, 94, 0.2); color: var(--green-400); border: 1px solid rgba(34, 197, 94, 0.4); }
 
-        .severity-high {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--red-400);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-        }
+        .finding-type { font-size: 0.75rem; color: var(--purple-400); margin-bottom: 0.25rem; }
+        .finding-explanation { color: var(--slate-400); font-size: 0.875rem; }
 
-        .severity-med {
-            background: rgba(245, 158, 11, 0.2);
-            color: var(--amber-400);
-            border: 1px solid rgba(245, 158, 11, 0.4);
-        }
+        .assets-table { width: 100%; border-collapse: collapse; }
+        .assets-table th, .assets-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--slate-700); }
+        .assets-table th { color: var(--slate-400); font-weight: 600; font-size: 0.875rem; }
+        .assets-table td { color: white; }
 
-        .severity-low {
-            background: rgba(34, 197, 94, 0.2);
-            color: var(--green-400);
-            border: 1px solid rgba(34, 197, 94, 0.4);
-        }
+        .asset-type-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: rgba(168, 85, 247, 0.2); color: var(--purple-400); border: 1px solid rgba(168, 85, 247, 0.4); }
 
-        .finding-type {
-            font-size: 0.75rem;
-            color: var(--purple-400);
-            margin-bottom: 0.25rem;
-        }
+        .lens-indicators { display: flex; gap: 0.25rem; }
+        .lens-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .lens-matched { background: var(--green-400); }
+        .lens-ambiguous { background: var(--amber-400); }
+        .lens-unmatched { background: var(--slate-500); }
 
-        .finding-explanation {
-            color: var(--slate-400);
-            font-size: 0.875rem;
-        }
+        .loading { display: flex; align-items: center; justify-content: center; padding: 2rem; color: var(--slate-400); }
 
-        .assets-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        .spinner { width: 24px; height: 24px; border: 3px solid var(--slate-700); border-top-color: var(--cyan-400); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .assets-table th,
-        .assets-table td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid var(--slate-700);
-        }
+        .error-message { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--red-400); padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+        .success-message { background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: var(--green-400); padding: 1rem; border-radius: 8px; margin-top: 1rem; }
 
-        .assets-table th {
-            color: var(--slate-400);
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
+        .hidden { display: none; }
 
-        .assets-table td {
-            color: white;
-        }
-
-        .asset-type-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            background: rgba(168, 85, 247, 0.2);
-            color: var(--purple-400);
-            border: 1px solid rgba(168, 85, 247, 0.4);
-        }
-
-        .lens-indicators {
-            display: flex;
-            gap: 0.25rem;
-        }
-
-        .lens-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-
-        .lens-matched {
-            background: var(--green-400);
-        }
-
-        .lens-ambiguous {
-            background: var(--amber-400);
-        }
-
-        .lens-unmatched {
-            background: var(--slate-500);
-        }
-
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-            color: var(--slate-400);
-        }
-
-        .spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid var(--slate-700);
-            border-top-color: var(--cyan-400);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 0.5rem;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .error-message {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            color: var(--red-400);
-            padding: 1rem;
-            border-radius: 8px;
-            margin-top: 1rem;
-        }
-
-        .success-message {
-            background: rgba(34, 197, 94, 0.2);
-            border: 1px solid rgba(34, 197, 94, 0.4);
-            color: var(--green-400);
-            padding: 1rem;
-            border-radius: 8px;
-            margin-top: 1rem;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .runs-list {
-            margin-top: 1rem;
-        }
+        .runs-list { margin-top: 1rem; }
 
         .run-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem;
-            background: var(--slate-800);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem; background: var(--slate-800); border-radius: 8px;
+            margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s ease;
         }
 
-        .run-item:hover {
-            background: var(--gray-800);
-            border-color: var(--cyan-500);
-        }
+        .run-item:hover { background: var(--gray-800); }
+        .run-item.selected { border: 1px solid var(--cyan-500); }
 
-        .run-item.selected {
-            border: 1px solid var(--cyan-500);
-        }
+        .run-info { display: flex; align-items: center; gap: 1rem; }
+        .run-id { font-weight: 600; color: var(--cyan-400); }
 
-        .run-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
+        .run-status { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .run-status.completed { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
+        .run-status.failed { background: rgba(239, 68, 68, 0.2); color: var(--red-400); }
+        .run-status.running { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
 
-        .run-id {
-            font-weight: 600;
-            color: var(--cyan-400);
-        }
+        .download-btn { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+        .table-container { overflow-x: auto; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--slate-500); }
 
-        .run-status {
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .run-status.completed {
-            background: rgba(34, 197, 94, 0.2);
-            color: var(--green-400);
-        }
-
-        .run-status.failed {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--red-400);
-        }
-
-        .run-status.running {
-            background: rgba(6, 182, 212, 0.2);
-            color: var(--cyan-400);
-        }
-
-        .download-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .table-container {
-            overflow-x: auto;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: var(--slate-500);
-        }
-
-        .tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--slate-700);
-            padding-bottom: 0.5rem;
-        }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--slate-700); padding-bottom: 0.5rem; }
 
         .tab {
-            padding: 0.5rem 1rem;
-            background: transparent;
-            border: none;
-            color: var(--slate-400);
-            font-family: 'Quicksand', sans-serif;
-            font-weight: 600;
-            cursor: pointer;
-            border-radius: 6px 6px 0 0;
-            transition: all 0.2s ease;
+            padding: 0.5rem 1rem; background: transparent; border: none;
+            color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600;
+            cursor: pointer; border-radius: 6px 6px 0 0; transition: all 0.2s ease;
         }
 
-        .tab:hover {
-            color: white;
-            background: var(--slate-800);
-        }
+        .tab:hover { color: white; background: var(--slate-800); }
+        .tab.active { color: var(--cyan-400); background: var(--slate-800); }
 
-        .tab.active {
-            color: var(--cyan-400);
-            background: var(--slate-800);
-        }
+        .button-row { display: flex; gap: 1rem; margin-top: 1rem; }
     </style>
 </head>
 <body>
@@ -505,17 +208,25 @@
 
     <main class="container">
         <div class="section">
-            <h2 class="section-title">Upload Snapshot</h2>
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text">Drop your Farm snapshot JSON here</div>
-                <div class="upload-hint">or click to browse</div>
-                <input type="file" id="fileInput" accept=".json,application/json">
+            <h2 class="section-title">Fetch from Farm</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Farm Base URL</label>
+                    <input type="text" class="form-input" id="farmUrl" placeholder="https://farm.example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Snapshot ID</label>
+                    <input type="text" class="form-input" id="snapshotId" placeholder="snapshot-123">
+                </div>
             </div>
-            <div id="uploadMessage" class="hidden"></div>
-            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                <button class="btn btn-primary" id="runDiscovery" disabled>Run Discovery</button>
-                <button class="btn btn-secondary" id="loadSample">Load Sample Snapshot</button>
+            <div class="form-group">
+                <label class="form-label">Tenant ID</label>
+                <input type="text" class="form-input" id="tenantId" placeholder="my-tenant">
+            </div>
+            <div id="fetchMessage" class="hidden"></div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="fetchFromFarm">Fetch & Run Discovery</button>
+                <button class="btn btn-secondary" id="runSampleData">Run with Sample Data</button>
             </div>
         </div>
 
@@ -526,7 +237,7 @@
                 Loading runs...
             </div>
             <div id="runsList" class="runs-list">
-                <div class="empty-state">No runs yet. Upload a snapshot to get started.</div>
+                <div class="empty-state">No runs yet. Fetch a snapshot from Farm to get started.</div>
             </div>
         </div>
 
@@ -541,72 +252,35 @@
 
             <div id="summaryTab" class="tab-content">
                 <div id="summaryStats" class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value" id="statObservations">-</div>
-                        <div class="stat-label">Observations</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statAssets">-</div>
-                        <div class="stat-label">Assets</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statArtifacts">-</div>
-                        <div class="stat-label">Artifacts</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statFindings">-</div>
-                        <div class="stat-label">Findings</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statAmbiguous">-</div>
-                        <div class="stat-label">Ambiguous</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statRejected">-</div>
-                        <div class="stat-label">Rejected</div>
-                    </div>
+                    <div class="stat-card"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                 </div>
             </div>
 
             <div id="assetsTab" class="tab-content hidden">
-                <div id="assetsLoading" class="loading hidden">
-                    <div class="spinner"></div>
-                    Loading assets...
-                </div>
+                <div id="assetsLoading" class="loading hidden"><div class="spinner"></div>Loading assets...</div>
                 <div class="table-container">
                     <table class="assets-table" id="assetsTable">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Vendor</th>
-                                <th>Environment</th>
-                                <th>Lens Coverage</th>
-                            </tr>
-                        </thead>
-                        <tbody id="assetsBody">
-                        </tbody>
+                        <thead><tr><th>Name</th><th>Type</th><th>Vendor</th><th>Environment</th><th>Lens Coverage</th></tr></thead>
+                        <tbody id="assetsBody"></tbody>
                     </table>
                 </div>
-                <button class="btn btn-secondary download-btn" id="downloadCatalog">
-                    Download Catalog JSON
-                </button>
+                <button class="btn btn-secondary download-btn" id="downloadCatalog">Download Catalog JSON</button>
             </div>
 
             <div id="findingsTab" class="tab-content hidden">
-                <div id="findingsLoading" class="loading hidden">
-                    <div class="spinner"></div>
-                    Loading findings...
-                </div>
-                <div class="findings-list" id="findingsList">
-                </div>
+                <div id="findingsLoading" class="loading hidden"><div class="spinner"></div>Loading findings...</div>
+                <div class="findings-list" id="findingsList"></div>
             </div>
         </div>
     </main>
 
     <script>
         let currentRunId = null;
-        let currentSnapshot = null;
         let catalogData = null;
 
         async function checkHealth() {
@@ -624,15 +298,12 @@
         async function loadRuns() {
             const loading = document.getElementById('runsLoading');
             const list = document.getElementById('runsList');
-            
             loading.classList.remove('hidden');
-            
             try {
                 const response = await fetch('/api/runs');
                 const runs = await response.json();
-                
                 if (runs.length === 0) {
-                    list.innerHTML = '<div class="empty-state">No runs yet. Upload a snapshot to get started.</div>';
+                    list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot from Farm to get started.</div>';
                 } else {
                     list.innerHTML = runs.map(run => `
                         <div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
@@ -640,14 +311,9 @@
                                 <span class="run-id">${run.run_id}</span>
                                 <span class="run-status ${run.status}">${run.status}</span>
                             </div>
-                            <div>
-                                <span style="color: var(--slate-400); font-size: 0.875rem;">
-                                    ${run.counts.assets_admitted} assets, ${run.counts.findings_generated} findings
-                                </span>
-                            </div>
+                            <div><span style="color: var(--slate-400); font-size: 0.875rem;">${run.counts.assets_admitted} assets, ${run.counts.findings_generated} findings</span></div>
                         </div>
                     `).join('');
-                    
                     document.querySelectorAll('.run-item').forEach(item => {
                         item.addEventListener('click', () => selectRun(item.dataset.runId));
                     });
@@ -661,13 +327,8 @@
 
         async function selectRun(runId) {
             currentRunId = runId;
-            
-            document.querySelectorAll('.run-item').forEach(item => {
-                item.classList.toggle('selected', item.dataset.runId === runId);
-            });
-            
+            document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
             document.getElementById('resultsSection').classList.remove('hidden');
-            
             await loadRunDetails(runId);
             await loadAssets(runId);
             await loadFindings(runId);
@@ -677,28 +338,22 @@
             try {
                 const response = await fetch(`/api/runs/${runId}`);
                 const run = await response.json();
-                
                 document.getElementById('statObservations').textContent = run.counts.observations_in;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
                 document.getElementById('statArtifacts').textContent = run.counts.artifacts_recorded;
                 document.getElementById('statFindings').textContent = run.counts.findings_generated;
                 document.getElementById('statAmbiguous').textContent = run.counts.ambiguous_matches;
                 document.getElementById('statRejected').textContent = run.counts.rejected;
-            } catch (e) {
-                console.error('Failed to load run details:', e);
-            }
+            } catch (e) { console.error('Failed to load run details:', e); }
         }
 
         async function loadAssets(runId) {
             const loading = document.getElementById('assetsLoading');
             const body = document.getElementById('assetsBody');
-            
             loading.classList.remove('hidden');
-            
             try {
                 const response = await fetch(`/api/catalog?run_id=${runId}`);
                 catalogData = await response.json();
-                
                 if (catalogData.assets.length === 0) {
                     body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>';
                 } else {
@@ -708,34 +363,26 @@
                             <td><span class="asset-type-badge">${asset.asset_type}</span></td>
                             <td>${asset.vendor || '-'}</td>
                             <td>${asset.environment}</td>
-                            <td>
-                                <div class="lens-indicators" title="IdP | CMDB | Cloud | Finance">
-                                    <div class="lens-dot lens-${asset.lens_status.idp}"></div>
-                                    <div class="lens-dot lens-${asset.lens_status.cmdb}"></div>
-                                    <div class="lens-dot lens-${asset.lens_status.cloud}"></div>
-                                    <div class="lens-dot lens-${asset.lens_status.finance}"></div>
-                                </div>
-                            </td>
+                            <td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance">
+                                <div class="lens-dot lens-${asset.lens_status.idp}"></div>
+                                <div class="lens-dot lens-${asset.lens_status.cmdb}"></div>
+                                <div class="lens-dot lens-${asset.lens_status.cloud}"></div>
+                                <div class="lens-dot lens-${asset.lens_status.finance}"></div>
+                            </div></td>
                         </tr>
                     `).join('');
                 }
-            } catch (e) {
-                body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>';
-            } finally {
-                loading.classList.add('hidden');
-            }
+            } catch (e) { body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; }
+            finally { loading.classList.add('hidden'); }
         }
 
         async function loadFindings(runId) {
             const loading = document.getElementById('findingsLoading');
             const list = document.getElementById('findingsList');
-            
             loading.classList.remove('hidden');
-            
             try {
                 const response = await fetch(`/api/findings?run_id=${runId}`);
                 const data = await response.json();
-                
                 if (data.findings.length === 0) {
                     list.innerHTML = '<div class="empty-state">No findings generated</div>';
                 } else {
@@ -749,163 +396,123 @@
                         </div>
                     `).join('');
                 }
-            } catch (e) {
-                list.innerHTML = '<div class="error-message">Failed to load findings</div>';
-            } finally {
-                loading.classList.add('hidden');
-            }
+            } catch (e) { list.innerHTML = '<div class="error-message">Failed to load findings</div>'; }
+            finally { loading.classList.add('hidden'); }
         }
 
-        document.getElementById('uploadArea').addEventListener('click', () => {
-            document.getElementById('fileInput').click();
-        });
+        document.getElementById('fetchFromFarm').addEventListener('click', async () => {
+            const farmUrl = document.getElementById('farmUrl').value.trim();
+            const snapshotId = document.getElementById('snapshotId').value.trim();
+            const tenantId = document.getElementById('tenantId').value.trim();
+            const msg = document.getElementById('fetchMessage');
 
-        document.getElementById('uploadArea').addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.currentTarget.classList.add('dragover');
-        });
-
-        document.getElementById('uploadArea').addEventListener('dragleave', (e) => {
-            e.currentTarget.classList.remove('dragover');
-        });
-
-        document.getElementById('uploadArea').addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.currentTarget.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && file.type === 'application/json') {
-                handleFile(file);
+            if (!farmUrl || !snapshotId || !tenantId) {
+                msg.className = 'error-message';
+                msg.textContent = 'Please fill in all fields';
+                msg.classList.remove('hidden');
+                return;
             }
-        });
 
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                handleFile(file);
-            }
-        });
-
-        function handleFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    currentSnapshot = JSON.parse(e.target.result);
-                    const msg = document.getElementById('uploadMessage');
-                    msg.className = 'success-message';
-                    msg.textContent = `Loaded: ${file.name} (${currentSnapshot.planes?.discovery?.observations?.length || 0} observations)`;
-                    msg.classList.remove('hidden');
-                    document.getElementById('runDiscovery').disabled = false;
-                } catch (err) {
-                    const msg = document.getElementById('uploadMessage');
-                    msg.className = 'error-message';
-                    msg.textContent = `Invalid JSON: ${err.message}`;
-                    msg.classList.remove('hidden');
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        document.getElementById('runDiscovery').addEventListener('click', async () => {
-            if (!currentSnapshot) return;
-            
-            const btn = document.getElementById('runDiscovery');
+            const btn = document.getElementById('fetchFromFarm');
             btn.disabled = true;
-            btn.textContent = 'Running...';
-            
+            btn.textContent = 'Fetching...';
+
             try {
-                const response = await fetch('/api/runs/json', {
+                const response = await fetch('/api/runs/from-farm', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentSnapshot)
+                    body: JSON.stringify({ tenant_id: tenantId, farm_base_url: farmUrl, snapshot_id: snapshotId })
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.detail || 'Discovery failed');
+                    throw new Error(error.detail || 'Farm fetch failed');
                 }
-                
+
                 const result = await response.json();
-                
-                const msg = document.getElementById('uploadMessage');
                 msg.className = 'success-message';
                 msg.textContent = result.message;
-                
+                msg.classList.remove('hidden');
+
                 currentRunId = result.run_id;
                 await loadRuns();
                 await selectRun(result.run_id);
-                
             } catch (e) {
-                const msg = document.getElementById('uploadMessage');
                 msg.className = 'error-message';
                 msg.textContent = e.message;
+                msg.classList.remove('hidden');
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Run Discovery';
+                btn.textContent = 'Fetch & Run Discovery';
             }
         });
 
-        document.getElementById('loadSample').addEventListener('click', () => {
-            currentSnapshot = {
-                "meta": {
-                    "tenant_id": "demo-tenant",
-                    "run_id": "sample-run-" + Date.now(),
-                    "seed": 42,
-                    "generated_at": new Date().toISOString()
-                },
+        document.getElementById('runSampleData').addEventListener('click', async () => {
+            const btn = document.getElementById('runSampleData');
+            const msg = document.getElementById('fetchMessage');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+
+            const sampleSnapshot = {
+                "meta": { "tenant_id": "demo-tenant", "run_id": "sample-run-" + Date.now(), "seed": 42, "generated_at": new Date().toISOString() },
                 "planes": {
-                    "discovery": {
-                        "observations": [
-                            {"observation_id": "obs-1", "name": "Salesforce CRM", "domain": "salesforce.com", "vendor": "Salesforce", "source": "proxy"},
-                            {"observation_id": "obs-2", "name": "Slack", "domain": "slack.com", "vendor": "Slack", "source": "idp"},
-                            {"observation_id": "obs-3", "name": "Sales Dashboard", "source": "discovery"},
-                            {"observation_id": "obs-4", "name": "Commission Calculator", "source": "discovery"},
-                            {"observation_id": "obs-5", "name": "Jira", "domain": "atlassian.net", "vendor": "Atlassian", "source": "proxy"},
-                            {"observation_id": "obs-6", "name": "AWS Production DB", "uri": "rds.amazonaws.com/prod-db", "source": "cloud"}
-                        ]
-                    },
-                    "idp": {
-                        "objects": [
-                            {"idp_id": "idp-1", "name": "Salesforce", "domain": "salesforce.com", "has_sso": true, "has_scim": true, "idp_type": "app"},
-                            {"idp_id": "idp-2", "name": "Slack", "domain": "slack.com", "has_sso": true, "has_scim": false, "idp_type": "app", "owner": "IT Team"}
-                        ]
-                    },
-                    "cmdb": {
-                        "cis": [
-                            {"ci_id": "ci-1", "name": "Salesforce CRM", "ci_type": "application", "lifecycle": "production", "environment": "prod", "owner": "Sales Ops"},
-                            {"ci_id": "ci-2", "name": "Jira", "ci_type": "application", "lifecycle": "production", "environment": "prod"}
-                        ]
-                    },
-                    "cloud": {
-                        "resources": [
-                            {"resource_id": "cloud-1", "name": "AWS Production DB", "resource_type": "rds", "provider": "aws", "environment": "prod"}
-                        ]
-                    },
+                    "discovery": { "observations": [
+                        {"observation_id": "obs-1", "name": "Salesforce CRM", "domain": "salesforce.com", "vendor": "Salesforce", "source": "proxy"},
+                        {"observation_id": "obs-2", "name": "Slack", "domain": "slack.com", "vendor": "Slack", "source": "idp"},
+                        {"observation_id": "obs-3", "name": "Jira", "domain": "atlassian.net", "vendor": "Atlassian", "source": "proxy"},
+                        {"observation_id": "obs-4", "name": "AWS Production DB", "uri": "rds.amazonaws.com/prod-db", "source": "cloud"}
+                    ]},
+                    "idp": { "objects": [
+                        {"idp_id": "idp-1", "name": "Salesforce", "domain": "salesforce.com", "has_sso": true, "has_scim": true, "idp_type": "app"},
+                        {"idp_id": "idp-2", "name": "Slack", "domain": "slack.com", "has_sso": true, "has_scim": false, "idp_type": "app", "owner": "IT Team"}
+                    ]},
+                    "cmdb": { "cis": [
+                        {"ci_id": "ci-1", "name": "Salesforce CRM", "ci_type": "application", "lifecycle": "production", "environment": "prod", "owner": "Sales Ops"},
+                        {"ci_id": "ci-2", "name": "Jira", "ci_type": "application", "lifecycle": "production", "environment": "prod"}
+                    ]},
+                    "cloud": { "resources": [{"resource_id": "cloud-1", "name": "AWS Production DB", "resource_type": "rds", "provider": "aws", "environment": "prod"}]},
                     "endpoint": {"devices": [], "installed_apps": []},
                     "network": {"dns": [], "proxy": [], "certs": []},
                     "finance": {
-                        "vendors": [
-                            {"vendor_id": "v-1", "name": "Salesforce", "products": ["CRM", "Marketing Cloud"]},
-                            {"vendor_id": "v-2", "name": "Atlassian", "products": ["Jira", "Confluence"]}
-                        ],
-                        "contracts": [
-                            {"contract_id": "c-1", "vendor_id": "v-1", "product": "CRM", "amount": 50000},
-                            {"contract_id": "c-2", "vendor_id": "v-2", "product": "Jira", "amount": 12000}
-                        ],
+                        "vendors": [{"vendor_id": "v-1", "name": "Salesforce", "products": ["CRM"]}, {"vendor_id": "v-2", "name": "Atlassian", "products": ["Jira"]}],
+                        "contracts": [{"contract_id": "c-1", "vendor_id": "v-1", "product": "CRM", "amount": 50000}, {"contract_id": "c-2", "vendor_id": "v-2", "product": "Jira", "amount": 12000}],
                         "transactions": []
                     }
                 }
             };
-            
-            const msg = document.getElementById('uploadMessage');
-            msg.className = 'success-message';
-            msg.textContent = 'Loaded sample snapshot with 6 observations';
-            msg.classList.remove('hidden');
-            document.getElementById('runDiscovery').disabled = false;
+
+            try {
+                const response = await fetch('/api/runs/json', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sampleSnapshot)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Discovery failed');
+                }
+
+                const result = await response.json();
+                msg.className = 'success-message';
+                msg.textContent = result.message;
+                msg.classList.remove('hidden');
+
+                currentRunId = result.run_id;
+                await loadRuns();
+                await selectRun(result.run_id);
+            } catch (e) {
+                msg.className = 'error-message';
+                msg.textContent = e.message;
+                msg.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run with Sample Data';
+            }
         });
 
         document.getElementById('downloadCatalog').addEventListener('click', () => {
             if (!catalogData) return;
-            
             const blob = new Blob([JSON.stringify(catalogData, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -919,7 +526,6 @@
             tab.addEventListener('click', () => {
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-                
                 tab.classList.add('active');
                 document.getElementById(`${tab.dataset.tab}Tab`).classList.remove('hidden');
             });

@@ -203,5 +203,107 @@ class TestFarmClientHTTPErrors:
             assert "500" in result.error
 
 
+class TestSnapshotListProxy:
+    """Test snapshot list proxy endpoint"""
+    
+    @pytest.mark.asyncio
+    async def test_list_snapshots_success(self):
+        """Successful snapshot listing returns list of snapshots"""
+        from aod.farm_client import FarmClient, FarmListResult
+        
+        mock_snapshots = [
+            {"snapshot_id": "snap-1", "tenant_id": "t1", "created_at": "2024-01-01T00:00:00Z", "schema_version": "farm.v1"},
+            {"snapshot_id": "snap-2", "tenant_id": "t1", "created_at": "2024-01-02T00:00:00Z", "schema_version": "farm.v1"}
+        ]
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.json.return_value = mock_snapshots
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+            
+            client = FarmClient("http://farm.example.com")
+            result = await client.list_snapshots("t1")
+            
+            assert result.success is True
+            assert result.snapshots is not None
+            assert len(result.snapshots) == 2
+            assert result.snapshots[0]["snapshot_id"] == "snap-1"
+    
+    @pytest.mark.asyncio
+    async def test_list_snapshots_handles_wrapped_response(self):
+        """Handles response wrapped in {snapshots: [...]} object"""
+        from aod.farm_client import FarmClient
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.json.return_value = {"snapshots": [{"snapshot_id": "snap-1"}]}
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+            
+            client = FarmClient("http://farm.example.com")
+            result = await client.list_snapshots("t1")
+            
+            assert result.success is True
+            assert len(result.snapshots) == 1
+    
+    @pytest.mark.asyncio
+    async def test_list_snapshots_http_error(self):
+        """HTTP error returns UPSTREAM_ERROR"""
+        from aod.farm_client import FarmClient
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Server Error"
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+            
+            client = FarmClient("http://farm.example.com")
+            result = await client.list_snapshots("t1")
+            
+            assert result.success is False
+            assert result.error_type == "UPSTREAM_ERROR"
+    
+    @pytest.mark.asyncio
+    async def test_list_snapshots_html_response(self):
+        """HTML response returns UPSTREAM_ERROR"""
+        from aod.farm_client import FarmClient
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "text/html"}
+        mock_response.text = "<html></html>"
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+            
+            client = FarmClient("http://farm.example.com")
+            result = await client.list_snapshots("t1")
+            
+            assert result.success is False
+            assert result.error_type == "UPSTREAM_ERROR"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

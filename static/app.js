@@ -175,9 +175,27 @@ function formatReason(reason) {
         'MULTIPLE_OWNERS': 'Multiple conflicting owners detected',
         'SOR_CONFLICT': 'System of Record conflict - multiple sources claim authority',
         'SCHEMA_MISMATCH': 'Data schema does not match expected structure',
-        'DATA_SCHEMA_DRIFT': 'Schema has drifted from expected definition'
+        'DATA_SCHEMA_DRIFT': 'Schema has drifted from expected definition',
+        'SOURCE_VALUE_MISMATCH': 'Values differ between data sources'
     };
     return reasonMap[reason] || reason.replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+}
+
+function formatDataConflicts(asset) {
+    if (!asset.has_data_conflicts) {
+        return 'No';
+    }
+    let conflictTypes = [];
+    try {
+        const metadata = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : asset.metadata || {};
+        conflictTypes = metadata.conflict_types || [];
+    } catch(e) {}
+    
+    if (conflictTypes.length === 0) {
+        return 'Yes';
+    }
+    const formatted = conflictTypes.map(c => formatReason(c)).join(', ');
+    return `Yes - ${formatted}`;
 }
 
 async function showAssetDetail(assetId) {
@@ -278,7 +296,7 @@ async function showAssetDetail(assetId) {
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Data Conflicts</div>
-                        <div class="detail-value">${asset.has_data_conflicts ? 'Yes' : 'No'}</div>
+                        <div class="detail-value">${formatDataConflicts(asset)}</div>
                     </div>
                 </div>
                 

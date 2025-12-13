@@ -105,7 +105,7 @@ def build_asset_from_signals(tenant_id: str, signals: Dict[str, Any], entity_hin
         "metadata": {
             "rules_triggered": signals.get("rules_triggered", []),
             "conflict_types": signals.get("conflict_types", []),
-            "anomaly_score": signals.get("anomaly_score"),
+            "anomaly_indicators": signals.get("anomaly_indicators", []),
             "prob_kind": signals.get("prob_kind"),
             "sources": signals.get("sources", [])
         }
@@ -120,7 +120,11 @@ def derive_farm_bucket(signals: Dict[str, Any], parked_reason: Optional[str] = N
     2. blocking - if parked_reason exists (blocking issues)
     3. non_blocking - if has findings (data conflicts, governance gaps, ops risk, low confidence)
     4. clean - no issues
+    
+    Note: ops_risk is now evidence-based, using risk_score derived from anomaly_indicators.
     """
+    from src.aod.anomaly_evidence import extract_anomaly_evidence
+    
     if signals.get("is_shadow_it", False):
         return "shadow"
     
@@ -131,15 +135,17 @@ def derive_farm_bucket(signals: Dict[str, Any], parked_reason: Optional[str] = N
     has_governance_gap = not signals.get("owner") or not signals.get("owner_team")
     conflict_types = signals.get("conflict_types", [])
     rules_triggered = signals.get("rules_triggered", [])
-    anomaly_score = signals.get("anomaly_score", 0) or 0
     prob_kind = signals.get("prob_kind", 1.0) or 1.0
+    
+    anomaly_data = extract_anomaly_evidence(signals)
+    has_ops_risk = anomaly_data["risk_score"] >= 0.35
     
     has_findings = (
         has_data_conflicts or
         has_governance_gap or
         len(conflict_types) > 0 or
         len(rules_triggered) > 0 or
-        anomaly_score > 0.7 or
+        has_ops_risk or
         prob_kind < 0.8
     )
     
@@ -190,7 +196,7 @@ def build_asset_from_ground_truth(tenant_id: str, signals: Dict[str, Any], entit
         "metadata": {
             "rules_triggered": signals.get("rules_triggered", []),
             "conflict_types": signals.get("conflict_types", []),
-            "anomaly_score": signals.get("anomaly_score"),
+            "anomaly_indicators": signals.get("anomaly_indicators", []),
             "prob_kind": signals.get("prob_kind"),
             "shadow_reasons": signals.get("shadow_reasons", []),
             "sources": signals.get("sources", [])
@@ -343,7 +349,7 @@ async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
                 "conflict_types": cmdb_signals.get("conflict_types", []) or gt_asset.get("conflict_types", []),
                 "rules_triggered": cmdb_signals.get("rules_triggered", []) or gt_asset.get("rules_triggered", []),
                 "parked_reason": cmdb_signals.get("parked_reason") or gt_asset.get("parked_reason"),
-                "anomaly_score": cmdb_signals.get("anomaly_score", 0),
+                "anomaly_indicators": cmdb_signals.get("anomaly_indicators", []) or gt_asset.get("anomaly_indicators", []),
                 "prob_kind": cmdb_signals.get("prob_kind", 1.0),
                 "shadow_reasons": gt_asset.get("shadow_reasons", []),
             }

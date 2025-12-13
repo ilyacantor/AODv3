@@ -202,15 +202,12 @@ def derive_findings(asset: Dict[str, Any], signals: Dict[str, Any]) -> List[Dict
             "evidence": {"conflict_types": signals.get("conflict_types", [])}
         })
     
-    anomaly_score = signals.get("anomaly_score", 0)
-    if anomaly_score and anomaly_score >= 0.4:
-        findings.append({
-            "finding_type": "ops_risk",
-            "rule_id": "OPS_ANOMALY_HIGH",
-            "severity": "critical" if anomaly_score >= 0.7 else "warn",
-            "description": f"Operational risk detected (anomaly score: {anomaly_score:.2f})",
-            "evidence": {"anomaly_score": anomaly_score}
-        })
+    from src.aod.anomaly_evidence import extract_anomaly_evidence, derive_ops_risk_finding
+    
+    anomaly_data = extract_anomaly_evidence(signals)
+    ops_risk_finding = derive_ops_risk_finding(anomaly_data["indicators"], anomaly_data["risk_score"])
+    if ops_risk_finding:
+        findings.append(ops_risk_finding)
     
     prob_kind = signals.get("prob_kind", 1.0)
     if prob_kind and prob_kind < 0.5:

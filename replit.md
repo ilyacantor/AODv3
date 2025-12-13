@@ -61,12 +61,32 @@ tests/
 
 - `POST /api/runs` - Create discovery run (file upload)
 - `POST /api/runs/json` - Create discovery run (JSON body)
+- `POST /api/runs/from-farm` - Create discovery run from Farm HTTP pull
 - `GET /api/runs` - List all runs
 - `GET /api/runs/{run_id}` - Get run details
 - `GET /api/catalog?run_id=...` - Get assets for run
 - `GET /api/findings?run_id=...` - Get findings for run
 - `GET /api/artifacts?run_id=...` - Get artifacts for run
 - `GET /api/health` - Health check
+
+### Farm HTTP Pull Integration
+
+The `/api/runs/from-farm` endpoint fetches snapshots from an AOS Farm server:
+
+```json
+POST /api/runs/from-farm
+{
+  "tenant_id": "my-tenant",
+  "farm_base_url": "https://farm.example.com",
+  "snapshot_id": "snapshot-123"
+}
+```
+
+Validates:
+- HTTP status code (must be 2xx, 404 returns explicit "not found" error)
+- Content-Type includes JSON (HTML responses rejected with clear error)
+- Body is non-empty JSON
+- `meta.schema_version == "farm.v1"` (wrong version returns INVALID_INPUT_CONTRACT)
 
 ## Running the Application
 

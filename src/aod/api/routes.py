@@ -14,10 +14,12 @@ from ..farm_client import FarmClient, validate_schema_version
 router = APIRouter(prefix="/api")
 
 
+import os
+
 class FarmRunRequest(BaseModel):
     """Request for creating a run from Farm"""
     tenant_id: str
-    farm_base_url: str
+    farm_base_url: str | None = None
     snapshot_id: str
 
 
@@ -135,12 +137,17 @@ async def create_run_from_farm(request: FarmRunRequest):
     Create a new discovery run by fetching snapshot from Farm.
     
     Fetches snapshot from {farm_base_url}/api/snapshots/{snapshot_id}
+    Uses FARM_URL from environment if farm_base_url not provided.
     Validates HTTP status, Content-Type, non-empty JSON body.
     Requires meta.schema_version == "farm.v1"
     
     Returns run_id + summary counts.
     """
-    farm_client = FarmClient(request.farm_base_url)
+    farm_url = request.farm_base_url or os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable or provide farm_base_url.")
+    
+    farm_client = FarmClient(farm_url)
     fetch_result = await farm_client.fetch_snapshot(request.snapshot_id)
     
     if not fetch_result.success:

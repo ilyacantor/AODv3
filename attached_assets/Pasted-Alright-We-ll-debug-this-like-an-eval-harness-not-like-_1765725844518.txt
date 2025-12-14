@@ -1,0 +1,93 @@
+Alright. We’ll debug this **like an eval harness**, not like random poking.
+
+### What the FAIL is telling us
+
+Farm expected **19 zombies**. AOD reported **0**. Yet Farm shows **3/19 overlap** (so AOD *is producing keys* that look like zombies somewhere, but not counting/classifying them as zombies).
+
+That pattern usually means one of these is true:
+
+1. **Zombie classification isn’t being applied to the same entity set Farm evaluates** (key normalization / grouping mismatch).
+2. **Zombie criteria differs** (AOD still treats “evidence_refs exist” as “activity”, or uses a different activity window / timestamp field set).
+3. **Zombie view exists but KPI count is coming from the wrong filter** (UI/summary bug).
+
+We need a deterministic “why not zombie?” explainer, per candidate key.
+
+---
+
+## Single Replit prompt (AOD) — add “Zombie Debug Explainer” and reconcile against Farm keys
+
+> Debug the zombie mismatch using Farm reconciliation output for snapshot FetchCorp (expected 19, AOD 0).
+>
+> Goal: For every zombie key Farm lists as expected (and any AOD “extra zombie” keys), AOD must be able to answer in plain English: **“Why did I not classify this as zombie?”** or **“Why did I classify it as zombie?”**
+>
+> Implement in AOD (one pass):
+>
+> 1. Add a debug endpoint:
+>
+> * `POST /api/debug/zombie-explain`
+> * Body:
+>
+>   ```json
+>   {
+>     "tenant_id": "string",
+>     "run_id": "string",
+>     "keys": ["slackcom", "postgresmain", "..."],
+>     "window_days": 30
+>   }
+>   ```
+> * Response: an array of per-key explanations, each containing:
+>
+>   * `key` (input key)
+>
+>   * `matched_asset_ids` (0..n)
+>
+>   * `normalized_keys_considered` (what AOD thinks the key is)
+>
+>   * `idp_present` (true/false) + evidence fields used (e.g., last_login_at)
+>
+>   * `cmdb_present` (true/false) + evidence fields used (e.g., lifecycle, owner)
+>
+>   * `activity_signals` (list of timestamps found by plane: discovery/idp/endpoint/network)
+>
+>   * `activity_within_window` (true/false/indeterminate)
+>
+>   * `zombie_decision` (YES/NO/INDETERMINATE)
+>
+>   * `why` (1–3 plain-English bullets)
+>
+> 2. Ensure “activity” uses only time-bearing signals:
+>
+> * discovery.observed_at
+>
+> * idp.last_login_at
+>
+> * endpoint.last_seen_at
+>
+> * network timestamps
+>
+> * Do NOT treat evidence_refs existence as activity.
+>
+> 3. Add a tiny helper on the run summary page (or CLI script) to call this endpoint using Farm reconciliation output:
+>
+> * Take two lists:
+>
+>   * Farm expected zombie keys (top list)
+>   * AOD extra zombie keys (top list)
+> * Call zombie-explain for both lists and print a compact report:
+>
+>   * counts by reason (e.g., “key did not map to any asset”, “activity seen within window”, “indeterminate timestamps”, “idp/cmdb missing”)
+>
+> 4. Deliver proof with the FetchCorp run shown in Farm:
+>
+> * Use the AOD run_id displayed in Farm.
+> * Call zombie-explain for:
+>
+>   * at least 10 “Missed zombies” keys Farm shows
+>   * all “Extra zombies in AOD” keys Farm shows
+> * Paste the compact report and one full per-key explanation example.
+>
+> Do not change zombie logic yet. First add visibility so we can see *exactly* why AOD diverges from Farm.
+
+---
+
+Once you run that, we’ll know the root cause in minutes (mapping vs activity vs KPI count), and the next iteration will be a **surgical fix**, not another rewrite.

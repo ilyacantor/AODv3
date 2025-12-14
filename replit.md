@@ -150,8 +150,35 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 **Contract Tests:** `tests/test_farm_adapter_contract.py` (17 tests)
 **Real Farm Fixture:** `tests/fixtures/real_farm_snapshot.json`
 
+## Derived Classifications
+
+Shadow and Zombie are computed as **derived views** after the main pipeline (not stored flags).
+
+**Shadow Asset** = admitted asset with:
+- Finance evidence OR cloud presence OR discovery observations
+- AND no IdP match (no SSO / SCIM / service principal)
+- AND no CMDB match
+
+*Interpretation: "We know this software is used, but it's not being managed through official channels."*
+
+**Zombie Asset** = admitted asset with:
+- CMDB or IdP presence
+- AND no discovery observations or activity evidence
+
+*Interpretation: "This is in our official systems but we have no evidence anyone is actually using it."*
+
+**API:** `GET /api/runs/{run_id}/derived` returns counts and detailed lists with explanations.
+
+**Implementation:** `src/aod/pipeline/derived_classifications.py`
+
 ## Recent Changes
 
+- Added Shadow and Zombie derived classifications:
+  - Computed on-read from asset evidence (not stored flags)
+  - New `/api/runs/{run_id}/derived` endpoint
+  - New KPI cards: Shadow Assets (amber), Zombie Assets (red)
+  - Drillable with explanations showing why each asset qualifies
+  - Help modal updated with Shadow/Zombie definitions
 - Added Help modal with plain-English guide:
   - "? Help" button in header opens modal explaining AOD terminology
   - Documents all 6 KPI boxes (Observations, Assets, Artifacts, Findings, Ambiguous, Rejected)

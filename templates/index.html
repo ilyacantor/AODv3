@@ -49,6 +49,8 @@
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; }
         .stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; }
         .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
+        .stat-value.stat-shadow { color: var(--amber-400); }
+        .stat-value.stat-zombie { color: var(--red-400); }
         .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
         .findings-list { max-height: 400px; overflow-y: auto; }
         .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
@@ -242,6 +244,8 @@
                     <div class="stat-card clickable" data-drill-type="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="ambiguous"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                    <div class="stat-card clickable" data-drill-type="shadow"><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
+                    <div class="stat-card clickable" data-drill-type="zombie"><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
@@ -269,7 +273,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [] };
+        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         
         const DRILL_SCHEMA = {
             entities: {
@@ -336,6 +340,30 @@
                     },
                     drillPaths: ['reason_code'],
                     displayName: 'Rejections'
+                },
+                shadow: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        reason: { default: 'No reason available' },
+                        evidence_summary: { default: [] }
+                    },
+                    drillPaths: ['asset_type', 'vendor'],
+                    displayName: 'Shadow Assets'
+                },
+                zombie: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        reason: { default: 'No reason available' },
+                        evidence_summary: { default: [] }
+                    },
+                    drillPaths: ['asset_type', 'vendor'],
+                    displayName: 'Zombie Assets'
                 }
             },
             summaryCardMappings: {
@@ -344,7 +372,9 @@
                 statArtifacts: 'artifacts',
                 statObservations: 'observations',
                 statAmbiguous: 'ambiguous',
-                statRejected: 'rejections'
+                statRejected: 'rejections',
+                statShadow: 'shadow',
+                statZombie: 'zombie'
             }
         };
         
@@ -615,6 +645,18 @@
                 await loadDrillData(type, currentRunId);
             }
             
+            if (['shadow', 'zombie'].includes(type) && normalizedData[type].length === 0) {
+                try {
+                    const dr = await fetch(`/api/runs/${currentRunId}/derived`);
+                    if (dr.ok) {
+                        const derived = await dr.json();
+                        const items = type === 'shadow' ? (derived.shadow_assets || []) : (derived.zombie_assets || []);
+                        const { data: normalized } = normalizeResponse(type, items);
+                        normalizedData[type] = normalized;
+                    }
+                } catch (e) { console.error(`Error loading ${type} drill data:`, e); }
+            }
+            
             const sourceData = normalizedData[type] || [];
             if (sourceData.length === 0) {
                 drillStack = [];
@@ -800,6 +842,34 @@
                 document.getElementById('statAmbiguous').textContent = run.counts.ambiguous_matches;
                 document.getElementById('statRejected').textContent = run.counts.rejected;
             } catch (e) { console.error('Failed to load run details:', e); }
+            
+            try {
+                const dr = await fetch(`/api/runs/${runId}/derived`);
+                if (dr.ok) {
+                    const derived = await dr.json();
+                    document.getElementById('statShadow').textContent = derived.shadow_count ?? 0;
+                    document.getElementById('statZombie').textContent = derived.zombie_count ?? 0;
+                    
+                    const { data: shadowNorm, errors: shadowErrs } = normalizeResponse('shadow', derived.shadow_assets || []);
+                    normalizedData.shadow = shadowNorm;
+                    if (shadowErrs.length > 0) console.warn('Shadow normalization errors:', shadowErrs);
+                    
+                    const { data: zombieNorm, errors: zombieErrs } = normalizeResponse('zombie', derived.zombie_assets || []);
+                    normalizedData.zombie = zombieNorm;
+                    if (zombieErrs.length > 0) console.warn('Zombie normalization errors:', zombieErrs);
+                } else {
+                    document.getElementById('statShadow').textContent = '-';
+                    document.getElementById('statZombie').textContent = '-';
+                    normalizedData.shadow = [];
+                    normalizedData.zombie = [];
+                }
+            } catch (e) {
+                console.error('Failed to load derived classifications:', e);
+                document.getElementById('statShadow').textContent = '-';
+                document.getElementById('statZombie').textContent = '-';
+                normalizedData.shadow = [];
+                normalizedData.zombie = [];
+            }
         }
         
         async function loadAssets(runId) {
@@ -1014,6 +1084,14 @@
                         <div class="help-kpi-item">
                             <div class="help-kpi-name">Rejected</div>
                             <div class="help-kpi-desc">Items we saw but excluded from the catalog - didn't meet the quality bar or weren't real software systems.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Shadow</div>
+                            <div class="help-kpi-desc">Unmanaged assets - software in use that isn't tracked in official systems like CMDB or Finance.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Zombie</div>
+                            <div class="help-kpi-desc">Inactive assets - software still in records but showing no recent usage or activity.</div>
                         </div>
                     </div>
                 </div>

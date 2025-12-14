@@ -301,7 +301,13 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             distribution.with_cmdb_match += 1
         if asset.activity_evidence.latest_activity_at is not None:
             distribution.with_any_activity_timestamp += 1
-            if asset.activity_evidence.latest_activity_at > cutoff_date:
+            latest = asset.activity_evidence.latest_activity_at
+            cutoff = cutoff_date
+            if latest.tzinfo is not None and cutoff.tzinfo is None:
+                cutoff = cutoff.replace(tzinfo=latest.tzinfo)
+            elif latest.tzinfo is None and cutoff.tzinfo is not None:
+                latest = latest.replace(tzinfo=cutoff.tzinfo)
+            if latest > cutoff:
                 distribution.with_activity_last_30_days += 1
         
         shadow_result = classify_shadow(asset, activity_window_days)

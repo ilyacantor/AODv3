@@ -126,10 +126,10 @@
                 <div class="form-group">
                     <label class="form-label">Tenant</label>
                     <select class="form-select" id="tenantSelect" disabled>
-                        <option value="">Click Load Tenants first</option>
+                        <option value="">Loading tenants...</option>
                     </select>
                 </div>
-                <button class="btn btn-secondary" id="loadTenants">Load Tenants</button>
+                <button class="btn btn-secondary" id="loadTenants">Refresh</button>
             </div>
             
             <div class="snapshot-picker" id="snapshotPicker">
@@ -274,7 +274,7 @@
                 select.disabled = true;
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Load Tenants';
+                btn.textContent = 'Refresh';
             }
         }
         
@@ -481,7 +481,8 @@
         }));
         
         checkHealth(); 
-        loadRuns(); 
+        loadRuns();
+        loadTenants();
         setInterval(checkHealth, 30000);
     </script>
 </body>

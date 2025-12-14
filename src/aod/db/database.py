@@ -114,6 +114,15 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id);
             CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id);
             CREATE INDEX IF NOT EXISTS idx_findings_asset_id ON findings(asset_id);
+        """)
+        
+        try:
+            await conn.execute("ALTER TABLE assets ADD COLUMN activity_evidence TEXT NOT NULL DEFAULT '{}'")
+            await conn.commit()
+        except Exception:
+            pass
+        
+        await conn.executescript("""
             
             CREATE TABLE IF NOT EXISTS observation_samples (
                 id TEXT PRIMARY KEY,

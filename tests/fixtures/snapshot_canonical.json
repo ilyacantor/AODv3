@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "tenant_id": "test-tenant",
+    "run_id": "test-run-001",
+    "generated_at": "2024-01-15T10:30:00Z",
+    "schema_version": "farm.v1",
+    "profile": "enterprise/typical"
+  },
+  "planes": {
+    "discovery": {
+      "observations": [
+        {
+          "observation_id": "obs-001",
+          "name": "Salesforce CRM",
+          "domain": "salesforce.com",
+          "hostname": null,
+          "uri": "https://login.salesforce.com",
+          "vendor": "Salesforce",
+          "source": "discovery"
+        },
+        {
+          "observation_id": "obs-002",
+          "name": "Slack",
+          "domain": "slack.com",
+          "hostname": null,
+          "uri": "https://app.slack.com",
+          "vendor": "Slack Technologies",
+          "source": "discovery"
+        }
+      ]
+    },
+    "idp": {
+      "objects": [
+        {
+          "idp_id": "idp-001",
+          "name": "Salesforce Enterprise",
+          "idp_type": "app",
+          "domain": "salesforce.com",
+          "has_sso": true,
+          "has_scim": false
+        }
+      ]
+    },
+    "cmdb": {
+      "cis": [
+        {
+          "ci_id": "ci-001",
+          "name": "Salesforce",
+          "ci_type": "application",
+          "lifecycle": "production",
+          "environment": "production"
+        }
+      ]
+    },
+    "cloud": {
+      "resources": []
+    },
+    "endpoint": {
+      "devices": [],
+      "installed_apps": []
+    },
+    "network": {
+      "dns": [],
+      "proxy": [],
+      "certs": []
+    },
+    "finance": {
+      "vendors": [],
+      "contracts": [],
+      "transactions": [
+        {
+          "transaction_id": "txn-001",
+          "vendor_name": "Salesforce",
+          "amount": 50000.00,
+          "currency": "USD",
+          "is_recurring": true
+        }
+      ]
+    }
+  }
+}

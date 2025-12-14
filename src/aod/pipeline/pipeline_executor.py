@@ -56,6 +56,10 @@ async def execute_pipeline(
     Returns:
         PipelineResult with run log, assets, artifacts, and findings
     """
+    is_farm_source = bool(provenance and provenance.get("source") == "farm")
+    snapshot_id = provenance.get("snapshot_id") if provenance else None
+    fallback_tenant_id = data.get("meta", {}).get("tenant_id") or data.get("tenant_id")
+    
     run_id = data.get("meta", {}).get("run_id", f"run_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}")
     tenant_id = data.get("meta", {}).get("tenant_id", "unknown")
     
@@ -75,7 +79,12 @@ async def execute_pipeline(
     await db.create_run(run_log)
     
     try:
-        snapshot = validate_snapshot(data)
+        snapshot = validate_snapshot(
+            data,
+            normalize=is_farm_source,
+            fallback_tenant_id=fallback_tenant_id,
+            snapshot_id=snapshot_id
+        )
         
         observations = snapshot.planes.discovery.observations
         run_log.counts.observations_in = len(observations)

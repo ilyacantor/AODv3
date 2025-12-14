@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "tenantId": "GlobalBank",
+    "schemaVersion": "farm.v1",
+    "createdAt": "2024-12-13T15:45:00Z",
+    "enterprise_profile": "regulated_finance",
+    "realism_profile": "typical"
+  },
+  "planes": {
+    "discovery": {
+      "observations": [
+        {
+          "id": "9a267267-ca25-4eec-8152-506286489d9a",
+          "observedName": "Workday HCM",
+          "fqdn": "workday.com",
+          "url": "https://wd5.myworkday.com/globalbank",
+          "vendorName": "Workday Inc",
+          "dataSource": "proxy",
+          "bytesTransferred": 1523456,
+          "observedAt": "2024-12-13T14:30:00Z"
+        },
+        {
+          "id": "b3c4d5e6-f789-4abc-def0-123456789abc",
+          "observedName": "ServiceNow ITSM",
+          "fqdn": "service-now.com",
+          "url": "https://globalbank.service-now.com",
+          "vendorName": "ServiceNow",
+          "dataSource": "discovery",
+          "bytesTransferred": 892341
+        },
+        {
+          "id": "c4d5e6f7-89ab-4cde-f012-3456789abcde",
+          "name": "Zoom Meetings",
+          "domain": "zoom.us",
+          "uri": "https://zoom.us/j/meeting",
+          "vendor": "Zoom Video Communications"
+        }
+      ]
+    },
+    "idp": {
+      "objects": [
+        {
+          "idpId": "entra-app-001",
+          "displayName": "Workday SSO",
+          "type": "enterprise_app",
+          "hasSso": true,
+          "hasScim": true,
+          "ownerEmail": "it-admin@globalbank.com"
+        },
+        {
+          "id": "okta-app-002",
+          "name": "ServiceNow",
+          "idpType": "saml_app",
+          "ssoEnabled": true,
+          "scimEnabled": false
+        }
+      ]
+    },
+    "cmdb": {
+      "cis": [
+        {
+          "sys_id": "cmdb-ci-001",
+          "displayName": "Workday HR System",
+          "category": "business_application",
+          "lifecycleStatus": "production",
+          "env": "production",
+          "owned_by": "HR Department",
+          "manufacturer": "Workday Inc"
+        }
+      ]
+    },
+    "cloud": {
+      "resources": [
+        {
+          "arn": "arn:aws:s3:::globalbank-data-lake",
+          "resourceName": "Data Lake Storage",
+          "type": "s3_bucket",
+          "cloudProvider": "aws",
+          "stage": "production"
+        }
+      ]
+    },
+    "endpoint": {
+      "devices": [],
+      "installed_apps": []
+    },
+    "network": {
+      "dns": [],
+      "proxy": [],
+      "certs": []
+    },
+    "finance": {
+      "vendors": [],
+      "contracts": [],
+      "transactions": [
+        {
+          "txn_id": "fin-txn-001",
+          "vendor": "Workday Inc",
+          "description": "Annual HCM License",
+          "total": 250000.00,
+          "currencyCode": "USD",
+          "transactionDate": "2024-01-15",
+          "recurring": true
+        }
+      ]
+    }
+  }
+}

@@ -123,27 +123,39 @@ Uses AutonomOS palette:
 
 ## Farm Snapshot Normalization
 
-The pipeline includes a normalization adapter (`src/aod/pipeline/normalize_snapshot.py`) that transforms raw Farm JSON into canonical AOD schema:
+The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline/farm_adapter.py`) that transforms raw Farm JSON into canonical AOD schema.
 
-**Validation Flow:** `fetch raw → normalize → Snapshot.model_validate(normalized)`
+**Validation Flow:** `fetch raw → normalize_farm_snapshot() → Snapshot.model_validate(normalized)`
 
-**Key Features:**
-- Field alias mapping (in adapter, not Pydantic models) handles Farm field name variations
-- Meta normalization: derives `tenant_id`, `run_id` (synthesized as `farm_<snapshot_id>` if missing), `generated_at`, `schema_version`
-- Observation normalization: maps `id`/`observationId` → `observation_id`, `observedName` → `name`, etc.
+**Architecture:**
+- All field mappings defined in `FIELD_MAPPING` tables (not ad-hoc transformations)
+- Separate mapping tables for each record type: META, OBSERVATION, IDP_OBJECT, CMDB_CI, etc.
 - Unknown fields preserved in `raw_data` object
-- Fails with `INVALID_SNAPSHOT` and clear missing field messages if required fields cannot be derived
+- Fails fast with `NormalizationError` and clear missing field messages
 
-**Test fixtures:** `tests/fixtures/snapshot_canonical.json` and `tests/fixtures/snapshot_farm_format.json`
+**Key Mappings:**
+| Farm Wire | Canonical | Plane |
+|-----------|-----------|-------|
+| `install_id` | `app_id` | endpoint.installed_apps |
+| `app_name` | `name` | endpoint.installed_apps |
+| `cloud_id` | `resource_id` | cloud.resources |
+| `dns_id` | `record_id` | network.dns |
+| `proxy_id` | `log_id` | network.proxy |
+| `queried_domain` | `domain` | network.dns |
+| `observed_name` | `name` | discovery.observations |
+| `vendor_hint` | `vendor` | discovery.observations |
+| `txn_id` | `transaction_id` | finance.transactions |
+| `not_after` | `expires_at` | network.certs |
+
+**Contract Tests:** `tests/test_farm_adapter_contract.py` (17 tests)
+**Real Farm Fixture:** `tests/fixtures/real_farm_snapshot.json`
 
 ## Recent Changes
 
-- Added Farm snapshot normalization adapter (`normalize_snapshot.py`) with field alias mapping
-- Validation flow now: fetch → normalize (for Farm sources) → validate
-- Tenant dropdown auto-loads on page open (removed manual Load Tenants button)
-- 53+ tests passing including 23 normalization tests
-- Updated `/api/runs/from-farm` to persist run provenance (farm_url, snapshot_id, schema_version, fetch_duration_ms)
-- Pipeline now uses `COMPLETED_WITH_RESULTS` when assets admitted, `COMPLETED_NO_ASSETS` when none
-- Added snapshot list proxy endpoint (`GET /api/farm/snapshots`)
-- Updated RunStatus enum with IRL semantics
-- FarmClient now has `list_snapshots()` method
+- Contract-driven Farm adapter with explicit mapping tables
+- 17 contract tests verifying all planes normalize correctly
+- Real Farm snapshot fixture for integration testing
+- Tenant dropdown auto-loads on page open
+- Updated `/api/runs/from-farm` to persist run provenance
+- Pipeline uses `COMPLETED_WITH_RESULTS` / `COMPLETED_NO_ASSETS`
+- FarmClient has `list_snapshots()` method

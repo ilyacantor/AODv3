@@ -3,7 +3,7 @@
 from typing import Any
 
 from ..models.input_contracts import Snapshot, check_banned_fields
-from .normalize_snapshot import normalize_farm_snapshot, NormalizationError
+from .farm_adapter import normalize_farm_snapshot, NormalizationError
 
 
 class ValidationError(Exception):

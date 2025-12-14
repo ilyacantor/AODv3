@@ -188,7 +188,8 @@ class Vendor(BaseModel):
 class Contract(BaseModel):
     """Contract record"""
     contract_id: str
-    vendor_id: str
+    vendor_id: Optional[str] = None  # Farm uses vendor_name instead
+    vendor_name: Optional[str] = None
     product: Optional[str] = None
     amount: float = 0.0
     currency: str = "USD"

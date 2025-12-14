@@ -208,12 +208,12 @@
             </div>
             <div id="summaryTab" class="tab-content">
                 <div id="summaryStats" class="stats-grid">
-                    <div class="stat-card"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
+                    <div class="stat-card clickable" data-drill-type="observations"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
                     <div class="stat-card clickable" data-drill-type="artifacts"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
                     <div class="stat-card clickable" data-drill-type="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                    <div class="stat-card clickable" data-drill-type="ambiguous"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card clickable" data-drill-type="rejections"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
@@ -241,7 +241,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], artifacts: [] };
+        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [] };
         
         const DRILL_SCHEMA = {
             entities: {
@@ -280,12 +280,43 @@
                     },
                     drillPaths: ['artifact_type', 'source_lens'],
                     displayName: 'Artifacts'
+                },
+                observations: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        domain: { default: null },
+                        source: { default: 'unknown' },
+                        category: { default: null }
+                    },
+                    drillPaths: ['source', 'category'],
+                    displayName: 'Observations'
+                },
+                ambiguous: {
+                    fields: {
+                        entity_name: { default: 'unknown' },
+                        plane: { default: 'unknown' },
+                        candidate_names: { default: [] }
+                    },
+                    drillPaths: ['plane'],
+                    displayName: 'Ambiguous Matches'
+                },
+                rejections: {
+                    fields: {
+                        entity_name: { default: 'unknown' },
+                        reason_code: { default: 'unknown' },
+                        reason_detail: { default: 'No details available' }
+                    },
+                    drillPaths: ['reason_code'],
+                    displayName: 'Rejections'
                 }
             },
             summaryCardMappings: {
                 statAssets: 'assets',
                 statFindings: 'findings',
-                statArtifacts: 'artifacts'
+                statArtifacts: 'artifacts',
+                statObservations: 'observations',
+                statAmbiguous: 'ambiguous',
+                statRejected: 'rejections'
             }
         };
         
@@ -521,8 +552,55 @@
             pushDrill({ rootType, filters: newFilters, level: currentState.level + 1 });
         }
         
-        function initiateDrill(type) {
+        async function loadDrillData(type, runId) {
+            const endpointMap = {
+                observations: `/api/runs/${runId}/observations?limit=500`,
+                ambiguous: `/api/runs/${runId}/ambiguous?limit=500`,
+                rejections: `/api/runs/${runId}/rejections?limit=500`
+            };
+            
+            const endpoint = endpointMap[type];
+            if (!endpoint) return;
+            
+            try {
+                const r = await fetch(endpoint);
+                if (!r.ok) {
+                    console.error(`Failed to load ${type} drill data`);
+                    normalizedData[type] = [];
+                    return;
+                }
+                const data = await r.json();
+                const items = data.items || [];
+                const { data: normalized, errors } = normalizeResponse(type, items);
+                normalizedData[type] = normalized;
+                if (errors.length > 0) console.warn(`${type} normalization errors:`, errors);
+            } catch (e) {
+                console.error(`Error loading ${type} drill data:`, e);
+                normalizedData[type] = [];
+            }
+        }
+        
+        async function initiateDrill(type) {
             if (!currentRunId) return;
+            
+            if (['observations', 'ambiguous', 'rejections'].includes(type)) {
+                await loadDrillData(type, currentRunId);
+            }
+            
+            const sourceData = normalizedData[type] || [];
+            if (sourceData.length === 0) {
+                drillStack = [];
+                const panel = document.getElementById('drillPanel');
+                const titleEl = document.getElementById('drillPanelTitle');
+                const contentEl = document.getElementById('drillContent');
+                const schema = DRILL_SCHEMA.entities[type];
+                titleEl.textContent = `Drill Down: ${schema?.displayName || type}`;
+                document.getElementById('drillBreadcrumb').innerHTML = '';
+                contentEl.innerHTML = '<div class="drill-no-data">No drill data captured for this run.</div>';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
             drillStack = [];
             pushDrill({ rootType: type, filters: {}, level: 0 });
         }

@@ -1,0 +1,51 @@
+Why this isn’t acceptable as-is: it’s **mixing a true constraint with an unnecessary conclusion**.
+
+**True constraint:** You can only drill into what you **have a result set for**.
+**Unnecessary conclusion:** “Not stored → can’t drill.” IRL you *can* drill if you **capture a lightweight audit set** during the run.
+
+What to do next (one iteration): **Make all KPI boxes drillable by persisting minimal per-run drill sets**, not full raw observations. You don’t need to store 38k rows; you store **just enough to explain the counts**.
+
+Here’s the single prompt to send the Replit agent:
+
+---
+
+## Replit prompt (single)
+
+> Make all KPI boxes drillable with minimal IRL-safe persistence.
+>
+> Goal: every KPI card (Assets, Findings, Artifacts, Observations, Ambiguous, Rejected) must open a drill view and continue to deeper detail until no further detail exists.
+>
+> Do this without storing full raw data at scale.
+>
+> Implementation:
+>
+> 1. Define three new per-run “drill sets” stored in the database:
+>
+> * `run_observation_samples` (a capped sample of normalized observations, e.g., max 2000 per run, plus summary counts by source/type)
+> * `run_ambiguous_matches` (records of ambiguous correlation groups: entity key, plane, candidate IDs/names, match keys used)
+> * `run_rejections` (rejected candidates with reason_code and the minimal evidence used to decide)
+>
+> 2. During pipeline execution, capture these drill sets deterministically:
+>
+> * Observations: store only normalized fields needed for browsing (name/domain/source/category) + opaque `raw_preview`; cap with deterministic sampling (hash-based) so same snapshot yields same sample.
+> * Ambiguous: store the ambiguity groups produced by correlation (no guesswork).
+> * Rejected: store each rejected candidate’s normalized identity + the reason it failed admission.
+>
+> 3. Add API endpoints scoped by `run_id`:
+>
+> * `GET /api/runs/{run_id}/observations` (paged)
+> * `GET /api/runs/{run_id}/ambiguous` (paged)
+> * `GET /api/runs/{run_id}/rejections` (paged)
+>
+> 4. Update the UI drill engine so each KPI card routes to its corresponding endpoint and shows list → detail drilldown.
+> 5. Add one safeguard: if the drill set is empty (e.g., cap=0), show “No drill data captured for this run” rather than failing.
+>
+> Deliver proof:
+>
+> * One run where all 6 KPI cards open a drill list.
+> * Show page 1 of each drill list and one detail view.
+> * Confirm storage is capped and deterministic.
+
+---
+
+That answer also resolves his question without punting back to you.

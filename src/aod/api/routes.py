@@ -413,3 +413,60 @@ async def get_artifacts(run_id: str):
         ],
         "count": len(artifacts)
     }
+
+
+@router.get("/runs/{run_id}/observations")
+async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
+    """Get observation samples for a run"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    items, total = await db.get_observation_samples_by_run(run_id, limit=limit, offset=offset)
+    
+    return {
+        "run_id": run_id,
+        "items": items,
+        "count": len(items),
+        "total": total
+    }
+
+
+@router.get("/runs/{run_id}/ambiguous")
+async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
+    """Get ambiguous matches for a run"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    items, total = await db.get_ambiguous_matches_by_run(run_id, limit=limit, offset=offset)
+    
+    return {
+        "run_id": run_id,
+        "items": items,
+        "count": len(items),
+        "total": total
+    }
+
+
+@router.get("/runs/{run_id}/rejections")
+async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
+    """Get rejections for a run"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    items, total = await db.get_rejections_by_run(run_id, limit=limit, offset=offset)
+    
+    return {
+        "run_id": run_id,
+        "items": items,
+        "count": len(items),
+        "total": total
+    }

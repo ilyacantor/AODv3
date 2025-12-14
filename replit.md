@@ -152,6 +152,11 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Added full drill sets for all 6 KPI boxes:
+  - New database tables: observation_samples, ambiguous_matches, rejections
+  - Pipeline captures drill data during execution (observations capped at 2000)
+  - 3 new API endpoints: /observations, /ambiguous, /rejections (paginated)
+  - All 6 stat cards are now clickable and drillable
 - Added schema-driven drill-down architecture:
   - DRILL_SCHEMA defines entities (assets, findings, artifacts), fields with defaults, and drill paths
   - normalizeResponse() converts API data to safe view-models with defaults

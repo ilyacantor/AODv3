@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50;
+}
+
+a {
+  @apply text-teal hover:text-mint transition-colors;
+}
+
+.glass-card {
+  @apply bg-slate-900/70 border border-white/5 backdrop-blur-md rounded-2xl shadow-glass;
+}
+
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #1a47ff 0%, #38bdf8 100%);
+  z-index: -1;
+  opacity: 0.6;
+}
+
+.tag {
+  @apply inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-white/10 text-mint border border-white/5;
+}

@@ -37,3 +37,7 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Node
+node_modules/
+dist/

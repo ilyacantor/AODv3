@@ -17,7 +17,7 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
 ## Notes
-- Ensure `DATABASE_URL` is set in the Render dashboard (Environment tab).
+- Ensure `DATABASE_URL` is set in the Render dashboard (Environment tab). You need a Postgres-style connection string (Render Postgres or Supabase). Replit DB URLs will not work because the app expects Postgres.
 - If you need to add build-time tools (e.g., `uv`), use the same `pip install ...` pattern without `PIP_CONFIG_FILE` so installs keep using PyPI.
 - If your Render environment requires a custom index, set `PIP_INDEX_URL`/`PIP_EXTRA_INDEX_URL` explicitly; avoid `pip.conf` because it points to the Replit proxy.
 - No Procfile is required; Render uses the start command directly.

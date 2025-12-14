@@ -59,7 +59,7 @@ Persisted directly from Farm's classification - each asset belongs to exactly on
 - **shadow**: Shadow IT assets
 
 ## Environment Variables
-- `DATABASE_URL`: PostgreSQL connection string (required)
+- `DATABASE_URL`: PostgreSQL connection string (required). Use Render Postgres, Supabase, Neon, or any managed Postgres. Replit DB URLs are **not** compatible because the app uses asyncpg against PostgreSQL.
 - `FARM_URL`: Farm API base URL (optional, defaults to example)
 
 ## API Endpoints

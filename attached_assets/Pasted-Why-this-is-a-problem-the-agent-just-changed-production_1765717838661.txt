@@ -1,0 +1,48 @@
+Why this is a problem: the agent just **changed production semantics to satisfy the test**.
+
+* The test correctly found: deterministic IDs collide across runs.
+* The agent “fixed” it by **overwriting prior run data** (`INSERT OR REPLACE`), which destroys run history and makes drill tables untrustworthy.
+* That’s a **silent regression**. Passing the nuke test isn’t worth that trade.
+
+What to do next (one iteration): **make drill-table IDs run-scoped**, not snapshot-scoped, so determinism remains true while keeping run history intact. Concretely: include `run_id` in the primary key (or in the ID hash). Remove `INSERT OR REPLACE`.
+
+Here is the **single prompt** to give the Replit agent.
+
+---
+
+## Replit prompt (single)
+
+> Undo the “INSERT OR REPLACE” workaround and fix deterministic ID collisions correctly without losing run history.
+>
+> Why: Using `INSERT OR REPLACE` overwrites prior run drill data when re-running the same snapshot. That breaks auditability and makes drill-down unreliable. Passing the nuke check is not worth changing semantics.
+>
+> Do this:
+>
+> 1. Revert any `INSERT OR REPLACE` changes for drill tables (observation samples / ambiguous / rejections). Use normal inserts.
+> 2. Make drill-table records **run-scoped**:
+>
+> * Either (preferred) add `run_id` column and make the primary key `(run_id, <deterministic_id>)`, OR
+> * include `run_id` in the deterministic ID generation so IDs never collide across runs.
+>
+> 3. Keep determinism where it matters:
+>
+> * The *content* of drill samples for the same snapshot must remain identical across runs (same rows aside from run_id).
+> * But the stored records must be distinct per run.
+>
+> 4. Update `scripts/nuke_check.py` so it verifies determinism by comparing functional outputs, but also verifies that the database contains two distinct run-scoped drill sets after two runs (no overwrites).
+> 5. Add one regression test:
+>
+> * Run same snapshot twice.
+> * Assert both run_ids exist.
+> * Assert drill sample counts match between runs.
+> * Assert total stored drill rows equals sum of both runs (no replacement).
+>
+> Deliver proof:
+>
+> * Show the failing behavior before (overwrite) is gone.
+> * Show nuke_check still passes.
+> * Show DB now retains both runs’ drill data.
+
+---
+
+That’s the correct “secure engineering” fix: **tests don’t get to redefine product behavior**.

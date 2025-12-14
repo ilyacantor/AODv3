@@ -1,0 +1,79 @@
+You’re stuck in a loop because agents keep trying to “help” by tweaking Farm, when the actual defect is: **AOD is not recording/using Farm’s identity**, so there is nothing for Farm to display.
+
+### Why the “latest fix” didn’t work
+
+Adding `/api/tenants` to Farm (or any other helper) does **not** make Farm “show AOD runs.” Farm can only show runs if either:
+
+1. **AOD exposes runs by (tenant_id, snapshot_id)** and those values match Farm exactly, or
+2. Farm *itself* initiates evaluation and stores a local eval record (since you’re stateless, this can be in-memory only), or
+3. Farm can call AOD and ask “what did you run recently?” then *map* it back (which requires AOD to store snapshot_id anyway)
+
+Right now you have **none** of those reliably.
+
+So the fix is one iteration, AOD-side, with proof.
+
+---
+
+## Plan (before changes)
+
+Make it **impossible** for an AOD run to exist without:
+
+* `tenant_id` exactly equal to Farm tenant_id
+* `snapshot_id` exactly equal to Farm snapshot_id
+
+…and make Farm able to show “Evaluated / Not evaluated” without guessing.
+
+---
+
+## Single Replit prompt (paste to AOD agent)
+
+> Stop changing Farm. Fix AOD so Farm can always show AOD runs.
+>
+> Objective: When I run a snapshot in AOD, Farm must be able to find it by exact `(tenant_id, snapshot_id)` and show it as evaluated.
+>
+> Implement these minimum changes in AOD:
+>
+> 1. Enforce Farm-sourced selection (no manual IDs in normal flow)
+>
+> * In AOD UI, tenant + snapshot must come from Farm lists only (FARM_URL).
+>
+> * Remove free-text tenant/snapshot inputs from the primary path.
+>
+> 2. Persist run provenance exactly
+>
+> * When creating a run from Farm snapshot, persist:
+>
+>   * tenant_id (exact string from Farm)
+>   * snapshot_id (exact string from Farm)
+>   * created_at
+>   * status
+>
+> * No normalization, no aliases, no trimming, no “friendly name”.
+>
+> 3. Make the run query contract correct
+>
+> * Implement/repair: `GET /api/runs/latest?tenant_id=...&snapshot_id=...`
+>
+>   * If found: 200 + `{ run_id, tenant_id, snapshot_id, created_at, status }`
+>
+>   * If not found: HTTP 404 (not 200 with {"detail":...})
+>
+> 4. Add a deterministic proof endpoint for debugging
+>
+> * `GET /api/runs?tenant_id=...` returns the last N runs with tenant_id + snapshot_id.
+>
+> 5. Prove end-to-end
+>
+> * Using an actual Farm snapshot_id shown in Farm UI, run it from AOD dropdown.
+> * Show:
+>   a) AOD stored tenant_id + snapshot_id for the run
+>   b) `/api/runs/latest?tenant_id=...&snapshot_id=...` returns that run
+>   c) The response is 404 when no run exists (correct semantics)
+>
+> Do not add any new Farm endpoints. Do not propose workarounds. Make the identifiers line up and prove it.
+
+---
+
+If AOD can’t do step (1) because the Farm snapshot list isn’t reachable or CORS blocks it, the correct fix is still in AOD: **AOD proxies Farm through its own backend** (so UI calls AOD, AOD calls Farm). But that’s still AOD work, not Farm.
+
+Once AOD does the above, Farm will “show AOD runs” automatically because it can query by exact IDs and get a real answer.

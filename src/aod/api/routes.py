@@ -351,10 +351,13 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
 
 
 @router.get("/runs", response_model=list[RunDetailResponse])
-async def list_runs():
-    """List all discovery runs"""
+async def list_runs(tenant_id: Optional[str] = None):
+    """List all discovery runs, optionally filtered by tenant_id"""
     db = await get_db()
     runs = await db.get_all_runs()
+    
+    if tenant_id:
+        runs = [r for r in runs if r.tenant_id == tenant_id]
     
     return [
         RunDetailResponse(

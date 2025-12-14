@@ -203,8 +203,13 @@ Returns counts, detailed lists, and **distribution diagnostic**:
   - `python scripts/nuke_check.py` - fast sanity check (~60 seconds)
   - Verifies FARM_URL, server health, tenant/snapshot access, discovery run, status codes
   - Determinism check: runs same snapshot twice, compares outputs
+  - Run history check: verifies both runs' data retained (no overwrites)
   - Plain-English PASS/FAIL output with helpful failure diagnostics
   - See README_NUKE_CHECK.md for documentation
+- Run-scoped deterministic IDs:
+  - All entity IDs (assets, findings, artifacts, drill samples) now include run_id
+  - Prevents data overwrites when re-running the same snapshot
+  - Both runs' data preserved in database for audit trail
 - Added Shadow and Zombie derived classifications:
   - Computed on-read from asset evidence (not stored flags)
   - New `/api/runs/{run_id}/derived` endpoint

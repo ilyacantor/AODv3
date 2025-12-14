@@ -268,7 +268,7 @@ class Database:
         
         await conn.execute(
             """
-            INSERT INTO assets (
+            INSERT OR REPLACE INTO assets (
                 asset_id, tenant_id, run_id, name, asset_type, identifiers,
                 vendor, environment, evidence_refs, lens_status, lens_coverage,
                 activity_evidence, tags, admission_reason, created_at
@@ -333,7 +333,7 @@ class Database:
         
         await conn.execute(
             """
-            INSERT INTO artifacts (
+            INSERT OR REPLACE INTO artifacts (
                 artifact_id, tenant_id, run_id, parent_asset_id, name,
                 artifact_type, source, evidence_ref, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -384,7 +384,7 @@ class Database:
         
         await conn.execute(
             """
-            INSERT INTO findings (
+            INSERT OR REPLACE INTO findings (
                 finding_id, asset_id, tenant_id, run_id, finding_type,
                 severity, explanation, evidence_refs, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -444,7 +444,7 @@ class Database:
         conn = await self.get_connection()
         await conn.execute(
             """
-            INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
+            INSERT OR REPLACE INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (sample_id, run_id, name, domain, source, category, raw_preview, created_at.isoformat())
@@ -467,7 +467,7 @@ class Database:
         conn = await self.get_connection()
         await conn.execute(
             """
-            INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
+            INSERT OR REPLACE INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -493,7 +493,7 @@ class Database:
         conn = await self.get_connection()
         await conn.execute(
             """
-            INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
+            INSERT OR REPLACE INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (

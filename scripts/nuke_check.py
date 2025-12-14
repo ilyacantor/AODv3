@@ -268,7 +268,7 @@ async def run_discovery(
             return {"status": "UPSTREAM_ERROR", "counts": {}, "assets": []}
         
         run_data = run_resp.json()
-        status = run_data.get("status", "")
+        status = run_data.get("status", "").upper()
         
         if status not in VALID_AOD_STATUSES:
             result.add_fail(

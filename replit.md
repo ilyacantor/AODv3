@@ -152,6 +152,11 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Added Help modal with plain-English guide:
+  - "? Help" button in header opens modal explaining AOD terminology
+  - Documents all 6 KPI boxes (Observations, Assets, Artifacts, Findings, Ambiguous, Rejected)
+  - Explains drill-down navigation and getting started steps
+  - Responsive grid layout for KPI explanations
 - Added full drill sets for all 6 KPI boxes:
   - New database tables: observation_samples, ambiguous_matches, rejections
   - Pipeline captures drill data during execution (observations capped at 2000)

@@ -152,6 +152,10 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Added snapshot size selector to UI:
+  - New "Snapshot Size" dropdown (All sizes, Small, Medium, Large)
+  - Size parameter passed to Farm API when listing snapshots
+  - Snapshots automatically reload when size selection changes
 - Pipeline determinism stabilization:
   - All run identifiers (run_id, started_at) generated at API boundary
   - Pipeline accepts run_id/started_at as required parameters

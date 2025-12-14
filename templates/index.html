@@ -129,6 +129,16 @@
                 </select>
             </div>
             
+            <div class="form-group">
+                <label class="form-label">Snapshot Size</label>
+                <select class="form-select" id="sizeSelect">
+                    <option value="">All sizes</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                </select>
+            </div>
+            
             <div class="snapshot-picker" id="snapshotPicker">
                 <div class="form-group">
                     <label class="form-label">Select Snapshot</label>
@@ -271,6 +281,7 @@
         
         async function loadSnapshots() {
             const tenantId = document.getElementById('tenantSelect').value;
+            const size = document.getElementById('sizeSelect').value;
             const select = document.getElementById('snapshotSelect');
             const msg = document.getElementById('fetchMessage');
             
@@ -284,7 +295,11 @@
             select.innerHTML = '<option value="">Loading snapshots...</option>';
             
             try {
-                const r = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                let url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
+                if (size) {
+                    url += `&size=${encodeURIComponent(size)}`;
+                }
+                const r = await fetch(url);
                 if (!r.ok) {
                     const e = await r.json();
                     throw new Error(e.detail || 'Failed to load snapshots');
@@ -384,6 +399,7 @@
         }
         
         document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
+        document.getElementById('sizeSelect').addEventListener('change', loadSnapshots);
         
         document.getElementById('advancedToggle').addEventListener('click', () => {
             const content = document.getElementById('advancedContent');

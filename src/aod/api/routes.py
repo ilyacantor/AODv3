@@ -112,19 +112,23 @@ async def list_farm_tenants():
 
 
 @router.get("/farm/snapshots", response_model=SnapshotListResponse)
-async def list_farm_snapshots(tenant_id: str):
+async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
     """
     List available snapshots from Farm for a tenant.
     
-    Proxies to {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20
+    Proxies to {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20&size=<size>
     Returns metadata list with snapshot_id, tenant_id, created_at, schema_version.
+    
+    Args:
+        tenant_id: The tenant to filter snapshots by
+        size: Optional size filter (small, medium, large)
     """
     farm_url = os.environ.get("FARM_URL")
     if not farm_url:
         raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
     
     farm_client = FarmClient(farm_url)
-    result = await farm_client.list_snapshots(tenant_id)
+    result = await farm_client.list_snapshots(tenant_id, size=size)
     
     if not result.success:
         raise HTTPException(

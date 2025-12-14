@@ -37,18 +37,21 @@ class FarmClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
     
-    async def list_snapshots(self, tenant_id: str, limit: int = 20) -> FarmListResult:
+    async def list_snapshots(self, tenant_id: str, limit: int = 20, size: str | None = None) -> FarmListResult:
         """
         List available snapshots from Farm for a tenant.
         
         Args:
             tenant_id: The tenant ID to list snapshots for
             limit: Maximum number of snapshots to return (default 20)
+            size: Optional size filter (small, medium, large)
             
         Returns:
             FarmListResult with success status and snapshots list or error
         """
         url = f"{self.base_url}/api/snapshots?tenant_id={tenant_id}&limit={limit}"
+        if size:
+            url += f"&size={size}"
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:

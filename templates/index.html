@@ -110,6 +110,30 @@
         .outcome-badge.error { background: rgba(239, 68, 68, 0.3); color: var(--red-400); }
         .outcome-explanation { color: var(--slate-400); font-size: 0.875rem; }
         .snapshot-picker { margin-top: 1rem; }
+        .stat-card.clickable { cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent; }
+        .stat-card.clickable:hover { border-color: var(--cyan-500); background: var(--gray-800); transform: translateY(-2px); }
+        .drill-panel { background: rgba(30, 41, 59, 0.6); border: 1px solid var(--cyan-600); border-radius: 12px; padding: 1.5rem; margin-top: 1rem; }
+        .drill-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .drill-panel-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
+        .breadcrumb { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .breadcrumb-item { color: var(--slate-400); font-size: 0.875rem; cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s ease; }
+        .breadcrumb-item:hover { color: var(--cyan-400); background: var(--slate-800); }
+        .breadcrumb-item.active { color: var(--cyan-400); cursor: default; }
+        .breadcrumb-sep { color: var(--slate-500); font-size: 0.75rem; }
+        .drill-group { background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent; }
+        .drill-group:hover { border-color: var(--cyan-500); background: var(--gray-800); }
+        .drill-group-header { display: flex; justify-content: space-between; align-items: center; }
+        .drill-group-label { font-weight: 600; color: white; }
+        .drill-group-count { color: var(--cyan-400); font-weight: 600; }
+        .drill-group-hint { color: var(--slate-500); font-size: 0.75rem; margin-top: 0.25rem; }
+        .drill-detail { background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; }
+        .drill-detail-name { font-weight: 600; color: white; margin-bottom: 0.5rem; }
+        .drill-detail-row { display: flex; gap: 1rem; font-size: 0.875rem; color: var(--slate-400); margin-bottom: 0.25rem; }
+        .drill-detail-label { color: var(--slate-500); min-width: 100px; }
+        .drill-no-data { text-align: center; padding: 2rem; color: var(--slate-500); }
+        .drill-error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--red-400); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; }
+        .btn-back { background: var(--slate-700); color: white; padding: 0.5rem 1rem; font-size: 0.875rem; }
+        .btn-back:hover { background: var(--slate-600); }
     </style>
 </head>
 <body>
@@ -185,11 +209,20 @@
             <div id="summaryTab" class="tab-content">
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card clickable" data-drill-type="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
+                    <div class="stat-card clickable" data-drill-type="artifacts"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
                     <div class="stat-card"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
                     <div class="stat-card"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                </div>
+                <div id="drillPanel" class="drill-panel hidden">
+                    <div class="drill-panel-header">
+                        <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
+                        <button class="btn btn-back" id="drillBackBtn">← Back</button>
+                    </div>
+                    <div class="breadcrumb" id="drillBreadcrumb"></div>
+                    <div id="drillError" class="drill-error hidden"></div>
+                    <div id="drillContent"></div>
                 </div>
             </div>
             <div id="assetsTab" class="tab-content hidden">
@@ -207,6 +240,292 @@
     </main>
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
+        let drillStack = [];
+        let normalizedData = { assets: [], findings: [], artifacts: [] };
+        
+        const DRILL_SCHEMA = {
+            entities: {
+                assets: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        lens_status: { 
+                            default: { idp: 'unmatched', cmdb: 'unmatched', cloud: 'unmatched', finance: 'unmatched' }
+                        },
+                        identifiers: { default: {} },
+                        deterministic_id: { default: 'unknown' }
+                    },
+                    drillPaths: ['asset_type', 'vendor', 'environment'],
+                    displayName: 'Assets'
+                },
+                findings: {
+                    fields: {
+                        finding_type: { default: 'unknown' },
+                        severity: { default: 'unknown' },
+                        explanation: { default: 'No explanation available' },
+                        asset_id: { default: null },
+                        created_at: { default: null }
+                    },
+                    drillPaths: ['finding_type', 'severity'],
+                    displayName: 'Findings'
+                },
+                artifacts: {
+                    fields: {
+                        artifact_type: { default: 'unknown' },
+                        source_lens: { default: 'unknown' },
+                        asset_id: { default: null },
+                        data: { default: {} }
+                    },
+                    drillPaths: ['artifact_type', 'source_lens'],
+                    displayName: 'Artifacts'
+                }
+            },
+            summaryCardMappings: {
+                statAssets: 'assets',
+                statFindings: 'findings',
+                statArtifacts: 'artifacts'
+            }
+        };
+        
+        function normalizeResponse(type, data) {
+            const errors = [];
+            const schema = DRILL_SCHEMA.entities[type];
+            
+            if (!schema) {
+                errors.push(`Unknown entity type: ${type}`);
+                return { data: [], errors };
+            }
+            
+            if (!Array.isArray(data)) {
+                errors.push(`Expected array for ${type}, got ${typeof data}`);
+                return { data: [], errors };
+            }
+            
+            const normalized = data.map((item, index) => {
+                const result = {};
+                try {
+                    for (const [field, config] of Object.entries(schema.fields)) {
+                        const value = item?.[field];
+                        if (value === undefined || value === null || value === '') {
+                            if (typeof config.default === 'object' && config.default !== null) {
+                                result[field] = JSON.parse(JSON.stringify(config.default));
+                            } else {
+                                result[field] = config.default;
+                            }
+                        } else if (typeof config.default === 'object' && config.default !== null && typeof value === 'object') {
+                            result[field] = { ...JSON.parse(JSON.stringify(config.default)), ...value };
+                        } else {
+                            result[field] = value;
+                        }
+                    }
+                    Object.keys(item || {}).forEach(key => {
+                        if (!(key in result)) result[key] = item[key];
+                    });
+                } catch (e) {
+                    errors.push(`Error normalizing ${type}[${index}]: ${e.message}`);
+                    for (const [field, config] of Object.entries(schema.fields)) {
+                        result[field] = typeof config.default === 'object' && config.default !== null
+                            ? JSON.parse(JSON.stringify(config.default))
+                            : config.default;
+                    }
+                }
+                return result;
+            });
+            
+            return { data: normalized, errors };
+        }
+        
+        function executeDrill({ rootType, filters = {}, level = 0 }) {
+            const schema = DRILL_SCHEMA.entities[rootType];
+            if (!schema) {
+                return { items: [], nextDrillOptions: [], canDrillFurther: false, error: `Unknown type: ${rootType}` };
+            }
+            
+            const sourceData = normalizedData[rootType] || [];
+            let filtered = sourceData;
+            
+            for (const [key, value] of Object.entries(filters)) {
+                filtered = filtered.filter(item => (item[key] ?? 'unknown') === value);
+            }
+            
+            const drillPaths = schema.drillPaths || [];
+            const usedFields = Object.keys(filters);
+            const availablePaths = drillPaths.filter(p => !usedFields.includes(p));
+            
+            if (filtered.length <= 1 || availablePaths.length === 0) {
+                return { items: filtered, nextDrillOptions: [], canDrillFurther: false };
+            }
+            
+            const nextField = availablePaths[0];
+            const groups = {};
+            filtered.forEach(item => {
+                const val = item[nextField] ?? 'unknown';
+                groups[val] = groups[val] || [];
+                groups[val].push(item);
+            });
+            
+            const nextDrillOptions = Object.entries(groups).map(([value, items]) => ({
+                field: nextField,
+                value,
+                count: items.length,
+                canDrillDeeper: availablePaths.length > 1 || items.length > 1
+            }));
+            
+            return {
+                items: filtered,
+                nextDrillOptions: nextDrillOptions.sort((a, b) => b.count - a.count),
+                canDrillFurther: true,
+                groupField: nextField
+            };
+        }
+        
+        function pushDrill(drillState) {
+            drillStack.push(drillState);
+            renderDrillPanel();
+        }
+        
+        function popDrill() {
+            if (drillStack.length > 0) {
+                drillStack.pop();
+                if (drillStack.length === 0) {
+                    hideDrillPanel();
+                } else {
+                    renderDrillPanel();
+                }
+            }
+        }
+        
+        function navigateToDrillLevel(level) {
+            while (drillStack.length > level + 1) {
+                drillStack.pop();
+            }
+            if (drillStack.length === 0) {
+                hideDrillPanel();
+            } else {
+                renderDrillPanel();
+            }
+        }
+        
+        function hideDrillPanel() {
+            drillStack = [];
+            document.getElementById('drillPanel').classList.add('hidden');
+        }
+        
+        function showDrillError(message) {
+            const errorEl = document.getElementById('drillError');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+        
+        function hideDrillError() {
+            document.getElementById('drillError').classList.add('hidden');
+        }
+        
+        function renderDrillPanel() {
+            if (drillStack.length === 0) {
+                hideDrillPanel();
+                return;
+            }
+            
+            hideDrillError();
+            const panel = document.getElementById('drillPanel');
+            const titleEl = document.getElementById('drillPanelTitle');
+            const breadcrumbEl = document.getElementById('drillBreadcrumb');
+            const contentEl = document.getElementById('drillContent');
+            
+            const currentState = drillStack[drillStack.length - 1];
+            const schema = DRILL_SCHEMA.entities[currentState.rootType];
+            const displayName = schema?.displayName || currentState.rootType;
+            
+            titleEl.textContent = `Drill Down: ${displayName}`;
+            
+            let breadcrumbHtml = `<span class="breadcrumb-item" onclick="navigateToDrillLevel(-1)">${displayName}</span>`;
+            drillStack.forEach((state, index) => {
+                if (Object.keys(state.filters).length > 0) {
+                    const lastFilter = Object.entries(state.filters).pop();
+                    breadcrumbHtml += `<span class="breadcrumb-sep">›</span>`;
+                    breadcrumbHtml += `<span class="breadcrumb-item${index === drillStack.length - 1 ? ' active' : ''}" onclick="navigateToDrillLevel(${index})">${lastFilter[1]}</span>`;
+                }
+            });
+            breadcrumbEl.innerHTML = breadcrumbHtml;
+            
+            const result = executeDrill(currentState);
+            
+            if (result.error) {
+                showDrillError(result.error);
+                contentEl.innerHTML = '';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
+            if (result.items.length === 0) {
+                contentEl.innerHTML = '<div class="drill-no-data">No items found matching the current filters.</div>';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
+            if (!result.canDrillFurther || result.nextDrillOptions.length === 0) {
+                contentEl.innerHTML = renderDetailView(currentState.rootType, result.items);
+            } else {
+                contentEl.innerHTML = renderGroupView(currentState.rootType, result.nextDrillOptions, result.groupField);
+            }
+            
+            panel.classList.remove('hidden');
+        }
+        
+        function renderGroupView(rootType, options, groupField) {
+            const fieldLabel = groupField.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            return options.map(opt => `
+                <div class="drill-group" onclick="drillIntoGroup('${rootType}', '${opt.field}', '${opt.value.replace(/'/g, "\\'")}')">
+                    <div class="drill-group-header">
+                        <span class="drill-group-label">${opt.value}</span>
+                        <span class="drill-group-count">${opt.count} item${opt.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="drill-group-hint">${opt.canDrillDeeper ? 'Click to drill deeper' : 'Click to view details'}</div>
+                </div>
+            `).join('');
+        }
+        
+        function renderDetailView(rootType, items) {
+            if (items.length === 0) {
+                return '<div class="drill-no-data">No further details available.</div>';
+            }
+            
+            const schema = DRILL_SCHEMA.entities[rootType];
+            if (!schema) {
+                return '<div class="drill-no-data">Unknown entity type.</div>';
+            }
+            
+            const fieldNames = Object.keys(schema.fields);
+            
+            return items.map(item => {
+                const rows = fieldNames.map(field => {
+                    let value = item[field];
+                    if (typeof value === 'object' && value !== null) {
+                        value = JSON.stringify(value);
+                    }
+                    const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    return `<div class="drill-detail-row"><span class="drill-detail-label">${label}:</span><span>${value ?? 'N/A'}</span></div>`;
+                }).join('');
+                
+                const name = item.name || item.finding_type || item.artifact_type || 'Item';
+                return `<div class="drill-detail"><div class="drill-detail-name">${name}</div>${rows}</div>`;
+            }).join('');
+        }
+        
+        function drillIntoGroup(rootType, field, value) {
+            const currentState = drillStack.length > 0 ? drillStack[drillStack.length - 1] : { rootType, filters: {}, level: 0 };
+            const newFilters = { ...currentState.filters, [field]: value };
+            pushDrill({ rootType, filters: newFilters, level: currentState.level + 1 });
+        }
+        
+        function initiateDrill(type) {
+            if (!currentRunId) return;
+            drillStack = [];
+            pushDrill({ rootType: type, filters: {}, level: 0 });
+        }
         
         const STATUS_CONFIG = {
             'completed_with_results': { type: 'success', label: 'Completed', explanation: 'Pipeline completed successfully with assets discovered.' },
@@ -359,9 +678,10 @@
         
         async function selectRun(runId) {
             currentRunId = runId;
+            hideDrillPanel();
             document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
             document.getElementById('resultsSection').classList.remove('hidden');
-            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId)]);
+            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId)]);
         }
         
         async function loadRunDetails(runId) {
@@ -381,9 +701,17 @@
             loading.classList.remove('hidden');
             try {
                 const r = await fetch(`/api/catalog?run_id=${runId}`); catalogData = await r.json();
-                if (catalogData.assets.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>'; }
-                else { body.innerHTML = catalogData.assets.map(a => `<tr><td>${a.name}</td><td><span class="asset-type-badge">${a.asset_type}</span></td><td>${a.vendor || '-'}</td><td>${a.environment}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status.idp}"></div><div class="lens-dot lens-${a.lens_status.cmdb}"></div><div class="lens-dot lens-${a.lens_status.cloud}"></div><div class="lens-dot lens-${a.lens_status.finance}"></div></div></td></tr>`).join(''); }
-            } catch { body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; }
+                const { data: normalized, errors } = normalizeResponse('assets', catalogData.assets || []);
+                normalizedData.assets = normalized;
+                if (errors.length > 0) console.warn('Asset normalization errors:', errors);
+                
+                if (normalized.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>'; }
+                else { body.innerHTML = normalized.map(a => `<tr><td>${a.name}</td><td><span class="asset-type-badge">${a.asset_type}</span></td><td>${a.vendor || '-'}</td><td>${a.environment}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status?.idp || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cmdb || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cloud || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.finance || 'unmatched'}"></div></div></td></tr>`).join(''); }
+            } catch (e) { 
+                console.error('Failed to load assets:', e);
+                normalizedData.assets = [];
+                body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; 
+            }
             finally { loading.classList.add('hidden'); }
         }
         
@@ -392,10 +720,35 @@
             loading.classList.remove('hidden');
             try {
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
-                if (data.findings.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
-                else { list.innerHTML = data.findings.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${f.finding_type.replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
-            } catch { list.innerHTML = '<div class="error-message">Failed to load findings</div>'; }
+                const { data: normalized, errors } = normalizeResponse('findings', data.findings || []);
+                normalizedData.findings = normalized;
+                if (errors.length > 0) console.warn('Findings normalization errors:', errors);
+                
+                if (normalized.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
+                else { list.innerHTML = normalized.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${(f.finding_type || 'unknown').replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
+            } catch (e) { 
+                console.error('Failed to load findings:', e);
+                normalizedData.findings = [];
+                list.innerHTML = '<div class="error-message">Failed to load findings</div>'; 
+            }
             finally { loading.classList.add('hidden'); }
+        }
+        
+        async function loadArtifacts(runId) {
+            try {
+                const r = await fetch(`/api/artifacts?run_id=${runId}`);
+                if (r.ok) {
+                    const data = await r.json();
+                    const { data: normalized, errors } = normalizeResponse('artifacts', data.artifacts || []);
+                    normalizedData.artifacts = normalized;
+                    if (errors.length > 0) console.warn('Artifacts normalization errors:', errors);
+                } else {
+                    normalizedData.artifacts = [];
+                }
+            } catch (e) {
+                console.error('Failed to load artifacts:', e);
+                normalizedData.artifacts = [];
+            }
         }
         
         document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
@@ -485,6 +838,19 @@
             tab.classList.add('active'); 
             document.getElementById(`${tab.dataset.tab}Tab`).classList.remove('hidden'); 
         }));
+        
+        document.querySelectorAll('.stat-card.clickable').forEach(card => {
+            card.addEventListener('click', () => {
+                const drillType = card.dataset.drillType;
+                if (drillType && currentRunId) {
+                    initiateDrill(drillType);
+                }
+            });
+        });
+        
+        document.getElementById('drillBackBtn').addEventListener('click', () => {
+            popDrill();
+        });
         
         checkHealth(); 
         loadRuns();

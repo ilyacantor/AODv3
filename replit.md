@@ -152,6 +152,14 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Added schema-driven drill-down architecture:
+  - DRILL_SCHEMA defines entities (assets, findings, artifacts), fields with defaults, and drill paths
+  - normalizeResponse() converts API data to safe view-models with defaults
+  - executeDrill() engine handles all drill logic with runtime-discovered paths
+  - Clickable KPI cards (Assets, Findings, Artifacts) initiate drill-down
+  - Drill panel with breadcrumb navigation and back button
+  - Zero-crash guarantee - missing fields, empty arrays handled gracefully
+  - Drill stops naturally when result set is 1 or no deeper paths available
 - Added snapshot size selector to UI:
   - New "Snapshot Size" dropdown (All sizes, Small, Medium, Large)
   - Size parameter passed to Farm API when listing snapshots

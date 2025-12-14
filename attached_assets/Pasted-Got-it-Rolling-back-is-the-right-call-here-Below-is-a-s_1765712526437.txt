@@ -1,0 +1,206 @@
+Got it. Rolling back is the right call here.
+
+Below is a **single, secure, discipline-enforcing Replit prompt** that fixes the *class* of problems you’re seeing (UI crashes, bad assumptions, drill chaos) instead of patching symptoms.
+
+This prompt is intentionally conservative.
+
+---
+
+## Replit Prompt — Secure, IRL-Safe Drill-Down Architecture for AOD
+
+You are implementing **drill-down behavior** for AOD results (KPIs, summaries, counts).
+This must be **robust, defensive, and impossible to crash due to missing fields**.
+
+### Goal (plain English)
+
+Any KPI, summary, or count must be **clickable and drillable** all the way down to the **deepest available level of detail**, *without assuming data completeness*, and *without UI crashes*.
+
+Drill-down must stop **naturally** when no further detail exists.
+
+---
+
+## Core Principle (non-negotiable)
+
+**The UI must never assume data shape.**
+All drill-down must be driven by **capabilities discovered at runtime**, not hard-coded paths.
+
+If data is missing, the UI degrades gracefully and explains why.
+
+---
+
+## Architecture Rules
+
+### 1. One normalized view-model only
+
+* The UI must never render directly from API payloads.
+* On load, convert all API responses into **normalized view-models** with safe defaults.
+* After normalization, rendering code must not need optional chaining for nested fields.
+
+If normalization fails → show a visible error and stop.
+
+---
+
+### 2. Drill-down is schema-driven, not hard-coded
+
+Each drillable object must expose **what it can drill into**, not the UI guessing.
+
+Example conceptually (not code-binding):
+
+* A KPI exposes:
+
+  * what it represents (e.g., assets, findings)
+  * how many items it covers
+  * what the *next drill dimension* is (if any)
+
+The UI asks:
+
+> “What can I drill into next?”
+
+If the answer is “nothing”, drilling stops cleanly.
+
+---
+
+### 3. Drill-down must be stateless and reversible
+
+* Drill state = `{ root_type, filters[], level }`
+* No mutation of global data
+* Every drill level is derived from:
+
+  * the normalized data
+  * the drill state only
+
+Back navigation must always work.
+
+---
+
+### 4. Safe grouping only
+
+Grouping rules:
+
+* Never group on a field unless it exists on **at least one record**
+* Missing values must go into `"unknown"` buckets
+* Empty groups must not render as clickable
+
+If grouping yields zero items → show “No further detail available”.
+
+---
+
+### 5. Hard stop conditions (required)
+
+Drill-down must stop when:
+
+* the result set is size 1 **and**
+* there is no richer representation available
+
+In that case:
+
+* render a **detail panel**
+* do not attempt to drill further
+
+---
+
+### 6. Zero-crash guarantee
+
+The UI must never throw due to:
+
+* missing fields
+* unexpected enum values
+* empty arrays
+* undefined nested objects
+
+If an invariant is violated:
+
+* show a non-blocking error banner
+* keep the rest of the UI alive
+
+---
+
+## Implementation Requirements
+
+### A. Normalization layer (mandatory)
+
+Implement a single function that:
+
+* validates top-level response shape
+* fills defaults for all nested objects used by the UI
+* produces:
+
+  * `view.assets[]`
+  * `view.findings[]`
+  * `view.artifacts[]`
+  * `view.kpis[]`
+
+Rendering code may only read from `view.*`.
+
+---
+
+### B. Drill engine (single path)
+
+Implement one drill function:
+
+* input: `{ rootType, filters[], level }`
+* output:
+
+  * items
+  * available next drill dimensions (if any)
+  * canDrillFurther: true/false
+
+No UI code may compute drill logic independently.
+
+---
+
+### C. KPI behavior
+
+Every KPI box must:
+
+* declare what data it represents
+* declare the initial drill dimension
+* use the same drill engine as everything else
+
+No KPI-specific drill logic allowed.
+
+---
+
+### D. Defensive UI behavior
+
+* Every clickable drill target must be validated before enabling click
+* Disable clicks if no deeper data exists
+* Show explanatory copy instead of breaking
+
+---
+
+## Explicitly Forbidden
+
+* Accessing nested properties directly from API payloads
+* Hard-coding drill paths (e.g., “asset → lens → finding”)
+* Assuming fields like `lens_status`, `identifiers`, etc. exist
+* Special-case drill logic per KPI
+
+---
+
+## Definition of Done
+
+* All KPI boxes are clickable
+* Drill-down works until data naturally runs out
+* No UI crashes even with partial or malformed records
+* A single asset or finding can be safely viewed in detail
+* Removing a field from the API does **not** crash the UI
+
+---
+
+## Deliverable
+
+* Refactored drill-down implementation
+* Short explanation (5–7 bullets) of how drill-down stops safely
+* One example of a KPI drilling all the way to a single record without assumptions
+
+---
+
+This prompt forces:
+
+* **data contracts**
+* **single drill engine**
+* **no accidental coupling**
+* **no silent crashes**
+
+Once this is in place, you won’t need to “nuke and rebuild” every time a field changes.

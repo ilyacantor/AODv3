@@ -1033,17 +1033,20 @@
         loadTenants();
         setInterval(checkHealth, 30000);
         
-        document.getElementById('helpBtn').addEventListener('click', () => {
-            document.getElementById('helpModal').classList.add('active');
-        });
-        document.getElementById('helpModalClose').addEventListener('click', () => {
-            document.getElementById('helpModal').classList.remove('active');
-        });
-        document.getElementById('helpModal').addEventListener('click', (e) => {
-            if (e.target.id === 'helpModal') {
-                document.getElementById('helpModal').classList.remove('active');
-            }
-        });
+        const helpBtn = document.getElementById('helpBtn');
+        const helpModal = document.getElementById('helpModal');
+        const helpModalClose = document.getElementById('helpModalClose');
+        if (helpBtn && helpModal) {
+            helpBtn.addEventListener('click', () => helpModal.classList.add('active'));
+        }
+        if (helpModalClose && helpModal) {
+            helpModalClose.addEventListener('click', () => helpModal.classList.remove('active'));
+        }
+        if (helpModal) {
+            helpModal.addEventListener('click', (e) => {
+                if (e.target.id === 'helpModal') helpModal.classList.remove('active');
+            });
+        }
     </script>
     
     <div class="modal-overlay" id="helpModal">

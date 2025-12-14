@@ -96,10 +96,21 @@ IDs are run-scoped using deterministic UUID generation from snapshot + content c
 Farm is the upstream evidence source. AOD fetches snapshots via HTTP:
 
 - `FARM_URL` environment variable (required) - Base URL for Farm API
+- `FARM_SHARED_SECRET` environment variable (optional) - Auth header for reconciliation
 - `GET {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20` - List snapshots
 - `GET {FARM_URL}/api/snapshots/{snapshot_id}` - Fetch full snapshot
+- `POST {FARM_URL}/api/reconcile` - Auto-sync run results back to Farm
 
 Snapshots must have `meta.schema_version == "farm.v1"`. The `farm_adapter.py` module normalizes Farm wire format to AOD canonical schema.
+
+### Farm Auto-Sync
+
+After a successful pipeline run from Farm, AOD automatically reconciles results back:
+
+- **Sync Status** - Tracked per run: `pending`, `synced`, `failed`, `not_applicable`
+- **Reconcile Payload** - Includes counts, shadow/zombie asset lists, high-severity findings
+- **UI Display** - Sync status badges shown on run list items (green=synced, red=failed, cyan=syncing)
+- **Error Handling** - Graceful handling of HTTP errors, connection errors, timeouts with error messages stored
 
 ### Python Dependencies
 

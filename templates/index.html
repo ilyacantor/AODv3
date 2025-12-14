@@ -110,6 +110,45 @@
         .outcome-badge.error { background: rgba(239, 68, 68, 0.3); color: var(--red-400); }
         .outcome-explanation { color: var(--slate-400); font-size: 0.875rem; }
         .snapshot-picker { margin-top: 1rem; }
+        .stat-card { cursor: pointer; transition: all 0.2s ease; }
+        .stat-card:hover { transform: translateY(-2px); border: 1px solid var(--cyan-500); }
+        .drill-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .drill-panel { background: var(--slate-900); border: 1px solid var(--slate-700); border-radius: 12px; width: 90%; max-width: 900px; max-height: 85vh; display: flex; flex-direction: column; }
+        .drill-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--slate-700); display: flex; justify-content: space-between; align-items: center; }
+        .drill-title { font-size: 1.25rem; font-weight: 600; color: var(--cyan-400); }
+        .drill-close { background: none; border: none; color: var(--slate-400); font-size: 1.5rem; cursor: pointer; padding: 0.25rem 0.5rem; }
+        .drill-close:hover { color: white; }
+        .drill-breadcrumb { padding: 0.75rem 1.5rem; background: var(--slate-800); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .breadcrumb-item { color: var(--slate-400); font-size: 0.875rem; cursor: pointer; }
+        .breadcrumb-item:hover { color: var(--cyan-400); }
+        .breadcrumb-item.active { color: var(--cyan-400); cursor: default; }
+        .breadcrumb-sep { color: var(--slate-600); }
+        .drill-content { padding: 1.5rem; overflow-y: auto; flex: 1; }
+        .drill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+        .drill-card { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease; }
+        .drill-card:hover { border-color: var(--cyan-500); transform: translateY(-2px); }
+        .drill-card-value { font-size: 1.5rem; font-weight: 700; color: var(--cyan-400); }
+        .drill-card-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
+        .drill-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .drill-list-item { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease; }
+        .drill-list-item:hover { border-color: var(--cyan-500); }
+        .drill-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .drill-list-name { font-weight: 600; color: white; }
+        .drill-list-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .drill-list-meta { font-size: 0.875rem; color: var(--slate-400); }
+        .drill-detail { background: var(--slate-800); border-radius: 8px; padding: 1.5rem; }
+        .drill-detail-row { display: flex; border-bottom: 1px solid var(--slate-700); padding: 0.75rem 0; }
+        .drill-detail-row:last-child { border-bottom: none; }
+        .drill-detail-label { width: 140px; flex-shrink: 0; color: var(--slate-400); font-size: 0.875rem; }
+        .drill-detail-value { color: white; font-size: 0.875rem; word-break: break-word; }
+        .drill-detail-value code { background: var(--gray-800); padding: 0.125rem 0.375rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; }
+        .drill-section { margin-bottom: 1.5rem; }
+        .drill-section-title { font-size: 1rem; font-weight: 600; color: var(--purple-400); margin-bottom: 0.75rem; border-bottom: 1px solid var(--slate-700); padding-bottom: 0.5rem; }
+        .evidence-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .evidence-tag { background: var(--gray-800); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; color: var(--slate-400); }
+        .lens-detail { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .lens-item { display: flex; align-items: center; gap: 0.5rem; }
+        .lens-label { font-size: 0.875rem; color: var(--slate-400); }
     </style>
 </head>
 <body>
@@ -184,12 +223,12 @@
             </div>
             <div id="summaryTab" class="tab-content">
                 <div id="summaryStats" class="stats-grid">
-                    <div class="stat-card"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
-                    <div class="stat-card"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                    <div class="stat-card" data-drill="observations"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
+                    <div class="stat-card" data-drill="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
+                    <div class="stat-card" data-drill="artifacts"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
+                    <div class="stat-card" data-drill="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card" data-drill="ambiguous"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card" data-drill="rejected"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                 </div>
             </div>
             <div id="assetsTab" class="tab-content hidden">
@@ -205,8 +244,20 @@
             </div>
         </div>
     </main>
+    
+    <div id="drillModal" class="drill-modal hidden">
+        <div class="drill-panel">
+            <div class="drill-header">
+                <span class="drill-title" id="drillTitle">Drill Down</span>
+                <button class="drill-close" id="drillClose">&times;</button>
+            </div>
+            <div class="drill-breadcrumb" id="drillBreadcrumb"></div>
+            <div class="drill-content" id="drillContent"></div>
+        </div>
+    </div>
+    
     <script>
-        let currentRunId = null, catalogData = null, loadedSnapshots = [];
+        let currentRunId = null, catalogData = null, loadedSnapshots = [], artifactsData = null, findingsData = null, runDetails = null;
         
         const STATUS_CONFIG = {
             'completed_with_results': { type: 'success', label: 'Completed', explanation: 'Pipeline completed successfully with assets discovered.' },
@@ -366,13 +417,14 @@
         
         async function loadRunDetails(runId) {
             try {
-                const r = await fetch(`/api/runs/${runId}`); const run = await r.json();
-                document.getElementById('statObservations').textContent = run.counts.observations_in;
-                document.getElementById('statAssets').textContent = run.counts.assets_admitted;
-                document.getElementById('statArtifacts').textContent = run.counts.artifacts_recorded;
-                document.getElementById('statFindings').textContent = run.counts.findings_generated;
-                document.getElementById('statAmbiguous').textContent = run.counts.ambiguous_matches;
-                document.getElementById('statRejected').textContent = run.counts.rejected;
+                const r = await fetch(`/api/runs/${runId}`); runDetails = await r.json();
+                document.getElementById('statObservations').textContent = runDetails.counts.observations_in;
+                document.getElementById('statAssets').textContent = runDetails.counts.assets_admitted;
+                document.getElementById('statArtifacts').textContent = runDetails.counts.artifacts_recorded;
+                document.getElementById('statFindings').textContent = runDetails.counts.findings_generated;
+                document.getElementById('statAmbiguous').textContent = runDetails.counts.ambiguous_matches;
+                document.getElementById('statRejected').textContent = runDetails.counts.rejected;
+                const ar = await fetch(`/api/artifacts?run_id=${runId}`); artifactsData = await ar.json();
             } catch (e) { console.error('Failed to load run details:', e); }
         }
         
@@ -391,9 +443,9 @@
             const loading = document.getElementById('findingsLoading'), list = document.getElementById('findingsList');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
-                if (data.findings.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
-                else { list.innerHTML = data.findings.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${f.finding_type.replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
+                const r = await fetch(`/api/findings?run_id=${runId}`); findingsData = await r.json();
+                if (findingsData.findings.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
+                else { list.innerHTML = findingsData.findings.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${f.finding_type.replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
             } catch { list.innerHTML = '<div class="error-message">Failed to load findings</div>'; }
             finally { loading.classList.add('hidden'); }
         }
@@ -485,6 +537,208 @@
             tab.classList.add('active'); 
             document.getElementById(`${tab.dataset.tab}Tab`).classList.remove('hidden'); 
         }));
+        
+        let drillState = { type: null, path: [], data: null };
+        
+        function openDrill(type) {
+            if (!currentRunId) return;
+            drillState = { type, path: [{ label: type.charAt(0).toUpperCase() + type.slice(1), level: 'root' }], data: null };
+            document.getElementById('drillTitle').textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            document.getElementById('drillModal').classList.remove('hidden');
+            renderDrillLevel();
+        }
+        
+        function closeDrill() {
+            document.getElementById('drillModal').classList.add('hidden');
+            drillState = { type: null, path: [], data: null };
+        }
+        
+        function renderBreadcrumb() {
+            const bc = document.getElementById('drillBreadcrumb');
+            bc.innerHTML = drillState.path.map((p, i) => 
+                `<span class="breadcrumb-item${i === drillState.path.length - 1 ? ' active' : ''}" data-level="${i}">${p.label}</span>${i < drillState.path.length - 1 ? '<span class="breadcrumb-sep">›</span>' : ''}`
+            ).join('');
+            bc.querySelectorAll('.breadcrumb-item:not(.active)').forEach(item => {
+                item.addEventListener('click', () => navigateToBreadcrumb(parseInt(item.dataset.level)));
+            });
+        }
+        
+        function navigateToBreadcrumb(level) {
+            drillState.path = drillState.path.slice(0, level + 1);
+            renderDrillLevel();
+        }
+        
+        function groupBy(arr, key) {
+            return arr.reduce((acc, item) => {
+                const k = item[key] || 'unknown';
+                acc[k] = acc[k] || [];
+                acc[k].push(item);
+                return acc;
+            }, {});
+        }
+        
+        function renderDrillLevel() {
+            renderBreadcrumb();
+            const content = document.getElementById('drillContent');
+            const depth = drillState.path.length;
+            const type = drillState.type;
+            
+            if (type === 'assets') {
+                const assets = catalogData?.assets || [];
+                if (depth === 1) {
+                    const byType = groupBy(assets, 'asset_type');
+                    content.innerHTML = `<div class="drill-grid">${Object.entries(byType).map(([k, v]) => 
+                        `<div class="drill-card" data-group="${k}"><div class="drill-card-value">${v.length}</div><div class="drill-card-label">${k}</div></div>`
+                    ).join('')}</div>`;
+                    content.querySelectorAll('.drill-card').forEach(c => c.addEventListener('click', () => drillIntoGroup('asset_type', c.dataset.group)));
+                } else if (depth === 2) {
+                    const group = drillState.path[1].filter;
+                    const filtered = assets.filter(a => a.asset_type === group);
+                    renderItemList(filtered, 'asset');
+                } else if (depth === 3) {
+                    const item = drillState.path[2].item;
+                    renderAssetDetail(item);
+                }
+            } else if (type === 'findings') {
+                const findings = findingsData?.findings || [];
+                if (depth === 1) {
+                    const bySev = groupBy(findings, 'severity');
+                    content.innerHTML = `<div class="drill-grid">${Object.entries(bySev).map(([k, v]) => 
+                        `<div class="drill-card" data-group="${k}"><div class="drill-card-value">${v.length}</div><div class="drill-card-label">${k.toUpperCase()}</div></div>`
+                    ).join('')}</div>`;
+                    content.querySelectorAll('.drill-card').forEach(c => c.addEventListener('click', () => drillIntoGroup('severity', c.dataset.group)));
+                } else if (depth === 2) {
+                    const group = drillState.path[1].filter;
+                    const filtered = findings.filter(f => f.severity === group);
+                    renderFindingsList(filtered);
+                } else if (depth === 3) {
+                    const item = drillState.path[2].item;
+                    renderFindingDetail(item);
+                }
+            } else if (type === 'artifacts') {
+                const artifacts = artifactsData?.artifacts || [];
+                if (depth === 1) {
+                    const byType = groupBy(artifacts, 'artifact_type');
+                    content.innerHTML = `<div class="drill-grid">${Object.entries(byType).map(([k, v]) => 
+                        `<div class="drill-card" data-group="${k}"><div class="drill-card-value">${v.length}</div><div class="drill-card-label">${k}</div></div>`
+                    ).join('')}</div>`;
+                    content.querySelectorAll('.drill-card').forEach(c => c.addEventListener('click', () => drillIntoGroup('artifact_type', c.dataset.group)));
+                } else if (depth === 2) {
+                    const group = drillState.path[1].filter;
+                    const filtered = artifacts.filter(a => a.artifact_type === group);
+                    renderArtifactsList(filtered);
+                } else if (depth === 3) {
+                    const item = drillState.path[2].item;
+                    renderArtifactDetail(item);
+                }
+            } else if (type === 'observations' || type === 'ambiguous' || type === 'rejected') {
+                content.innerHTML = `<div class="empty-state">Count: ${type === 'observations' ? runDetails?.counts?.observations_in : type === 'ambiguous' ? runDetails?.counts?.ambiguous_matches : runDetails?.counts?.rejected}<br><span style="font-size:0.875rem">Detailed drill-down for ${type} requires additional API endpoints.</span></div>`;
+            }
+        }
+        
+        function drillIntoGroup(field, value) {
+            drillState.path.push({ label: value, level: 'group', filter: value });
+            renderDrillLevel();
+        }
+        
+        function renderItemList(items, type) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-list">${items.map((a, i) => 
+                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${a.name}</span><span class="drill-list-badge asset-type-badge">${a.asset_type}</span></div><div class="drill-list-meta">${a.vendor || 'No vendor'} • ${a.environment}</div></div>`
+            ).join('')}</div>`;
+            content.querySelectorAll('.drill-list-item').forEach(item => {
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].name));
+            });
+        }
+        
+        function renderFindingsList(items) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-list">${items.map((f, i) => 
+                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${f.finding_type.replace(/_/g, ' ').toUpperCase()}</span><span class="drill-list-badge severity-${f.severity}">${f.severity}</span></div><div class="drill-list-meta">${f.explanation.substring(0, 100)}${f.explanation.length > 100 ? '...' : ''}</div></div>`
+            ).join('')}</div>`;
+            content.querySelectorAll('.drill-list-item').forEach(item => {
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].finding_type));
+            });
+        }
+        
+        function renderArtifactsList(items) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-list">${items.map((a, i) => 
+                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${a.name}</span><span class="drill-list-badge asset-type-badge">${a.artifact_type}</span></div><div class="drill-list-meta">Source: ${a.source}</div></div>`
+            ).join('')}</div>`;
+            content.querySelectorAll('.drill-list-item').forEach(item => {
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].name));
+            });
+        }
+        
+        function drillIntoItem(item, label) {
+            drillState.path.push({ label: label.substring(0, 30), level: 'detail', item });
+            renderDrillLevel();
+        }
+        
+        function renderAssetDetail(a) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-detail">
+                <div class="drill-section"><div class="drill-section-title">Basic Information</div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${a.name}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${a.asset_type}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Vendor</div><div class="drill-detail-value">${a.vendor || '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Environment</div><div class="drill-detail-value">${a.environment}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value"><code>${a.asset_id}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Admission</div><div class="drill-detail-value">${a.admission_reason || '-'}</div></div>
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Identifiers</div>
+                    ${Object.entries(a.identifiers || {}).map(([k, v]) => v ? `<div class="drill-detail-row"><div class="drill-detail-label">${k}</div><div class="drill-detail-value"><code>${v}</code></div></div>` : '').join('') || '<div class="drill-detail-row"><div class="drill-detail-value">No identifiers</div></div>'}
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Lens Status</div>
+                    <div class="lens-detail">${Object.entries(a.lens_status || {}).map(([k, v]) => `<div class="lens-item"><div class="lens-dot lens-${v}"></div><span class="lens-label">${k}: ${v}</span></div>`).join('')}</div>
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Evidence References</div>
+                    <div class="evidence-list">${(a.evidence_refs || []).map(e => `<span class="evidence-tag">${e}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>'}</div>
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Tags</div>
+                    <div class="evidence-list">${(a.tags || []).map(t => `<span class="evidence-tag">${t}</span>`).join('') || '<span class="drill-list-meta">No tags</span>'}</div>
+                </div>
+            </div>`;
+        }
+        
+        function renderFindingDetail(f) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-detail">
+                <div class="drill-section"><div class="drill-section-title">Finding Information</div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value">${f.finding_type.replace(/_/g, ' ').toUpperCase()}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Severity</div><div class="drill-detail-value"><span class="severity-badge severity-${f.severity}">${f.severity}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Finding ID</div><div class="drill-detail-value"><code>${f.finding_id}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value">${f.asset_id ? `<code>${f.asset_id}</code>` : '-'}</div></div>
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Explanation</div>
+                    <div style="color: var(--slate-300); line-height: 1.6;">${f.explanation}</div>
+                </div>
+                <div class="drill-section"><div class="drill-section-title">Evidence References</div>
+                    <div class="evidence-list">${(f.evidence_refs || []).map(e => `<span class="evidence-tag">${e}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>'}</div>
+                </div>
+            </div>`;
+        }
+        
+        function renderArtifactDetail(a) {
+            const content = document.getElementById('drillContent');
+            content.innerHTML = `<div class="drill-detail">
+                <div class="drill-section"><div class="drill-section-title">Artifact Information</div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${a.name}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${a.artifact_type}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Source</div><div class="drill-detail-value">${a.source}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Artifact ID</div><div class="drill-detail-value"><code>${a.artifact_id}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Parent Asset</div><div class="drill-detail-value">${a.parent_asset_id ? `<code>${a.parent_asset_id}</code>` : '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Evidence Ref</div><div class="drill-detail-value">${a.evidence_ref || '-'}</div></div>
+                </div>
+            </div>`;
+        }
+        
+        document.querySelectorAll('.stat-card[data-drill]').forEach(card => {
+            card.addEventListener('click', () => openDrill(card.dataset.drill));
+        });
+        document.getElementById('drillClose').addEventListener('click', closeDrill);
+        document.getElementById('drillModal').addEventListener('click', (e) => { if (e.target.id === 'drillModal') closeDrill(); });
         
         checkHealth(); 
         loadRuns();

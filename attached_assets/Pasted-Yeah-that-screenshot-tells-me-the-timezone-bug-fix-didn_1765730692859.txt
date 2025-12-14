@@ -1,0 +1,54 @@
+Yeah — that screenshot tells me the **timezone bug fix didn’t actually land in the running AOD path**, *or* AOD is still producing `latest_activity_at = null` for everything, so it can’t classify zombies and Farm flags the mismatch.
+
+Either way, we need to stop guessing and force **two proofs**.
+
+## Proof 1: Did AOD actually run zombie classification, or did it crash/short-circuit?
+
+In **AODv3**, open the most recent **Discovery Run → Logs** (or the server logs panel) and look for **either**:
+
+* `TypeError: can't compare offset-naive and offset-aware datetimes` (still present → fix did not apply in the real call path), **or**
+* Any stack trace in `derived_classifications.py` / `classify_zombie`, **or**
+* A message that derived classifications were skipped/failed.
+
+**If the UI says “Unexpected token … not valid JSON” anywhere on the AOD fetch/run step, that means AOD threw a 500 and the UI tried to parse HTML.** That is still “crash”, not “0 zombies”.
+
+## Proof 2: Does AOD have *any* activity timestamps after ingest?
+
+Farm’s recon is screaming: **AOD: 0 zombies** while **Expected: 38**. That’s *exactly* what happens when AOD has **no usable activity evidence** (everything looks “unknown/active” depending on your fallback).
+
+So we force a coverage report inside AOD for the last run:
+
+### Minimal required report (per plane)
+
+For assets in the run snapshot, compute counts:
+
+* `% with latest_activity_at != null`
+* `% with latest_activity_at tz-aware` (if datetime object) OR ISO string ending in `Z` (if stored as text)
+* `% with any candidate timestamps present` (observed_at / last_seen / last_login / last_used / transaction_date / etc.)
+
+If that report says `latest_activity_at` is null for ~100%, then your **zombie classification is impossible** no matter what logic you write.
+
+---
+
+# What to tell the agent (tight, no drift)
+
+Paste this into the Replit agent on **AODv3**:
+
+> **Stop changing logic. Add observability.**
+> Implement a “Timestamp Coverage Report” for the most recent discovery run: for each plane (discovery observations, idp objects, cloud resources, finance transactions), count how many records contain timestamp fields (including alternate names), and how many assets end up with `latest_activity_at` populated. Output the report to logs and return it via an endpoint used by the UI.
+> Additionally, ensure `classify_zombie` never throws tz naive/aware comparison errors by normalizing both `cutoff_date` and `latest_activity` to UTC-aware.
+> Finally, ensure API error responses are JSON (don’t let HTML 500s bubble to the UI causing `Unexpected token`).
+
+---
+
+## Likely reality (based on your screenshot)
+
+This is almost certainly **not** Farm being wrong. Your “Expected 38” is stable. AOD returning **0** is classic for one of these:
+
+1. AOD still **crashes** during derived classifications → nothing computed → 0
+2. AOD runs but `latest_activity_at` is **null across the board** → zombie logic never triggers
+3. AOD runs but is comparing against cutoff incorrectly (tz) and silently skipping
+
+Until we have the coverage report + logs proof, any further fixes are still “cheating”.
+
+If you paste the **AOD server log snippet around the run** (just the error/stack trace block), I’ll tell you which of the 3 it is immediately.

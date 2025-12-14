@@ -17,9 +17,23 @@ Zombie Asset = admitted asset with:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from ..models.output_contracts import Asset, LensStatus
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize a datetime to UTC-aware. Returns None if input is None."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 @dataclass
@@ -225,8 +239,8 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     if has_cmdb:
         official_presence.append("CMDB")
     
-    latest_activity = asset.activity_evidence.latest_activity_at
-    cutoff_date = datetime.utcnow() - timedelta(days=activity_window_days)
+    latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
     
     activity_sources = []
     if asset.activity_evidence.discovery_observed_at:
@@ -291,7 +305,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     zombie_assets = []
     indeterminate_count = 0
     
-    cutoff_date = datetime.utcnow() - timedelta(days=activity_window_days)
+    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
     distribution = DistributionDiagnostic(total_assets=len(assets))
     
     for asset in assets:
@@ -301,13 +315,8 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             distribution.with_cmdb_match += 1
         if asset.activity_evidence.latest_activity_at is not None:
             distribution.with_any_activity_timestamp += 1
-            latest = asset.activity_evidence.latest_activity_at
-            cutoff = cutoff_date
-            if latest.tzinfo is not None and cutoff.tzinfo is None:
-                cutoff = cutoff.replace(tzinfo=latest.tzinfo)
-            elif latest.tzinfo is None and cutoff.tzinfo is not None:
-                latest = latest.replace(tzinfo=cutoff.tzinfo)
-            if latest > cutoff:
+            latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+            if latest is not None and latest > cutoff_date:
                 distribution.with_activity_last_30_days += 1
         
         shadow_result = classify_shadow(asset, activity_window_days)

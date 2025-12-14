@@ -1,0 +1,77 @@
+You’re not confused — the system is currently **not closed-loop**, so you’re doing the “human glue” work that IRL the product must do.
+
+**Why nothing shows up in Farm after you “ran ListCorp in AOD”:**
+AOD and Farm are still not using the same **source-of-truth identifiers**. If AOD isn’t *selecting* ListCorp from Farm and then running that exact `(tenant_id, snapshot_id)` pair, Farm has no way to associate your run with any Farm test case.
+
+The Farm agent is right about the fix direction: **this is an AOD-side completion problem**, not a Farm UI problem.
+
+### What to do next (one iteration)
+
+Do **not** add more Farm endpoints, and do **not** keep debugging tenant strings.
+Make AOD run *only* from Farm-provided dropdowns and **auto-post results back**.
+
+Here’s the single prompt to send to the **AOD agent** to finish the loop.
+
+---
+
+## Replit prompt (AOD) — close the loop so Farm always shows runs
+
+> Close the Farm↔AOD loop so that if I run “ListCorp” in AOD, it *must* appear in Farm automatically. No manual IDs, no string mismatches, no “latest not found.”
+>
+> Goal:
+>
+> * AOD UI: choose Tenant + Snapshot from dropdowns populated directly from Farm.
+> * AOD runs that exact snapshot.
+> * When the run completes, AOD POSTs the reconciliation payload back to Farm.
+> * Farm then shows PASS/WARN/FAIL for that snapshot without any manual action.
+>
+> Implement:
+>
+> 1. AOD must fetch the source-of-truth list from Farm:
+>
+> * `GET {FARM_URL}/api/snapshots` (use existing)
+>
+> * Build tenant dropdown from unique tenant_id values in that response.
+>
+> * Build snapshot dropdown filtered by selected tenant_id (show seed/profile/scale as label).
+>
+> * Remove free-text tenant/snapshot inputs from the normal path (keep “Advanced override” hidden).
+>
+> 2. Running must be tied to Farm snapshot_id:
+>
+> * `POST /api/runs/from-farm` must accept `{ tenant_id, snapshot_id }`
+>
+> * It must fetch the snapshot from Farm and persist the run with those exact values.
+>
+> 3. Auto-post results back to Farm on completion:
+>
+> * Env vars:
+>
+>   * `FARM_URL` (already)
+>   * `FARM_SHARED_SECRET` optional
+>
+> * POST to `{FARM_URL}/api/reconcile` with:
+>
+>   * snapshot_id, tenant_id, aod_run_id
+>   * summary: assets/findings/artifacts/zombies/shadows
+>   * lists: zombie_assets, shadow_assets, top_findings (capped + deterministic order)
+>
+> * Store sync status on the run: `farm_sync=SYNCED|FAILED` + reason.
+>
+> 4. Fix /api/runs/latest semantics:
+>
+> * When no run exists, return HTTP 404 (not 200 with error blob).
+> * Ensure tenant_id is stored exactly as received from Farm (no normalization).
+>
+> Proof:
+>
+> * Show AOD UI dropdown containing “ListCorp” sourced from Farm.
+> * Run it from the dropdown.
+> * Show in logs that AOD posted to Farm /api/reconcile successfully.
+> * Confirm Farm UI shows reconciliation status for that ListCorp snapshot.
+>
+> Do not ask me questions. Implement the loop end-to-end.
+
+---
+
+That’s it. Once this is done, “I ran ListCorp in AOD and nothing shows in Farm” becomes impossible by design.

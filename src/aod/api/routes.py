@@ -318,6 +318,38 @@ async def create_run_from_farm(request: FarmRunRequest):
     )
 
 
+@router.get("/runs/latest", response_model=RunDetailResponse)
+async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
+    """
+    Get the latest run for a tenant and optionally a specific snapshot.
+    
+    Returns HTTP 404 if no matching run exists.
+    """
+    db = await get_db()
+    runs = await db.get_all_runs()
+    
+    matching = [r for r in runs if r.tenant_id == tenant_id]
+    if snapshot_id:
+        matching = [r for r in matching if r.input_meta.get("snapshot_id") == snapshot_id]
+    
+    if not matching:
+        raise HTTPException(status_code=404, detail=f"No run found for tenant {tenant_id}" + (f" and snapshot {snapshot_id}" if snapshot_id else ""))
+    
+    run = matching[0]
+    return RunDetailResponse(
+        run_id=run.run_id,
+        tenant_id=run.tenant_id,
+        status=run.status.value,
+        started_at=run.started_at.isoformat(),
+        completed_at=run.completed_at.isoformat() if run.completed_at else None,
+        input_meta=run.input_meta,
+        counts=run.counts,
+        failure_reasons=run.failure_reasons,
+        sync_status=run.sync_status.value,
+        sync_error=run.sync_error
+    )
+
+
 @router.get("/runs", response_model=list[RunDetailResponse])
 async def list_runs():
     """List all discovery runs"""

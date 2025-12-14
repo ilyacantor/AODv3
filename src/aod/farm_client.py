@@ -51,7 +51,7 @@ class FarmClient:
         url = f"{self.base_url}/api/snapshots?tenant_id={tenant_id}&limit={limit}"
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 
                 if response.status_code >= 400:
@@ -122,7 +122,7 @@ class FarmClient:
         url = f"{self.base_url}/api/snapshots/{snapshot_id}"
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 
                 if response.status_code == 404:

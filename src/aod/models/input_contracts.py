@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 BANNED_FIELDS = frozenset([
     "is_shadow_it",

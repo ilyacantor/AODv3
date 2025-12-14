@@ -130,6 +130,13 @@
                 <button class="btn btn-secondary" id="loadSnapshots">Load Snapshots</button>
             </div>
             
+            <div style="margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--slate-400); font-size: 0.875rem; cursor: pointer;">
+                    <input type="checkbox" id="mockMode" style="accent-color: var(--cyan-500);">
+                    <span>Use mock data (for testing dropdown)</span>
+                </label>
+            </div>
+            
             <div class="snapshot-picker" id="snapshotPicker">
                 <div class="form-group">
                     <label class="form-label">Select Snapshot</label>
@@ -250,7 +257,8 @@
             msg.classList.add('hidden');
             
             try {
-                const r = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                const mockMode = document.getElementById('mockMode').checked;
+                const r = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}${mockMode ? '&mock=true' : ''}`);
                 if (!r.ok) {
                     const e = await r.json();
                     throw new Error(e.detail || 'Failed to load snapshots');

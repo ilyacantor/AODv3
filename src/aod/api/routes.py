@@ -78,14 +78,73 @@ async def health_check():
     )
 
 
+def get_mock_snapshots(tenant_id: str) -> list[dict]:
+    """Generate mock snapshots for testing the dropdown UI"""
+    from datetime import datetime, timedelta
+    base_time = datetime.utcnow()
+    return [
+        {
+            "snapshot_id": f"snap_{tenant_id}_001",
+            "tenant_id": tenant_id,
+            "created_at": (base_time - timedelta(hours=1)).isoformat() + "Z",
+            "schema_version": "farm.v1",
+            "enterprise_profile": "modern_saas",
+            "realism_profile": "typical",
+            "scale": "startup"
+        },
+        {
+            "snapshot_id": f"snap_{tenant_id}_002",
+            "tenant_id": tenant_id,
+            "created_at": (base_time - timedelta(hours=12)).isoformat() + "Z",
+            "schema_version": "farm.v1",
+            "enterprise_profile": "legacy_enterprise",
+            "realism_profile": "messy",
+            "scale": "enterprise"
+        },
+        {
+            "snapshot_id": f"snap_{tenant_id}_003",
+            "tenant_id": tenant_id,
+            "created_at": (base_time - timedelta(days=1)).isoformat() + "Z",
+            "schema_version": "farm.v1",
+            "enterprise_profile": "hybrid_cloud",
+            "realism_profile": "typical",
+            "scale": "mid_market"
+        },
+        {
+            "snapshot_id": f"snap_{tenant_id}_004",
+            "tenant_id": tenant_id,
+            "created_at": (base_time - timedelta(days=3)).isoformat() + "Z",
+            "schema_version": "farm.v1",
+            "enterprise_profile": "modern_saas",
+            "realism_profile": "clean",
+            "scale": "startup"
+        },
+        {
+            "snapshot_id": f"snap_{tenant_id}_005",
+            "tenant_id": tenant_id,
+            "created_at": (base_time - timedelta(days=7)).isoformat() + "Z",
+            "schema_version": "farm.v1",
+            "enterprise_profile": "legacy_enterprise",
+            "realism_profile": "typical",
+            "scale": "enterprise"
+        }
+    ]
+
+
 @router.get("/farm/snapshots", response_model=SnapshotListResponse)
-async def list_farm_snapshots(tenant_id: str):
+async def list_farm_snapshots(tenant_id: str, mock: bool = False):
     """
     List available snapshots from Farm for a tenant.
     
     Proxies to {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20
     Returns metadata list with snapshot_id, tenant_id, created_at, schema_version.
+    
+    Add ?mock=true to get mock snapshots for UI testing.
     """
+    if mock:
+        mock_snapshots = get_mock_snapshots(tenant_id)
+        return SnapshotListResponse(snapshots=mock_snapshots, count=len(mock_snapshots))
+    
     farm_url = os.environ.get("FARM_URL")
     if not farm_url:
         raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")

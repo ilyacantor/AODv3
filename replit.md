@@ -152,6 +152,11 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Pipeline determinism stabilization:
+  - All run identifiers (run_id, started_at) generated at API boundary
+  - Pipeline accepts run_id/started_at as required parameters
+  - All uuid4() replaced with deterministic_uuid() based on snapshot_id + content hash
+  - New determinism test verifies identical outputs across runs
 - Contract-driven Farm adapter with explicit mapping tables
 - 17 contract tests verifying all planes normalize correctly
 - Real Farm snapshot fixture for integration testing

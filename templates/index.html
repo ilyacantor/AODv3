@@ -33,6 +33,10 @@
         .section { background: rgba(30, 41, 59, 0.4); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .section.compact { flex: 1; min-width: 300px; max-width: 500px; }
         .section-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .run-descriptors { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--slate-800); border-radius: 8px; }
+        .run-desc-item { display: flex; gap: 0.5rem; align-items: center; }
+        .run-desc-label { color: var(--slate-500); font-size: 0.875rem; }
+        .run-desc-value { color: var(--cyan-400); font-weight: 600; font-size: 0.875rem; }
         .section:hover { border-color: rgba(6, 182, 212, 0.5); }
         .section-title { font-size: 1.25rem; font-weight: 600; color: var(--cyan-400); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
         .form-group { margin-bottom: 1rem; }
@@ -274,6 +278,12 @@
                 <button class="tab" data-tab="findings">Findings</button>
             </div>
             <div id="summaryTab" class="tab-content">
+                <div id="runDescriptors" class="run-descriptors">
+                    <div class="run-desc-item"><span class="run-desc-label">Run ID:</span><span class="run-desc-value" id="descRunId">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Tenant:</span><span class="run-desc-value" id="descTenant">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Status:</span><span class="run-desc-value" id="descStatus">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
+                </div>
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card clickable" data-drill-type="observations"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
@@ -1060,6 +1070,10 @@
         async function loadRunDetails(runId) {
             try {
                 const r = await fetch(`/api/runs/${runId}`); const run = await r.json();
+                document.getElementById('descRunId').textContent = run.run_id;
+                document.getElementById('descTenant').textContent = run.tenant_id;
+                document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
+                document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
                 document.getElementById('statObservations').textContent = run.counts.observations_in;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
                 document.getElementById('statArtifacts').textContent = run.counts.artifacts_recorded;

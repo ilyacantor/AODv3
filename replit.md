@@ -50,9 +50,6 @@ tests/
 4. **Evidence-only decisions** - Admission based only on plane evidence
 5. **Assets vs Artifacts** - Dashboards/reports/calculators are artifacts, never assets
 
-## Prompt Shortcuts
-1. **DCCE** - means: don't change code, explain only
-
 ## Tech Stack
 
 - **Python 3.11**
@@ -155,13 +152,6 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
-- Added drillable KPI boxes to Results/Summary:
-  - All stat cards (Assets, Findings, Artifacts, etc.) are now clickable
-  - Multi-level drill-down with breadcrumb navigation
-  - Level 1: Group by type (asset_type, severity, artifact_type)
-  - Level 2: List items within group
-  - Level 3: Full detail view with all fields (identifiers, lens status, evidence refs, etc.)
-  - Click outside modal or X to close
 - Added snapshot size selector to UI:
   - New "Snapshot Size" dropdown (All sizes, Small, Medium, Large)
   - Size parameter passed to Farm API when listing snapshots

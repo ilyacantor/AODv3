@@ -1,20 +1,21 @@
 """Stage 7: Findings Engine - Generate deterministic, explainable findings"""
 
 from typing import Optional
-from uuid import uuid4
 
 from ..models.output_contracts import (
     Asset, Finding, FindingType, Severity, LensStatus
 )
 from .correlate_entities import CorrelationResult, MatchStatus
 from .build_plane_indexes import PlaneIndexes
+from .deterministic_ids import deterministic_uuid
 
 
 def generate_identity_gap_finding(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> Optional[Finding]:
     """
     Generate identity_gap finding:
@@ -35,7 +36,7 @@ def generate_identity_gap_finding(
         admitted_via.append("Finance")
     
     return Finding(
-        finding_id=uuid4(),
+        finding_id=deterministic_uuid(snapshot_id, asset.name, "identity_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -50,7 +51,8 @@ def generate_cmdb_gap_finding(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> Optional[Finding]:
     """
     Generate cmdb_gap finding:
@@ -69,7 +71,7 @@ def generate_cmdb_gap_finding(
         admitted_via.append("Finance")
     
     return Finding(
-        finding_id=uuid4(),
+        finding_id=deterministic_uuid(snapshot_id, asset.name, "cmdb_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -84,7 +86,8 @@ def generate_governance_gap_finding(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> Optional[Finding]:
     """
     Generate governance_gap finding:
@@ -108,7 +111,7 @@ def generate_governance_gap_finding(
         return None
     
     return Finding(
-        finding_id=uuid4(),
+        finding_id=deterministic_uuid(snapshot_id, asset.name, "governance_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -123,7 +126,8 @@ def generate_duplication_risk_finding(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> Optional[Finding]:
     """
     Generate duplication_risk finding:
@@ -144,7 +148,7 @@ def generate_duplication_risk_finding(
         return None
     
     return Finding(
-        finding_id=uuid4(),
+        finding_id=deterministic_uuid(snapshot_id, asset.name, "duplication_risk"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -159,7 +163,8 @@ def generate_data_conflict_finding(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> Optional[Finding]:
     """
     Generate data_conflict finding:
@@ -184,7 +189,7 @@ def generate_data_conflict_finding(
         return None
     
     return Finding(
-        finding_id=uuid4(),
+        finding_id=deterministic_uuid(snapshot_id, asset.name, "data_conflict"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -200,7 +205,8 @@ def generate_finance_gap_findings(
     admitted_assets: list[Asset],
     correlations: list[CorrelationResult],
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> list[Finding]:
     """
     Generate finance_gap findings:
@@ -221,7 +227,7 @@ def generate_finance_gap_findings(
             product_name = getattr(record, 'product', None) or getattr(record, 'vendor_name', None) or record_id
             
             findings.append(Finding(
-                finding_id=uuid4(),
+                finding_id=deterministic_uuid(snapshot_id, record_id, "finance_gap"),
                 asset_id=None,
                 tenant_id=tenant_id,
                 run_id=run_id,
@@ -239,7 +245,8 @@ def generate_findings(
     correlations: list[CorrelationResult],
     indexes: PlaneIndexes,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> list[Finding]:
     """
     Generate findings deterministically from catalog + lens statuses.
@@ -273,28 +280,28 @@ def generate_findings(
         if not correlation:
             continue
         
-        identity_gap = generate_identity_gap_finding(asset, correlation, tenant_id, run_id)
+        identity_gap = generate_identity_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if identity_gap:
             findings.append(identity_gap)
         
-        cmdb_gap = generate_cmdb_gap_finding(asset, correlation, tenant_id, run_id)
+        cmdb_gap = generate_cmdb_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if cmdb_gap:
             findings.append(cmdb_gap)
         
-        governance_gap = generate_governance_gap_finding(asset, correlation, tenant_id, run_id)
+        governance_gap = generate_governance_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if governance_gap:
             findings.append(governance_gap)
         
-        duplication_risk = generate_duplication_risk_finding(asset, correlation, tenant_id, run_id)
+        duplication_risk = generate_duplication_risk_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if duplication_risk:
             findings.append(duplication_risk)
         
-        data_conflict = generate_data_conflict_finding(asset, correlation, tenant_id, run_id)
+        data_conflict = generate_data_conflict_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if data_conflict:
             findings.append(data_conflict)
     
     finance_gaps = generate_finance_gap_findings(
-        indexes, assets, correlations, tenant_id, run_id
+        indexes, assets, correlations, tenant_id, run_id, snapshot_id
     )
     findings.extend(finance_gaps)
     

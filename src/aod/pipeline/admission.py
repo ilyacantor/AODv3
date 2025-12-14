@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass
 from typing import Optional
-from uuid import uuid4
 
 from ..models.output_contracts import (
     Asset, AssetType, Environment, LensStatus, LensStatuses, LensCoverage, AssetIdentifiers
 )
 from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction
 from .correlate_entities import CorrelationResult, MatchStatus
+from .deterministic_ids import deterministic_uuid
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -179,7 +179,8 @@ def determine_environment(correlation: CorrelationResult) -> Environment:
 def apply_admission_criteria(
     correlation: CorrelationResult,
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -254,7 +255,7 @@ def apply_admission_criteria(
         tags.append("finance_tracked")
     
     asset = Asset(
-        asset_id=uuid4(),
+        asset_id=deterministic_uuid(snapshot_id, "asset", entity.original_name),
         tenant_id=tenant_id,
         run_id=run_id,
         name=entity.original_name,

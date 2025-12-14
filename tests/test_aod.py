@@ -130,8 +130,8 @@ class TestDeterminism:
             CandidateEntity(entity_id="e3", canonical_name="commission calculator", original_name="Commission Calculator", observation_ids=["o3"]),
         ]
         
-        filtered1, artifacts1 = handle_artifacts(entities, "t1", "r1")
-        filtered2, artifacts2 = handle_artifacts(entities, "t1", "r1")
+        filtered1, artifacts1 = handle_artifacts(entities, "t1", "r1", "snap-1")
+        filtered2, artifacts2 = handle_artifacts(entities, "t1", "r1", "snap-1")
         
         assert len(filtered1) == len(filtered2)
         assert len(artifacts1) == len(artifacts2)
@@ -139,6 +139,7 @@ class TestDeterminism:
         for a1, a2 in zip(artifacts1, artifacts2):
             assert a1.name == a2.name
             assert a1.artifact_type == a2.artifact_type
+            assert a1.artifact_id == a2.artifact_id
 
 
 class TestVendorDoesNotAdmit:
@@ -292,7 +293,7 @@ class TestRunLogCounts:
             CandidateEntity(entity_id="e3", canonical_name="report", original_name="Monthly Report", observation_ids=["o3"]),
         ]
         
-        filtered, artifacts = handle_artifacts(entities, "t1", "r1")
+        filtered, artifacts = handle_artifacts(entities, "t1", "r1", "snap-1")
         
         assert len(artifacts) == 2
         assert len(filtered) == 1
@@ -329,7 +330,7 @@ class TestProvenanceAndStatus:
             db = Database(Path(tmpdir) / "test.db")
             await db.initialize()
             
-            result = await execute_pipeline(data, db)
+            result = await execute_pipeline(data, db, run_id="test_with_results", started_at=datetime.utcnow())
             
             assert result.success
             if len(result.assets) > 0:
@@ -367,7 +368,7 @@ class TestProvenanceAndStatus:
             db = Database(Path(tmpdir) / "test.db")
             await db.initialize()
             
-            result = await execute_pipeline(data, db)
+            result = await execute_pipeline(data, db, run_id="test_no_assets", started_at=datetime.utcnow())
             
             assert result.success
             assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
@@ -383,7 +384,7 @@ class TestProvenanceAndStatus:
         from pathlib import Path
         
         data = {
-            "meta": {"tenant_id": "t1", "run_id": "test_provenance", "generated_at": "2024-01-01T00:00:00Z"},
+            "meta": {"tenant_id": "t1", "run_id": "test_provenance", "generated_at": "2024-01-01T00:00:00Z", "schema_version": "farm.v1"},
             "planes": {
                 "discovery": {"observations": []},
                 "idp": {"objects": []},
@@ -407,7 +408,7 @@ class TestProvenanceAndStatus:
             db = Database(Path(tmpdir) / "test.db")
             await db.initialize()
             
-            result = await execute_pipeline(data, db, provenance=provenance)
+            result = await execute_pipeline(data, db, run_id="test_provenance", started_at=datetime.utcnow(), provenance=provenance)
             
             assert result.success
             assert "provenance" in result.run_log.input_meta
@@ -421,6 +422,89 @@ class TestProvenanceAndStatus:
             assert "provenance" in stored_run.input_meta
             
             await db.close()
+
+
+class TestPipelineDeterminism:
+    """Test that pipeline is a pure function: same input -> same output"""
+    
+    @pytest.mark.asyncio
+    async def test_pipeline_determinism_full(self):
+        """
+        Running pipeline twice on same snapshot produces identical results.
+        
+        Verifies:
+        - Same asset IDs, names, types, admission reasons
+        - Same finding IDs, types, explanations, evidence refs
+        - Same artifact IDs, names, types
+        """
+        from aod.pipeline.pipeline_executor import execute_pipeline
+        from aod.db.database import Database
+        import tempfile
+        from pathlib import Path
+        
+        snapshot = {
+            "meta": {"tenant_id": "t1", "generated_at": "2024-01-01T00:00:00Z"},
+            "planes": {
+                "discovery": {"observations": [
+                    {"observation_id": "o1", "name": "Salesforce", "source": "proxy", "domain": "salesforce.com"},
+                    {"observation_id": "o2", "name": "Slack", "source": "idp", "domain": "slack.com"},
+                    {"observation_id": "o3", "name": "Sales Dashboard", "source": "proxy"},
+                    {"observation_id": "o4", "name": "Zendesk", "source": "proxy", "domain": "zendesk.com"}
+                ]},
+                "idp": {"objects": [
+                    {"idp_id": "idp-1", "name": "Salesforce", "has_sso": True},
+                    {"idp_id": "idp-2", "name": "Slack", "has_scim": True}
+                ]},
+                "cmdb": {"cis": [
+                    {"ci_id": "ci-1", "name": "Zendesk", "ci_type": "service", "lifecycle": "production", "environment": "prod"}
+                ]},
+                "cloud": {"resources": []},
+                "endpoint": {"devices": [], "installed_apps": []},
+                "network": {"dns": [], "proxy": [], "certs": []},
+                "finance": {"vendors": [], "contracts": [], "transactions": []}
+            }
+        }
+        
+        fixed_run_id = "determinism_test_run"
+        fixed_started_at = datetime(2024, 1, 15, 12, 0, 0)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db1 = Database(Path(tmpdir) / "test1.db")
+            await db1.initialize()
+            result1 = await execute_pipeline(snapshot, db1, run_id=fixed_run_id, started_at=fixed_started_at)
+            await db1.close()
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db2 = Database(Path(tmpdir) / "test2.db")
+            await db2.initialize()
+            result2 = await execute_pipeline(snapshot, db2, run_id=fixed_run_id, started_at=fixed_started_at)
+            await db2.close()
+        
+        assert result1.success == result2.success
+        assert len(result1.assets) == len(result2.assets), "Asset count mismatch"
+        assert len(result1.findings) == len(result2.findings), "Findings count mismatch"
+        assert len(result1.artifacts) == len(result2.artifacts), "Artifacts count mismatch"
+        
+        for a1, a2 in zip(result1.assets, result2.assets):
+            assert a1.asset_id == a2.asset_id, f"Asset ID mismatch: {a1.asset_id} vs {a2.asset_id}"
+            assert a1.name == a2.name, f"Asset name mismatch: {a1.name} vs {a2.name}"
+            assert a1.asset_type == a2.asset_type, f"Asset type mismatch"
+            assert a1.admission_reason == a2.admission_reason, f"Admission reason mismatch"
+            assert a1.evidence_refs == a2.evidence_refs, f"Evidence refs mismatch"
+            assert a1.lens_status == a2.lens_status, f"Lens status mismatch"
+            assert a1.lens_coverage == a2.lens_coverage, f"Lens coverage mismatch"
+        
+        for f1, f2 in zip(result1.findings, result2.findings):
+            assert f1.finding_id == f2.finding_id, f"Finding ID mismatch: {f1.finding_id} vs {f2.finding_id}"
+            assert f1.finding_type == f2.finding_type, f"Finding type mismatch"
+            assert f1.explanation == f2.explanation, f"Finding explanation mismatch"
+            assert f1.evidence_refs == f2.evidence_refs, f"Finding evidence refs mismatch"
+            assert f1.severity == f2.severity, f"Finding severity mismatch"
+        
+        for art1, art2 in zip(result1.artifacts, result2.artifacts):
+            assert art1.artifact_id == art2.artifact_id, f"Artifact ID mismatch"
+            assert art1.name == art2.name, f"Artifact name mismatch"
+            assert art1.artifact_type == art2.artifact_type, f"Artifact type mismatch"
 
 
 if __name__ == "__main__":

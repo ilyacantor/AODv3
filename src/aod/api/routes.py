@@ -1,11 +1,13 @@
 """FastAPI routes for AOD"""
 
 from typing import Any, Optional
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import json
 import os
 import time
+import uuid
 
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
@@ -153,8 +155,11 @@ async def create_run(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
     
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    started_at = datetime.utcnow()
+    
     db = await get_db()
-    result = await execute_pipeline(data, db)
+    result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -178,8 +183,11 @@ async def create_run_json(snapshot: dict[str, Any]):
     Accepts a snapshot JSON object directly.
     Returns run_id + summary counts.
     """
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    started_at = datetime.utcnow()
+    
     db = await get_db()
-    result = await execute_pipeline(snapshot, db)
+    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -241,6 +249,9 @@ async def create_run_from_farm(request: FarmRunRequest):
     if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
         snapshot_data["meta"]["tenant_id"] = request.tenant_id
     
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    started_at = datetime.utcnow()
+    
     provenance = {
         "source": "farm",
         "farm_url": farm_url,
@@ -250,7 +261,7 @@ async def create_run_from_farm(request: FarmRunRequest):
     }
     
     db = await get_db()
-    result = await execute_pipeline(snapshot_data, db, provenance=provenance)
+    result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:

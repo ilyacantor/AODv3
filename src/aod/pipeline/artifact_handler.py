@@ -2,10 +2,10 @@
 
 import re
 from typing import Optional
-from uuid import uuid4
 
 from ..models.output_contracts import Artifact, ArtifactType
 from .normalize_observations import CandidateEntity
+from .deterministic_ids import deterministic_uuid
 
 ARTIFACT_PATTERNS = [
     (r"\bdashboard\b", ArtifactType.DASHBOARD),
@@ -73,7 +73,8 @@ def is_artifact(entity: CandidateEntity) -> tuple[bool, Optional[ArtifactType]]:
 def handle_artifacts(
     entities: list[CandidateEntity],
     tenant_id: str,
-    run_id: str
+    run_id: str,
+    snapshot_id: str
 ) -> tuple[list[CandidateEntity], list[Artifact]]:
     """
     Filter out artifacts from candidate entities.
@@ -102,7 +103,7 @@ def handle_artifacts(
         
         if is_art and artifact_type:
             artifact = Artifact(
-                artifact_id=uuid4(),
+                artifact_id=deterministic_uuid(snapshot_id, "artifact", entity.original_name),
                 tenant_id=tenant_id,
                 run_id=run_id,
                 parent_asset_id=None,

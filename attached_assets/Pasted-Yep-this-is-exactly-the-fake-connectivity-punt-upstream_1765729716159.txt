@@ -1,0 +1,88 @@
+Yep — this is exactly the “fake connectivity” / “punt upstream” failure mode.
+
+It might be *partly* true that Farm is missing timestamps, but the agent is **not allowed** to conclude “AOD is correct” without proving two things:
+
+1. **AOD is actually reading timestamps from every plane that *does* have them** (finance definitely has dates; IdP sample had lastLoginAt; CMDB doesn’t matter for activity)
+2. The “no timestamps” condition is **coming from parsed/normalized fields being dropped**, not because raw data truly has none.
+
+Right now the agent is skipping the proof and handing you a blame-shift.
+
+### What to do next (one iteration)
+
+Force AOD to produce a **timestamp coverage report** per plane from the *raw snapshot it received*, before any normalization, and again after normalization. This instantly tells you whether:
+
+* Farm truly sent no timestamps, **or**
+* AOD dropped/mismapped them, **or**
+* AOD is looking for the wrong field names (`last_login_at` vs `lastLoginAt`, `observed_at` vs `observedAt`, `date` vs `datetime`).
+
+Here’s the single Replit prompt to give the AOD agent. It forbids “upstream issue” conclusions until the report exists.
+
+---
+
+## Replit prompt (AOD) — “Stop blaming upstream” proof report
+
+> Stop. Do not claim “Farm is missing timestamps” until you produce a coverage report proving it.
+>
+> Task: implement a **Timestamp Coverage Report** that compares (A) raw snapshot payload fields and (B) post-normalization fields, per plane.
+>
+> Implement:
+>
+> 1. Add endpoint: `POST /api/debug/timestamp-coverage`
+>
+> * Input: `{ "tenant_id": "...", "snapshot_id": "...", "run_id": "..." }`
+> * Output must include, for each plane:
+>
+>   * `raw_count`
+>   * `raw_with_timestamp`
+>   * `raw_timestamp_field_names_found` (set of field names seen, e.g. `observedAt`, `observed_at`, `lastLoginAt`, `date`, `datetime`)
+>   * `normalized_with_timestamp`
+>   * `normalized_timestamp_fields_used`
+>   * 3 example records for “has timestamp” and 3 for “missing timestamp” (IDs + the relevant timestamp fields only)
+>
+> Planes to cover at minimum:
+>
+> * discovery observations
+>
+> * idp objects
+>
+> * finance transactions
+>
+> * endpoint installed_apps/devices (if present)
+>
+> * network (if present)
+>
+> * cloud (if present)
+>
+> 2. Add field-alias support in normalization ONLY if the coverage report shows timestamps exist under alternate names:
+>
+> * Accept common variants:
+>
+>   * `observedAt` → `observed_at`
+>   * `lastLoginAt` → `last_login_at`
+>   * `lastSeenAt` → `last_seen_at`
+>   * finance `datetime`/`timestamp` → `date`
+>
+> * This is not “loosening schema”; it’s a deterministic adapter.
+>
+> 3. Hard rule:
+>
+> * You may not mark the issue “upstream Farm” until the coverage report proves raw_with_timestamp is ~0 for all planes, including finance and idp.
+>
+> Deliver proof:
+>
+> * Run the endpoint for the failing snapshot (FingerprintCorp/FetchCorp — whichever produced the FAIL in Farm) using the run_id from Farm.
+> * Paste the coverage report summary (counts + field names found).
+> * State clearly: “timestamps absent upstream” OR “timestamps present but dropped/mismapped in AOD,” based on the report.
+
+---
+
+### Why this works
+
+Finance transactions *always* have dates in any realistic dataset. If AOD says “no timestamps anywhere,” either:
+
+* Farm is generating broken finance records (possible, but then Farm is broken), **or**
+* AOD is not mapping `date/datetime/lastLoginAt` properly (very likely).
+
+This report forces reality.
+
+If you paste the coverage report output here after the agent runs it, I’ll tell you exactly which side is wrong and the smallest fix.

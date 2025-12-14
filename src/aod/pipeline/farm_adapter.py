@@ -33,6 +33,7 @@ OBSERVATION_MAPPING = {
     "uri": {"sources": ["observed_uri", "uri"], "default": None},
     "vendor": {"sources": ["vendor_hint", "vendor"], "default": None},
     "source": {"sources": ["source"], "default": "discovery"},
+    "observed_at": {"sources": ["observed_at", "observedAt"], "default": None},
 }
 
 IDP_OBJECT_MAPPING = {
@@ -43,6 +44,7 @@ IDP_OBJECT_MAPPING = {
     "has_sso": {"sources": ["has_sso"], "default": False},
     "has_scim": {"sources": ["has_scim"], "default": False},
     "owner": {"sources": ["owner"], "default": None},
+    "last_login_at": {"sources": ["last_login_at", "lastLoginAt"], "default": None},
 }
 
 CMDB_CI_MAPPING = {
@@ -62,6 +64,7 @@ CLOUD_RESOURCE_MAPPING = {
     "provider": {"sources": ["cloud_provider", "provider"], "default": "aws"},
     "uri": {"sources": ["uri"], "default": None},
     "environment": {"sources": ["tags.environment", "environment"], "default": "unknown"},
+    "observed_at": {"sources": ["observed_at", "observedAt"], "default": None},
 }
 
 ENDPOINT_DEVICE_MAPPING = {
@@ -76,6 +79,7 @@ INSTALLED_APP_MAPPING = {
     "device_id": {"sources": ["device_id"], "required": True},
     "version": {"sources": ["version"], "default": None},
     "vendor": {"sources": ["vendor"], "default": None},
+    "last_seen_at": {"sources": ["last_seen_at", "lastSeenAt"], "default": None},
 }
 
 DNS_RECORD_MAPPING = {
@@ -83,6 +87,7 @@ DNS_RECORD_MAPPING = {
     "domain": {"sources": ["queried_domain", "domain"], "required": True},
     "record_type": {"sources": ["record_type"], "default": "A"},
     "value": {"sources": ["value"], "default": None},
+    "timestamp": {"sources": ["timestamp", "observed_at", "observedAt"], "default": None},
 }
 
 PROXY_LOG_MAPPING = {
@@ -91,6 +96,7 @@ PROXY_LOG_MAPPING = {
     "uri": {"sources": ["url", "uri"], "default": None},
     "user": {"sources": ["user_email", "user"], "default": None},
     "bytes_transferred": {"sources": ["bytes_transferred"], "default": 0},
+    "timestamp": {"sources": ["timestamp", "observed_at", "observedAt"], "default": None},
 }
 
 CERTIFICATE_MAPPING = {
@@ -125,7 +131,7 @@ TRANSACTION_MAPPING = {
     "memo": {"sources": ["memo"], "default": None},
     "amount": {"sources": ["amount"], "default": 0.0},
     "currency": {"sources": ["currency"], "default": "USD"},
-    "date": {"sources": ["date"], "default": None},
+    "date": {"sources": ["date", "datetime", "timestamp"], "default": None},
     "is_recurring": {"sources": ["is_recurring"], "default": False},
 }
 

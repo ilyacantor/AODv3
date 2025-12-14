@@ -124,17 +124,19 @@
             
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Tenant ID</label>
-                    <input type="text" class="form-input" id="tenantId" placeholder="my-tenant">
+                    <label class="form-label">Tenant</label>
+                    <select class="form-select" id="tenantSelect" disabled>
+                        <option value="">Click Load Tenants first</option>
+                    </select>
                 </div>
-                <button class="btn btn-secondary" id="loadSnapshots">Load Snapshots</button>
+                <button class="btn btn-secondary" id="loadTenants">Load Tenants</button>
             </div>
             
             <div class="snapshot-picker" id="snapshotPicker">
                 <div class="form-group">
                     <label class="form-label">Select Snapshot</label>
                     <select class="form-select" id="snapshotSelect" disabled>
-                        <option value="">Enter tenant ID and click Load Snapshots</option>
+                        <option value="">Select a tenant first</option>
                     </select>
                 </div>
             </div>
@@ -231,23 +233,64 @@
             } catch { document.getElementById('healthDot').classList.add('error'); document.getElementById('healthText').textContent = 'Offline'; }
         }
         
-        async function loadSnapshots() {
-            const tenantId = document.getElementById('tenantId').value.trim();
-            const select = document.getElementById('snapshotSelect');
-            const btn = document.getElementById('loadSnapshots');
+        async function loadTenants() {
+            const select = document.getElementById('tenantSelect');
+            const btn = document.getElementById('loadTenants');
             const msg = document.getElementById('fetchMessage');
-            
-            if (!tenantId) {
-                msg.className = 'error-message';
-                msg.textContent = 'Please enter a Tenant ID';
-                msg.classList.remove('hidden');
-                return;
-            }
+            const snapshotSelect = document.getElementById('snapshotSelect');
             
             btn.disabled = true;
             btn.textContent = 'Loading...';
             select.disabled = true;
+            snapshotSelect.disabled = true;
+            snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
             msg.classList.add('hidden');
+            
+            try {
+                const r = await fetch('/api/farm/tenants');
+                if (!r.ok) {
+                    const e = await r.json();
+                    throw new Error(e.detail || 'Failed to load tenants');
+                }
+                const data = await r.json();
+                const tenants = data.tenants || [];
+                
+                if (tenants.length === 0) {
+                    select.innerHTML = '<option value="">No tenants found in Farm</option>';
+                    select.disabled = true;
+                } else {
+                    select.innerHTML = '<option value="">Select a tenant...</option>' +
+                        tenants.map(t => `<option value="${t}">${t}</option>`).join('');
+                    select.disabled = false;
+                }
+                msg.className = 'success-message';
+                msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;
+                msg.classList.remove('hidden');
+            } catch (e) {
+                msg.className = 'error-message';
+                msg.textContent = e.message;
+                msg.classList.remove('hidden');
+                select.innerHTML = '<option value="">Failed to load tenants</option>';
+                select.disabled = true;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Load Tenants';
+            }
+        }
+        
+        async function loadSnapshots() {
+            const tenantId = document.getElementById('tenantSelect').value;
+            const select = document.getElementById('snapshotSelect');
+            const msg = document.getElementById('fetchMessage');
+            
+            if (!tenantId) {
+                select.innerHTML = '<option value="">Select a tenant first</option>';
+                select.disabled = true;
+                return;
+            }
+            
+            select.disabled = true;
+            select.innerHTML = '<option value="">Loading snapshots...</option>';
             
             try {
                 const r = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
@@ -278,13 +321,12 @@
                         let label = id;
                         if (profile) label += ` — ${profile}`;
                         if (created) label += ` — ${created}`;
-                        else if (!profile && created) label += ` — ${created}`;
                         return `<option value="${id}"${id === mostRecentId ? ' selected' : ''}>${label}</option>`;
                     }).join('');
                     select.disabled = false;
                 }
                 msg.className = 'success-message';
-                msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for tenant "${tenantId}"`;
+                msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
                 msg.classList.remove('hidden');
             } catch (e) {
                 msg.className = 'error-message';
@@ -292,9 +334,6 @@
                 msg.classList.remove('hidden');
                 select.innerHTML = '<option value="">Failed to load snapshots</option>';
                 select.disabled = true;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Load Snapshots';
             }
         }
         
@@ -353,7 +392,8 @@
             finally { loading.classList.add('hidden'); }
         }
         
-        document.getElementById('loadSnapshots').addEventListener('click', loadSnapshots);
+        document.getElementById('loadTenants').addEventListener('click', loadTenants);
+        document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
         
         document.getElementById('advancedToggle').addEventListener('click', () => {
             const content = document.getElementById('advancedContent');
@@ -363,7 +403,7 @@
         });
         
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {
-            const tenantId = document.getElementById('tenantId').value.trim();
+            const tenantId = document.getElementById('tenantSelect').value;
             const snapshotSelect = document.getElementById('snapshotSelect').value;
             const snapshotManual = document.getElementById('snapshotIdManual').value.trim();
             const snapshotId = snapshotManual || snapshotSelect;
@@ -373,7 +413,7 @@
             
             if (!tenantId) { 
                 msg.className = 'error-message'; 
-                msg.textContent = 'Please enter a Tenant ID'; 
+                msg.textContent = 'Please select a Tenant'; 
                 msg.classList.remove('hidden'); 
                 return; 
             }

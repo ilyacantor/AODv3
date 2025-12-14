@@ -23,6 +23,37 @@ FIELD_ALIASES = {
         "observed_at": ["observed_at", "observedAt", "timestamp", "created_at"],
         "bytes_transferred": ["bytes_transferred", "bytesTransferred", "s_transferred"],
     },
+    "endpoint_device": {
+        "device_id": ["device_id", "deviceId", "id"],
+        "hostname": ["hostname", "host_name", "hostName", "name"],
+        "os": ["os", "operatingSystem", "operating_system"],
+    },
+    "installed_app": {
+        "app_id": ["app_id", "appId", "id", "install_id", "installId"],
+        "name": ["name", "appName", "app_name", "displayName"],
+        "device_id": ["device_id", "deviceId"],
+        "version": ["version", "appVersion", "app_version"],
+        "vendor": ["vendor", "publisher", "vendorName"],
+    },
+    "dns_record": {
+        "record_id": ["record_id", "recordId", "id"],
+        "domain": ["domain", "name", "fqdn"],
+        "record_type": ["record_type", "recordType", "type"],
+        "value": ["value", "data", "target"],
+    },
+    "proxy_log": {
+        "log_id": ["log_id", "logId", "id"],
+        "domain": ["domain", "host", "fqdn"],
+        "uri": ["uri", "url", "path"],
+        "user": ["user", "username", "userId"],
+        "bytes_transferred": ["bytes_transferred", "bytesTransferred", "bytes"],
+    },
+    "certificate": {
+        "cert_id": ["cert_id", "certId", "id"],
+        "domain": ["domain", "commonName", "common_name", "cn"],
+        "issuer": ["issuer", "issuerName", "issuer_name"],
+        "expires_at": ["expires_at", "expiresAt", "expiration", "notAfter"],
+    },
     "meta": {
         "tenant_id": ["tenant_id", "tenantId"],
         "run_id": ["run_id", "runId"],
@@ -290,6 +321,173 @@ def _normalize_transaction(raw_txn: dict) -> dict:
     return normalized
 
 
+def _normalize_endpoint_device(raw_dev: dict) -> dict:
+    """Normalize a single endpoint device to canonical format."""
+    aliases = FIELD_ALIASES["endpoint_device"]
+    
+    dev_id = _get_aliased_value(raw_dev, aliases["device_id"])
+    if not dev_id:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Endpoint device missing required identifier",
+            missing_fields=["device_id or id"]
+        )
+    
+    hostname = _get_aliased_value(raw_dev, aliases["hostname"], str(dev_id))
+    
+    normalized = {
+        "device_id": str(dev_id),
+        "hostname": str(hostname),
+        "os": _get_aliased_value(raw_dev, aliases["os"]),
+    }
+    
+    all_known = set()
+    for alias_list in aliases.values():
+        all_known.update(alias_list)
+    raw_data = _extract_raw_data(raw_dev, all_known)
+    if raw_data:
+        normalized["raw_data"] = raw_data
+    
+    return normalized
+
+
+def _normalize_installed_app(raw_app: dict) -> dict:
+    """Normalize a single installed app to canonical format."""
+    aliases = FIELD_ALIASES["installed_app"]
+    
+    app_id = _get_aliased_value(raw_app, aliases["app_id"])
+    if not app_id:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Installed app missing required identifier",
+            missing_fields=["app_id or id or install_id"]
+        )
+    
+    name = _get_aliased_value(raw_app, aliases["name"], str(app_id))
+    device_id = _get_aliased_value(raw_app, aliases["device_id"], "unknown")
+    
+    normalized = {
+        "app_id": str(app_id),
+        "name": str(name),
+        "device_id": str(device_id),
+        "version": _get_aliased_value(raw_app, aliases["version"]),
+        "vendor": _get_aliased_value(raw_app, aliases["vendor"]),
+    }
+    
+    all_known = set()
+    for alias_list in aliases.values():
+        all_known.update(alias_list)
+    raw_data = _extract_raw_data(raw_app, all_known)
+    if raw_data:
+        normalized["raw_data"] = raw_data
+    
+    return normalized
+
+
+def _normalize_dns_record(raw_dns: dict) -> dict:
+    """Normalize a single DNS record to canonical format."""
+    aliases = FIELD_ALIASES["dns_record"]
+    
+    rec_id = _get_aliased_value(raw_dns, aliases["record_id"])
+    if not rec_id:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: DNS record missing required identifier",
+            missing_fields=["record_id or id"]
+        )
+    
+    domain = _get_aliased_value(raw_dns, aliases["domain"])
+    if not domain:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: DNS record missing required domain",
+            missing_fields=["domain"]
+        )
+    
+    normalized = {
+        "record_id": str(rec_id),
+        "domain": str(domain),
+        "record_type": _get_aliased_value(raw_dns, aliases["record_type"], "A"),
+        "value": _get_aliased_value(raw_dns, aliases["value"]),
+    }
+    
+    all_known = set()
+    for alias_list in aliases.values():
+        all_known.update(alias_list)
+    raw_data = _extract_raw_data(raw_dns, all_known)
+    if raw_data:
+        normalized["raw_data"] = raw_data
+    
+    return normalized
+
+
+def _normalize_proxy_log(raw_log: dict) -> dict:
+    """Normalize a single proxy log to canonical format."""
+    aliases = FIELD_ALIASES["proxy_log"]
+    
+    log_id = _get_aliased_value(raw_log, aliases["log_id"])
+    if not log_id:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Proxy log missing required identifier",
+            missing_fields=["log_id or id"]
+        )
+    
+    domain = _get_aliased_value(raw_log, aliases["domain"])
+    if not domain:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Proxy log missing required domain",
+            missing_fields=["domain"]
+        )
+    
+    normalized = {
+        "log_id": str(log_id),
+        "domain": str(domain),
+        "uri": _get_aliased_value(raw_log, aliases["uri"]),
+        "user": _get_aliased_value(raw_log, aliases["user"]),
+        "bytes_transferred": int(_get_aliased_value(raw_log, aliases["bytes_transferred"], 0)),
+    }
+    
+    all_known = set()
+    for alias_list in aliases.values():
+        all_known.update(alias_list)
+    raw_data = _extract_raw_data(raw_log, all_known)
+    if raw_data:
+        normalized["raw_data"] = raw_data
+    
+    return normalized
+
+
+def _normalize_certificate(raw_cert: dict) -> dict:
+    """Normalize a single certificate to canonical format."""
+    aliases = FIELD_ALIASES["certificate"]
+    
+    cert_id = _get_aliased_value(raw_cert, aliases["cert_id"])
+    if not cert_id:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Certificate missing required identifier",
+            missing_fields=["cert_id or id"]
+        )
+    
+    domain = _get_aliased_value(raw_cert, aliases["domain"])
+    if not domain:
+        raise NormalizationError(
+            "INVALID_SNAPSHOT: Certificate missing required domain",
+            missing_fields=["domain"]
+        )
+    
+    normalized = {
+        "cert_id": str(cert_id),
+        "domain": str(domain),
+        "issuer": _get_aliased_value(raw_cert, aliases["issuer"]),
+        "expires_at": _normalize_datetime(_get_aliased_value(raw_cert, aliases["expires_at"])),
+    }
+    
+    all_known = set()
+    for alias_list in aliases.values():
+        all_known.update(alias_list)
+    raw_data = _extract_raw_data(raw_cert, all_known)
+    if raw_data:
+        normalized["raw_data"] = raw_data
+    
+    return normalized
+
+
 def _find_observations(raw: dict) -> list[dict]:
     """Find observations list handling different nesting structures."""
     if "planes" in raw and isinstance(raw["planes"], dict):
@@ -451,11 +649,49 @@ def normalize_farm_snapshot(raw: dict, fallback_tenant_id: str | None = None, sn
     raw_contracts = _find_plane_data(raw, "finance", "contracts")
     
     raw_devices = _find_plane_data(raw, "endpoint", "devices")
+    normalized_devices = []
+    for dev in raw_devices:
+        if isinstance(dev, dict):
+            try:
+                normalized_devices.append(_normalize_endpoint_device(dev))
+            except NormalizationError:
+                pass
+    
     raw_installed_apps = _find_plane_data(raw, "endpoint", "installed_apps")
+    normalized_installed_apps = []
+    for app in raw_installed_apps:
+        if isinstance(app, dict):
+            try:
+                normalized_installed_apps.append(_normalize_installed_app(app))
+            except NormalizationError:
+                pass
     
     raw_dns = _find_plane_data(raw, "network", "dns")
+    normalized_dns = []
+    for dns in raw_dns:
+        if isinstance(dns, dict):
+            try:
+                normalized_dns.append(_normalize_dns_record(dns))
+            except NormalizationError:
+                pass
+    
     raw_proxy = _find_plane_data(raw, "network", "proxy")
+    normalized_proxy = []
+    for log in raw_proxy:
+        if isinstance(log, dict):
+            try:
+                normalized_proxy.append(_normalize_proxy_log(log))
+            except NormalizationError:
+                pass
+    
     raw_certs = _find_plane_data(raw, "network", "certs")
+    normalized_certs = []
+    for cert in raw_certs:
+        if isinstance(cert, dict):
+            try:
+                normalized_certs.append(_normalize_certificate(cert))
+            except NormalizationError:
+                pass
     
     normalized = {
         "meta": normalized_meta,
@@ -465,13 +701,13 @@ def normalize_farm_snapshot(raw: dict, fallback_tenant_id: str | None = None, sn
             "cmdb": {"cis": normalized_cmdb},
             "cloud": {"resources": normalized_cloud},
             "endpoint": {
-                "devices": raw_devices,
-                "installed_apps": raw_installed_apps,
+                "devices": normalized_devices,
+                "installed_apps": normalized_installed_apps,
             },
             "network": {
-                "dns": raw_dns,
-                "proxy": raw_proxy,
-                "certs": raw_certs,
+                "dns": normalized_dns,
+                "proxy": normalized_proxy,
+                "certs": normalized_certs,
             },
             "finance": {
                 "vendors": raw_vendors,

@@ -11,6 +11,7 @@ import uuid
 
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
+from ..pipeline.derived_classifications import compute_derived_classifications
 from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus
 from ..farm_client import FarmClient, FarmListResult, validate_schema_version
 
@@ -469,4 +470,34 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
         "items": items,
         "count": len(items),
         "total": total
+    }
+
+
+@router.get("/runs/{run_id}/derived")
+async def get_derived_classifications(run_id: str):
+    """
+    Get derived classifications (Shadow/Zombie) for a run.
+    
+    These are computed on-read from asset evidence, not stored as flags.
+    
+    Shadow Asset = has finance/cloud/discovery evidence but NO IdP or CMDB match
+    Zombie Asset = in CMDB or IdP but NO discovery/activity evidence
+    """
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    
+    summary = compute_derived_classifications(assets)
+    
+    return {
+        "run_id": run_id,
+        "shadow_count": summary.shadow_count,
+        "zombie_count": summary.zombie_count,
+        "indeterminate_count": summary.indeterminate_count,
+        "shadow_assets": summary.shadow_assets,
+        "zombie_assets": summary.zombie_assets
     }

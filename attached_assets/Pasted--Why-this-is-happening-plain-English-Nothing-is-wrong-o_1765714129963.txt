@@ -1,0 +1,75 @@
+**Why this is happening (plain English)**
+Nothing is “wrong” or missing by accident. In this iteration you **correctly removed pre-adjudicated concepts** (shadow, zombie) from the pipeline. Because of that:
+
+* **Shadow** used to come from Farm labels or shortcut logic
+* **Zombie** used to come from lifecycle heuristics mixed into admission
+* In AOD Fresh, neither is derived yet from **evidence-only rules**, so they don’t appear
+
+This is actually a **sign of architectural health**, not regression.
+
+Right now AOD produces:
+
+* assets
+* findings
+* gaps / conflicts
+
+…but it does **not yet compose higher-order states** like *shadow* or *zombie*.
+
+---
+
+**What to do next (one iteration only)**
+Add **derived classifications** for *shadow* and *zombie* as **post-processing views**, not ingestion concepts.
+
+They should be:
+
+* computed from existing evidence + findings
+* explainable
+* optional (views), not baked into core pipeline
+
+---
+
+## Single Replit prompt (copy/paste)
+
+> Reintroduce **Shadow** and **Zombie** as derived, explainable classifications (not ingestion labels).
+>
+> Goal: expose shadow and zombie views without reintroducing pre-seeded truth or shortcut logic.
+>
+> Do this:
+>
+> 1. Define derived classifications computed AFTER the main pipeline:
+>
+> * **Shadow Asset** = admitted asset with:
+>
+>   * finance evidence OR cloud presence OR discovery observations
+>   * AND no IdP match (no SSO / SCIM / service principal)
+>   * AND no CMDB match
+> * **Zombie Asset** = admitted asset with:
+>
+>   * CMDB or IdP presence
+>   * AND no discovery observations or activity evidence within a defined window (use existing timestamps if present; otherwise mark as “stale by absence”)
+>
+> 2. Implement these as **derived views**, not stored fields:
+>
+> * compute on read from assets + findings + evidence_refs
+> * do not persist `is_shadow` or `is_zombie` flags
+>
+> 3. Expose counts in the summary/KPI layer:
+>
+> * Shadow Assets (count)
+> * Zombie Assets (count)
+>
+> 4. Make both KPIs drillable using the existing drill engine:
+>
+> * drill → list of assets
+> * drill → asset detail explaining *why* it is shadow or zombie (criteria met + evidence refs)
+>
+> 5. If criteria cannot be evaluated due to missing evidence, classify as “indeterminate” and exclude from counts.
+>
+> Deliver proof:
+>
+> * One run showing non-zero shadow and/or zombie counts
+> * One drilled asset showing an explanation (“why this is shadow/zombie”) with evidence references
+
+---
+
+This keeps you **IRL-correct**, avoids reintroducing Farm omniscience, and explains exactly why they disappeared — and how to bring them back **the right way**.

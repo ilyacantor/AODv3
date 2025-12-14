@@ -85,6 +85,8 @@ Persisted directly from Farm's classification - each asset belongs to exactly on
 
 ## Running Locally
 ```bash
+# Use the bundled pip.conf to bypass the MITM proxy and route through the Replit package proxy
+PIP_CONFIG_FILE=./pip.conf ./scripts/install_deps.sh
 python main.py
 ```
 

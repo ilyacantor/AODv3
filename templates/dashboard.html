@@ -3,36 +3,99 @@
 {% block title %}Dashboard - AOD Discover{% endblock %}
 
 {% block content %}
-<div class="ingest-panel">
-    <h3 class="section-title">Farm Data Ingestion</h3>
-    <form class="ingest-form" id="ingestForm">
-        <div class="form-group">
-            <label for="archetype">Enterprise Archetype</label>
-            <select id="archetype" name="archetype">
-                <option value="hybrid_sprawl">Hybrid Sprawl (~35% Shadow IT)</option>
-                <option value="k8s_mesh">K8s Mesh (~25% Shadow IT)</option>
-                <option value="legacy_monolith">Legacy Monolith (~15% Shadow IT)</option>
-                <option value="saas_heavy">SaaS Heavy (~30% Shadow IT)</option>
-                <option value="startup_lean">Startup Lean (~20% Shadow IT)</option>
-                <option value="regulated_bank">Regulated Bank (~10% Shadow IT)</option>
-                <option value="healthcare_network">Healthcare Network (~12% Shadow IT)</option>
-                <option value="retail_chain">Retail Chain (~25% Shadow IT)</option>
-                <option value="media_streaming">Media Streaming (~20% Shadow IT)</option>
-                <option value="manufacturing_iot">Manufacturing IoT (~18% Shadow IT)</option>
-            </select>
+<section class="page-hero">
+    <div>
+        <p class="eyebrow">AOS Palette</p>
+        <h2 class="hero-title">Asset Observability, Simplified</h2>
+        <p class="hero-subtitle">Monitor asset health, reduce shadow IT, and keep catalogs clean with a modern AOS-inspired surface.</p>
+        <div class="hero-metrics">
+            <span class="pill">Total assets: {{ data.total_assets }}</span>
+            <span class="pill pill-amber">Shadow IT: {{ data.shadow_it_count.total }}</span>
+            <span class="pill pill-outline">Cataloged: {{ data.lifecycle.CATALOGED }}</span>
         </div>
-        <div class="form-group">
-            <label for="scale">Scale</label>
-            <select id="scale" name="scale">
-                <option value="small">Small (~30 assets)</option>
-                <option value="medium" selected>Medium (~100 assets)</option>
-                <option value="large">Large (~300 assets)</option>
-            </select>
+    </div>
+    <div class="hero-actions">
+        <div class="hero-card">
+            <p class="eyebrow">Live signals</p>
+            <div class="hero-grid">
+                <div class="hero-stat">
+                    <span>Discovered</span>
+                    <strong>{{ data.lifecycle.DISCOVERED }}</strong>
+                </div>
+                <div class="hero-stat">
+                    <span>Parked</span>
+                    <strong>{{ data.lifecycle.PARKED }}</strong>
+                </div>
+                <div class="hero-stat">
+                    <span>Findings</span>
+                    <strong>{{ data.findings.governance_gap.assets + data.findings.data_conflicts.assets + data.findings.ops_risk.assets + data.findings.low_confidence.assets }}</strong>
+                </div>
+            </div>
+            <p class="microcopy">AOS gradients and soft shadows keep focus on the most recent pull.</p>
         </div>
-        <button type="submit" class="btn btn-primary" id="ingestBtn">Pull from Farm</button>
-        <button type="button" class="btn btn-danger" id="resetBtn" onclick="resetData()">Reset All Data</button>
-    </form>
-    <div id="ingestStatus"></div>
+    </div>
+</section>
+
+<div class="layout-grid">
+    <div class="ingest-panel elevated">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Data Farm</p>
+                <h3 class="section-title">Farm Data Ingestion</h3>
+                <p class="microcopy">Choose an enterprise archetype and scale to simulate an AOS-grade pull.</p>
+            </div>
+            <div class="pill pill-ghost">One-click ingest</div>
+        </div>
+        <form class="ingest-form" id="ingestForm">
+            <div class="form-group">
+                <label for="archetype">Enterprise Archetype</label>
+                <select id="archetype" name="archetype">
+                    <option value="hybrid_sprawl">Hybrid Sprawl (~35% Shadow IT)</option>
+                    <option value="k8s_mesh">K8s Mesh (~25% Shadow IT)</option>
+                    <option value="legacy_monolith">Legacy Monolith (~15% Shadow IT)</option>
+                    <option value="saas_heavy">SaaS Heavy (~30% Shadow IT)</option>
+                    <option value="startup_lean">Startup Lean (~20% Shadow IT)</option>
+                    <option value="regulated_bank">Regulated Bank (~10% Shadow IT)</option>
+                    <option value="healthcare_network">Healthcare Network (~12% Shadow IT)</option>
+                    <option value="retail_chain">Retail Chain (~25% Shadow IT)</option>
+                    <option value="media_streaming">Media Streaming (~20% Shadow IT)</option>
+                    <option value="manufacturing_iot">Manufacturing IoT (~18% Shadow IT)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="scale">Scale</label>
+                <select id="scale" name="scale">
+                    <option value="small">Small (~30 assets)</option>
+                    <option value="medium" selected>Medium (~100 assets)</option>
+                    <option value="large">Large (~300 assets)</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="ingestBtn">Pull from Farm</button>
+                <button type="button" class="btn btn-danger" id="resetBtn" onclick="resetData()">Reset All Data</button>
+            </div>
+        </form>
+        <div id="ingestStatus"></div>
+    </div>
+
+    <div class="signal-stack">
+        <div class="signal-card">
+            <div>
+                <p class="eyebrow">Shadow IT</p>
+                <h3>{{ data.shadow_it_count.total }}</h3>
+                <p class="microcopy">Assets observed outside source-of-record inventory.</p>
+            </div>
+            <span class="pill pill-amber subtle">Review triage</span>
+        </div>
+        <div class="signal-card">
+            <div>
+                <p class="eyebrow">Catalog health</p>
+                <h3>{{ data.lifecycle.CATALOGED }}</h3>
+                <p class="microcopy">Validated and ready for downstream AOS consumers.</p>
+            </div>
+            <span class="pill pill-outline subtle">Lifecycle</span>
+        </div>
+    </div>
 </div>
 
 <section class="kpi-section">

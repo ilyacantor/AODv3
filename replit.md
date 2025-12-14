@@ -121,14 +121,29 @@ Uses AutonomOS palette:
 - `FAILED` - Pipeline execution failed
 - `INVALID_INPUT_CONTRACT` - Snapshot doesn't conform to input contract
 
+## Farm Snapshot Normalization
+
+The pipeline includes a normalization adapter (`src/aod/pipeline/normalize_snapshot.py`) that transforms raw Farm JSON into canonical AOD schema:
+
+**Validation Flow:** `fetch raw → normalize → Snapshot.model_validate(normalized)`
+
+**Key Features:**
+- Field alias mapping (in adapter, not Pydantic models) handles Farm field name variations
+- Meta normalization: derives `tenant_id`, `run_id` (synthesized as `farm_<snapshot_id>` if missing), `generated_at`, `schema_version`
+- Observation normalization: maps `id`/`observationId` → `observation_id`, `observedName` → `name`, etc.
+- Unknown fields preserved in `raw_data` object
+- Fails with `INVALID_SNAPSHOT` and clear missing field messages if required fields cannot be derived
+
+**Test fixtures:** `tests/fixtures/snapshot_canonical.json` and `tests/fixtures/snapshot_farm_format.json`
+
 ## Recent Changes
 
+- Added Farm snapshot normalization adapter (`normalize_snapshot.py`) with field alias mapping
+- Validation flow now: fetch → normalize (for Farm sources) → validate
+- Tenant dropdown auto-loads on page open (removed manual Load Tenants button)
+- 53+ tests passing including 23 normalization tests
 - Updated `/api/runs/from-farm` to persist run provenance (farm_url, snapshot_id, schema_version, fetch_duration_ms)
 - Pipeline now uses `COMPLETED_WITH_RESULTS` when assets admitted, `COMPLETED_NO_ASSETS` when none
 - Added snapshot list proxy endpoint (`GET /api/farm/snapshots`)
 - Updated RunStatus enum with IRL semantics
-- Refactored UI: removed sample data button, added snapshot picker with "Load Snapshots"
-- Added outcome panel with status badges
-- Added collapsible "Advanced" section for manual snapshot ID entry
-- 30 tests passing (added provenance and status tests)
 - FarmClient now has `list_snapshots()` method

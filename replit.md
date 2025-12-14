@@ -66,6 +66,8 @@ FastAPI application with these key endpoints:
 - `GET /api/runs/{run_id}/assets` - Get assets for a run
 - `GET /api/runs/{run_id}/findings` - Get findings for a run
 - `GET /api/farm/snapshots` - Proxy to Farm for snapshot listing
+- `POST /api/debug/zombie-explain` - Debug endpoint for zombie classification explanations
+- `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
 
 ### Run Status Semantics
 

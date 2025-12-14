@@ -256,8 +256,99 @@
         </div>
     </div>
     
+    <div id="uiErrorBanner" class="error-message hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;margin:0;border-radius:0;text-align:center;">
+        <span id="uiErrorText"></span>
+        <button onclick="document.getElementById('uiErrorBanner').classList.add('hidden')" style="margin-left:1rem;background:none;border:none;color:inherit;cursor:pointer;font-size:1.2rem;">&times;</button>
+    </div>
+    
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [], artifactsData = null, findingsData = null, runDetails = null;
+        
+        window.onerror = function(msg, url, line) {
+            const banner = document.getElementById('uiErrorBanner');
+            const text = document.getElementById('uiErrorText');
+            text.textContent = `UI Error: ${msg} (try refreshing)`;
+            banner.classList.remove('hidden');
+            return false;
+        };
+        
+        function safeText(val, fallback = '-') {
+            if (val === null || val === undefined || val === '') return fallback;
+            return String(val);
+        }
+        
+        function normalizeAsset(a) {
+            return {
+                asset_id: safeText(a?.asset_id, 'unknown'),
+                name: safeText(a?.name, 'Unnamed'),
+                asset_type: safeText(a?.asset_type, 'unknown'),
+                vendor: a?.vendor || null,
+                environment: safeText(a?.environment, 'unknown'),
+                admission_reason: a?.admission_reason || null,
+                identifiers: a?.identifiers && typeof a.identifiers === 'object' ? a.identifiers : {},
+                lens_status: {
+                    idp: safeText(a?.lens_status?.idp, 'unmatched'),
+                    cmdb: safeText(a?.lens_status?.cmdb, 'unmatched'),
+                    cloud: safeText(a?.lens_status?.cloud, 'unmatched'),
+                    finance: safeText(a?.lens_status?.finance, 'unmatched')
+                },
+                evidence_refs: Array.isArray(a?.evidence_refs) ? a.evidence_refs : [],
+                tags: Array.isArray(a?.tags) ? a.tags : []
+            };
+        }
+        
+        function normalizeFinding(f) {
+            return {
+                finding_id: safeText(f?.finding_id, 'unknown'),
+                finding_type: safeText(f?.finding_type, 'unknown'),
+                severity: safeText(f?.severity, 'low'),
+                explanation: safeText(f?.explanation, 'No explanation'),
+                asset_id: f?.asset_id || null,
+                evidence_refs: Array.isArray(f?.evidence_refs) ? f.evidence_refs : []
+            };
+        }
+        
+        function normalizeArtifact(a) {
+            return {
+                artifact_id: safeText(a?.artifact_id, 'unknown'),
+                name: safeText(a?.name, 'Unnamed'),
+                artifact_type: safeText(a?.artifact_type, 'unknown'),
+                source: safeText(a?.source, 'unknown'),
+                parent_asset_id: a?.parent_asset_id || null,
+                evidence_ref: a?.evidence_ref || null
+            };
+        }
+        
+        function normalizeCatalogResponse(raw) {
+            if (!raw || typeof raw !== 'object' || !Array.isArray(raw.assets)) {
+                console.error('Invalid catalog response shape:', raw);
+                return { assets: [], _error: 'Bad API response shape for catalog' };
+            }
+            return { assets: raw.assets.map(normalizeAsset), _error: null };
+        }
+        
+        function normalizeFindingsResponse(raw) {
+            if (!raw || typeof raw !== 'object' || !Array.isArray(raw.findings)) {
+                console.error('Invalid findings response shape:', raw);
+                return { findings: [], _error: 'Bad API response shape for findings' };
+            }
+            return { findings: raw.findings.map(normalizeFinding), _error: null };
+        }
+        
+        function normalizeArtifactsResponse(raw) {
+            if (!raw || typeof raw !== 'object' || !Array.isArray(raw.artifacts)) {
+                console.error('Invalid artifacts response shape:', raw);
+                return { artifacts: [], _error: 'Bad API response shape for artifacts' };
+            }
+            return { artifacts: raw.artifacts.map(normalizeArtifact), _error: null };
+        }
+        
+        function showApiError(msg) {
+            const banner = document.getElementById('uiErrorBanner');
+            const text = document.getElementById('uiErrorText');
+            text.textContent = msg;
+            banner.classList.remove('hidden');
+        }
         
         const STATUS_CONFIG = {
             'completed_with_results': { type: 'success', label: 'Completed', explanation: 'Pipeline completed successfully with assets discovered.' },
@@ -418,13 +509,17 @@
         async function loadRunDetails(runId) {
             try {
                 const r = await fetch(`/api/runs/${runId}`); runDetails = await r.json();
-                document.getElementById('statObservations').textContent = runDetails.counts.observations_in;
-                document.getElementById('statAssets').textContent = runDetails.counts.assets_admitted;
-                document.getElementById('statArtifacts').textContent = runDetails.counts.artifacts_recorded;
-                document.getElementById('statFindings').textContent = runDetails.counts.findings_generated;
-                document.getElementById('statAmbiguous').textContent = runDetails.counts.ambiguous_matches;
-                document.getElementById('statRejected').textContent = runDetails.counts.rejected;
-                const ar = await fetch(`/api/artifacts?run_id=${runId}`); artifactsData = await ar.json();
+                const counts = runDetails?.counts || {};
+                document.getElementById('statObservations').textContent = safeText(counts.observations_in, '0');
+                document.getElementById('statAssets').textContent = safeText(counts.assets_admitted, '0');
+                document.getElementById('statArtifacts').textContent = safeText(counts.artifacts_recorded, '0');
+                document.getElementById('statFindings').textContent = safeText(counts.findings_generated, '0');
+                document.getElementById('statAmbiguous').textContent = safeText(counts.ambiguous_matches, '0');
+                document.getElementById('statRejected').textContent = safeText(counts.rejected, '0');
+                const ar = await fetch(`/api/artifacts?run_id=${runId}`); 
+                const rawArtifacts = await ar.json();
+                artifactsData = normalizeArtifactsResponse(rawArtifacts);
+                if (artifactsData._error) showApiError(artifactsData._error);
             } catch (e) { console.error('Failed to load run details:', e); }
         }
         
@@ -432,9 +527,12 @@
             const loading = document.getElementById('assetsLoading'), body = document.getElementById('assetsBody');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch(`/api/catalog?run_id=${runId}`); catalogData = await r.json();
+                const r = await fetch(`/api/catalog?run_id=${runId}`); 
+                const rawCatalog = await r.json();
+                catalogData = normalizeCatalogResponse(rawCatalog);
+                if (catalogData._error) { showApiError(catalogData._error); }
                 if (catalogData.assets.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>'; }
-                else { body.innerHTML = catalogData.assets.map(a => `<tr><td>${a.name}</td><td><span class="asset-type-badge">${a.asset_type}</span></td><td>${a.vendor || '-'}</td><td>${a.environment}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status.idp}"></div><div class="lens-dot lens-${a.lens_status.cmdb}"></div><div class="lens-dot lens-${a.lens_status.cloud}"></div><div class="lens-dot lens-${a.lens_status.finance}"></div></div></td></tr>`).join(''); }
+                else { body.innerHTML = catalogData.assets.map(a => `<tr><td>${safeText(a.name)}</td><td><span class="asset-type-badge">${safeText(a.asset_type)}</span></td><td>${safeText(a.vendor)}</td><td>${safeText(a.environment)}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status.idp}"></div><div class="lens-dot lens-${a.lens_status.cmdb}"></div><div class="lens-dot lens-${a.lens_status.cloud}"></div><div class="lens-dot lens-${a.lens_status.finance}"></div></div></td></tr>`).join(''); }
             } catch { body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; }
             finally { loading.classList.add('hidden'); }
         }
@@ -443,9 +541,12 @@
             const loading = document.getElementById('findingsLoading'), list = document.getElementById('findingsList');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch(`/api/findings?run_id=${runId}`); findingsData = await r.json();
+                const r = await fetch(`/api/findings?run_id=${runId}`); 
+                const rawFindings = await r.json();
+                findingsData = normalizeFindingsResponse(rawFindings);
+                if (findingsData._error) { showApiError(findingsData._error); }
                 if (findingsData.findings.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
-                else { list.innerHTML = findingsData.findings.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${f.finding_type.replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
+                else { list.innerHTML = findingsData.findings.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${safeText(f.severity)}</span><div><div class="finding-type">${safeText(f.finding_type).replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${safeText(f.explanation)}</div></div></div>`).join(''); }
             } catch { list.innerHTML = '<div class="error-message">Failed to load findings</div>'; }
             finally { loading.classList.add('hidden'); }
         }
@@ -665,78 +766,86 @@
         function renderItemList(items, type) {
             const content = document.getElementById('drillContent');
             content.innerHTML = `<div class="drill-list">${items.map((a, i) => 
-                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${a.name}</span><span class="drill-list-badge asset-type-badge">${a.asset_type}</span></div><div class="drill-list-meta">${a.vendor || 'No vendor'} • ${a.environment}</div></div>`
+                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${safeText(a.name)}</span><span class="drill-list-badge asset-type-badge">${safeText(a.asset_type)}</span></div><div class="drill-list-meta">${safeText(a.vendor, 'No vendor')} • ${safeText(a.environment)}</div></div>`
             ).join('')}</div>`;
             content.querySelectorAll('.drill-list-item').forEach(item => {
-                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].name));
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], safeText(items[parseInt(item.dataset.index)].name, 'Item')));
             });
         }
         
         function renderFindingsList(items) {
             const content = document.getElementById('drillContent');
-            content.innerHTML = `<div class="drill-list">${items.map((f, i) => 
-                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${f.finding_type.replace(/_/g, ' ').toUpperCase()}</span><span class="drill-list-badge severity-${f.severity}">${f.severity}</span></div><div class="drill-list-meta">${f.explanation.substring(0, 100)}${f.explanation.length > 100 ? '...' : ''}</div></div>`
-            ).join('')}</div>`;
+            content.innerHTML = `<div class="drill-list">${items.map((f, i) => {
+                const ft = safeText(f.finding_type, 'unknown');
+                const exp = safeText(f.explanation, '');
+                return `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${ft.replace(/_/g, ' ').toUpperCase()}</span><span class="drill-list-badge severity-${safeText(f.severity, 'low')}">${safeText(f.severity)}</span></div><div class="drill-list-meta">${exp.substring(0, 100)}${exp.length > 100 ? '...' : ''}</div></div>`;
+            }).join('')}</div>`;
             content.querySelectorAll('.drill-list-item').forEach(item => {
-                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].finding_type));
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], safeText(items[parseInt(item.dataset.index)].finding_type, 'Finding')));
             });
         }
         
         function renderArtifactsList(items) {
             const content = document.getElementById('drillContent');
             content.innerHTML = `<div class="drill-list">${items.map((a, i) => 
-                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${a.name}</span><span class="drill-list-badge asset-type-badge">${a.artifact_type}</span></div><div class="drill-list-meta">Source: ${a.source}</div></div>`
+                `<div class="drill-list-item" data-index="${i}"><div class="drill-list-header"><span class="drill-list-name">${safeText(a.name)}</span><span class="drill-list-badge asset-type-badge">${safeText(a.artifact_type)}</span></div><div class="drill-list-meta">Source: ${safeText(a.source)}</div></div>`
             ).join('')}</div>`;
             content.querySelectorAll('.drill-list-item').forEach(item => {
-                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], items[parseInt(item.dataset.index)].name));
+                item.addEventListener('click', () => drillIntoItem(items[parseInt(item.dataset.index)], safeText(items[parseInt(item.dataset.index)].name, 'Artifact')));
             });
         }
         
         function drillIntoItem(item, label) {
-            drillState.path.push({ label: label.substring(0, 30), level: 'detail', item });
+            const safeLabel = safeText(label, 'Item').substring(0, 30);
+            drillState.path.push({ label: safeLabel, level: 'detail', item });
             renderDrillLevel();
         }
         
         function renderAssetDetail(a) {
             const content = document.getElementById('drillContent');
+            const identifiersHtml = Object.entries(a.identifiers).map(([k, v]) => v ? `<div class="drill-detail-row"><div class="drill-detail-label">${safeText(k)}</div><div class="drill-detail-value"><code>${safeText(v)}</code></div></div>` : '').join('');
+            const lensHtml = Object.entries(a.lens_status).map(([k, v]) => `<div class="lens-item"><div class="lens-dot lens-${safeText(v, 'unmatched')}"></div><span class="lens-label">${safeText(k)}: ${safeText(v)}</span></div>`).join('');
+            const evidenceHtml = a.evidence_refs.map(e => `<span class="evidence-tag">${safeText(e)}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>';
+            const tagsHtml = a.tags.map(t => `<span class="evidence-tag">${safeText(t)}</span>`).join('') || '<span class="drill-list-meta">No tags</span>';
             content.innerHTML = `<div class="drill-detail">
                 <div class="drill-section"><div class="drill-section-title">Basic Information</div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${a.name}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${a.asset_type}</span></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Vendor</div><div class="drill-detail-value">${a.vendor || '-'}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Environment</div><div class="drill-detail-value">${a.environment}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value"><code>${a.asset_id}</code></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Admission</div><div class="drill-detail-value">${a.admission_reason || '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${safeText(a.name)}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${safeText(a.asset_type)}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Vendor</div><div class="drill-detail-value">${safeText(a.vendor)}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Environment</div><div class="drill-detail-value">${safeText(a.environment)}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value"><code>${safeText(a.asset_id)}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Admission</div><div class="drill-detail-value">${safeText(a.admission_reason)}</div></div>
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Identifiers</div>
-                    ${Object.entries(a.identifiers || {}).map(([k, v]) => v ? `<div class="drill-detail-row"><div class="drill-detail-label">${k}</div><div class="drill-detail-value"><code>${v}</code></div></div>` : '').join('') || '<div class="drill-detail-row"><div class="drill-detail-value">No identifiers</div></div>'}
+                    ${identifiersHtml || '<div class="drill-detail-row"><div class="drill-detail-value">No identifiers</div></div>'}
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Lens Status</div>
-                    <div class="lens-detail">${Object.entries(a.lens_status || {}).map(([k, v]) => `<div class="lens-item"><div class="lens-dot lens-${v}"></div><span class="lens-label">${k}: ${v}</span></div>`).join('')}</div>
+                    <div class="lens-detail">${lensHtml}</div>
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Evidence References</div>
-                    <div class="evidence-list">${(a.evidence_refs || []).map(e => `<span class="evidence-tag">${e}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>'}</div>
+                    <div class="evidence-list">${evidenceHtml}</div>
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Tags</div>
-                    <div class="evidence-list">${(a.tags || []).map(t => `<span class="evidence-tag">${t}</span>`).join('') || '<span class="drill-list-meta">No tags</span>'}</div>
+                    <div class="evidence-list">${tagsHtml}</div>
                 </div>
             </div>`;
         }
         
         function renderFindingDetail(f) {
             const content = document.getElementById('drillContent');
+            const evidenceHtml = f.evidence_refs.map(e => `<span class="evidence-tag">${safeText(e)}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>';
             content.innerHTML = `<div class="drill-detail">
                 <div class="drill-section"><div class="drill-section-title">Finding Information</div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value">${f.finding_type.replace(/_/g, ' ').toUpperCase()}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Severity</div><div class="drill-detail-value"><span class="severity-badge severity-${f.severity}">${f.severity}</span></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Finding ID</div><div class="drill-detail-value"><code>${f.finding_id}</code></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value">${f.asset_id ? `<code>${f.asset_id}</code>` : '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value">${safeText(f.finding_type).replace(/_/g, ' ').toUpperCase()}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Severity</div><div class="drill-detail-value"><span class="severity-badge severity-${safeText(f.severity, 'low')}">${safeText(f.severity)}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Finding ID</div><div class="drill-detail-value"><code>${safeText(f.finding_id)}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Asset ID</div><div class="drill-detail-value">${f.asset_id ? `<code>${safeText(f.asset_id)}</code>` : '-'}</div></div>
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Explanation</div>
-                    <div style="color: var(--slate-300); line-height: 1.6;">${f.explanation}</div>
+                    <div style="color: var(--slate-300); line-height: 1.6;">${safeText(f.explanation)}</div>
                 </div>
                 <div class="drill-section"><div class="drill-section-title">Evidence References</div>
-                    <div class="evidence-list">${(f.evidence_refs || []).map(e => `<span class="evidence-tag">${e}</span>`).join('') || '<span class="drill-list-meta">No evidence refs</span>'}</div>
+                    <div class="evidence-list">${evidenceHtml}</div>
                 </div>
             </div>`;
         }
@@ -745,12 +854,12 @@
             const content = document.getElementById('drillContent');
             content.innerHTML = `<div class="drill-detail">
                 <div class="drill-section"><div class="drill-section-title">Artifact Information</div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${a.name}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${a.artifact_type}</span></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Source</div><div class="drill-detail-value">${a.source}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Artifact ID</div><div class="drill-detail-value"><code>${a.artifact_id}</code></div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Parent Asset</div><div class="drill-detail-value">${a.parent_asset_id ? `<code>${a.parent_asset_id}</code>` : '-'}</div></div>
-                    <div class="drill-detail-row"><div class="drill-detail-label">Evidence Ref</div><div class="drill-detail-value">${a.evidence_ref || '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Name</div><div class="drill-detail-value">${safeText(a.name)}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Type</div><div class="drill-detail-value"><span class="asset-type-badge">${safeText(a.artifact_type)}</span></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Source</div><div class="drill-detail-value">${safeText(a.source)}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Artifact ID</div><div class="drill-detail-value"><code>${safeText(a.artifact_id)}</code></div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Parent Asset</div><div class="drill-detail-value">${a.parent_asset_id ? `<code>${safeText(a.parent_asset_id)}</code>` : '-'}</div></div>
+                    <div class="drill-detail-row"><div class="drill-detail-label">Evidence Ref</div><div class="drill-detail-value">${safeText(a.evidence_ref)}</div></div>
                 </div>
             </div>`;
         }

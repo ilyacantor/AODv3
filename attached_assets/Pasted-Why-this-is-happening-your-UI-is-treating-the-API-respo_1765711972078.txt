@@ -1,0 +1,27 @@
+Why this is happening: your UI is **treating the API response as trusted**, then later doing **deep property reads without guarding** (e.g., `a.lens_status.idp`). One malformed/partial asset (or an unexpected response shape) and the drill-down blows up.
+
+What to do next: add a **single “normalize + validate once” step at load time** that converts every asset/finding/artifact into a safe shape (defaults for nested objects), and refuse to render if the top-level response isn’t the expected object. This prevents crashes everywhere without chasing individual lines.
+
+### One Replit prompt (copy/paste)
+
+> Fix the drill-down UI crashes by enforcing a single normalization/validation boundary in the frontend.
+>
+> Requirements:
+>
+> 1. In `templates/index.html`, in the fetch/load functions (where catalog/findings/artifacts are loaded), add a `normalizeApiResponse()` step that:
+>
+> * Verifies the response is an object of the expected shape (e.g., catalog has `assets` array; findings has `findings` array; artifacts has `artifacts` array). If not, show a visible error banner (“Bad API response shape”) and stop rendering.
+> * Normalizes each record into a safe shape with defaults:
+>
+>   * For assets: ensure `lens_status` exists as an object with keys `{idp, cmdb, cloud, finance}` defaulting to `"unmatched"`, ensure `identifiers` exists with arrays default empty, ensure `tags` is an array, ensure `vendor` is null if missing.
+>   * For findings: ensure `evidence_refs` is an array, `explanation` is a string, `severity` defaults to `"low"`.
+>   * For artifacts: ensure required display fields exist with safe defaults.
+>
+> 2. After normalization, ALL rendering code must use the normalized arrays only (never raw API payload).
+> 3. Replace any direct nested reads like `a.lens_status.idp` with safe reads from normalized objects only (so it can never be undefined).
+> 4. Add a small `safeText()` helper so undefined/null never reaches the DOM.
+> 5. Add a `window.onerror` handler that shows a non-blocking banner “UI Error: <message>” with a hint to refresh, instead of hard crashing.
+>
+> Deliver proof:
+>
+> * Show the before/after for one crashing case (an asset missing `lens_status`) and demonstrate the UI no longer crashes and displays `unmatched` statuses instead.

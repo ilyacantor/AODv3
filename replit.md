@@ -155,6 +155,13 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
+- Fixed drill-down UI crashes with normalization boundary:
+  - Added `normalizeAsset()`, `normalizeFinding()`, `normalizeArtifact()` functions
+  - All API responses validated and normalized at load time with safe defaults
+  - `safeText()` helper prevents undefined/null from reaching DOM
+  - `window.onerror` handler shows non-blocking error banner instead of hard crash
+  - Assets: `lens_status` defaults to `{idp, cmdb, cloud, finance: 'unmatched'}`
+  - Findings: `severity` defaults to `'low'`, `explanation` defaults to `'No explanation'`
 - Added drillable KPI boxes to Results/Summary:
   - All stat cards (Assets, Findings, Artifacts, etc.) are now clickable
   - Multi-level drill-down with breadcrumb navigation

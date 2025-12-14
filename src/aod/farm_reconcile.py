@@ -3,7 +3,12 @@
 import os
 import httpx
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+PST = timezone(timedelta(hours=-8))
+
+def now_pst() -> datetime:
+    return datetime.now(PST)
 
 from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
 from .pipeline.derived_classifications import compute_derived_classifications
@@ -55,7 +60,7 @@ async def reconcile_to_farm(
         "tenant_id": run_log.tenant_id,
         "aod_run_id": run_log.run_id,
         "aod_status": run_log.status.value,
-        "completed_at": run_log.completed_at.isoformat() if run_log.completed_at else datetime.utcnow().isoformat(),
+        "completed_at": run_log.completed_at.isoformat() if run_log.completed_at else now_pst().isoformat(),
         "aod_summary": {
             "observations_in": run_log.counts.observations_in,
             "candidates_out": run_log.counts.candidates_out,

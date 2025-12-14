@@ -1,10 +1,16 @@
 """Pydantic v2 models for AOD output contracts"""
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
+
+PST = timezone(timedelta(hours=-8))
+
+def now_pst() -> datetime:
+    """Get current time in PST"""
+    return datetime.now(PST)
 
 
 class AssetType(str, Enum):
@@ -82,7 +88,7 @@ class Asset(BaseModel):
     activity_evidence: ActivityEvidence = Field(default_factory=ActivityEvidence)
     tags: list[str] = Field(default_factory=list)
     admission_reason: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_pst)
 
 
 class ArtifactType(str, Enum):
@@ -107,7 +113,7 @@ class Artifact(BaseModel):
     artifact_type: ArtifactType
     source: str
     evidence_ref: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_pst)
 
 
 class FindingType(str, Enum):
@@ -137,7 +143,7 @@ class Finding(BaseModel):
     severity: Severity
     explanation: str
     evidence_refs: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_pst)
 
 
 class RunStatus(str, Enum):

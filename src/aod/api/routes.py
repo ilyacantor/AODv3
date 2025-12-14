@@ -1,9 +1,15 @@
 """FastAPI routes for AOD"""
 
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, UploadFile, File
+
 from pydantic import BaseModel
+
+PST = timezone(timedelta(hours=-8))
+
+def now_pst() -> datetime:
+    return datetime.now(PST)
 import json
 import os
 import time
@@ -166,7 +172,7 @@ async def create_run(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    started_at = datetime.utcnow()
+    started_at = now_pst()
     
     db = await get_db()
     result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at)
@@ -194,7 +200,7 @@ async def create_run_json(snapshot: dict[str, Any]):
     Returns run_id + summary counts.
     """
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    started_at = datetime.utcnow()
+    started_at = now_pst()
     
     db = await get_db()
     result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
@@ -260,7 +266,7 @@ async def create_run_from_farm(request: FarmRunRequest):
         snapshot_data["meta"]["tenant_id"] = request.tenant_id
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    started_at = datetime.utcnow()
+    started_at = now_pst()
     
     provenance = {
         "source": "farm",

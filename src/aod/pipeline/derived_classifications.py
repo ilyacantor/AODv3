@@ -144,6 +144,51 @@ def classify_shadow(asset: Asset, activity_window_days: int = 30) -> Classificat
     )
 
 
+def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bool, str]:
+    """
+    Shared zombie status computation used by BOTH KPI counts and debug explainer.
+    
+    Zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
+    If there are NO timestamps at all, that still counts as "no timestamps within window"
+    
+    Args:
+        asset: The asset to check
+        window_days: Activity window in days (default 30)
+        
+    Returns:
+        Tuple of (is_zombie, is_indeterminate, reason)
+    """
+    from datetime import timedelta
+    
+    has_idp = asset.lens_status.idp == LensStatus.MATCHED
+    has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+    
+    if not (has_idp or has_cmdb):
+        return False, False, "Not in IdP or CMDB - cannot be zombie"
+    
+    official_sources = []
+    if has_idp:
+        official_sources.append("IdP")
+    if has_cmdb:
+        official_sources.append("CMDB")
+    
+    latest = asset.activity_evidence.latest_activity_at
+    
+    if latest is None:
+        return True, False, f"Zombie: In {', '.join(official_sources)} with no activity timestamps"
+    
+    cutoff = datetime.utcnow() - timedelta(days=window_days)
+    
+    if latest.tzinfo is not None:
+        from datetime import timezone
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    
+    if latest < cutoff:
+        return True, False, f"Zombie: In {', '.join(official_sources)} with stale activity ({latest.isoformat()})"
+    
+    return False, False, f"Not zombie: Recent activity at {latest.isoformat()}"
+
+
 def classify_zombie(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
     """
     Determine if an asset is a Zombie Asset.

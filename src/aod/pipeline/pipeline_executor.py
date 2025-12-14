@@ -195,7 +195,8 @@ async def execute_pipeline(
                 )
                 continue
             
-            admission_result = apply_admission_criteria(correlation, tenant_id, run_id, snapshot_id)
+            entity_observations = [obs for obs in observations if obs.name == candidate.original_name or obs.domain == candidate.domain]
+            admission_result = apply_admission_criteria(correlation, tenant_id, run_id, snapshot_id, entity_observations)
             
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)

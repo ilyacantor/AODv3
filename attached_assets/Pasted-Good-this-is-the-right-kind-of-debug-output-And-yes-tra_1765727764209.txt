@@ -1,0 +1,94 @@
+Good — this is the right kind of debug output. And yes: **trace + implement**, but with one more constraint:
+
+You currently have an inconsistency: the explainer says **zombie_decision = YES** for multiple keys, yet Farm reports **AOD zombies = 0**. That means you likely have **two different zombie computations**:
+
+* the *debug explainer* computes zombie on the fly from evidence flags
+  vs
+* the *actual KPI / run summary* counts zombies from a different field/path (often `latest_activity_at`, `asset.activity_status`, or a filtered subset)
+
+So the “surgical fix” is actually **two surgical fixes in one place**:
+
+1. **populate timestamps** (so the asset model has activity)
+2. **make KPI count use the same zombie predicate as the explainer** (single source of truth)
+
+Below is the single prompt to give the AOD agent. It forces that.
+
+---
+
+## Replit prompt (AOD) — make activity timestamps first-class and unify zombie counting
+
+> Implement the minimal fix to resolve the zombie mismatch by (1) propagating activity timestamps into assets, and (2) ensuring the zombie KPI uses the same predicate as the debug explainer.
+>
+> Context:
+>
+> * Debug shows `with_any_activity_timestamp = 0` and `latest_activity_at = null` for all assets.
+> * Explainer can still compute `zombie_decision=YES` for keys present in IdP/CMDB with no timestamps.
+> * But run summary/KPI reports `zombies=0`, implying KPI logic diverges from explainer logic.
+>
+> Do this:
+>
+> 1. Add activity timestamp extraction during entity build (single place in pipeline)
+>
+> * When constructing each asset/candidate, compute `activity_signals` and `latest_activity_at` from evidence already present:
+>
+>   * discovery observations → `discovery_observed_at` (max)
+>   * IdP evidence → `idp_last_login_at` (max)
+>   * endpoint evidence → `endpoint_last_seen_at` (max)
+>   * network evidence → `network_last_seen_at` (max)
+>   * cloud evidence → `cloud_observed_at` (max if exists)
+>   * finance evidence → `finance_last_transaction_at` (max if exists)
+>
+> * Set `latest_activity_at = max(all non-null timestamps)` else null.
+>
+> * Do NOT treat “evidence_refs count” as activity.
+>
+> 2. Create a single shared function `compute_zombie_status(asset, window_days)` used by BOTH:
+>
+> * the run summary/KPI counts
+>
+> * the debug zombie explainer
+>   Definition:
+>
+> * zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
+>
+> * If there are NO timestamps at all, that still counts as “no timestamps within window” (=> zombie if managed).
+>
+> 3. Wire KPIs to the shared predicate
+>
+> * Ensure the `zombies` KPI in the run summary is computed by iterating the same asset set used in UI drill-down and applying `compute_zombie_status`.
+>
+> * Remove/stop any alternate zombie counting logic that depends on a different field or subset.
+>
+> 4. Proof / regression checks
+>
+> * Rerun the same Farm snapshot that produced the report (FingerprintCorp / run_id shown in Farm).
+> * Output must show:
+>
+>   * `with_any_activity_timestamp` is no longer 0 if evidence contains timestamps; OR remains 0 if Farm truly has none (both OK).
+>   * zombies KPI must match what `compute_zombie_status` returns for the assets.
+> * Add a test fixture:
+>
+>   * asset with idp_present true, cmdb_present true, all timestamps null => zombie = YES
+>   * asset with idp_present true, last_login_at within 30 days => zombie = NO
+>
+> Hard rules:
+>
+> * No threshold fiddling.
+> * No schema loosening.
+> * No overwrites (`INSERT OR REPLACE` etc.).
+> * Do not change Farm expectations.
+>
+> Deliver:
+>
+> * The pipeline location where timestamps are populated (one place).
+> * Confirmation that KPI + explainer use the same function.
+> * A before/after on zombie KPI for the snapshot.
+
+---
+
+If this lands, you’ll immediately know whether the remaining discrepancy is:
+
+* **Farm generating stale timestamps that AOD now correctly reads** (KPI should flip), or
+* **Farm not emitting timestamps at all** (then AOD should still count “managed + no timestamps” as zombie, and Farm/AOD should converge).
+
+Either way, this makes the system coherent and stops this class of mismatch from recurring.

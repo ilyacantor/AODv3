@@ -17,7 +17,7 @@ import uuid
 
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
-from ..pipeline.derived_classifications import compute_derived_classifications, classify_zombie
+from ..pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
 import re
 from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus, SyncStatus
 from ..farm_client import FarmClient, FarmListResult, validate_schema_version
@@ -772,12 +772,12 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
             else:
                 activity_within_window = latest > cutoff_date
             
-            zombie_result = classify_zombie(asset, request.window_days)
+            is_zombie, is_indeterminate, zombie_reason = compute_zombie_status(asset, request.window_days)
             
-            if zombie_result.is_classified:
+            if is_zombie:
                 zombie_decision = "YES"
                 reason_counts["zombie_yes"] += 1
-            elif zombie_result.is_indeterminate:
+            elif is_indeterminate:
                 zombie_decision = "INDETERMINATE"
                 reason_counts["indeterminate"] += 1
             else:
@@ -798,7 +798,7 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
                 why_bullets.append(f"Present in official systems: {', '.join(official)}")
                 
                 if latest is None:
-                    if zombie_result.is_indeterminate:
+                    if is_indeterminate:
                         why_bullets.append("No activity timestamps - indeterminate (cannot prove usage)")
                         reason_counts["no_activity_timestamps"] += 1
                     else:
@@ -811,7 +811,7 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
                     why_bullets.append(f"Recent activity found at {latest.isoformat()} - within {request.window_days}-day window - NOT zombie")
                     reason_counts["activity_within_window"] += 1
             
-            why_bullets.append(zombie_result.reason)
+            why_bullets.append(zombie_reason)
             
             explanations.append(KeyExplanation(
                 key=input_key,

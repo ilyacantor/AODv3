@@ -149,13 +149,14 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     Determine if an asset is a Zombie Asset.
     
     Zombie = exists in CMDB or IdP (official records)
-             AND (has NO discovery observations AND no finance AND no cloud activity
-                  OR has no recent activity within the activity window)
+             AND (has NO timestamped activity OR activity is outside the window)
     
     Interpretation: "This is in our official systems but we have no
     evidence anyone is actually using it."
     
-    Uses lens_coverage to determine activity, not just evidence_refs.
+    IMPORTANT: Activity is determined by timestamps, not evidence_refs.
+    If no activity timestamps exist, the asset is classified as zombie
+    (we cannot prove it's being used).
     
     Args:
         asset: The asset to classify
@@ -163,10 +164,6 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     """
     has_idp = asset.lens_status.idp == LensStatus.MATCHED
     has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
-    
-    has_discovery = bool(asset.evidence_refs)
-    has_finance = asset.lens_coverage.finance
-    has_cloud = asset.lens_coverage.cloud
     
     if not (has_idp or has_cmdb):
         return ClassificationResult(
@@ -183,42 +180,32 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     if has_cmdb:
         official_presence.append("CMDB")
     
-    has_presence_evidence = has_discovery or has_finance or has_cloud
     latest_activity = asset.activity_evidence.latest_activity_at
     cutoff_date = datetime.utcnow() - timedelta(days=activity_window_days)
     
-    if not has_presence_evidence:
+    activity_sources = []
+    if asset.activity_evidence.discovery_observed_at:
+        activity_sources.append("discovery observations")
+    if asset.activity_evidence.finance_last_transaction_at:
+        activity_sources.append("finance activity")
+    if asset.activity_evidence.cloud_observed_at:
+        activity_sources.append("cloud activity")
+    if asset.activity_evidence.idp_last_login_at:
+        activity_sources.append("IdP login")
+    if asset.activity_evidence.endpoint_last_seen_at:
+        activity_sources.append("endpoint activity")
+    if asset.activity_evidence.network_last_seen_at:
+        activity_sources.append("network activity")
+    
+    if latest_activity is None:
         return ClassificationResult(
             is_classified=True,
             is_indeterminate=False,
             classification_type="zombie",
-            reason=f"Zombie: Exists in {', '.join(official_presence)} but no activity evidence",
+            reason=f"Zombie: Exists in {', '.join(official_presence)} but no activity timestamps to prove usage",
             evidence_summary=[
                 f"Official presence: {', '.join(official_presence)}",
-                "No discovery observations",
-                "No finance activity",
-                "No cloud activity"
-            ]
-        )
-    
-    activity_sources = []
-    if has_discovery:
-        activity_sources.append(f"discovery observations ({len(asset.evidence_refs)} refs)")
-    if has_finance:
-        activity_sources.append("finance activity")
-    if has_cloud:
-        activity_sources.append("cloud activity")
-    
-    if latest_activity is None:
-        return ClassificationResult(
-            is_classified=False,
-            is_indeterminate=True,
-            classification_type="zombie",
-            reason="No activity timestamps available - cannot determine zombie status with certainty",
-            evidence_summary=[
-                f"Official presence: {', '.join(official_presence)}",
-                f"Activity sources: {', '.join(activity_sources)}",
-                "Activity timestamps: None"
+                "No timestamped activity evidence"
             ]
         )
     

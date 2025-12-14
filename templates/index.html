@@ -870,6 +870,7 @@
         document.getElementById('drillClose').addEventListener('click', closeDrill);
         document.getElementById('drillModal').addEventListener('click', (e) => { if (e.target.id === 'drillModal') closeDrill(); });
         
+        document.getElementById('drillModal').classList.add('hidden');
         checkHealth(); 
         loadRuns();
         loadTenants();

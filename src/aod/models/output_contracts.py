@@ -55,6 +55,17 @@ class AssetIdentifiers(BaseModel):
     uris: list[str] = Field(default_factory=list)
 
 
+class ActivityEvidence(BaseModel):
+    """Activity timestamps from various planes"""
+    idp_last_login_at: Optional[datetime] = None
+    discovery_observed_at: Optional[datetime] = None
+    cloud_observed_at: Optional[datetime] = None
+    endpoint_last_seen_at: Optional[datetime] = None
+    network_last_seen_at: Optional[datetime] = None
+    finance_last_transaction_at: Optional[datetime] = None
+    latest_activity_at: Optional[datetime] = None
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
@@ -68,6 +79,7 @@ class Asset(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     lens_status: LensStatuses = Field(default_factory=LensStatuses)
     lens_coverage: LensCoverage = Field(default_factory=LensCoverage)
+    activity_evidence: ActivityEvidence = Field(default_factory=ActivityEvidence)
     tags: list[str] = Field(default_factory=list)
     admission_reason: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)

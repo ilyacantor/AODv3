@@ -60,6 +60,7 @@ class Observation(BaseModel):
     uri: Optional[str] = None
     vendor: Optional[str] = None
     source: str = "discovery"
+    observed_at: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 
@@ -77,6 +78,7 @@ class IdPObject(BaseModel):
     has_sso: bool = False
     has_scim: bool = False
     owner: Optional[str] = None
+    last_login_at: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 
@@ -110,6 +112,7 @@ class CloudResource(BaseModel):
     provider: str = "aws"
     uri: Optional[str] = None
     environment: str = "unknown"
+    observed_at: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 
@@ -133,6 +136,7 @@ class InstalledApp(BaseModel):
     device_id: str
     version: Optional[str] = None
     vendor: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 
@@ -148,6 +152,7 @@ class DNSRecord(BaseModel):
     domain: str
     record_type: str = "A"
     value: Optional[str] = None
+    timestamp: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 
@@ -158,6 +163,7 @@ class ProxyLog(BaseModel):
     uri: Optional[str] = None
     user: Optional[str] = None
     bytes_transferred: int = 0
+    timestamp: Optional[datetime] = None
     raw_data: Optional[dict[str, Any]] = None
 
 

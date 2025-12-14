@@ -10,7 +10,7 @@ from uuid import UUID
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
-    AssetIdentifiers, FindingType, Severity, ArtifactType
+    AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType
 )
 
 DB_PATH = Path("aod.db")
@@ -75,6 +75,7 @@ class Database:
                 evidence_refs TEXT NOT NULL DEFAULT '[]',
                 lens_status TEXT NOT NULL DEFAULT '{}',
                 lens_coverage TEXT NOT NULL DEFAULT '{}',
+                activity_evidence TEXT NOT NULL DEFAULT '{}',
                 tags TEXT NOT NULL DEFAULT '[]',
                 admission_reason TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
@@ -261,8 +262,8 @@ class Database:
             INSERT INTO assets (
                 asset_id, tenant_id, run_id, name, asset_type, identifiers,
                 vendor, environment, evidence_refs, lens_status, lens_coverage,
-                tags, admission_reason, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                activity_evidence, tags, admission_reason, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(asset.asset_id),
@@ -276,6 +277,7 @@ class Database:
                 json.dumps(asset.evidence_refs),
                 asset.lens_status.model_dump_json(),
                 asset.lens_coverage.model_dump_json(),
+                asset.activity_evidence.model_dump_json(),
                 json.dumps(asset.tags),
                 asset.admission_reason,
                 asset.created_at.isoformat()
@@ -294,8 +296,10 @@ class Database:
         )
         rows = await cursor.fetchall()
         
-        return [
-            Asset(
+        assets = []
+        for row in rows:
+            activity_evidence_data = row["activity_evidence"] if "activity_evidence" in row.keys() else "{}"
+            assets.append(Asset(
                 asset_id=UUID(row["asset_id"]),
                 tenant_id=row["tenant_id"],
                 run_id=row["run_id"],
@@ -307,12 +311,12 @@ class Database:
                 evidence_refs=json.loads(row["evidence_refs"]),
                 lens_status=LensStatuses.model_validate_json(row["lens_status"]),
                 lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
+                activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
                 tags=json.loads(row["tags"]),
                 admission_reason=row["admission_reason"],
                 created_at=datetime.fromisoformat(row["created_at"])
-            )
-            for row in rows
-        ]
+            ))
+        return assets
     
     async def create_artifact(self, artifact: Artifact) -> Artifact:
         """Create a new artifact"""

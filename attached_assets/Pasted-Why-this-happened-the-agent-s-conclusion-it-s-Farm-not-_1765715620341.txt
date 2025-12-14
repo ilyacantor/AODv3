@@ -1,0 +1,68 @@
+Why this happened: the agent’s conclusion (“it’s Farm, not code”) is **only half-right**.
+
+* **Shadow**: yes, if *every* admitted asset has IdP or CMDB match, you’ll get zero shadow. That’s a **data distribution** issue.
+* **Zombie**: “evidence_refs exist” is **not activity evidence** unless those refs include **time-bearing activity signals** (DNS/proxy/last_seen/last_login). If your zombie logic treats “has any evidence_ref” as “active”, then it’s also a **code definition issue**.
+
+So the right move is: **tighten the definition of “activity”** and then ensure Farm can generate some stale/ unmanaged cases.
+
+Here’s the **single prompt** you want the Replit agent to execute next.
+
+---
+
+## Replit prompt (single)
+
+> Fix Shadow/Zombie so they can exist in IRL and in Farm without cheating.
+>
+> Why: Right now “zombie” is effectively impossible because the code treats “has evidence_refs” as “has activity.” That’s not IRL. Activity must come from time-bearing signals only.
+>
+> Do this in one pass:
+>
+> 1. Redefine “activity evidence” strictly as any of these timestamped signals within a configurable window (default 30 days):
+>
+> * IdP: `last_login_at`
+>
+> * Endpoint: `last_seen_at`
+>
+> * Network: DNS/proxy record timestamps
+>
+> * Cloud: any resource observation timestamp if present
+>
+> * Finance: transaction date (optional; counts as “financial activity”, not usage)
+>
+> 2. Update Zombie classification:
+>
+> * Zombie = (IdP matched OR CMDB matched) AND (NO activity evidence in window)
+>
+> * Do NOT use `evidence_refs` count as activity.
+>
+> * If no timestamp fields exist for an asset in any plane, classify as `indeterminate` and exclude from zombie count.
+>
+> 3. Keep Shadow definition as:
+>
+> * Shadow = (Finance OR Cloud OR Discovery activity exists) AND (IdP unmatched) AND (CMDB unmatched)
+>
+> * Discovery “activity exists” must also be timestamped (observed_at within window), not just evidence_refs.
+>
+> 4. Add a quick “distribution diagnostic” output to the run summary (plain English):
+>
+> * How many assets have IdP match
+>
+> * How many have CMDB match
+>
+> * How many have any activity timestamps in last 30d
+>
+> * How many are indeterminate for activity
+>
+> 5. Prove it with one deterministic test:
+>
+> * Construct a tiny fixture snapshot with:
+>
+>   * one managed-but-stale asset (IdP matched, last_login_at old) → Zombie
+>   * one paid-for-but-unmanaged asset (finance txn recent, no IdP/CMDB) → Shadow
+> * Assert counts are 1 zombie, 1 shadow, 0 indeterminate.
+>
+> Deliver proof via the test output and the run diagnostic summary.
+
+---
+
+This keeps everything IRL-clean, removes the “evidence_refs == activity” mistake, and makes it obvious whether Farm is too “healthy” versus your logic being too permissive.

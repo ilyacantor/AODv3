@@ -1,14 +1,17 @@
 """Stage 5: Admission (AAC) - Apply admission criteria to determine assets"""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from ..models.output_contracts import (
-    Asset, AssetType, Environment, LensStatus, LensStatuses, LensCoverage, AssetIdentifiers
+    Asset, AssetType, Environment, LensStatus, LensStatuses, LensCoverage, AssetIdentifiers,
+    ActivityEvidence
 )
-from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction
+from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction, Observation
 from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
+from .normalize_observations import CandidateEntity
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -176,11 +179,82 @@ def determine_environment(correlation: CorrelationResult) -> Environment:
     return Environment.UNKNOWN
 
 
+def extract_activity_timestamps(
+    correlation: CorrelationResult,
+    entity: CandidateEntity,
+    observations: Optional[list[Observation]] = None
+) -> ActivityEvidence:
+    """
+    Extract activity timestamps from correlation evidence and observations.
+    
+    Args:
+        correlation: Correlation result with matched records from various planes
+        entity: The candidate entity being processed
+        observations: Optional list of original observations for this entity
+        
+    Returns:
+        ActivityEvidence with timestamps from each plane and computed latest_activity_at
+    """
+    timestamps: list[datetime] = []
+    
+    idp_last_login_at: Optional[datetime] = None
+    discovery_observed_at: Optional[datetime] = None
+    cloud_observed_at: Optional[datetime] = None
+    endpoint_last_seen_at: Optional[datetime] = None
+    network_last_seen_at: Optional[datetime] = None
+    finance_last_transaction_at: Optional[datetime] = None
+    
+    if correlation.idp.status == MatchStatus.MATCHED:
+        for record in correlation.idp.matched_records:
+            if isinstance(record, IdPObject) and record.last_login_at:
+                if idp_last_login_at is None or record.last_login_at > idp_last_login_at:
+                    idp_last_login_at = record.last_login_at
+        if idp_last_login_at:
+            timestamps.append(idp_last_login_at)
+    
+    if observations:
+        for obs in observations:
+            if obs.observed_at:
+                if discovery_observed_at is None or obs.observed_at > discovery_observed_at:
+                    discovery_observed_at = obs.observed_at
+        if discovery_observed_at:
+            timestamps.append(discovery_observed_at)
+    
+    if correlation.cloud.status == MatchStatus.MATCHED:
+        for record in correlation.cloud.matched_records:
+            if isinstance(record, CloudResource) and record.observed_at:
+                if cloud_observed_at is None or record.observed_at > cloud_observed_at:
+                    cloud_observed_at = record.observed_at
+        if cloud_observed_at:
+            timestamps.append(cloud_observed_at)
+    
+    if correlation.finance.status == MatchStatus.MATCHED:
+        for record in correlation.finance.matched_records:
+            if isinstance(record, Transaction) and record.date:
+                if finance_last_transaction_at is None or record.date > finance_last_transaction_at:
+                    finance_last_transaction_at = record.date
+        if finance_last_transaction_at:
+            timestamps.append(finance_last_transaction_at)
+    
+    latest_activity_at = max(timestamps) if timestamps else None
+    
+    return ActivityEvidence(
+        idp_last_login_at=idp_last_login_at,
+        discovery_observed_at=discovery_observed_at,
+        cloud_observed_at=cloud_observed_at,
+        endpoint_last_seen_at=endpoint_last_seen_at,
+        network_last_seen_at=network_last_seen_at,
+        finance_last_transaction_at=finance_last_transaction_at,
+        latest_activity_at=latest_activity_at
+    )
+
+
 def apply_admission_criteria(
     correlation: CorrelationResult,
     tenant_id: str,
     run_id: str,
-    snapshot_id: str
+    snapshot_id: str,
+    observations: Optional[list[Observation]] = None
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -254,6 +328,8 @@ def apply_admission_criteria(
     if finance_admitted:
         tags.append("finance_tracked")
     
+    activity_evidence = extract_activity_timestamps(correlation, entity, observations)
+    
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, "asset", entity.original_name),
         tenant_id=tenant_id,
@@ -266,6 +342,7 @@ def apply_admission_criteria(
         evidence_refs=correlation.all_evidence_refs(),
         lens_status=lens_status,
         lens_coverage=lens_coverage,
+        activity_evidence=activity_evidence,
         tags=tags,
         admission_reason="; ".join(admission_reasons)
     )

@@ -474,14 +474,20 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/runs/{run_id}/derived")
-async def get_derived_classifications(run_id: str):
+async def get_derived_classifications(run_id: str, activity_window_days: int = 30):
     """
     Get derived classifications (Shadow/Zombie) for a run.
     
     These are computed on-read from asset evidence, not stored as flags.
     
     Shadow Asset = has finance/cloud/discovery evidence but NO IdP or CMDB match
+                   AND has recent activity within the activity window
     Zombie Asset = in CMDB or IdP but NO discovery/activity evidence
+                   OR has no recent activity within the activity window
+    
+    Args:
+        run_id: The run to get classifications for
+        activity_window_days: Number of days to consider for recent activity (default 30)
     """
     db = await get_db()
     
@@ -491,13 +497,22 @@ async def get_derived_classifications(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     
-    summary = compute_derived_classifications(assets)
+    summary = compute_derived_classifications(assets, activity_window_days)
     
     return {
         "run_id": run_id,
+        "activity_window_days": activity_window_days,
         "shadow_count": summary.shadow_count,
         "zombie_count": summary.zombie_count,
         "indeterminate_count": summary.indeterminate_count,
+        "distribution": {
+            "total_assets": summary.distribution.total_assets,
+            "with_idp_match": summary.distribution.with_idp_match,
+            "with_cmdb_match": summary.distribution.with_cmdb_match,
+            "with_activity_last_30_days": summary.distribution.with_activity_last_30_days,
+            "with_any_activity_timestamp": summary.distribution.with_any_activity_timestamp,
+            "indeterminate_count": summary.distribution.indeterminate_count
+        },
         "shadow_assets": summary.shadow_assets,
         "zombie_assets": summary.zombie_assets
     }

@@ -1,0 +1,75 @@
+Yes — **but only if you constrain it to the right kind of work**.
+
+Right now the report tells you *what* is wrong (AOD zombies = 0, Farm expected 15; overlap 2/15; extra keys), but not *why*. If you let the AOD agent “work it out” unconstrained, it will likely do one of the bad patterns:
+
+* change zombie definitions to match Farm (cheat)
+* loosen schemas / ignore fields (cheat)
+* hardcode key lists (cheat)
+* tweak thresholds until PASS (cheat)
+
+### The right move
+
+Let the AOD agent work, but **only on instrumentation + root-cause visibility first**, and **forbid any logic changes** until we have explanations per key.
+
+That’s how you avoid another rewrite.
+
+---
+
+## Single Replit prompt to AOD agent (safe debugging mode)
+
+> Do NOT change any classification logic yet. First, explain the mismatch.
+>
+> Task: add a “zombie mismatch explainer” so we can see why Farm expected zombies but AOD reported 0.
+>
+> Input: Use the Farm report for tenant `FingerprintCorp`, snapshot shown in Farm UI, and AOD run_id `run_d1daba1704c4` (from the report).
+>
+> Implement:
+>
+> 1. Add endpoint `POST /api/debug/zombie-explain` that accepts:
+>
+> ```json
+> {
+>  "tenant_id":"FingerprintCorp",
+>  "run_id":"run_d1daba1704c4",
+>  "keys":[ "mysqll egacy", "salesforcecom", "zoomus", "githubcom", "admindashboard", "datadog", "billingapi", "microsoft365", "figma", "okta" ],
+>  "window_days":30
+> }
+> ```
+>
+> 2. For each key, return:
+>
+> * whether the key mapped to any internal asset(s)
+>
+> * what normalized key AOD uses
+>
+> * whether idp_present/cmdb_present are true and what evidence fields drove that
+>
+> * which activity timestamps AOD found (by plane) and whether any fall within the window
+>
+> * the computed zombie decision (yes/no/indeterminate)
+>
+> * plain-English “why” bullets (max 3)
+>
+> 3. Add a small script `scripts/zombie_explain_from_farm_report.py` that calls the endpoint and prints a compact summary grouped by reason codes (e.g., NO_MATCH, HAS_ACTIVITY, NO_IDP_CMDB, INDETERMINATE).
+>
+> Deliver proof:
+>
+> * Paste the compact summary for the keys above.
+> * Paste one full JSON explanation for one “missed zombie” and one “extra zombie”.
+>
+> Hard rule: **No logic changes** beyond adding debug visibility. No threshold tweaks. No schema loosening. No overwrites.
+
+---
+
+### What you should look for in the output
+
+One of these will pop immediately:
+
+* **NO_MATCH** for most missed keys → key normalization / grouping mismatch between Farm and AOD
+* **HAS_ACTIVITY** unexpectedly → AOD is counting “activity” differently (or treating evidence refs as activity)
+* **NO_IDP_CMDB** → AOD didn’t correlate planes correctly
+* **INDETERMINATE** → timestamps missing/parsed wrong
+
+Once we see the dominant reason, the next iteration is a **single surgical fix**.
+
+So: yes, let the AOD agent work — but only under that prompt.

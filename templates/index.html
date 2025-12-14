@@ -86,7 +86,12 @@
         .run-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s ease; }
         .run-item:hover { background: var(--gray-800); }
         .run-item.selected { border: 1px solid var(--cyan-500); }
-        .run-info { display: flex; align-items: center; gap: 1rem; }
+        .run-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+        .run-info { display: flex; align-items: center; gap: 0.75rem; width: 100%; }
+        .run-tenant { font-weight: 600; color: var(--cyan-400); }
+        .run-meta { display: flex; gap: 0.75rem; font-size: 0.8rem; color: var(--slate-400); }
+        .run-size { background: var(--gray-700); padding: 0.15rem 0.4rem; border-radius: 4px; }
+        .run-profile { color: var(--purple-400); }
         .run-id { font-weight: 600; color: var(--cyan-400); }
         .run-status { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
         .run-status.completed, .run-status.completed_with_results { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
@@ -1044,14 +1049,27 @@
             const loading = document.getElementById('runsLoading'), list = document.getElementById('runsList');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch('/api/runs'); const runs = await r.json();
+                const r = await fetch('/api/runs'); let runs = await r.json();
+                runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
                 if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
                 else {
                     list.innerHTML = runs.map(run => {
                         const syncBadge = run.sync_status && run.sync_status !== 'not_applicable' 
                             ? `<span class="sync-status ${run.sync_status}" title="${run.sync_error || ''}">${run.sync_status === 'synced' ? 'SYNCED' : run.sync_status === 'failed' ? 'SYNC FAILED' : 'SYNCING'}</span>` 
                             : '';
-                        return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}"><div class="run-info"><span class="run-id">${run.run_id}</span><span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}</div><div><span style="color: var(--slate-400); font-size: 0.875rem;">${run.counts.assets_admitted} assets, ${run.counts.findings_generated} findings</span></div></div>`;
+                        const tenant = run.tenant_id || '-';
+                        const size = run.input_meta?.scale || '-';
+                        const profile = run.input_meta?.enterprise_profile || '-';
+                        return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
+                            <div class="run-info">
+                                <span class="run-tenant">${tenant}</span>
+                                <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}
+                            </div>
+                            <div class="run-meta">
+                                <span class="run-size">${size}</span>
+                                <span class="run-profile">${profile}</span>
+                            </div>
+                        </div>`;
                     }).join('');
                     document.querySelectorAll('.run-item').forEach(item => item.addEventListener('click', () => selectRun(item.dataset.runId)));
                 }

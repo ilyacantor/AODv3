@@ -50,6 +50,8 @@ tests/
 4. **Evidence-only decisions** - Admission based only on plane evidence
 5. **Assets vs Artifacts** - Dashboards/reports/calculators are artifacts, never assets
 
+## Prompt Shortcuts
+1. **DCCE** - means: don't change code, explain only
 
 ## Tech Stack
 
@@ -153,10 +155,6 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Recent Changes
 
-- Fixed drill-down modal edge cases:
-  - Added null type check to show helpful message instead of empty content
-  - Added fallback for empty breadcrumb path
-  - Modal now gracefully handles edge cases when data isn't loaded
 - Added drillable KPI boxes to Results/Summary:
   - All stat cards (Assets, Findings, Artifacts, etc.) are now clickable
   - Multi-level drill-down with breadcrumb navigation

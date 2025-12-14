@@ -120,8 +120,8 @@ def classify_shadow(asset: Asset, activity_window_days: int = 30) -> Classificat
             evidence_summary=[]
         )
     
-    latest_activity = asset.activity_evidence.latest_activity_at
-    cutoff_date = datetime.utcnow() - timedelta(days=activity_window_days)
+    latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
     
     if latest_activity is None:
         return ClassificationResult(
@@ -186,16 +186,12 @@ def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bo
     if has_cmdb:
         official_sources.append("CMDB")
     
-    latest = asset.activity_evidence.latest_activity_at
+    latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     
     if latest is None:
         return True, False, f"Zombie: In {', '.join(official_sources)} with no activity timestamps"
     
-    cutoff = datetime.utcnow() - timedelta(days=window_days)
-    
-    if latest.tzinfo is not None:
-        from datetime import timezone
-        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    cutoff = _utc_now() - timedelta(days=window_days)
     
     if latest < cutoff:
         return True, False, f"Zombie: In {', '.join(official_sources)} with stale activity ({latest.isoformat()})"

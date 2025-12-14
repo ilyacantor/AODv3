@@ -245,7 +245,7 @@
         </div>
     </main>
     
-    <div id="drillModal" class="drill-modal hidden">
+    <div id="drillModal" class="drill-modal hidden" style="display:none;">
         <div class="drill-panel">
             <div class="drill-header">
                 <span class="drill-title" id="drillTitle">Drill Down</span>
@@ -645,12 +645,16 @@
             if (!currentRunId) return;
             drillState = { type, path: [{ label: type.charAt(0).toUpperCase() + type.slice(1), level: 'root' }], data: null };
             document.getElementById('drillTitle').textContent = type.charAt(0).toUpperCase() + type.slice(1);
-            document.getElementById('drillModal').classList.remove('hidden');
+            const modal = document.getElementById('drillModal');
+            modal.style.display = '';
+            modal.classList.remove('hidden');
             renderDrillLevel();
         }
         
         function closeDrill() {
-            document.getElementById('drillModal').classList.add('hidden');
+            const modal = document.getElementById('drillModal');
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
             drillState = { type: null, path: [], data: null };
         }
         

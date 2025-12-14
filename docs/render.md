@@ -3,10 +3,10 @@
 Use these commands when configuring a **Web Service** on Render to preview AOD remotely.
 
 ## Build command
-Render runs the build step in a clean environment. Use the bundled proxy-safe pip configuration so dependencies install reliably:
+Render runs the build step in a clean environment. Install dependencies from PyPI directly—Render cannot reach the Replit package proxy referenced in `pip.conf`.
 
 ```bash
-PIP_CONFIG_FILE=./pip.conf pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Start command
@@ -18,5 +18,6 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 
 ## Notes
 - Ensure `DATABASE_URL` is set in the Render dashboard (Environment tab).
-- If you add build-time tools (e.g., `uv`), keep the `PIP_CONFIG_FILE` prefix so installs continue to bypass the blocked MITM proxy.
+- If you need to add build-time tools (e.g., `uv`), use the same `pip install ...` pattern without `PIP_CONFIG_FILE` so installs keep using PyPI.
+- If your Render environment requires a custom index, set `PIP_INDEX_URL`/`PIP_EXTRA_INDEX_URL` explicitly; avoid `pip.conf` because it points to the Replit proxy.
 - No Procfile is required; Render uses the start command directly.

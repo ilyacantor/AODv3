@@ -122,14 +122,11 @@
             <h2 class="section-title">Fetch from Farm</h2>
             <p class="config-note">Farm URL configured via environment</p>
             
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">Tenant</label>
-                    <select class="form-select" id="tenantSelect" disabled>
-                        <option value="">Loading tenants...</option>
-                    </select>
-                </div>
-                <button class="btn btn-secondary" id="loadTenants">Refresh</button>
+            <div class="form-group">
+                <label class="form-label">Tenant</label>
+                <select class="form-select" id="tenantSelect" disabled>
+                    <option value="">Loading tenants...</option>
+                </select>
             </div>
             
             <div class="snapshot-picker" id="snapshotPicker">
@@ -235,12 +232,9 @@
         
         async function loadTenants() {
             const select = document.getElementById('tenantSelect');
-            const btn = document.getElementById('loadTenants');
             const msg = document.getElementById('fetchMessage');
             const snapshotSelect = document.getElementById('snapshotSelect');
             
-            btn.disabled = true;
-            btn.textContent = 'Loading...';
             select.disabled = true;
             snapshotSelect.disabled = true;
             snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
@@ -272,9 +266,6 @@
                 msg.classList.remove('hidden');
                 select.innerHTML = '<option value="">Failed to load tenants</option>';
                 select.disabled = true;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Refresh';
             }
         }
         
@@ -392,7 +383,6 @@
             finally { loading.classList.add('hidden'); }
         }
         
-        document.getElementById('loadTenants').addEventListener('click', loadTenants);
         document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
         
         document.getElementById('advancedToggle').addEventListener('click', () => {

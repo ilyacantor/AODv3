@@ -1,0 +1,58 @@
+Yep — I see the problem. That “Item” view is dumping an **entire raw blob** (looks like a list of finance transactions) into one text wall. That’s not drill-down; that’s **UI self-harm**.
+
+**Why it’s bad:**
+When drill hits a leaf node, the UI should switch from “list/group” to **curated detail**. Raw blobs should be **collapsed, truncated, and structured** (or you can’t evaluate anything, and it feels broken).
+
+### What to do next (one iteration)
+
+Fix the **leaf detail renderer** so it:
+
+* shows **summary fields first** (vendor, plane, totals, last activity)
+* shows **records as a table** (transactions) with paging
+* puts `raw_data` behind a **collapsed “Raw JSON”** viewer (pretty-printed + copy button)
+* hard caps any single field display (e.g., 2–5 KB) to prevent UI lockups
+
+---
+
+## Single Replit prompt (copy/paste to the AOD agent)
+
+> Fix the leaf “Item” drill-down UX so it never dumps huge raw blobs into the page.
+>
+> Problem: leaf detail view currently renders large objects (e.g., finance candidate/raw_data) as unbounded text, making the UI unusable and fragile.
+>
+> Implement in one pass:
+>
+> 1. Add a generic `renderItemDetail(item)` that follows this layout:
+>
+> * **Header**: Entity Name, Plane, Type (if known)
+> * **Key Facts** (2-column grid): vendor, product (if any), domain (if any), amount totals (if finance), currency, date range, last_seen/last_login/observed_at if present
+>
+> 2. If the item contains a list of records (finance transactions, DNS records, observations, etc.):
+>
+> * Render as a compact **table** with pagination (page size 25)
+> * Columns for finance: transaction_id, date, amount, currency, memo/type
+>
+> 3. Handle `raw_data` safely:
+>
+> * Never inline raw_data by default
+> * Add a collapsed section titled **“Raw JSON (advanced)”**
+> * Pretty-print JSON inside it
+> * Add “Copy JSON” button
+> * Truncate display to max 5,000 characters with “Show more” toggles
+>
+> 4. Add a safety helper:
+>
+> * `safeStr(value, maxLen=200)` for any field rendered inline
+> * `safeJsonPreview(obj, maxLen=5000)` for previews
+>
+> 5. Ensure the drill experience stays consistent:
+>
+> * List → Group → List → Detail
+> * Detail is readable, not a dump
+>
+> Deliver proof:
+>
+> * Show before/after screenshot of the DocuSign finance item.
+> * Confirm the page no longer renders the big blob inline and the table + Raw JSON collapse works.
+
+This is the fastest way to make drill-down feel **intentional** and stop it from “looking broken” even when the data is fine.

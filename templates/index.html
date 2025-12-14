@@ -139,6 +139,34 @@
         .header-actions { display: flex; align-items: center; gap: 1rem; }
         .btn-help { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem; }
         .btn-help:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
+        .item-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--slate-700); }
+        .item-detail-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
+        .item-detail-meta { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+        .item-detail-tag { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; background: rgba(168, 85, 247, 0.2); color: var(--purple-400); }
+        .key-facts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+        .key-fact { background: var(--gray-800); border-radius: 6px; padding: 0.6rem 0.75rem; }
+        .key-fact-label { font-size: 0.7rem; color: var(--slate-500); text-transform: uppercase; margin-bottom: 0.15rem; }
+        .key-fact-value { font-size: 0.9rem; color: white; word-break: break-word; }
+        .records-section { margin-top: 1rem; }
+        .records-section-title { font-size: 0.875rem; font-weight: 600; color: var(--slate-400); margin-bottom: 0.5rem; }
+        .records-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .records-table th { text-align: left; padding: 0.4rem 0.5rem; color: var(--slate-500); border-bottom: 1px solid var(--slate-700); font-weight: 600; }
+        .records-table td { padding: 0.4rem 0.5rem; color: var(--slate-300); border-bottom: 1px solid var(--slate-800); }
+        .pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--slate-700); }
+        .pagination-info { font-size: 0.75rem; color: var(--slate-500); }
+        .pagination-btns { display: flex; gap: 0.5rem; }
+        .pagination-btn { padding: 0.3rem 0.6rem; font-size: 0.75rem; background: var(--slate-700); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .pagination-btn:hover { background: var(--slate-600); }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .raw-json-section { margin-top: 1rem; border-top: 1px solid var(--slate-700); padding-top: 0.75rem; }
+        .raw-json-toggle { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--slate-500); font-size: 0.8rem; }
+        .raw-json-toggle:hover { color: var(--cyan-400); }
+        .raw-json-content { margin-top: 0.5rem; display: none; }
+        .raw-json-content.open { display: block; }
+        .raw-json-pre { background: var(--slate-950); border: 1px solid var(--slate-700); border-radius: 6px; padding: 0.75rem; font-family: monospace; font-size: 0.7rem; color: var(--slate-400); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+        .copy-json-btn { margin-top: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.7rem; background: var(--slate-700); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .copy-json-btn:hover { background: var(--cyan-600); }
+        @media (max-width: 600px) { .key-facts-grid { grid-template-columns: 1fr; } }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.2s ease; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal { background: var(--gray-900); border: 1px solid var(--slate-700); border-radius: 12px; max-width: 700px; max-height: 85vh; overflow-y: auto; margin: 1rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
@@ -274,6 +302,42 @@
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
         let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
+        
+        function safeStr(value, maxLen = 200) {
+            if (value === null || value === undefined) return 'N/A';
+            const str = String(value);
+            if (str.length <= maxLen) return escapeHtml(str);
+            return escapeHtml(str.slice(0, maxLen)) + '...';
+        }
+        
+        function safeJsonPreview(obj, maxLen = 5000) {
+            if (obj === null || obj === undefined) return 'null';
+            try {
+                const str = JSON.stringify(obj, null, 2);
+                if (str.length <= maxLen) return escapeHtml(str);
+                return escapeHtml(str.slice(0, maxLen)) + '\n... [truncated]';
+            } catch (e) {
+                return '[Error serializing object]';
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('.copy-json-btn');
+                if (btn) {
+                    const original = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => btn.textContent = original, 1500);
+                }
+            });
+        }
         
         const DRILL_SCHEMA = {
             entities: {
@@ -587,21 +651,168 @@
                 return '<div class="drill-no-data">Unknown entity type.</div>';
             }
             
-            const fieldNames = Object.keys(schema.fields);
+            detailPagination.items = items;
+            detailPagination.rootType = rootType;
+            detailPagination.itemIndex = 0;
             
-            return items.map(item => {
-                const rows = fieldNames.map(field => {
-                    let value = item[field];
-                    if (typeof value === 'object' && value !== null) {
-                        value = JSON.stringify(value);
-                    }
-                    const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    return `<div class="drill-detail-row"><span class="drill-detail-label">${label}:</span><span>${value ?? 'N/A'}</span></div>`;
-                }).join('');
+            return renderSingleItemDetail(items[0], rootType, 0, items.length);
+        }
+        
+        function renderSingleItemDetail(item, rootType, index, total) {
+            const schema = DRILL_SCHEMA.entities[rootType];
+            const name = item.name || item.entity_name || item.finding_type || item.artifact_type || 'Item';
+            const plane = item.plane || item.source_lens || item.source || null;
+            const itemType = item.asset_type || item.artifact_type || item.finding_type || item.reason_code || null;
+            
+            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'severity', 'reason', 'reason_detail', 'explanation'];
+            const keyFacts = [];
+            keyFactFields.forEach(field => {
+                if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {
+                    keyFacts.push({ label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: item[field] });
+                }
+            });
+            
+            if (item.lens_status && typeof item.lens_status === 'object') {
+                const lenses = Object.entries(item.lens_status).map(([k, v]) => `${k}: ${v}`).join(', ');
+                keyFacts.push({ label: 'Lens Status', value: lenses });
+            }
+            
+            if (item.identifiers && typeof item.identifiers === 'object' && Object.keys(item.identifiers).length > 0) {
+                const ids = Object.entries(item.identifiers).map(([k, v]) => `${k}: ${safeStr(v, 50)}`).join(', ');
+                keyFacts.push({ label: 'Identifiers', value: ids });
+            }
+            
+            let html = `<div class="drill-detail" style="padding: 1.25rem;">`;
+            
+            html += `<div class="item-detail-header">
+                <div>
+                    <div class="item-detail-title">${safeStr(name, 100)}</div>
+                    <div class="item-detail-meta">
+                        ${plane ? `<span class="item-detail-tag">${safeStr(plane, 30)}</span>` : ''}
+                        ${itemType ? `<span class="item-detail-tag">${safeStr(itemType, 30)}</span>` : ''}
+                    </div>
+                </div>
+                ${total > 1 ? `<div style="color: var(--slate-500); font-size: 0.8rem;">Item ${index + 1} of ${total}</div>` : ''}
+            </div>`;
+            
+            if (keyFacts.length > 0) {
+                html += `<div class="key-facts-grid">`;
+                keyFacts.forEach(fact => {
+                    html += `<div class="key-fact"><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, 200)}</div></div>`;
+                });
+                html += `</div>`;
+            }
+            
+            const arrayFields = ['transactions', 'records', 'data', 'evidence_summary', 'candidate_names', 'raw_data'];
+            arrayFields.forEach(field => {
+                const arr = item[field];
+                if (Array.isArray(arr) && arr.length > 0) {
+                    html += renderRecordsTable(field, arr);
+                } else if (field === 'data' && typeof arr === 'object' && arr !== null && !Array.isArray(arr)) {
+                    const dataArrays = Object.entries(arr).filter(([k, v]) => Array.isArray(v) && v.length > 0);
+                    dataArrays.forEach(([key, value]) => {
+                        html += renderRecordsTable(key, value);
+                    });
+                }
+            });
+            
+            const rawJson = JSON.stringify(item, null, 2);
+            const jsonId = `rawJson_${index}`;
+            html += `<div class="raw-json-section">
+                <div class="raw-json-toggle" onclick="toggleRawJson('${jsonId}')">
+                    <span id="${jsonId}_icon">▶</span> Raw JSON (advanced)
+                </div>
+                <div class="raw-json-content" id="${jsonId}">
+                    <pre class="raw-json-pre">${safeJsonPreview(item, 5000)}</pre>
+                    <button class="copy-json-btn" onclick="copyToClipboard(\`${rawJson.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`)">Copy JSON</button>
+                </div>
+            </div>`;
+            
+            if (total > 1) {
+                html += `<div class="pagination-controls">
+                    <span class="pagination-info">Viewing item ${index + 1} of ${total}</span>
+                    <div class="pagination-btns">
+                        <button class="pagination-btn" onclick="navigateDetailItem(${index - 1})" ${index === 0 ? 'disabled' : ''}>← Prev</button>
+                        <button class="pagination-btn" onclick="navigateDetailItem(${index + 1})" ${index >= total - 1 ? 'disabled' : ''}>Next →</button>
+                    </div>
+                </div>`;
+            }
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function renderRecordsTable(title, records) {
+            if (!records || records.length === 0) return '';
+            
+            const pageSize = 25;
+            const pageId = `records_${title.replace(/\s+/g, '_')}`;
+            
+            let columns = [];
+            if (typeof records[0] === 'object' && records[0] !== null) {
+                columns = Object.keys(records[0]).slice(0, 6);
+            }
+            
+            let html = `<div class="records-section" id="${pageId}_section">
+                <div class="records-section-title">${title.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (${records.length})</div>`;
+            
+            if (columns.length > 0) {
+                html += `<table class="records-table"><thead><tr>`;
+                columns.forEach(col => {
+                    html += `<th>${col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`;
+                });
+                html += `</tr></thead><tbody>`;
                 
-                const name = item.name || item.finding_type || item.artifact_type || 'Item';
-                return `<div class="drill-detail"><div class="drill-detail-name">${name}</div>${rows}</div>`;
-            }).join('');
+                const displayRecords = records.slice(0, pageSize);
+                displayRecords.forEach(rec => {
+                    html += `<tr>`;
+                    columns.forEach(col => {
+                        let val = rec[col];
+                        if (typeof val === 'object' && val !== null) {
+                            val = JSON.stringify(val);
+                        }
+                        html += `<td>${safeStr(val, 80)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
+                
+                if (records.length > pageSize) {
+                    html += `<div class="pagination-info" style="margin-top: 0.5rem;">Showing ${pageSize} of ${records.length} records</div>`;
+                }
+            } else {
+                const displayItems = records.slice(0, pageSize);
+                html += `<div style="font-size: 0.85rem; color: var(--slate-400);">${displayItems.map(r => safeStr(r, 100)).join(', ')}</div>`;
+                if (records.length > pageSize) {
+                    html += `<div class="pagination-info" style="margin-top: 0.5rem;">Showing ${pageSize} of ${records.length} items</div>`;
+                }
+            }
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function toggleRawJson(id) {
+            const content = document.getElementById(id);
+            const icon = document.getElementById(id + '_icon');
+            if (content) {
+                content.classList.toggle('open');
+                if (icon) icon.textContent = content.classList.contains('open') ? '▼' : '▶';
+            }
+        }
+        
+        function navigateDetailItem(newIndex) {
+            if (newIndex < 0 || newIndex >= detailPagination.items.length) return;
+            detailPagination.itemIndex = newIndex;
+            const contentEl = document.getElementById('drillContent');
+            if (contentEl) {
+                contentEl.innerHTML = renderSingleItemDetail(
+                    detailPagination.items[newIndex], 
+                    detailPagination.rootType, 
+                    newIndex, 
+                    detailPagination.items.length
+                );
+            }
         }
         
         function drillIntoGroup(rootType, field, value) {

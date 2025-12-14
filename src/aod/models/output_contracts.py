@@ -153,6 +153,14 @@ class RunStatus(str, Enum):
     INVALID_INPUT_CONTRACT = "invalid_input_contract"
 
 
+class SyncStatus(str, Enum):
+    """Farm sync status"""
+    PENDING = "pending"
+    SYNCED = "synced"
+    FAILED = "failed"
+    NOT_APPLICABLE = "not_applicable"
+
+
 class RunCounts(BaseModel):
     """Run counts"""
     observations_in: int = 0
@@ -174,3 +182,5 @@ class RunLog(BaseModel):
     input_meta: dict = Field(default_factory=dict)
     counts: RunCounts = Field(default_factory=RunCounts)
     failure_reasons: list[str] = Field(default_factory=list)
+    sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
+    sync_error: Optional[str] = None

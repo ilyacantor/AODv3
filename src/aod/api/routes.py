@@ -12,8 +12,9 @@ import uuid
 from ..db.database import get_db
 from ..pipeline.pipeline_executor import execute_pipeline
 from ..pipeline.derived_classifications import compute_derived_classifications
-from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus
+from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus, SyncStatus
 from ..farm_client import FarmClient, FarmListResult, validate_schema_version
+from ..farm_reconcile import reconcile_to_farm
 
 
 router = APIRouter(prefix="/api")
@@ -32,6 +33,8 @@ class RunResponse(BaseModel):
     status: str
     counts: RunCounts
     message: str
+    sync_status: Optional[str] = None
+    sync_error: Optional[str] = None
 
 
 class RunDetailResponse(BaseModel):
@@ -44,6 +47,8 @@ class RunDetailResponse(BaseModel):
     input_meta: dict
     counts: RunCounts
     failure_reasons: list[str]
+    sync_status: str = "not_applicable"
+    sync_error: Optional[str] = None
 
 
 class CatalogResponse(BaseModel):
@@ -273,12 +278,43 @@ async def create_run_from_farm(request: FarmRunRequest):
             raise HTTPException(status_code=400, detail=result.error)
         raise HTTPException(status_code=500, detail=result.error)
     
+    sync_status = SyncStatus.PENDING
+    sync_error = None
+    
+    if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
+        result.run_log.sync_status = SyncStatus.PENDING
+        await db.update_run(result.run_log)
+        
+        assets = await db.get_assets_by_run(run_id)
+        findings = await db.get_findings_by_run(run_id)
+        
+        success, error = await reconcile_to_farm(
+            run_log=result.run_log,
+            assets=assets,
+            findings=findings,
+            snapshot_id=request.snapshot_id,
+            farm_url=farm_url
+        )
+        
+        if success:
+            result.run_log.sync_status = SyncStatus.SYNCED
+            result.run_log.sync_error = None
+        else:
+            result.run_log.sync_status = SyncStatus.FAILED
+            result.run_log.sync_error = error
+        
+        await db.update_run(result.run_log)
+        sync_status = result.run_log.sync_status
+        sync_error = result.run_log.sync_error
+    
     return RunResponse(
         run_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
-        message=f"Discovery completed from Farm. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated."
+        message=f"Discovery completed from Farm. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated.",
+        sync_status=sync_status.value,
+        sync_error=sync_error
     )
 
 
@@ -297,7 +333,9 @@ async def list_runs():
             completed_at=run.completed_at.isoformat() if run.completed_at else None,
             input_meta=run.input_meta,
             counts=run.counts,
-            failure_reasons=run.failure_reasons
+            failure_reasons=run.failure_reasons,
+            sync_status=run.sync_status.value,
+            sync_error=run.sync_error
         )
         for run in runs
     ]
@@ -320,7 +358,9 @@ async def get_run(run_id: str):
         completed_at=run.completed_at.isoformat() if run.completed_at else None,
         input_meta=run.input_meta,
         counts=run.counts,
-        failure_reasons=run.failure_reasons
+        failure_reasons=run.failure_reasons,
+        sync_status=run.sync_status.value,
+        sync_error=run.sync_error
     )
 
 

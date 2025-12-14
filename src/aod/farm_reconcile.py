@@ -1,0 +1,104 @@
+"""Farm reconciliation module - syncs AOD results back to Farm"""
+
+import os
+import httpx
+from typing import Optional
+from datetime import datetime
+
+from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
+from .pipeline.derived_classifications import compute_derived_classifications
+
+
+async def reconcile_to_farm(
+    run_log: RunLog,
+    assets: list[Asset],
+    findings: list[Finding],
+    snapshot_id: str,
+    farm_url: Optional[str] = None
+) -> tuple[bool, Optional[str]]:
+    """
+    Reconcile AOD results back to Farm.
+    
+    POSTs a summary of the run results to {FARM_URL}/api/reconcile
+    
+    Args:
+        run_log: The completed run log
+        assets: List of admitted assets
+        findings: List of generated findings
+        snapshot_id: The source snapshot ID
+        farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
+    
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
+    base_url = farm_url or os.environ.get("FARM_URL")
+    if not base_url:
+        return False, "No Farm URL configured"
+    
+    derived = compute_derived_classifications(assets, activity_window_days=30)
+    
+    shadow_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.shadow_assets[:10]]
+    zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]
+    
+    high_severity_findings = [
+        {
+            "finding_type": f.finding_type.value,
+            "severity": f.severity.value,
+            "explanation": f.explanation[:200]
+        }
+        for f in findings
+        if f.severity.value == "high"
+    ][:10]
+    
+    reconcile_payload = {
+        "snapshot_id": snapshot_id,
+        "tenant_id": run_log.tenant_id,
+        "aod_run_id": run_log.run_id,
+        "aod_status": run_log.status.value,
+        "completed_at": run_log.completed_at.isoformat() if run_log.completed_at else datetime.utcnow().isoformat(),
+        "aod_summary": {
+            "observations_in": run_log.counts.observations_in,
+            "candidates_out": run_log.counts.candidates_out,
+            "assets_admitted": run_log.counts.assets_admitted,
+            "artifacts_recorded": run_log.counts.artifacts_recorded,
+            "rejected": run_log.counts.rejected,
+            "ambiguous_matches": run_log.counts.ambiguous_matches,
+            "findings_generated": run_log.counts.findings_generated,
+            "shadow_count": derived.shadow_count,
+            "zombie_count": derived.zombie_count
+        },
+        "aod_lists": {
+            "shadow_assets": shadow_asset_names,
+            "zombie_assets": zombie_asset_names,
+            "high_severity_findings": high_severity_findings
+        }
+    }
+    
+    headers = {"Content-Type": "application/json"}
+    
+    shared_secret = os.environ.get("FARM_SHARED_SECRET")
+    if shared_secret:
+        headers["X-Farm-Shared-Secret"] = shared_secret
+    
+    reconcile_url = f"{base_url.rstrip('/')}/api/reconcile"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                reconcile_url,
+                json=reconcile_payload,
+                headers=headers
+            )
+            
+            if response.status_code in (200, 201, 202, 204):
+                return True, None
+            else:
+                error_text = response.text[:200] if response.text else f"HTTP {response.status_code}"
+                return False, f"Farm returned {response.status_code}: {error_text}"
+                
+    except httpx.ConnectError as e:
+        return False, f"Connection error: {str(e)[:100]}"
+    except httpx.TimeoutException:
+        return False, "Request timed out"
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)[:100]}"

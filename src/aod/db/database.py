@@ -8,7 +8,7 @@ from typing import Optional
 from uuid import UUID
 
 from ..models.output_contracts import (
-    Asset, Artifact, Finding, RunLog, RunStatus, RunCounts,
+    Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
     AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType
 )
@@ -122,6 +122,24 @@ class Database:
         except Exception:
             pass
         
+        cursor = await conn.execute("PRAGMA table_info(runs)")
+        columns = await cursor.fetchall()
+        existing_cols = {col[1] for col in columns}
+        
+        if "sync_status" not in existing_cols:
+            try:
+                await conn.execute("ALTER TABLE runs ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'not_applicable'")
+                await conn.commit()
+            except Exception:
+                pass
+        
+        if "sync_error" not in existing_cols:
+            try:
+                await conn.execute("ALTER TABLE runs ADD COLUMN sync_error TEXT")
+                await conn.commit()
+            except Exception:
+                pass
+        
         await conn.executescript("""
             
             CREATE TABLE IF NOT EXISTS observation_samples (
@@ -174,8 +192,8 @@ class Database:
         
         await conn.execute(
             """
-            INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run.run_id,
@@ -185,7 +203,9 @@ class Database:
                 run.completed_at.isoformat() if run.completed_at else None,
                 json.dumps(run.input_meta),
                 run.counts.model_dump_json(),
-                json.dumps(run.failure_reasons)
+                json.dumps(run.failure_reasons),
+                run.sync_status.value,
+                run.sync_error
             )
         )
         await conn.commit()
@@ -201,7 +221,9 @@ class Database:
                 status = ?,
                 completed_at = ?,
                 counts = ?,
-                failure_reasons = ?
+                failure_reasons = ?,
+                sync_status = ?,
+                sync_error = ?
             WHERE run_id = ?
             """,
             (
@@ -209,6 +231,8 @@ class Database:
                 run.completed_at.isoformat() if run.completed_at else None,
                 run.counts.model_dump_json(),
                 json.dumps(run.failure_reasons),
+                run.sync_status.value,
+                run.sync_error,
                 run.run_id
             )
         )
@@ -228,6 +252,9 @@ class Database:
         if not row:
             return None
         
+        sync_status_val = row["sync_status"] if "sync_status" in row.keys() else "not_applicable"
+        sync_error_val = row["sync_error"] if "sync_error" in row.keys() else None
+        
         return RunLog(
             run_id=row["run_id"],
             tenant_id=row["tenant_id"],
@@ -236,7 +263,9 @@ class Database:
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             input_meta=json.loads(row["input_meta"]),
             counts=RunCounts.model_validate_json(row["counts"]),
-            failure_reasons=json.loads(row["failure_reasons"])
+            failure_reasons=json.loads(row["failure_reasons"]),
+            sync_status=SyncStatus(sync_status_val),
+            sync_error=sync_error_val
         )
     
     async def get_all_runs(self) -> list[RunLog]:
@@ -248,8 +277,11 @@ class Database:
         )
         rows = await cursor.fetchall()
         
-        return [
-            RunLog(
+        runs = []
+        for row in rows:
+            sync_status_val = row["sync_status"] if "sync_status" in row.keys() else "not_applicable"
+            sync_error_val = row["sync_error"] if "sync_error" in row.keys() else None
+            runs.append(RunLog(
                 run_id=row["run_id"],
                 tenant_id=row["tenant_id"],
                 status=RunStatus(row["status"]),
@@ -257,10 +289,11 @@ class Database:
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
                 input_meta=json.loads(row["input_meta"]),
                 counts=RunCounts.model_validate_json(row["counts"]),
-                failure_reasons=json.loads(row["failure_reasons"])
-            )
-            for row in rows
-        ]
+                failure_reasons=json.loads(row["failure_reasons"]),
+                sync_status=SyncStatus(sync_status_val),
+                sync_error=sync_error_val
+            ))
+        return runs
     
     async def create_asset(self, asset: Asset) -> Asset:
         """Create a new asset"""

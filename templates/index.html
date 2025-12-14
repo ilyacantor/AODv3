@@ -87,6 +87,11 @@
         .run-status.completed_no_assets { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); }
         .run-status.failed, .run-status.upstream_error, .run-status.invalid_snapshot { background: rgba(239, 68, 68, 0.2); color: var(--red-400); }
         .run-status.running, .run-status.pending { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .sync-status { padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; margin-left: 0.5rem; }
+        .sync-status.synced { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
+        .sync-status.pending { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .sync-status.failed { background: rgba(239, 68, 68, 0.2); color: var(--red-400); }
+        .sync-status.not_applicable { display: none; }
         .download-btn { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
         .table-container { overflow-x: auto; }
         .empty-state { text-align: center; padding: 3rem; color: var(--slate-500); }
@@ -1028,7 +1033,12 @@
                 const r = await fetch('/api/runs'); const runs = await r.json();
                 if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
                 else {
-                    list.innerHTML = runs.map(run => `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}"><div class="run-info"><span class="run-id">${run.run_id}</span><span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span></div><div><span style="color: var(--slate-400); font-size: 0.875rem;">${run.counts.assets_admitted} assets, ${run.counts.findings_generated} findings</span></div></div>`).join('');
+                    list.innerHTML = runs.map(run => {
+                        const syncBadge = run.sync_status && run.sync_status !== 'not_applicable' 
+                            ? `<span class="sync-status ${run.sync_status}" title="${run.sync_error || ''}">${run.sync_status === 'synced' ? 'SYNCED' : run.sync_status === 'failed' ? 'SYNC FAILED' : 'SYNCING'}</span>` 
+                            : '';
+                        return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}"><div class="run-info"><span class="run-id">${run.run_id}</span><span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}</div><div><span style="color: var(--slate-400); font-size: 0.875rem;">${run.counts.assets_admitted} assets, ${run.counts.findings_generated} findings</span></div></div>`;
+                    }).join('');
                     document.querySelectorAll('.run-item').forEach(item => item.addEventListener('click', () => selectRun(item.dataset.runId)));
                 }
             } catch { list.innerHTML = '<div class="error-message">Failed to load runs</div>'; }

@@ -50,6 +50,10 @@ tests/
 4. **Evidence-only decisions** - Admission based only on plane evidence
 5. **Assets vs Artifacts** - Dashboards/reports/calculators are artifacts, never assets
 
+## Prompt shortcuts
+
+1. **DCCE or dcce** - don't change code, explain
+
 ## Tech Stack
 
 - **Python 3.11**

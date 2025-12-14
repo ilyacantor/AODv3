@@ -104,7 +104,7 @@ async def execute_pipeline(
         run_log.counts.candidates_out = len(candidates)
         
         for i, candidate in enumerate(candidates[:MAX_OBSERVATION_SAMPLES]):
-            sample_id = str(deterministic_uuid(snapshot_id, "obs_sample", candidate.entity_id))
+            sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.entity_id))
             raw_data = {
                 "entity_id": candidate.entity_id,
                 "canonical_name": candidate.canonical_name,
@@ -156,7 +156,7 @@ async def execute_pipeline(
                         else:
                             candidate_names.append(str(rec))
                     
-                    match_id = str(deterministic_uuid(snapshot_id, "ambiguous", c.entity.entity_id, plane))
+                    match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.entity_id, plane))
                     await db.create_ambiguous_match(
                         match_id=match_id,
                         run_id=run_id,
@@ -182,7 +182,7 @@ async def execute_pipeline(
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
                 rejected_count += 1
-                rejection_id = str(deterministic_uuid(snapshot_id, "rejection", candidate.entity_id))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 await db.create_rejection(
                     rejection_id=rejection_id,
                     run_id=run_id,
@@ -201,7 +201,7 @@ async def execute_pipeline(
                 assets.append(admission_result.asset)
             else:
                 rejected_count += 1
-                rejection_id = str(deterministic_uuid(snapshot_id, "rejection", candidate.entity_id))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 await db.create_rejection(
                     rejection_id=rejection_id,
                     run_id=run_id,

@@ -331,7 +331,7 @@ def apply_admission_criteria(
     activity_evidence = extract_activity_timestamps(correlation, entity, observations)
     
     asset = Asset(
-        asset_id=deterministic_uuid(snapshot_id, "asset", entity.original_name),
+        asset_id=deterministic_uuid(snapshot_id, run_id, "asset", entity.original_name),
         tenant_id=tenant_id,
         run_id=run_id,
         name=entity.original_name,

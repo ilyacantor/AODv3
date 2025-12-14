@@ -103,7 +103,7 @@ def handle_artifacts(
         
         if is_art and artifact_type:
             artifact = Artifact(
-                artifact_id=deterministic_uuid(snapshot_id, "artifact", entity.original_name),
+                artifact_id=deterministic_uuid(snapshot_id, run_id, "artifact", entity.original_name),
                 tenant_id=tenant_id,
                 run_id=run_id,
                 parent_asset_id=None,

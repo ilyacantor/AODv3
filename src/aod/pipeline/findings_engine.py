@@ -36,7 +36,7 @@ def generate_identity_gap_finding(
         admitted_via.append("Finance")
     
     return Finding(
-        finding_id=deterministic_uuid(snapshot_id, asset.name, "identity_gap"),
+        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "identity_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -71,7 +71,7 @@ def generate_cmdb_gap_finding(
         admitted_via.append("Finance")
     
     return Finding(
-        finding_id=deterministic_uuid(snapshot_id, asset.name, "cmdb_gap"),
+        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "cmdb_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -111,7 +111,7 @@ def generate_governance_gap_finding(
         return None
     
     return Finding(
-        finding_id=deterministic_uuid(snapshot_id, asset.name, "governance_gap"),
+        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "governance_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -148,7 +148,7 @@ def generate_duplication_risk_finding(
         return None
     
     return Finding(
-        finding_id=deterministic_uuid(snapshot_id, asset.name, "duplication_risk"),
+        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "duplication_risk"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -189,7 +189,7 @@ def generate_data_conflict_finding(
         return None
     
     return Finding(
-        finding_id=deterministic_uuid(snapshot_id, asset.name, "data_conflict"),
+        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "data_conflict"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
         run_id=run_id,
@@ -227,7 +227,7 @@ def generate_finance_gap_findings(
             product_name = getattr(record, 'product', None) or getattr(record, 'vendor_name', None) or record_id
             
             findings.append(Finding(
-                finding_id=deterministic_uuid(snapshot_id, record_id, "finance_gap"),
+                finding_id=deterministic_uuid(snapshot_id, run_id, record_id, "finance_gap"),
                 asset_id=None,
                 tenant_id=tenant_id,
                 run_id=run_id,

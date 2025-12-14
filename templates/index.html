@@ -555,6 +555,10 @@
         
         function renderBreadcrumb() {
             const bc = document.getElementById('drillBreadcrumb');
+            if (!drillState.path || drillState.path.length === 0) {
+                bc.innerHTML = '<span class="breadcrumb-item active">Drill Down</span>';
+                return;
+            }
             bc.innerHTML = drillState.path.map((p, i) => 
                 `<span class="breadcrumb-item${i === drillState.path.length - 1 ? ' active' : ''}" data-level="${i}">${p.label}</span>${i < drillState.path.length - 1 ? '<span class="breadcrumb-sep">›</span>' : ''}`
             ).join('');
@@ -583,8 +587,17 @@
             const depth = drillState.path.length;
             const type = drillState.type;
             
+            if (!type) {
+                content.innerHTML = '<div class="empty-state">No data selected. Please select a run first.</div>';
+                return;
+            }
+            
             if (type === 'assets') {
                 const assets = catalogData?.assets || [];
+                if (assets.length === 0) {
+                    content.innerHTML = '<div class="empty-state">No assets to display. Run a discovery first.</div>';
+                    return;
+                }
                 if (depth === 1) {
                     const byType = groupBy(assets, 'asset_type');
                     content.innerHTML = `<div class="drill-grid">${Object.entries(byType).map(([k, v]) => 
@@ -601,6 +614,10 @@
                 }
             } else if (type === 'findings') {
                 const findings = findingsData?.findings || [];
+                if (findings.length === 0) {
+                    content.innerHTML = '<div class="empty-state">No findings to display. Run a discovery first.</div>';
+                    return;
+                }
                 if (depth === 1) {
                     const bySev = groupBy(findings, 'severity');
                     content.innerHTML = `<div class="drill-grid">${Object.entries(bySev).map(([k, v]) => 
@@ -617,6 +634,10 @@
                 }
             } else if (type === 'artifacts') {
                 const artifacts = artifactsData?.artifacts || [];
+                if (artifacts.length === 0) {
+                    content.innerHTML = '<div class="empty-state">No artifacts to display. Run a discovery first.</div>';
+                    return;
+                }
                 if (depth === 1) {
                     const byType = groupBy(artifacts, 'artifact_type');
                     content.innerHTML = `<div class="drill-grid">${Object.entries(byType).map(([k, v]) => 

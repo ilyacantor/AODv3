@@ -218,8 +218,87 @@ async def check_aod(result: NukeCheckResult) -> NukeCheckResult:
             if not compare_runs(run1_result, run2_result, result):
                 return result
             result.add_pass("Determinism check passed: both runs produced identical outputs")
+            
+            if not await verify_both_runs_persisted(client, base_url, run1_result, run2_result, result):
+                return result
+            result.add_pass("Run history check passed: both runs' data retained (no overwrites)")
     
     return result
+
+
+async def verify_both_runs_persisted(
+    client: httpx.AsyncClient,
+    base_url: str,
+    run1: dict,
+    run2: dict,
+    result: NukeCheckResult
+) -> bool:
+    """Verify both runs have distinct data in database (no overwrites)"""
+    run1_id = run1.get("run_id")
+    run2_id = run2.get("run_id")
+    
+    if not run1_id or not run2_id:
+        return True
+    
+    if run1_id == run2_id:
+        result.add_fail(
+            "Run IDs are identical - runs should have unique IDs",
+            f"Both runs returned: {run1_id}",
+            "Check that run_id is generated at API boundary"
+        )
+        return False
+    
+    try:
+        run1_resp = await client.get(f"{base_url}/api/runs/{run1_id}")
+        run2_resp = await client.get(f"{base_url}/api/runs/{run2_id}")
+        
+        if run1_resp.status_code != 200:
+            result.add_fail(
+                "Run 1 not found in database after Run 2 completed",
+                f"GET /api/runs/{run1_id} returned {run1_resp.status_code}",
+                "Run data may be overwritten - check INSERT statements"
+            )
+            return False
+        
+        if run2_resp.status_code != 200:
+            result.add_fail(
+                "Run 2 not found in database",
+                f"GET /api/runs/{run2_id} returned {run2_resp.status_code}",
+                "Check database persistence"
+            )
+            return False
+        
+        catalog1 = await client.get(f"{base_url}/api/catalog?run_id={run1_id}")
+        catalog2 = await client.get(f"{base_url}/api/catalog?run_id={run2_id}")
+        
+        if catalog1.status_code != 200 or catalog2.status_code != 200:
+            result.add_fail(
+                "Could not fetch catalogs for both runs",
+                f"Run 1 catalog: {catalog1.status_code}, Run 2 catalog: {catalog2.status_code}",
+                "Check asset persistence"
+            )
+            return False
+        
+        assets1 = catalog1.json().get("assets", [])
+        assets2 = catalog2.json().get("assets", [])
+        
+        if len(assets1) != len(assets2):
+            result.add_fail(
+                "Asset counts differ between runs - possible overwrite",
+                f"Run 1: {len(assets1)} assets, Run 2: {len(assets2)} assets",
+                "Deterministic IDs should be run-scoped"
+            )
+            return False
+        
+        return True
+        
+    except Exception as e:
+        result.add_fail(
+            "Error verifying run persistence",
+            str(e),
+            "Check database connectivity"
+        )
+        return False
 
 
 async def run_discovery(
@@ -288,6 +367,7 @@ async def run_discovery(
             assets = catalog_resp.json().get("assets", [])
         
         return {
+            "run_id": run_id,
             "status": status,
             "counts": counts,
             "assets": sorted([a.get("name", "") for a in assets]),

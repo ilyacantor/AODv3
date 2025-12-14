@@ -1,0 +1,102 @@
+Paste this to the **AOD Replit agent**. It implements the **snapshot dropdown** the right way (AOD proxies Farm list; UI consumes AOD; no CORS pain; no manual URL field).
+
+---
+
+## Replit Prompt — Implement Snapshot Dropdown (AOD proxies Farm)
+
+### Goal
+
+Replace the free-text Snapshot ID input with a **real dropdown** populated from Farm snapshots. Farm URL comes from `FARM_URL` env var only.
+
+### Backend (AOD) — add proxy endpoint
+
+1. Add endpoint:
+
+`GET /api/farm/snapshots?tenant_id=<tenant>&limit=20`
+
+Behavior:
+
+* Read `FARM_URL` from env (required; if missing return 500 with clear message)
+* Call: `GET {FARM_URL}/api/snapshots?tenant_id=...&limit=...`
+* Validate upstream response:
+
+  * status 2xx
+  * content-type contains `application/json`
+  * body non-empty JSON
+* Return JSON exactly as upstream (or normalize to):
+
+```json
+{
+  "items": [
+    {
+      "snapshot_id": "snap_...",
+      "tenant_id": "t1",
+      "created_at": "ISO8601",
+      "schema_version": "farm.v1",
+      "enterprise_profile": "modern_saas",
+      "realism_profile": "typical",
+      "scale": "enterprise"
+    }
+  ],
+  "total": 5
+}
+```
+
+Error handling:
+
+* If upstream fails (404/500/html/empty) return:
+
+```json
+{
+  "status": "UPSTREAM_ERROR",
+  "error": { "code": "FARM_LIST_FAILED", "message": "...", "details": { "http_status": 502, "preview": "<first 200 chars>" } }
+}
+```
+
+### Frontend (AOD) — dropdown UX
+
+In the “Fetch from Farm” card:
+
+1. Inputs:
+
+* Tenant ID (required)
+* Button: **Load Snapshots**
+* Snapshot dropdown (disabled until loaded)
+
+2. On “Load Snapshots”:
+
+* GET `/api/farm/snapshots?tenant_id=<tenant>&limit=20`
+* If response has `status == UPSTREAM_ERROR`, show inline error banner and keep dropdown disabled.
+
+3. Dropdown content:
+
+* Value: `snapshot_id`
+* Label format (1 line, compact):
+
+  * `{snapshot_id} — {enterprise_profile}/{realism_profile} — {created_at}`
+    If those fields aren’t present, degrade gracefully:
+  * `{snapshot_id} — {created_at}`
+
+4. Default selection:
+
+* Auto-select the **most recent** snapshot (max created_at) after load.
+
+5. Keep manual Snapshot ID only as “Advanced ▸” collapsible override:
+
+* If manual value is non-empty, it overrides dropdown selection when running.
+
+### Run button wiring
+
+When user clicks “Fetch & Run Discovery”:
+
+* Use selected snapshot_id (or advanced override)
+* POST `/api/runs/from-farm` with `{ tenant_id, snapshot_id }`
+
+### Acceptance tests
+
+* Mock Farm list returning 5 seeded snapshots → dropdown shows 5 options and auto-selects most recent.
+* Farm down / returns HTML → UI shows “Farm unreachable” and no dropdown options.
+
+---
+
+If you want it even tighter, tell the agent: **remove the Snapshot ID text box completely** and rely purely on dropdown + optional advanced override.

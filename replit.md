@@ -152,24 +152,46 @@ The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline
 
 ## Derived Classifications
 
-Shadow and Zombie are computed as **derived views** after the main pipeline (not stored flags).
+Shadow and Zombie are computed as **derived views** after the main pipeline using **timestamped activity signals** (not stored flags).
 
-**Shadow Asset** = admitted asset with:
+### Activity Timestamps
+
+Activity is determined by timestamps from various planes, stored in `asset.activity_evidence`:
+- `idp_last_login_at` - Last SSO login
+- `discovery_observed_at` - When discovered
+- `cloud_observed_at` - Cloud resource observation
+- `endpoint_last_seen_at` - Endpoint agent observation
+- `network_last_seen_at` - DNS/proxy activity
+- `finance_last_transaction_at` - Last financial transaction
+- `latest_activity_at` - Max of all above (computed)
+
+### Shadow Asset
 - Finance evidence OR cloud presence OR discovery observations
 - AND no IdP match (no SSO / SCIM / service principal)
 - AND no CMDB match
+- AND has **recent activity** within window (default 30 days)
 
-*Interpretation: "We know this software is used, but it's not being managed through official channels."*
+*Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
 
-**Zombie Asset** = admitted asset with:
-- CMDB or IdP presence
-- AND no discovery observations or activity evidence
+### Zombie Asset
+- CMDB or IdP presence (officially managed)
+- AND (**no activity timestamps** OR activity **outside window**)
 
 *Interpretation: "This is in our official systems but we have no evidence anyone is actually using it."*
 
-**API:** `GET /api/runs/{run_id}/derived` returns counts and detailed lists with explanations.
+### Indeterminate
+- Shadow candidates with no activity timestamps → indeterminate (can't prove recent use)
+- Zombie classification treats missing timestamps as zombie (can't prove usage)
+
+### API
+`GET /api/runs/{run_id}/derived?activity_window_days=30`
+
+Returns counts, detailed lists, and **distribution diagnostic**:
+- `total_assets`, `with_idp_match`, `with_cmdb_match`
+- `with_activity_last_30_days`, `with_any_activity_timestamp`, `indeterminate_count`
 
 **Implementation:** `src/aod/pipeline/derived_classifications.py`
+**Tests:** `tests/test_shadow_zombie_timestamps.py` (9 tests)
 
 ## Recent Changes
 

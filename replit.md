@@ -199,6 +199,12 @@ Returns counts, detailed lists, and **distribution diagnostic**:
 
 ## Recent Changes
 
+- Added Nuke Prevention Check:
+  - `python scripts/nuke_check.py` - fast sanity check (~60 seconds)
+  - Verifies FARM_URL, server health, tenant/snapshot access, discovery run, status codes
+  - Determinism check: runs same snapshot twice, compares outputs
+  - Plain-English PASS/FAIL output with helpful failure diagnostics
+  - See README_NUKE_CHECK.md for documentation
 - Added Shadow and Zombie derived classifications:
   - Computed on-read from asset evidence (not stored flags)
   - New `/api/runs/{run_id}/derived` endpoint

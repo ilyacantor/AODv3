@@ -2,6 +2,7 @@ import uuid
 import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+from src.aod.config import PREVIEW_MODE
 from src.aod.db import execute, fetch, fetchrow
 from src.aod.farm_client import farm_client, normalize_ground_truth
 from src.aod.lifecycle import (
@@ -13,6 +14,8 @@ from src.aod.breaches import assemble_observed_breaches
 
 async def reset_all_data() -> Dict[str, Any]:
     """Reset all assets and findings but preserve catalog run history."""
+    if PREVIEW_MODE:
+        return {"success": True, "message": "Preview mode: no data to reset (database is disabled)."}
     await execute("DELETE FROM observed_breaches")
     await execute("DELETE FROM findings")
     await execute("DELETE FROM assets")
@@ -20,6 +23,8 @@ async def reset_all_data() -> Dict[str, Any]:
 
 
 async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
+    if PREVIEW_MODE:
+        return "preview-run"
     run_id = str(uuid.uuid4())
     await execute("""
         INSERT INTO ingest_runs (id, tenant_id, archetype, scale, status, started_at)
@@ -29,9 +34,11 @@ async def create_ingest_run(tenant_id: str, archetype: str, scale: str) -> str:
 
 
 async def update_ingest_run(run_id: str, status: str, stats: Dict[str, Any], message: str = ""):
+    if PREVIEW_MODE:
+        return None
     await execute("""
-        UPDATE ingest_runs 
-        SET status = $1, finished_at = NOW(), 
+        UPDATE ingest_runs
+        SET status = $1, finished_at = NOW(),
             total_assets = $2, shadow_it_count = $3, parked_count = $4,
             cataloged_count = $5, company_name = $6,
             findings_shadow_it = $7, findings_governance = $8, 
@@ -276,6 +283,12 @@ async def save_observed_breaches(run_id: str, asset_id: str, breaches: List[Dict
 
 
 async def ingest_full_pull(archetype: str, scale: str) -> Dict[str, Any]:
+    if PREVIEW_MODE:
+        return {
+            "success": True,
+            "preview": True,
+            "message": "Preview mode: ingestion is skipped because no database is configured.",
+        }
     try:
         snapshot = await farm_client.create_enterprise(archetype, scale)
     except Exception as e:

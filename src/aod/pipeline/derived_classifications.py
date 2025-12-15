@@ -14,6 +14,29 @@ Zombie Asset = admitted asset with:
   - CMDB or IdP presence
   - AND no discovery observations or activity evidence (no cloud, no finance)
   - OR has no recent activity (outside activity_window_days)
+
+=== IDENTITY vs EVIDENCE CONTRACT ===
+
+IDENTITY (required, canonical):
+  - vendor_key: Internal canonical vendor ID. Stable, source-agnostic, deterministic.
+    Normalization: lowercase, alphanumeric only, no TLD.
+    Example: "yammer", "hipchat", "pivotaltracker"
+    
+    This is the ONLY field used for reconciliation and matching.
+    Reject any future logic that keys on domain/name IRL.
+
+EVIDENCE (optional, variable):
+  - domain_key: Legacy *com format for backward compatibility (e.g., "yammercom")
+    Will be deprecated once Farm migrates to vendor_key.
+  - domains[]: Actual domain evidence if known (e.g., ["yammer.com"])
+  - display_name: Human-readable name (e.g., "Yammer", "PIVOTAL TRACKER")
+    
+    These fields are for display/audit only, never for identity matching.
+
+RECONCILIATION CONTRACT:
+  - AOD MUST always emit vendor_key for every zombie/shadow asset
+  - Farm MUST compare on vendor_key only
+  - domain_key is temporary fallback for backward compat (remove when Farm migrates)
 """
 
 from dataclasses import dataclass, field

@@ -57,6 +57,24 @@ Shadow and Zombie classifications are computed post-pipeline as views, not store
 - **Shadow Asset** - Has activity evidence but no IdP or CMDB match
 - **Zombie Asset** - Has IdP/CMDB presence but no recent activity (30-day window)
 
+### Identity vs Evidence Contract
+
+**IDENTITY (required, canonical):**
+- `vendor_key`: Internal canonical vendor ID. Stable, source-agnostic, deterministic.
+  - Normalization: lowercase, alphanumeric only, no TLD
+  - Example: `yammer`, `hipchat`, `pivotaltracker`
+  - This is the ONLY field used for reconciliation and matching
+
+**EVIDENCE (optional, variable):**
+- `domain_key`: Legacy `*com` format for backward compatibility (e.g., `yammercom`)
+- `domains[]`: Actual domain evidence if known (e.g., `["yammer.com"]`)
+- `display_name`: Human-readable name (e.g., `Yammer`, `PIVOTAL TRACKER`)
+
+**RECONCILIATION CONTRACT:**
+- AOD MUST always emit `vendor_key` for every zombie/shadow asset
+- Farm MUST compare on `vendor_key` only
+- `domain_key` is temporary fallback for backward compat (to be deprecated)
+
 ### API Structure
 
 FastAPI application with these key endpoints:

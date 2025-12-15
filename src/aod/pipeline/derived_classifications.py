@@ -68,7 +68,7 @@ class DerivedClassificationSummary:
     distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
 
 
-def classify_shadow(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
+def classify_shadow(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
     """
     Determine if an asset is a Shadow Asset.
     
@@ -84,7 +84,7 @@ def classify_shadow(asset: Asset, activity_window_days: int = 30) -> Classificat
     
     Args:
         asset: The asset to classify
-        activity_window_days: Number of days to consider for recent activity (default 30)
+        activity_window_days: Number of days to consider for recent activity (default 90)
     """
     has_idp = asset.lens_status.idp == LensStatus.MATCHED
     has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
@@ -158,7 +158,7 @@ def classify_shadow(asset: Asset, activity_window_days: int = 30) -> Classificat
     )
 
 
-def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bool, str]:
+def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bool, str]:
     """
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
@@ -167,7 +167,7 @@ def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bo
     
     Args:
         asset: The asset to check
-        window_days: Activity window in days (default 30)
+        window_days: Activity window in days (default 90)
         
     Returns:
         Tuple of (is_zombie, is_indeterminate, reason)
@@ -199,7 +199,7 @@ def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bo
     return False, False, f"Not zombie: Recent activity at {latest.isoformat()}"
 
 
-def classify_zombie(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
+def classify_zombie(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
     """
     Determine if an asset is a Zombie Asset.
     
@@ -215,7 +215,7 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     
     Args:
         asset: The asset to classify
-        activity_window_days: Number of days to consider for recent activity (default 30)
+        activity_window_days: Number of days to consider for recent activity (default 90)
     """
     has_idp = asset.lens_status.idp == LensStatus.MATCHED
     has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
@@ -286,7 +286,7 @@ def classify_zombie(asset: Asset, activity_window_days: int = 30) -> Classificat
     )
 
 
-def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 30) -> DerivedClassificationSummary:
+def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 90) -> DerivedClassificationSummary:
     """
     Compute derived classifications for all assets.
     
@@ -295,7 +295,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     
     Args:
         assets: List of assets to classify
-        activity_window_days: Number of days to consider for recent activity (default 30)
+        activity_window_days: Number of days to consider for recent activity (default 90)
     """
     shadow_assets = []
     zombie_assets = []

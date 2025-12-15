@@ -40,7 +40,7 @@ async def reconcile_to_farm(
     if not base_url:
         return False, "No Farm URL configured"
     
-    derived = compute_derived_classifications(assets, activity_window_days=30)
+    derived = compute_derived_classifications(assets, activity_window_days=90)
     
     shadow_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.shadow_assets[:10]]
     zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]

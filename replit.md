@@ -55,7 +55,7 @@ Evidence comes from 7 planes that represent different enterprise data sources:
 Shadow and Zombie classifications are computed post-pipeline as views, not stored flags:
 
 - **Shadow Asset** - Has activity evidence but no IdP or CMDB match
-- **Zombie Asset** - Has IdP/CMDB presence but no recent activity (30-day window)
+- **Zombie Asset** - Has IdP/CMDB presence but no recent activity (90-day window)
 
 ### API Structure
 

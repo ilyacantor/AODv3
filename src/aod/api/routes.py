@@ -556,7 +556,7 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/runs/{run_id}/derived")
-async def get_derived_classifications(run_id: str, activity_window_days: int = 30):
+async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
     """
     Get derived classifications (Shadow/Zombie) for a run.
     
@@ -569,7 +569,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 3
     
     Args:
         run_id: The run to get classifications for
-        activity_window_days: Number of days to consider for recent activity (default 30)
+        activity_window_days: Number of days to consider for recent activity (default 90)
     """
     db = await get_db()
     

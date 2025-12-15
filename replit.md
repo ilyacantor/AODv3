@@ -57,6 +57,10 @@ Shadow and Zombie classifications are computed post-pipeline as views, not store
 - **Shadow Asset** - Has activity evidence but no IdP or CMDB match
 - **Zombie Asset** - Exists in any system of record (IdP, CMDB, Cloud, Finance) but no recent activity
 
+### Zombie v0 (Debug Lane)
+
+Zombie v0 is isolated for debugging; does not affect main pipeline.
+
 #### Zombie Recognition Contract v1.0
 
 Zombie classification follows a strict contract:

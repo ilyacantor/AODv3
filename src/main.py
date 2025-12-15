@@ -8,6 +8,7 @@ from pathlib import Path
 
 from aod.api.routes import router
 from aod.db.database import get_db
+from zombie_v0.routes import router as zombie_v0_router
 
 app = FastAPI(
     title="AOD Fresh",
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(zombie_v0_router)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"

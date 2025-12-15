@@ -281,6 +281,7 @@
                 <button class="tab active" data-tab="summary">Summary</button>
                 <button class="tab" data-tab="assets">Assets</button>
                 <button class="tab" data-tab="findings">Findings</button>
+                <button class="tab" data-tab="zombiev0">Zombie v0</button>
             </div>
             <div id="summaryTab" class="tab-content">
                 <div id="runDescriptors" class="run-descriptors">
@@ -319,6 +320,31 @@
             <div id="findingsTab" class="tab-content hidden">
                 <div id="findingsLoading" class="loading hidden"><div class="spinner"></div>Loading findings...</div>
                 <div class="findings-list" id="findingsList"></div>
+            </div>
+            <div id="zombiev0Tab" class="tab-content hidden">
+                <div class="form-group">
+                    <label class="form-label">Window Days (required)</label>
+                    <input type="number" class="form-input" id="zombieV0WindowDays" placeholder="90" min="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Run ID</label>
+                    <input type="text" class="form-input" id="zombieV0RunId" placeholder="Use current run or enter ID">
+                </div>
+                <button class="btn btn-primary" id="runZombieV0">Run Zombie v0</button>
+                <div id="zombieV0Loading" class="loading hidden"><div class="spinner"></div>Analyzing...</div>
+                <div id="zombieV0Results" class="hidden" style="margin-top: 1rem;">
+                    <div class="stats-grid" style="margin-bottom: 1rem;">
+                        <div class="stat-card"><div class="stat-value" id="zombieV0Total">-</div><div class="stat-label">Total Assets</div></div>
+                        <div class="stat-card"><div class="stat-value stat-zombie" id="zombieV0Count">-</div><div class="stat-label">Zombies</div></div>
+                    </div>
+                    <div class="table-container">
+                        <table class="assets-table">
+                            <thead><tr><th>Asset ID</th><th>Exists in SOR</th><th>Activity in Window</th><th>Zombie</th><th>Last Activity</th><th>Reason</th></tr></thead>
+                            <tbody id="zombieV0Body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="zombieV0Error" class="error-message hidden"></div>
             </div>
         </div>
     </main>
@@ -1283,6 +1309,69 @@
         
         document.getElementById('drillBackBtn').addEventListener('click', () => {
             popDrill();
+        });
+        
+        document.getElementById('runZombieV0').addEventListener('click', async () => {
+            const windowDaysInput = document.getElementById('zombieV0WindowDays');
+            const runIdInput = document.getElementById('zombieV0RunId');
+            const loading = document.getElementById('zombieV0Loading');
+            const results = document.getElementById('zombieV0Results');
+            const errorDiv = document.getElementById('zombieV0Error');
+            const tbody = document.getElementById('zombieV0Body');
+            
+            errorDiv.classList.add('hidden');
+            results.classList.add('hidden');
+            
+            const windowDays = parseInt(windowDaysInput.value, 10);
+            if (!windowDays || windowDays <= 0) {
+                errorDiv.textContent = 'Window Days is required and must be a positive number';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            const runId = runIdInput.value.trim() || currentRunId;
+            if (!runId) {
+                errorDiv.textContent = 'No run selected. Please select a run or enter a Run ID.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            loading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`/v0/zombies/all?run_id=${encodeURIComponent(runId)}&window_days=${windowDays}`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to fetch zombie data');
+                }
+                
+                document.getElementById('zombieV0Total').textContent = data.total_assets;
+                document.getElementById('zombieV0Count').textContent = data.zombie_count;
+                
+                tbody.innerHTML = '';
+                for (const item of data.zombies) {
+                    const row = document.createElement('tr');
+                    const checkmark = '<span style="color: var(--green-400);">✓</span>';
+                    const xmark = '<span style="color: var(--red-400);">✗</span>';
+                    row.innerHTML = `
+                        <td>${escapeHtml(item.asset_id)}</td>
+                        <td>${item.exists_in_sor ? checkmark : xmark}</td>
+                        <td>${item.activity_in_window ? checkmark : xmark}</td>
+                        <td>${item.zombie ? checkmark : xmark}</td>
+                        <td>${item.last_activity_observed_at ? new Date(item.last_activity_observed_at).toLocaleString() : 'N/A'}</td>
+                        <td>${escapeHtml(item.reason)}</td>
+                    `;
+                    tbody.appendChild(row);
+                }
+                
+                results.classList.remove('hidden');
+            } catch (e) {
+                errorDiv.textContent = e.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+            }
         });
         
         checkHealth(); 

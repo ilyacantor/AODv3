@@ -1,0 +1,174 @@
+Cool — next we mirror the exact same **agent-proof, read-only sanity harness** on **AOD**.
+
+Paste this to **Replit Agent 3 MAX** inside the **AOD repo**.
+
+---
+
+## Replit Agent Prompt: AOD Sanity Test Harness (Read-Only, Agent-Proof)
+
+**ROLE:** Implement a *read-only* external sanity test harness for the **AOD** repo.
+**GOAL:** A single command I can run anytime to detect “non-IRL modality,” hidden defaults, fake timestamps, dual stores, and anything that would let AOD appear to work while violating the deterministic zombie spec.
+
+### Non-Negotiables
+
+1. **DO NOT modify any existing AOD runtime code** (no changes to API routes, business logic, pipeline logic, DB models, migrations, training center logic).
+
+   * You may only add a new script + minimal runner wiring (Makefile target or a single package script).
+2. **The test must be read-only.**
+
+   * No DB writes. No migrations. No data cleanup. No “auto-fix.” No changing env vars.
+3. **Hard to game**
+
+   * Inspect **filesystem + database directly** where possible.
+   * If AOD uses HTTP endpoints, you may call them *only as secondary checks*.
+4. **Binary rules only.** No anomaly scores, no percentages, no “close enough.”
+5. **Fast:** target runtime < 3 seconds.
+6. **Fail loud:** non-zero exit code on violations.
+
+---
+
+## What to Build
+
+### A) Create script
+
+* Path: `tools/sanity/aod_sanity_check.py`
+* Output format:
+
+  * Header: timestamp + repo root
+  * Each check: `CHECK <name>: PASS|FAIL`
+  * On fail: exact reason and paths/counts
+  * Final: `OVERALL: PASS|FAIL`
+* Exit codes:
+
+  * `0` = PASS
+  * `2` = FAIL (guardrail violated)
+  * `3` = ERROR (script couldn’t run due to missing resources)
+
+### B) Add a single command I can run
+
+Pick one and implement:
+
+* **Option 1 (preferred):** `make sanity`
+* **Option 2:** `python tools/sanity/aod_sanity_check.py`
+
+If you add a Makefile target, it must just call the python script.
+
+---
+
+## Required Checks (Phase 0)
+
+### 1) Storage modality audit (dual-store detection)
+
+Detect if AOD is persisting the same “assets/snapshots” in multiple places, e.g.:
+
+* SQLite file(s)
+* Postgres/Supabase (via env var)
+* JSON dump folders
+* Cache layers that masquerade as truth
+
+**Rules**
+
+* If more than one persistent store is present AND non-empty for the same logical data class → **FAIL**
+* If a legacy directory exists with data (json/csv/parquet) that looks like assets/snapshots → **FAIL**
+* If store is present but empty, print as INFO.
+
+Implementation guidance:
+
+* Search repo for typical folders: `data/`, `snapshots/`, `exports/`, `tmp/`, `.cache/`
+* Identify DB file candidates (`*.db`, `*.sqlite`, `*.sqlite3`)
+* Read-only stat checks + file counts
+
+### 2) “Deterministic-only” policy scan (static)
+
+We want to catch drift back into:
+
+* anomaly scoring
+* ML heuristics
+* training center knobs affecting zombie classification
+* “contamination”, “threshold”, “score”, “probability”
+
+**Rule**
+
+* This is Phase 0: emit **WARNINGS** (not FAIL yet), but print the exact file paths + line numbers.
+
+Implementation:
+
+* Grep-like scan (python stdlib) for keywords:
+
+  * `anomaly`, `contamination`, `isolationforest`, `threshold`, `score`, `probab`, `confidence`, `heuristic`, `ml`
+* Print findings grouped by file.
+
+### 3) Zombie classification contract presence check (static)
+
+We need to ensure AOD has an explicit, deterministic rule path for zombies (or at least no “placeholder ambiguity”).
+
+**Rule**
+
+* If there is no clear reference to `observed_at` / `last_seen` / “activity evidence” fields anywhere in code/config → **FAIL**
+  (Because then “zombies” can only be guessed.)
+
+Implementation:
+
+* Search for required evidence keys:
+
+  * `observed_at`, `last_seen`, `last_activity`, `activity`, `evidence`
+* If none found, fail with message: “No activity evidence fields found; zombie logic cannot be deterministic.”
+
+### 4) Timestamp integrity guardrail (behavioral, read-only)
+
+If AOD has a local DB file, inspect it directly:
+
+* List tables
+* Print columns for asset/activity/evidence tables (best effort)
+* Flag if any timestamp columns are being defaulted via DB default to `CURRENT_TIMESTAMP` (warn for now)
+
+If AOD does not have a local DB, inspect environment:
+
+* Print whether `DATABASE_URL` / `SUPABASE_*` / `REPLIT_DB_URL` exist (just presence, no secrets)
+
+**Rule**
+
+* If AOD is injecting timestamps on ingest when upstream doesn’t provide them, we must detect it later — so for Phase 0: print warnings if defaults exist.
+
+### 5) API smoke (optional, secondary)
+
+If a local server is running on a known port (e.g., 5000), do a quick GET to:
+
+* `/health` or `/docs` or `/dashboard/assets?page_size=1`
+  But:
+* Do **not** start the server
+* Do **not** rely on this for PASS
+* Only print INFO/WARN if unreachable
+
+---
+
+## Execution Requirements
+
+After implementing:
+
+1. Run the command (`make sanity` or python direct).
+2. Paste exact console output.
+3. Do not change anything else even if it fails — we want diagnosis.
+
+---
+
+## Constraints
+
+* Python standard library only.
+* Repo-root discovery must be robust (script runnable from any folder).
+* All filesystem checks must be read-only.
+* Do not print secrets. If env vars exist, print only “present: yes/no”.
+
+---
+
+## Deliverable Checklist (must confirm each)
+
+* [ ] Created `tools/sanity/aod_sanity_check.py`
+* [ ] Added `make sanity` or documented the direct python command
+* [ ] Script is read-only (no file/db writes)
+* [ ] Script fails non-zero on violations
+* [ ] Command executed and output pasted
+
+---
+
+If you run the **Farm sanity** first and paste the output here, I’ll tell you exactly what to delete vs what to quarantine — *without* “patching to pass.”

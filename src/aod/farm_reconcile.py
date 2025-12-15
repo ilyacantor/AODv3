@@ -152,11 +152,11 @@ async def reconcile_to_farm(
         },
         "shadow_asset_keys": shadow_asset_keys,
         "zombie_asset_keys": zombie_asset_keys,
-        "actual_reason_codes": actual_reasons,
         "aod_lists": {
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],
-            "high_severity_findings": high_severity_findings
+            "high_severity_findings": high_severity_findings,
+            "actual_reason_codes": actual_reasons
         }
     }
     

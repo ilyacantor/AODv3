@@ -1408,7 +1408,7 @@ class AODActualResultsResponse(BaseModel):
     shadow_actual: list[str]
     zombie_actual: list[str]
     admission_actual: dict[str, str]
-    actual_reasons: dict[str, list[str]]
+    actual_reason_codes: dict[str, list[str]]
     asset_details: dict[str, dict]
     summary: dict
 
@@ -1456,7 +1456,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
         shadow_actual=result.shadow_actual,
         zombie_actual=result.zombie_actual,
         admission_actual=result.admission_actual,
-        actual_reasons=result.actual_reasons,
+        actual_reason_codes=result.actual_reasons,
         asset_details=result.asset_details,
         summary=result.summary
     )

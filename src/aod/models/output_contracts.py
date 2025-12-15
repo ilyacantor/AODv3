@@ -215,26 +215,3 @@ class RunLog(BaseModel):
     sync_error: Optional[str] = None
 
 
-class NonflagDecision(str, Enum):
-    """Decision enum for explain-nonflag endpoint"""
-    UNKNOWN_KEY = "unknown_key"
-    NOT_ADMITTED = "not_admitted"
-    ADMITTED_NOT_SHADOW = "admitted_not_shadow"
-    ADMITTED_NOT_ZOMBIE = "admitted_not_zombie"
-
-
-class NonflagExplanation(BaseModel):
-    """Per-key explanation for why an asset was NOT flagged as shadow/zombie"""
-    asset_key: str
-    present_in_aod: bool
-    decision: NonflagDecision
-    reason_codes: list[str] = Field(default_factory=list)
-    primary_reason: Optional[str] = None
-    missing_inputs: list[str] = Field(default_factory=list)
-
-
-class ExplainNonflagRequest(BaseModel):
-    """Request for explain-nonflag endpoint"""
-    snapshot_id: str
-    asset_keys: list[str]
-    ask: str = Field(description="'shadow' | 'zombie' | 'both'")

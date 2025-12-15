@@ -88,6 +88,7 @@ FastAPI application with these key endpoints:
 - `POST /api/debug/zombie-explain` - Debug endpoint for zombie classification explanations
 - `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
 - `POST /api/debug/aod-agent-reconcile` - AOD Agent diagnostic reconciliation (actual results + RCA codes)
+- `POST /api/reconcile/explain-nonflag` - Explain why specific assets are NOT in shadow/zombie lists
 
 ### AOD Actual Results Emitter
 
@@ -122,9 +123,38 @@ FastAPI application with these key endpoints:
 Farm uses these codes to determine root cause of mismatches:
 - `ACTIVITY_TIMESTAMP_DROPPED` - Farm says recent, AOD says stale
 - `DISCOVERY_SOURCE_COUNT_MISMATCH` - Discovery source count differs
-- `DISCOVERY_ADMISSION_GATE_NOT_APPLIED` - Discovery admission not applied
-- `FINANCE_EVIDENCE_INGESTION_MISMATCH` - Finance evidence differs
-- `SOR_MATCHING_MISMATCH` - IdP/CMDB matching differs
+
+### Explain Non-Flag Endpoint
+
+`POST /api/reconcile/explain-nonflag` - Farm can ask AOD why specific assets are NOT flagged as shadow/zombie.
+
+**Request:**
+```json
+{
+  "snapshot_id": "uuid",
+  "asset_keys": ["Salesforce", "HubSpot"],
+  "ask": "shadow" | "zombie" | "both"
+}
+```
+
+**Response (per key):**
+```json
+{
+  "asset_key": "Salesforce",
+  "present_in_aod": true,
+  "decision": "admitted_not_shadow",
+  "reason_codes": ["HAS_IDP", "HAS_CMDB", "RECENT_ACTIVITY"],
+  "primary_reason": "HAS_IDP"
+}
+```
+
+**Decision Types:**
+- `unknown_key` - AOD never saw this asset (no candidate formed)
+- `not_admitted` - Saw it but rejected (no admission gate satisfied)
+- `admitted_not_shadow` - Admitted, but has presence evidence (not shadow)
+- `admitted_not_zombie` - Admitted, but has recent activity (not zombie)
+
+**Guardrail:** Farm only sends keys + snapshot_id + ask-type. AOD does NOT consume any expected data.
 
 ### Run Status Semantics
 

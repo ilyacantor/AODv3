@@ -57,6 +57,23 @@ Shadow and Zombie classifications are computed post-pipeline as views, not store
 - **Shadow Asset** - Has activity evidence but no IdP or CMDB match
 - **Zombie Asset** - Has IdP/CMDB presence but no recent activity (90-day window)
 
+### Vendor Hypothesis (Inference Layer)
+
+Design principle: **Inference decorates reality; it does not redefine it.**
+
+For discovery-only assets, vendor is typically unknown. The system infers a `vendor_hypothesis` from domain patterns:
+
+- **Location**: Normalization layer only (Stage 2)
+- **Max confidence**: 0.9 (never authoritative)
+- **Basis**: Curated domain-to-vendor mapping (~120 SaaS vendors)
+- **Display**: "Likely MongoDB (90% confidence, based on domain:mongodb.com)"
+
+Key constraints:
+- `vendor` field remains "unknown" (never overwritten)
+- Does NOT affect admission logic
+- Does NOT affect shadow/zombie classification
+- UI displays inference as suggestion, not fact
+
 ### API Structure
 
 FastAPI application with these key endpoints:

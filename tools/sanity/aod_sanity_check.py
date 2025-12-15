@@ -29,7 +29,8 @@ ACTIVITY_EVIDENCE_KEYWORDS = [
     "latest_activity_at", "last_login_at", "endpoint_last_seen"
 ]
 
-DUAL_STORE_FOLDERS = ["data/", "snapshots/", "exports/", "tmp/", ".cache/"]
+DUAL_STORE_FOLDERS = ["data/", "snapshots/", "exports/", "tmp/"]
+EXCLUDED_CACHE_DIRS = [".cache/replit", ".cache/uv", ".cache/pip"]
 DB_EXTENSIONS = [".db", ".sqlite", ".sqlite3"]
 
 
@@ -58,12 +59,18 @@ def print_header(repo_root: Path):
 
 def check_storage_modality(repo_root: Path) -> tuple[bool, list[str]]:
     """
-    Check 1: Storage modality audit (dual-store detection)
+    Check 1: Storage modality audit (single store enforcement)
     
-    Detect if AOD persists data in multiple places.
+    Rules:
+    - PASS if using SUPABASE_DB_URL or DATABASE_URL (external DB)
+    - PASS if IGNORE_REPLIT_DB=true and REPLIT* vars exist (they are ignored)
+    - FAIL if any SQLite files (*.db, *.sqlite) exist with data
+    - FAIL if .cache or data folders have persistence files
+    - FAIL if no database configured at all
     """
     issues = []
     stores_found = []
+    ignore_replit = os.environ.get("IGNORE_REPLIT_DB", "").lower() == "true"
     
     for folder in DUAL_STORE_FOLDERS:
         folder_path = repo_root / folder
@@ -73,6 +80,20 @@ def check_storage_modality(repo_root: Path) -> tuple[bool, list[str]]:
                         list(folder_path.glob("**/*.parquet"))
             if data_files:
                 stores_found.append(f"{folder} ({len(data_files)} data files)")
+                issues.append(f"LOCAL FILE STORE VIOLATION: {folder} contains {len(data_files)} data files")
+    
+    cache_path = repo_root / ".cache"
+    if cache_path.exists() and cache_path.is_dir():
+        cache_data_files = list(cache_path.glob("**/*.json")) + \
+                          list(cache_path.glob("**/*.csv")) + \
+                          list(cache_path.glob("**/*.parquet"))
+        aod_cache_files = [
+            f for f in cache_data_files 
+            if not any(excl in str(f) for excl in EXCLUDED_CACHE_DIRS)
+        ]
+        if aod_cache_files:
+            stores_found.append(f".cache/ ({len(aod_cache_files)} AOD data files)")
+            issues.append(f"LOCAL FILE STORE VIOLATION: .cache/ contains {len(aod_cache_files)} AOD data files")
     
     db_files = []
     for ext in DB_EXTENSIONS:
@@ -86,22 +107,30 @@ def check_storage_modality(repo_root: Path) -> tuple[bool, list[str]]:
     
     if non_empty_dbs:
         stores_found.append(f"SQLite DBs: {', '.join(non_empty_dbs)}")
+        issues.append(f"SQLITE VIOLATION: Local SQLite files found: {', '.join(non_empty_dbs)}")
     
+    supabase_db_url = bool(os.environ.get("SUPABASE_DB_URL"))
     db_url_present = bool(os.environ.get("DATABASE_URL"))
-    supabase_present = bool(os.environ.get("SUPABASE_URL"))
+    replit_db_present = bool(os.environ.get("REPLIT_DB_URL"))
     
-    if db_url_present:
-        stores_found.append("DATABASE_URL env var (external DB)")
-    if supabase_present:
-        stores_found.append("SUPABASE_URL env var (external DB)")
+    active_db = None
+    if supabase_db_url:
+        active_db = "SUPABASE_DB_URL"
+        stores_found.append("SUPABASE_DB_URL (external DB - PRIMARY)")
+    elif db_url_present:
+        active_db = "DATABASE_URL"
+        stores_found.append("DATABASE_URL (external DB - FALLBACK)")
     
-    if len(stores_found) > 1:
-        has_sqlite = any("SQLite" in s for s in stores_found)
-        has_external = db_url_present or supabase_present
-        has_file_store = any(any(f in s for f in DUAL_STORE_FOLDERS) for s in stores_found)
-        
-        if (has_sqlite and has_external) or (has_sqlite and has_file_store) or (has_external and has_file_store):
-            issues.append(f"DUAL STORE DETECTED: {stores_found}")
+    if replit_db_present:
+        if ignore_replit:
+            print(f"  INFO: REPLIT_DB_URL present but IGNORE_REPLIT_DB=true (correctly ignored)")
+        else:
+            stores_found.append("REPLIT_DB_URL (Replit DB - not used)")
+    
+    if not active_db:
+        issues.append("NO DATABASE CONFIGURED: Set SUPABASE_DB_URL or DATABASE_URL")
+    else:
+        print(f"  Active DB source: {active_db}")
     
     if stores_found and not issues:
         print(f"  INFO: Stores found: {stores_found}")

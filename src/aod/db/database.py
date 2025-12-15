@@ -1,9 +1,9 @@
-"""SQLite persistence layer for AOD - structured for future PostgreSQL migration"""
+"""PostgreSQL persistence layer for AOD using asyncpg"""
 
-import aiosqlite
+import asyncpg
 import json
+import os
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -13,7 +13,36 @@ from ..models.output_contracts import (
     AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType
 )
 
-DB_PATH = Path("aod.db")
+
+def get_database_url() -> str:
+    """
+    Get database URL with single selection rule:
+    1. Use SUPABASE_DB_URL if set
+    2. Else use DATABASE_URL
+    3. If neither is set, fail fast with clear error
+    
+    No SQLite fallback or other defaults are allowed.
+    """
+    db_url = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL")
+    
+    if not db_url:
+        raise RuntimeError(
+            "No database configured. Set SUPABASE_DB_URL or DATABASE_URL environment variable. "
+            "No SQLite fallback or other defaults are allowed."
+        )
+    
+    return db_url
+
+
+def get_active_db_source() -> str:
+    """Return which env var is providing the database URL."""
+    if os.environ.get("SUPABASE_DB_URL"):
+        return "SUPABASE_DB_URL"
+    elif os.environ.get("DATABASE_URL"):
+        return "DATABASE_URL"
+    else:
+        return "NONE"
+
 
 _db_instance: Optional["Database"] = None
 
@@ -22,180 +51,165 @@ async def get_db() -> "Database":
     """Get or create database instance"""
     global _db_instance
     if _db_instance is None:
-        _db_instance = Database(DB_PATH)
+        db_url = get_database_url()
+        _db_instance = Database(db_url)
         await _db_instance.initialize()
     return _db_instance
 
 
 class Database:
-    """SQLite database for AOD persistence"""
+    """PostgreSQL database for AOD persistence"""
     
-    def __init__(self, db_path: Path):
-        self.db_path = db_path
-        self._conn: Optional[aiosqlite.Connection] = None
+    def __init__(self, db_url: str):
+        self.db_url = db_url
+        self._pool: Optional[asyncpg.Pool] = None
     
-    async def get_connection(self) -> aiosqlite.Connection:
-        """Get database connection"""
-        if self._conn is None:
-            self._conn = await aiosqlite.connect(self.db_path)
-            self._conn.row_factory = aiosqlite.Row
-        return self._conn
+    async def get_pool(self) -> asyncpg.Pool:
+        """Get database connection pool"""
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
+        return self._pool
     
     async def close(self):
-        """Close database connection"""
-        if self._conn:
-            await self._conn.close()
-            self._conn = None
+        """Close database connection pool"""
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
     
     async def initialize(self):
         """Initialize database schema"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.executescript("""
-            CREATE TABLE IF NOT EXISTS runs (
-                run_id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL,
-                status TEXT NOT NULL,
-                started_at TEXT NOT NULL,
-                completed_at TEXT,
-                input_meta TEXT NOT NULL DEFAULT '{}',
-                counts TEXT NOT NULL DEFAULT '{}',
-                failure_reasons TEXT NOT NULL DEFAULT '[]'
-            );
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS runs (
+                    run_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    input_meta TEXT NOT NULL DEFAULT '{}',
+                    counts TEXT NOT NULL DEFAULT '{}',
+                    failure_reasons TEXT NOT NULL DEFAULT '[]',
+                    sync_status TEXT NOT NULL DEFAULT 'not_applicable',
+                    sync_error TEXT
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS assets (
-                asset_id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL,
-                run_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                asset_type TEXT NOT NULL,
-                identifiers TEXT NOT NULL DEFAULT '{}',
-                vendor TEXT,
-                environment TEXT NOT NULL,
-                evidence_refs TEXT NOT NULL DEFAULT '[]',
-                lens_status TEXT NOT NULL DEFAULT '{}',
-                lens_coverage TEXT NOT NULL DEFAULT '{}',
-                activity_evidence TEXT NOT NULL DEFAULT '{}',
-                tags TEXT NOT NULL DEFAULT '[]',
-                admission_reason TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id)
-            );
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS assets (
+                    asset_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    asset_type TEXT NOT NULL,
+                    identifiers TEXT NOT NULL DEFAULT '{}',
+                    vendor TEXT,
+                    environment TEXT NOT NULL,
+                    evidence_refs TEXT NOT NULL DEFAULT '[]',
+                    lens_status TEXT NOT NULL DEFAULT '{}',
+                    lens_coverage TEXT NOT NULL DEFAULT '{}',
+                    activity_evidence TEXT NOT NULL DEFAULT '{}',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    admission_reason TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS artifacts (
-                artifact_id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL,
-                run_id TEXT NOT NULL,
-                parent_asset_id TEXT,
-                name TEXT NOT NULL,
-                artifact_type TEXT NOT NULL,
-                source TEXT NOT NULL,
-                evidence_ref TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id),
-                FOREIGN KEY (parent_asset_id) REFERENCES assets(asset_id)
-            );
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    artifact_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    parent_asset_id TEXT,
+                    name TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    evidence_ref TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id),
+                    FOREIGN KEY (parent_asset_id) REFERENCES assets(asset_id)
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS findings (
-                finding_id TEXT PRIMARY KEY,
-                asset_id TEXT,
-                tenant_id TEXT NOT NULL,
-                run_id TEXT NOT NULL,
-                finding_type TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                explanation TEXT NOT NULL,
-                evidence_refs TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id),
-                FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
-            );
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS findings (
+                    finding_id TEXT PRIMARY KEY,
+                    asset_id TEXT,
+                    tenant_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    finding_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    evidence_refs TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id),
+                    FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
+                )
+            """)
             
-            CREATE INDEX IF NOT EXISTS idx_assets_run_id ON assets(run_id);
-            CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_asset_id ON findings(asset_id);
-        """)
-        
-        try:
-            await conn.execute("ALTER TABLE assets ADD COLUMN activity_evidence TEXT NOT NULL DEFAULT '{}'")
-            await conn.commit()
-        except Exception:
-            pass
-        
-        cursor = await conn.execute("PRAGMA table_info(runs)")
-        columns = await cursor.fetchall()
-        existing_cols = {col[1] for col in columns}
-        
-        if "sync_status" not in existing_cols:
-            try:
-                await conn.execute("ALTER TABLE runs ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'not_applicable'")
-                await conn.commit()
-            except Exception:
-                pass
-        
-        if "sync_error" not in existing_cols:
-            try:
-                await conn.execute("ALTER TABLE runs ADD COLUMN sync_error TEXT")
-                await conn.commit()
-            except Exception:
-                pass
-        
-        await conn.executescript("""
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS observation_samples (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    domain TEXT,
+                    source TEXT NOT NULL,
+                    category TEXT,
+                    raw_preview TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS observation_samples (
-                id TEXT PRIMARY KEY,
-                run_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                domain TEXT,
-                source TEXT NOT NULL,
-                category TEXT,
-                raw_preview TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id)
-            );
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ambiguous_matches (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    entity_key TEXT NOT NULL,
+                    entity_name TEXT NOT NULL,
+                    plane TEXT NOT NULL,
+                    candidate_ids TEXT NOT NULL DEFAULT '[]',
+                    candidate_names TEXT NOT NULL DEFAULT '[]',
+                    match_keys TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS ambiguous_matches (
-                id TEXT PRIMARY KEY,
-                run_id TEXT NOT NULL,
-                entity_key TEXT NOT NULL,
-                entity_name TEXT NOT NULL,
-                plane TEXT NOT NULL,
-                candidate_ids TEXT NOT NULL DEFAULT '[]',
-                candidate_names TEXT NOT NULL DEFAULT '[]',
-                match_keys TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id)
-            );
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS rejections (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    entity_key TEXT NOT NULL,
+                    entity_name TEXT NOT NULL,
+                    reason_code TEXT NOT NULL,
+                    reason_detail TEXT NOT NULL,
+                    evidence_summary TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                )
+            """)
             
-            CREATE TABLE IF NOT EXISTS rejections (
-                id TEXT PRIMARY KEY,
-                run_id TEXT NOT NULL,
-                entity_key TEXT NOT NULL,
-                entity_name TEXT NOT NULL,
-                reason_code TEXT NOT NULL,
-                reason_detail TEXT NOT NULL,
-                evidence_summary TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (run_id) REFERENCES runs(run_id)
-            );
-            
-            CREATE INDEX IF NOT EXISTS idx_observation_samples_run_id ON observation_samples(run_id);
-            CREATE INDEX IF NOT EXISTS idx_ambiguous_matches_run_id ON ambiguous_matches(run_id);
-            CREATE INDEX IF NOT EXISTS idx_rejections_run_id ON rejections(run_id);
-        """)
-        
-        await conn.commit()
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_run_id ON assets(run_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_asset_id ON findings(asset_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_observation_samples_run_id ON observation_samples(run_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_ambiguous_matches_run_id ON ambiguous_matches(run_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_rejections_run_id ON rejections(run_id)")
     
     async def create_run(self, run: RunLog) -> RunLog:
         """Create a new run log entry"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.execute(
-            """
-            INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """,
                 run.run_id,
                 run.tenant_id,
                 run.status.value,
@@ -207,26 +221,24 @@ class Database:
                 run.sync_status.value,
                 run.sync_error
             )
-        )
-        await conn.commit()
         return run
     
     async def update_run(self, run: RunLog) -> RunLog:
         """Update an existing run log entry"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.execute(
-            """
-            UPDATE runs SET
-                status = ?,
-                completed_at = ?,
-                counts = ?,
-                failure_reasons = ?,
-                sync_status = ?,
-                sync_error = ?
-            WHERE run_id = ?
-            """,
-            (
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE runs SET
+                    status = $1,
+                    completed_at = $2,
+                    counts = $3,
+                    failure_reasons = $4,
+                    sync_status = $5,
+                    sync_error = $6
+                WHERE run_id = $7
+                """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
                 run.counts.model_dump_json(),
@@ -235,25 +247,23 @@ class Database:
                 run.sync_error,
                 run.run_id
             )
-        )
-        await conn.commit()
         return run
     
     async def get_run(self, run_id: str) -> Optional[RunLog]:
         """Get a run log entry by ID"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        cursor = await conn.execute(
-            "SELECT * FROM runs WHERE run_id = ?",
-            (run_id,)
-        )
-        row = await cursor.fetchone()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM runs WHERE run_id = $1",
+                run_id
+            )
         
         if not row:
             return None
         
-        sync_status_val = row["sync_status"] if "sync_status" in row.keys() else "not_applicable"
-        sync_error_val = row["sync_error"] if "sync_error" in row.keys() else None
+        sync_status_val = row.get("sync_status", "not_applicable")
+        sync_error_val = row.get("sync_error")
         
         return RunLog(
             run_id=row["run_id"],
@@ -270,17 +280,17 @@ class Database:
     
     async def get_all_runs(self) -> list[RunLog]:
         """Get all run logs"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        cursor = await conn.execute(
-            "SELECT * FROM runs ORDER BY started_at DESC"
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM runs ORDER BY started_at DESC"
+            )
         
         runs = []
         for row in rows:
-            sync_status_val = row["sync_status"] if "sync_status" in row.keys() else "not_applicable"
-            sync_error_val = row["sync_error"] if "sync_error" in row.keys() else None
+            sync_status_val = row.get("sync_status", "not_applicable")
+            sync_error_val = row.get("sync_error")
             runs.append(RunLog(
                 run_id=row["run_id"],
                 tenant_id=row["tenant_id"],
@@ -297,17 +307,17 @@ class Database:
     
     async def create_asset(self, asset: Asset) -> Asset:
         """Create a new asset"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.execute(
-            """
-            INSERT INTO assets (
-                asset_id, tenant_id, run_id, name, asset_type, identifiers,
-                vendor, environment, evidence_refs, lens_status, lens_coverage,
-                activity_evidence, tags, admission_reason, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO assets (
+                    asset_id, tenant_id, run_id, name, asset_type, identifiers,
+                    vendor, environment, evidence_refs, lens_status, lens_coverage,
+                    activity_evidence, tags, admission_reason, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                """,
                 str(asset.asset_id),
                 asset.tenant_id,
                 asset.run_id,
@@ -324,23 +334,21 @@ class Database:
                 asset.admission_reason,
                 asset.created_at.isoformat()
             )
-        )
-        await conn.commit()
         return asset
     
     async def get_assets_by_run(self, run_id: str) -> list[Asset]:
         """Get all assets for a run"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        cursor = await conn.execute(
-            "SELECT * FROM assets WHERE run_id = ? ORDER BY name",
-            (run_id,)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM assets WHERE run_id = $1 ORDER BY name",
+                run_id
+            )
         
         assets = []
         for row in rows:
-            activity_evidence_data = row["activity_evidence"] if "activity_evidence" in row.keys() else "{}"
+            activity_evidence_data = row.get("activity_evidence", "{}")
             assets.append(Asset(
                 asset_id=UUID(row["asset_id"]),
                 tenant_id=row["tenant_id"],
@@ -362,16 +370,16 @@ class Database:
     
     async def create_artifact(self, artifact: Artifact) -> Artifact:
         """Create a new artifact"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.execute(
-            """
-            INSERT INTO artifacts (
-                artifact_id, tenant_id, run_id, parent_asset_id, name,
-                artifact_type, source, evidence_ref, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO artifacts (
+                    artifact_id, tenant_id, run_id, parent_asset_id, name,
+                    artifact_type, source, evidence_ref, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
                 str(artifact.artifact_id),
                 artifact.tenant_id,
                 artifact.run_id,
@@ -382,19 +390,17 @@ class Database:
                 artifact.evidence_ref,
                 artifact.created_at.isoformat()
             )
-        )
-        await conn.commit()
         return artifact
     
     async def get_artifacts_by_run(self, run_id: str) -> list[Artifact]:
         """Get all artifacts for a run"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        cursor = await conn.execute(
-            "SELECT * FROM artifacts WHERE run_id = ? ORDER BY name",
-            (run_id,)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM artifacts WHERE run_id = $1 ORDER BY name",
+                run_id
+            )
         
         return [
             Artifact(
@@ -413,16 +419,16 @@ class Database:
     
     async def create_finding(self, finding: Finding) -> Finding:
         """Create a new finding"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        await conn.execute(
-            """
-            INSERT INTO findings (
-                finding_id, asset_id, tenant_id, run_id, finding_type,
-                severity, explanation, evidence_refs, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO findings (
+                    finding_id, asset_id, tenant_id, run_id, finding_type,
+                    severity, explanation, evidence_refs, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
                 str(finding.finding_id),
                 str(finding.asset_id) if finding.asset_id else None,
                 finding.tenant_id,
@@ -433,19 +439,17 @@ class Database:
                 json.dumps(finding.evidence_refs),
                 finding.created_at.isoformat()
             )
-        )
-        await conn.commit()
         return finding
     
     async def get_findings_by_run(self, run_id: str) -> list[Finding]:
         """Get all findings for a run"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        cursor = await conn.execute(
-            "SELECT * FROM findings WHERE run_id = ? ORDER BY severity DESC, finding_type",
-            (run_id,)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM findings WHERE run_id = $1 ORDER BY severity DESC, finding_type",
+                run_id
+            )
         
         return [
             Finding(
@@ -474,15 +478,15 @@ class Database:
         created_at: datetime
     ) -> None:
         """Create an observation sample record"""
-        conn = await self.get_connection()
-        await conn.execute(
-            """
-            INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (sample_id, run_id, name, domain, source, category, raw_preview, created_at.isoformat())
-        )
-        await conn.commit()
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                sample_id, run_id, name, domain, source, category, raw_preview, created_at.isoformat()
+            )
     
     async def create_ambiguous_match(
         self,
@@ -497,19 +501,17 @@ class Database:
         created_at: datetime
     ) -> None:
         """Create an ambiguous match record"""
-        conn = await self.get_connection()
-        await conn.execute(
-            """
-            INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
                 match_id, run_id, entity_key, entity_name, plane,
                 json.dumps(candidate_ids), json.dumps(candidate_names), json.dumps(match_keys),
                 created_at.isoformat()
             )
-        )
-        await conn.commit()
     
     async def create_rejection(
         self,
@@ -523,35 +525,32 @@ class Database:
         created_at: datetime
     ) -> None:
         """Create a rejection record"""
-        conn = await self.get_connection()
-        await conn.execute(
-            """
-            INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
                 rejection_id, run_id, entity_key, entity_name, reason_code, reason_detail,
                 json.dumps(evidence_summary), created_at.isoformat()
             )
-        )
-        await conn.commit()
     
     async def get_observation_samples_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
         """Get observation samples for a run with pagination"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        count_cursor = await conn.execute(
-            "SELECT COUNT(*) as total FROM observation_samples WHERE run_id = ?",
-            (run_id,)
-        )
-        count_row = await count_cursor.fetchone()
-        total = count_row["total"] if count_row else 0
-        
-        cursor = await conn.execute(
-            "SELECT * FROM observation_samples WHERE run_id = ? ORDER BY name LIMIT ? OFFSET ?",
-            (run_id, limit, offset)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM observation_samples WHERE run_id = $1",
+                run_id
+            )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM observation_samples WHERE run_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
         
         items = [
             {
@@ -569,20 +568,19 @@ class Database:
     
     async def get_ambiguous_matches_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
         """Get ambiguous matches for a run with pagination"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        count_cursor = await conn.execute(
-            "SELECT COUNT(*) as total FROM ambiguous_matches WHERE run_id = ?",
-            (run_id,)
-        )
-        count_row = await count_cursor.fetchone()
-        total = count_row["total"] if count_row else 0
-        
-        cursor = await conn.execute(
-            "SELECT * FROM ambiguous_matches WHERE run_id = ? ORDER BY entity_name LIMIT ? OFFSET ?",
-            (run_id, limit, offset)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM ambiguous_matches WHERE run_id = $1",
+                run_id
+            )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM ambiguous_matches WHERE run_id = $1 ORDER BY entity_name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
         
         items = [
             {
@@ -601,20 +599,19 @@ class Database:
     
     async def get_rejections_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
         """Get rejections for a run with pagination"""
-        conn = await self.get_connection()
+        pool = await self.get_pool()
         
-        count_cursor = await conn.execute(
-            "SELECT COUNT(*) as total FROM rejections WHERE run_id = ?",
-            (run_id,)
-        )
-        count_row = await count_cursor.fetchone()
-        total = count_row["total"] if count_row else 0
-        
-        cursor = await conn.execute(
-            "SELECT * FROM rejections WHERE run_id = ? ORDER BY entity_name LIMIT ? OFFSET ?",
-            (run_id, limit, offset)
-        )
-        rows = await cursor.fetchall()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM rejections WHERE run_id = $1",
+                run_id
+            )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM rejections WHERE run_id = $1 ORDER BY entity_name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
         
         items = [
             {

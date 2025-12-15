@@ -776,6 +776,49 @@ async def get_reconcile_payload(run_id: str):
     if aod_callback_url and not aod_callback_url.startswith("http"):
         aod_callback_url = f"https://{aod_callback_url}"
     
+    def get_reason_codes(asset: dict) -> list[str]:
+        codes = []
+        lens_coverage = asset.get("lens_coverage", {})
+        activity_evidence = asset.get("activity_evidence", {})
+        
+        if lens_coverage.get("idp"):
+            codes.append("HAS_IDP")
+        else:
+            codes.append("NO_IDP")
+        if lens_coverage.get("cmdb"):
+            codes.append("HAS_CMDB")
+        else:
+            codes.append("NO_CMDB")
+        if lens_coverage.get("finance"):
+            codes.append("HAS_FINANCE")
+        else:
+            codes.append("NO_FINANCE")
+        if lens_coverage.get("cloud"):
+            codes.append("HAS_CLOUD")
+        else:
+            codes.append("NO_CLOUD")
+        if lens_coverage.get("discovery"):
+            codes.append("HAS_DISCOVERY")
+        else:
+            codes.append("NO_DISCOVERY")
+        if activity_evidence.get("latest_activity_at"):
+            codes.append("HAS_ACTIVITY_TIMESTAMP")
+        else:
+            codes.append("NO_ACTIVITY_TIMESTAMPS")
+        return codes
+    
+    actual_reasons: dict[str, list[str]] = {}
+    for asset in derived.shadow_assets:
+        key = get_asset_key(asset)
+        codes = get_reason_codes(asset)
+        codes.append("SHADOW_CLASSIFICATION")
+        actual_reasons[key] = codes
+    for asset in derived.zombie_assets:
+        key = get_asset_key(asset)
+        codes = get_reason_codes(asset)
+        codes.append("ZOMBIE_CLASSIFICATION")
+        actual_reasons[key] = codes
+    
     return {
         "snapshot_id": run.input_meta.get("snapshot_id") if run.input_meta else None,
         "tenant_id": run.tenant_id,
@@ -796,6 +839,7 @@ async def get_reconcile_payload(run_id: str):
         },
         "shadow_asset_keys": shadow_asset_keys,
         "zombie_asset_keys": zombie_asset_keys,
+        "actual_reasons": actual_reasons,
         "aod_lists": {
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],

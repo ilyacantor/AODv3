@@ -70,6 +70,58 @@ async def reconcile_to_farm(
     shadow_asset_keys = [get_asset_key(a) for a in derived.shadow_assets]
     zombie_asset_keys = [get_asset_key(a) for a in derived.zombie_assets]
     
+    def get_reason_codes(asset: dict) -> list[str]:
+        """Generate canonical reason codes for an asset"""
+        codes = []
+        lens_coverage = asset.get("lens_coverage", {})
+        activity_evidence = asset.get("activity_evidence", {})
+        
+        if lens_coverage.get("idp"):
+            codes.append("HAS_IDP")
+        else:
+            codes.append("NO_IDP")
+        
+        if lens_coverage.get("cmdb"):
+            codes.append("HAS_CMDB")
+        else:
+            codes.append("NO_CMDB")
+        
+        if lens_coverage.get("finance"):
+            codes.append("HAS_FINANCE")
+        else:
+            codes.append("NO_FINANCE")
+        
+        if lens_coverage.get("cloud"):
+            codes.append("HAS_CLOUD")
+        else:
+            codes.append("NO_CLOUD")
+        
+        if lens_coverage.get("discovery"):
+            codes.append("HAS_DISCOVERY")
+        else:
+            codes.append("NO_DISCOVERY")
+        
+        latest_activity = activity_evidence.get("latest_activity_at")
+        if latest_activity:
+            codes.append("HAS_ACTIVITY_TIMESTAMP")
+        else:
+            codes.append("NO_ACTIVITY_TIMESTAMPS")
+        
+        return codes
+    
+    actual_reasons: dict[str, list[str]] = {}
+    for asset in derived.shadow_assets:
+        key = get_asset_key(asset)
+        codes = get_reason_codes(asset)
+        codes.append("SHADOW_CLASSIFICATION")
+        actual_reasons[key] = codes
+    
+    for asset in derived.zombie_assets:
+        key = get_asset_key(asset)
+        codes = get_reason_codes(asset)
+        codes.append("ZOMBIE_CLASSIFICATION")
+        actual_reasons[key] = codes
+    
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
         for f in findings
@@ -100,6 +152,7 @@ async def reconcile_to_farm(
         },
         "shadow_asset_keys": shadow_asset_keys,
         "zombie_asset_keys": zombie_asset_keys,
+        "actual_reasons": actual_reasons,
         "aod_lists": {
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],

@@ -40,12 +40,12 @@ async def reconcile_to_farm(
     if not base_url:
         return False, "No Farm URL configured"
     
-    derived = compute_derived_classifications(assets, activity_window_days=30)
+    derived = compute_derived_classifications(assets, activity_window_days=90)
     
     zombie_classifications = compute_zombie_classifications(
         assets, 
         run_id=run_log.run_id, 
-        window_days=30
+        window_days=90
     )
     
     zombie_results = [

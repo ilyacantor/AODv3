@@ -556,7 +556,7 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/runs/{run_id}/derived")
-async def get_derived_classifications(run_id: str, activity_window_days: int = 30):
+async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
     """
     Get derived classifications (Shadow/Zombie) for a run.
     
@@ -591,7 +591,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 3
             "total_assets": summary.distribution.total_assets,
             "with_idp_match": summary.distribution.with_idp_match,
             "with_cmdb_match": summary.distribution.with_cmdb_match,
-            "with_activity_last_30_days": summary.distribution.with_activity_last_30_days,
+            "with_activity_in_window": summary.distribution.with_activity_in_window,
             "with_any_activity_timestamp": summary.distribution.with_any_activity_timestamp,
             "indeterminate_count": summary.distribution.indeterminate_count
         },
@@ -616,7 +616,7 @@ class ZombieExplainRequest(BaseModel):
     tenant_id: str
     run_id: str
     keys: list[str]
-    window_days: int = 30
+    window_days: int = 90
 
 
 class KeyExplanation(BaseModel):
@@ -842,7 +842,7 @@ class ZombieReconcileRequest(BaseModel):
     run_id: str
     expected_zombie_keys: list[str]
     extra_zombie_keys: list[str]
-    window_days: int = 30
+    window_days: int = 90
 
 
 class ZombieReconcileResponse(BaseModel):

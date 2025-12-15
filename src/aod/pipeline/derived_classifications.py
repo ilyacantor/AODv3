@@ -52,7 +52,7 @@ class DistributionDiagnostic:
     total_assets: int = 0
     with_idp_match: int = 0
     with_cmdb_match: int = 0
-    with_activity_last_30_days: int = 0
+    with_activity_in_window: int = 0
     with_any_activity_timestamp: int = 0
     indeterminate_count: int = 0
 
@@ -68,7 +68,7 @@ class DerivedClassificationSummary:
     distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
 
 
-def classify_shadow(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
+def classify_shadow(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
     """
     Determine if an asset is a Shadow Asset.
     
@@ -451,7 +451,7 @@ def compute_zombie_classifications(
     ]
 
 
-def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 30) -> DerivedClassificationSummary:
+def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 90) -> DerivedClassificationSummary:
     """
     Compute derived classifications for all assets.
     
@@ -478,7 +478,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             distribution.with_any_activity_timestamp += 1
             latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
             if latest is not None and latest > cutoff_date:
-                distribution.with_activity_last_30_days += 1
+                distribution.with_activity_in_window += 1
         
         shadow_result = classify_shadow(asset, activity_window_days)
         zombie_result = classify_zombie(asset, activity_window_days)

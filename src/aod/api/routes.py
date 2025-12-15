@@ -672,11 +672,7 @@ async def get_reconcile_payload(run_id: str):
     zombie_asset_names = [a["name"] for a in derived.zombie_assets[:10]]
     
     high_severity_findings = [
-        {
-            "finding_type": f.finding_type.value,
-            "severity": f.severity.value,
-            "explanation": f.explanation[:200]
-        }
+        f"{f.finding_type.value}: {f.explanation[:150]}"
         for f in findings
         if f.severity.value == "high"
     ][:10]

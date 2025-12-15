@@ -46,11 +46,7 @@ async def reconcile_to_farm(
     zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]
     
     high_severity_findings = [
-        {
-            "finding_type": f.finding_type.value,
-            "severity": f.severity.value,
-            "explanation": f.explanation[:200]
-        }
+        f"{f.finding_type.value}: {f.explanation[:150]}"
         for f in findings
         if f.severity.value == "high"
     ][:10]

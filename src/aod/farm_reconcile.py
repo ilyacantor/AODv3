@@ -76,11 +76,16 @@ async def reconcile_to_farm(
         if f.severity.value == "high"
     ][:10]
     
+    aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    if aod_callback_url and not aod_callback_url.startswith("http"):
+        aod_callback_url = f"https://{aod_callback_url}"
+    
     reconcile_payload = {
         "snapshot_id": snapshot_id,
         "tenant_id": run_log.tenant_id,
         "aod_run_id": run_log.run_id,
         "aod_status": run_log.status.value,
+        "aod_callback_url": aod_callback_url,
         "completed_at": run_log.completed_at.isoformat() if run_log.completed_at else now_pst().isoformat(),
         "aod_summary": {
             "observations_in": run_log.counts.observations_in,

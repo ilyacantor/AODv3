@@ -771,11 +771,17 @@ async def get_reconcile_payload(run_id: str):
         if f.severity.value == "high"
     ][:10]
     
+    import os
+    aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    if aod_callback_url and not aod_callback_url.startswith("http"):
+        aod_callback_url = f"https://{aod_callback_url}"
+    
     return {
         "snapshot_id": run.input_meta.get("snapshot_id") if run.input_meta else None,
         "tenant_id": run.tenant_id,
         "aod_run_id": run.run_id,
         "aod_status": run.status.value,
+        "aod_callback_url": aod_callback_url,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "aod_summary": {
             "observations_in": run.counts.observations_in,
@@ -1629,8 +1635,7 @@ async def explain_nonflag(request: ExplainNonflagRequest):
                 present_in_aod=False,
                 decision="unknown_key",
                 reason_codes=["NO_RUN_FOR_SNAPSHOT"],
-                primary_reason="PRIMARY:NO_RUN_FOR_SNAPSHOT",
-                missing_inputs=["snapshot_not_processed"]
+                primary_reason="PRIMARY:NO_RUN_FOR_SNAPSHOT"
             ))
         return ExplainNonflagResponse(
             snapshot_id=request.snapshot_id,

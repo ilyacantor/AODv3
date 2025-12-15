@@ -238,7 +238,7 @@ async def execute_pipeline(
             run_log.status = RunStatus.COMPLETED_WITH_RESULTS
         else:
             run_log.status = RunStatus.COMPLETED_NO_ASSETS
-        run_log.completed_at = started_at
+        run_log.completed_at = now_pst()
         await db.update_run(run_log)
         
         return PipelineResult(
@@ -251,7 +251,7 @@ async def execute_pipeline(
         
     except ValidationError as e:
         run_log.status = RunStatus.INVALID_INPUT_CONTRACT
-        run_log.completed_at = started_at
+        run_log.completed_at = now_pst()
         run_log.failure_reasons = [str(e)]
         await db.update_run(run_log)
         
@@ -263,7 +263,7 @@ async def execute_pipeline(
         
     except Exception as e:
         run_log.status = RunStatus.FAILED
-        run_log.completed_at = started_at
+        run_log.completed_at = now_pst()
         run_log.failure_reasons = [str(e)]
         await db.update_run(run_log)
         

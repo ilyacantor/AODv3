@@ -89,29 +89,42 @@ FastAPI application with these key endpoints:
 - `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
 - `POST /api/debug/aod-agent-reconcile` - AOD Agent diagnostic reconciliation (actual results + RCA codes)
 
-### AOD Agent Reconciliation
+### AOD Actual Results Emitter
 
-The AOD Agent reconciliation endpoint is **diagnostic only** - it outputs actual results and deterministic RCA codes for mismatches without proposing code changes.
+**DESIGN PRINCIPLE (prevents coupling):**
+- Farm owns reconciliation UI (has expected + actual + diffs)
+- AOD owns its structured "actual" output only
+- Farm displays side-by-side and runs the RCA reducer
+- **HARD RULE: AOD NEVER consumes Farm expected/rca data. AOD ONLY emits its own "actual + reasons".**
 
-**Outputs:**
+**Data Flow:**
+- AOD publishes: `shadow_actual`, `zombie_actual`, `admission_actual`, `actual_reason_codes`
+- Farm already has: `shadow_expected`, `zombie_expected`, `expected_reason_codes`
+- Farm computes: `extra`, `missed`, `rca_code` per mismatch
+
+**AOD Outputs:**
 - `shadow_actual[]` - Assets classified as shadow
 - `zombie_actual[]` - Assets classified as zombie
 - `admission_actual[key]` - "admitted" | "rejected"
 - `actual_reasons[key]` - Canonical reason codes
-- `mismatches[]` - RCA for each mismatch with reason diffs
+- `asset_details[key]` - Per-asset evidence summary
 
-**RCA Codes (deterministic reducer):**
+**Canonical Reason Codes (emitted by AOD):**
+- `HAS_IDP`, `NO_IDP` - IdP presence
+- `HAS_CMDB`, `NO_CMDB` - CMDB presence
+- `HAS_FINANCE`, `NO_FINANCE` - Finance evidence
+- `HAS_CLOUD`, `NO_CLOUD` - Cloud evidence
+- `HAS_DISCOVERY`, `NO_DISCOVERY` - Discovery evidence
+- `RECENT_ACTIVITY`, `STALE_ACTIVITY`, `NO_ACTIVITY_TIMESTAMPS` - Activity status
+- `DISCOVERY_SOURCE_COUNT_GE_2`, `DISCOVERY_SOURCE_COUNT_LT_2` - Discovery source count
+
+**RCA Reducer (owned by Farm, not AOD):**
+Farm uses these codes to determine root cause of mismatches:
 - `ACTIVITY_TIMESTAMP_DROPPED` - Farm says recent, AOD says stale
 - `DISCOVERY_SOURCE_COUNT_MISMATCH` - Discovery source count differs
 - `DISCOVERY_ADMISSION_GATE_NOT_APPLIED` - Discovery admission not applied
 - `FINANCE_EVIDENCE_INGESTION_MISMATCH` - Finance evidence differs
 - `SOR_MATCHING_MISMATCH` - IdP/CMDB matching differs
-
-**RCA Systems:**
-- `FARM_EVIDENCE` - Issue originates in Farm data
-- `AOD_INGEST` - Issue in normalization
-- `AOD_ADMISSION` - Issue in admission logic
-- `AOD_CLASSIFICATION` - Issue in classification logic
 
 ### Run Status Semantics
 

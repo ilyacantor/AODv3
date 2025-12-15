@@ -323,48 +323,47 @@
             </div>
             <div id="diagnosticsTab" class="tab-content hidden">
                 <div class="diagnostics-header">
-                    <h3 style="color: var(--purple-400); margin-bottom: 1rem;">AOD Agent Reconciliation</h3>
+                    <h3 style="color: var(--purple-400); margin-bottom: 1rem;">AOD Actual Results</h3>
                     <p style="color: var(--slate-400); font-size: 0.875rem; margin-bottom: 1rem;">
-                        Diagnostic analysis comparing AOD actual results against Farm expectations. 
-                        <strong style="color: var(--amber-400);">Diagnostic only - does not change code.</strong>
+                        AOD's structured actual output for this run. <strong style="color: var(--cyan-400);">Farm owns reconciliation UI</strong> - it has expected data and computes diffs/RCA.
                     </p>
+                    <div style="background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; border-left: 3px solid var(--purple-400);">
+                        <div style="font-size: 0.8rem; color: var(--slate-400);">
+                            <strong style="color: var(--purple-400);">Data Flow:</strong><br>
+                            AOD emits: shadow_actual, zombie_actual, admission_actual, actual_reason_codes<br>
+                            Farm has: shadow_expected, zombie_expected, expected_reason_codes<br>
+                            Farm computes: extra, missed, rca_code per mismatch
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group" style="max-width: 600px;">
-                    <label class="form-label">Expected Shadow Keys (comma-separated)</label>
-                    <input type="text" class="form-input" id="expectedShadowKeys" placeholder="e.g., mongodb-docs, notion-team">
-                </div>
-                <div class="form-group" style="max-width: 600px;">
-                    <label class="form-label">Expected Zombie Keys (comma-separated)</label>
-                    <input type="text" class="form-input" id="expectedZombieKeys" placeholder="e.g., legacy-app, old-service">
-                </div>
-                <button class="btn btn-primary" id="runReconciliation" style="margin-bottom: 1.5rem;">Run Reconciliation Analysis</button>
-                <div id="reconcileLoading" class="loading hidden"><div class="spinner"></div>Running reconciliation...</div>
+                <button class="btn btn-primary" id="runReconciliation" style="margin-bottom: 1.5rem;">Load Actual Results</button>
+                <div id="reconcileLoading" class="loading hidden"><div class="spinner"></div>Loading actual results...</div>
                 <div id="reconcileError" class="error-message hidden"></div>
                 <div id="reconcileResults" class="hidden">
                     <div class="stats-grid" style="margin-bottom: 1.5rem;">
                         <div class="stat-card"><div class="stat-value" id="rcTotalAssets">-</div><div class="stat-label">Total Assets</div></div>
                         <div class="stat-card"><div class="stat-value stat-shadow" id="rcShadowActual">-</div><div class="stat-label">Shadow (Actual)</div></div>
                         <div class="stat-card"><div class="stat-value stat-zombie" id="rcZombieActual">-</div><div class="stat-label">Zombie (Actual)</div></div>
-                        <div class="stat-card"><div class="stat-value" id="rcMismatches" style="color: var(--amber-400);">-</div><div class="stat-label">Mismatches</div></div>
-                    </div>
-                    <div id="rcMismatchSection" class="hidden" style="margin-top: 1.5rem;">
-                        <h4 style="color: var(--amber-400); margin-bottom: 1rem;">Mismatch Analysis (RCA)</h4>
-                        <div id="rcMismatchList" class="findings-list" style="max-height: 400px;"></div>
+                        <div class="stat-card"><div class="stat-value" id="rcAdmitted" style="color: var(--green-400);">-</div><div class="stat-label">Admitted</div></div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
                         <div>
-                            <h4 style="color: var(--cyan-400); margin-bottom: 0.75rem;">Shadow Assets (Actual)</h4>
-                            <div id="rcShadowList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem;"></div>
+                            <h4 style="color: var(--amber-400); margin-bottom: 0.75rem;">Shadow Assets (Actual)</h4>
+                            <div id="rcShadowList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
                         </div>
                         <div>
                             <h4 style="color: var(--red-400); margin-bottom: 0.75rem;">Zombie Assets (Actual)</h4>
-                            <div id="rcZombieList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem;"></div>
+                            <div id="rcZombieList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
                         </div>
+                    </div>
+                    <div id="rcAssetDetailsSection" style="margin-top: 1.5rem;">
+                        <h4 style="color: var(--cyan-400); margin-bottom: 0.75rem;">Asset Reason Codes (for Farm reconciliation)</h4>
+                        <div id="rcAssetDetailsList" class="findings-list" style="max-height: 400px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
                     </div>
                     <div class="collapsible" style="margin-top: 1.5rem;">
                         <div class="collapsible-header" id="rcRawToggle">
                             <span class="collapsible-icon" id="rcRawIcon">&#9654;</span>
-                            <span>Raw Reconciliation Response</span>
+                            <span>Raw Actual Results Response</span>
                         </div>
                         <div class="collapsible-content hidden" id="rcRawContent">
                             <pre id="rcRawJson" style="background: var(--slate-900); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.75rem; max-height: 400px; overflow-y: auto;"></pre>
@@ -1387,7 +1386,7 @@
             });
         }
         
-        // Diagnostics tab - AOD Agent Reconciliation
+        // Diagnostics tab - AOD Actual Results (pure emitter - Farm owns reconciliation)
         const rcRawToggle = document.getElementById('rcRawToggle');
         const rcRawIcon = document.getElementById('rcRawIcon');
         const rcRawContent = document.getElementById('rcRawContent');
@@ -1405,12 +1404,6 @@
                 return;
             }
             
-            const shadowKeysInput = document.getElementById('expectedShadowKeys').value;
-            const zombieKeysInput = document.getElementById('expectedZombieKeys').value;
-            
-            const expectedShadowKeys = shadowKeysInput ? shadowKeysInput.split(',').map(k => k.trim()).filter(k => k) : [];
-            const expectedZombieKeys = zombieKeysInput ? zombieKeysInput.split(',').map(k => k.trim()).filter(k => k) : [];
-            
             document.getElementById('reconcileLoading').classList.remove('hidden');
             document.getElementById('reconcileResults').classList.add('hidden');
             document.getElementById('reconcileError').classList.add('hidden');
@@ -1421,8 +1414,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         run_id: currentRunId,
-                        expected_shadow_keys: expectedShadowKeys,
-                        expected_zombie_keys: expectedZombieKeys,
                         activity_window_days: 90
                     })
                 });
@@ -1433,30 +1424,31 @@
                 }
                 
                 const data = await response.json();
-                renderReconciliationResults(data);
+                renderActualResults(data);
                 
             } catch (error) {
-                document.getElementById('reconcileError').textContent = `Reconciliation failed: ${error.message}`;
+                document.getElementById('reconcileError').textContent = `Failed to load actual results: ${error.message}`;
                 document.getElementById('reconcileError').classList.remove('hidden');
             } finally {
                 document.getElementById('reconcileLoading').classList.add('hidden');
             }
         });
         
-        function renderReconciliationResults(data) {
+        function renderActualResults(data) {
             document.getElementById('rcTotalAssets').textContent = data.summary.total_assets || 0;
             document.getElementById('rcShadowActual').textContent = data.summary.shadow_actual_count || 0;
             document.getElementById('rcZombieActual').textContent = data.summary.zombie_actual_count || 0;
-            document.getElementById('rcMismatches').textContent = data.summary.total_mismatches || 0;
+            document.getElementById('rcAdmitted').textContent = data.summary.admitted_count || 0;
             
             // Render shadow list
             const shadowList = document.getElementById('rcShadowList');
             if (data.shadow_actual.length === 0) {
                 shadowList.innerHTML = '<div style="color: var(--slate-500);">No shadow assets detected</div>';
             } else {
-                shadowList.innerHTML = data.shadow_actual.map(key => 
-                    `<div style="padding: 0.25rem 0; color: var(--amber-400);">${escapeHtml(key)}</div>`
-                ).join('');
+                shadowList.innerHTML = data.shadow_actual.map(key => {
+                    const details = data.asset_details[key] || {};
+                    return `<div style="padding: 0.25rem 0; color: var(--amber-400);">${escapeHtml(details.name || key)}</div>`;
+                }).join('');
             }
             
             // Render zombie list
@@ -1464,47 +1456,40 @@
             if (data.zombie_actual.length === 0) {
                 zombieList.innerHTML = '<div style="color: var(--slate-500);">No zombie assets detected</div>';
             } else {
-                zombieList.innerHTML = data.zombie_actual.map(key => 
-                    `<div style="padding: 0.25rem 0; color: var(--red-400);">${escapeHtml(key)}</div>`
-                ).join('');
+                zombieList.innerHTML = data.zombie_actual.map(key => {
+                    const details = data.asset_details[key] || {};
+                    return `<div style="padding: 0.25rem 0; color: var(--red-400);">${escapeHtml(details.name || key)}</div>`;
+                }).join('');
             }
             
-            // Render mismatches
-            const mismatchSection = document.getElementById('rcMismatchSection');
-            const mismatchList = document.getElementById('rcMismatchList');
-            if (data.mismatches.length > 0) {
-                mismatchSection.classList.remove('hidden');
-                mismatchList.innerHTML = data.mismatches.map(m => {
-                    const rcaColor = m.rca_code === 'UNKNOWN' ? 'var(--slate-400)' : 'var(--amber-400)';
-                    const systemColor = {
-                        'FARM_EVIDENCE': 'var(--purple-400)',
-                        'AOD_INGEST': 'var(--cyan-400)',
-                        'AOD_ADMISSION': 'var(--green-400)',
-                        'AOD_CLASSIFICATION': 'var(--red-400)'
-                    }[m.rca_system] || 'var(--slate-400)';
+            // Render asset details with reason codes (for Farm reconciliation)
+            const detailsList = document.getElementById('rcAssetDetailsList');
+            const assetKeys = Object.keys(data.actual_reasons || {});
+            if (assetKeys.length === 0) {
+                detailsList.innerHTML = '<div style="color: var(--slate-500);">No asset reason codes</div>';
+            } else {
+                detailsList.innerHTML = assetKeys.slice(0, 50).map(key => {
+                    const reasons = data.actual_reasons[key] || [];
+                    const details = data.asset_details[key] || {};
+                    const badges = [];
+                    if (details.is_shadow) badges.push('<span class="severity-badge severity-med">SHADOW</span>');
+                    if (details.is_zombie) badges.push('<span class="severity-badge severity-high">ZOMBIE</span>');
                     
                     return `
                         <div class="finding-item" style="flex-direction: column; gap: 0.5rem;">
                             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                                <span style="font-weight: 600; color: white;">${escapeHtml(m.asset_key)}</span>
-                                <span class="severity-badge severity-med">${escapeHtml(m.mismatch_type)}</span>
+                                <span style="font-weight: 600; color: white;">${escapeHtml(details.name || key)}</span>
+                                ${badges.join('')}
                             </div>
-                            <div style="display: flex; gap: 1rem; font-size: 0.875rem;">
-                                <span style="color: ${rcaColor};">RCA: ${escapeHtml(m.rca_code)}</span>
-                                <span style="color: ${systemColor};">System: ${escapeHtml(m.rca_system)}</span>
+                            <div style="font-size: 0.75rem; color: var(--slate-400); display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                ${reasons.map(r => `<span style="background: var(--slate-700); padding: 0.125rem 0.375rem; border-radius: 4px;">${escapeHtml(r)}</span>`).join('')}
                             </div>
-                            <div style="font-size: 0.75rem; color: var(--slate-500);">
-                                Expected: ${escapeHtml(m.expected)} | Actual: ${escapeHtml(m.actual)}
-                            </div>
-                            <details style="font-size: 0.75rem; color: var(--slate-400);">
-                                <summary style="cursor: pointer;">Reason Diff</summary>
-                                <pre style="margin-top: 0.5rem; background: var(--slate-900); padding: 0.5rem; border-radius: 4px; overflow-x: auto;">${safeJsonPreview(m.reason_diff, 1000)}</pre>
-                            </details>
                         </div>
                     `;
                 }).join('');
-            } else {
-                mismatchSection.classList.add('hidden');
+                if (assetKeys.length > 50) {
+                    detailsList.innerHTML += `<div style="color: var(--slate-500); padding: 0.5rem 0;">...and ${assetKeys.length - 50} more assets</div>`;
+                }
             }
             
             // Render raw JSON

@@ -1,24 +1,32 @@
 """
-AOD Agent Reconciliation - Diagnostic Only
+AOD Agent Reconciliation - Actual Results Emitter
 
-This module produces structured actual results for reconciliation and deterministic
-root-cause labels for each mismatch. It does NOT change any code.
+This module produces ONLY structured actual results for reconciliation.
+It does NOT consume Farm expected data or compute mismatches.
 
-CRITICAL DIRECTIVE:
-When reconciliation shows differences (extra/missed shadows/zombies), this module
-diagnoses using reason-code diffs and outputs the most likely root cause code.
-It NEVER proposes fixes, patches, or code adjustments. Diagnosis only.
+CRITICAL DESIGN PRINCIPLE:
+- Farm owns reconciliation UI (has expected + actual + diffs)
+- AOD owns its structured "actual" output (status + reason codes + admission outcome)
+- Farm displays side-by-side and runs the RCA reducer
+
+DATA FLOW:
+- AOD publishes: shadow_actual, zombie_actual, admission_actual, actual_reason_codes
+- Farm already has: shadow_expected, zombie_expected, expected_reason_codes
+- Farm computes: extra, missed, rca_code per mismatch
+
+HARD RULE (prevents coupling):
+- AOD NEVER consumes Farm expected/rca data
+- AOD ONLY emits its own "actual + reasons"
 
 Outputs per run:
 - shadow_actual[]: List of asset keys classified as shadow
 - zombie_actual[]: List of asset keys classified as zombie
 - admission_actual[asset_key]: "admitted" | "rejected"
 - actual_reasons[asset_key]: List of reason codes (canonical enum only)
-- For each mismatch: rca[asset_key] = RCA_CODE, rca_system[asset_key] = system
 """
 
 from enum import Enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
@@ -50,24 +58,6 @@ class ReasonCode(str, Enum):
     REJECTED_NO_GATE = "REJECTED_NO_GATE"
 
 
-class RCACode(str, Enum):
-    """Root Cause Analysis codes for mismatches."""
-    ACTIVITY_TIMESTAMP_DROPPED = "ACTIVITY_TIMESTAMP_DROPPED"
-    DISCOVERY_SOURCE_COUNT_MISMATCH = "DISCOVERY_SOURCE_COUNT_MISMATCH"
-    DISCOVERY_ADMISSION_GATE_NOT_APPLIED = "DISCOVERY_ADMISSION_GATE_NOT_APPLIED"
-    FINANCE_EVIDENCE_INGESTION_MISMATCH = "FINANCE_EVIDENCE_INGESTION_MISMATCH"
-    SOR_MATCHING_MISMATCH = "SOR_MATCHING_MISMATCH"
-    UNKNOWN = "UNKNOWN"
-
-
-class RCASystem(str, Enum):
-    """Which system is responsible for the mismatch."""
-    FARM_EVIDENCE = "FARM_EVIDENCE"
-    AOD_INGEST = "AOD_INGEST"
-    AOD_ADMISSION = "AOD_ADMISSION"
-    AOD_CLASSIFICATION = "AOD_CLASSIFICATION"
-
-
 @dataclass
 class AssetActualResult:
     """Actual classification result for a single asset."""
@@ -82,26 +72,18 @@ class AssetActualResult:
 
 
 @dataclass
-class MismatchRCA:
-    """Root cause analysis for a single mismatch."""
-    asset_key: str
-    mismatch_type: str
-    expected: str
-    actual: str
-    rca_code: RCACode
-    rca_system: RCASystem
-    reason_diff: dict
-
-
-@dataclass
-class ReconciliationResult:
-    """Complete reconciliation result."""
+class ActualResultsOutput:
+    """
+    Complete actual results output from AOD.
+    
+    This is what AOD emits - Farm consumes this and computes diffs/RCA.
+    """
     run_id: str
     shadow_actual: list[str]
     zombie_actual: list[str]
     admission_actual: dict[str, str]
     actual_reasons: dict[str, list[str]]
-    mismatches: list[MismatchRCA]
+    asset_details: dict[str, dict]
     summary: dict
 
 
@@ -212,7 +194,7 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     """
     Produce the actual classification result for an asset.
     
-    This is the AOD Agent's view of what the asset IS - not what it should be.
+    This is AOD's view of what the asset IS - not what it should be.
     """
     reasons, evidence = compute_asset_reasons(asset, activity_window_days)
     
@@ -222,7 +204,6 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     has_cloud = ReasonCode.HAS_CLOUD in reasons
     has_discovery = ReasonCode.HAS_DISCOVERY in reasons
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
-    discovery_ge_2 = ReasonCode.DISCOVERY_SOURCE_COUNT_GE_2 in reasons
     
     is_shadow = False
     if not has_idp and not has_cmdb:
@@ -248,205 +229,64 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     )
 
 
-def compute_rca(
-    asset_key: str,
-    mismatch_type: str,
-    expected_reasons: list[str],
-    actual_reasons: list[str]
-) -> MismatchRCA:
-    """
-    Compute the root cause analysis for a mismatch using deterministic reducer rules.
-    
-    RCA Reducer Rules (no prose, pick one):
-    - Farm says RECENT_ACTIVITY, AOD says STALE_ACTIVITY → ACTIVITY_TIMESTAMP_DROPPED
-    - Farm says HAS_DISCOVERY (≥2 sources), AOD says insufficient → DISCOVERY_SOURCE_COUNT_MISMATCH
-    - Farm expects admitted via discovery-only, AOD reports REJECTED_NO_GATE → DISCOVERY_ADMISSION_GATE_NOT_APPLIED
-    - Farm says NO_FINANCE, AOD says HAS_FINANCE (or vice versa) → FINANCE_EVIDENCE_INGESTION_MISMATCH
-    - Farm says NO_IDP/NO_CMDB, AOD shows IdP/CMDB match (or vice versa) → SOR_MATCHING_MISMATCH
-    """
-    expected_set = set(expected_reasons)
-    actual_set = set(actual_reasons)
-    
-    reason_diff = {
-        "expected_only": list(expected_set - actual_set),
-        "actual_only": list(actual_set - expected_set),
-        "common": list(expected_set & actual_set)
-    }
-    
-    rca_code = RCACode.UNKNOWN
-    rca_system = RCASystem.AOD_CLASSIFICATION
-    
-    if "RECENT_ACTIVITY" in expected_set and "STALE_ACTIVITY" in actual_set:
-        rca_code = RCACode.ACTIVITY_TIMESTAMP_DROPPED
-        rca_system = RCASystem.AOD_INGEST
-    elif "STALE_ACTIVITY" in expected_set and "RECENT_ACTIVITY" in actual_set:
-        rca_code = RCACode.ACTIVITY_TIMESTAMP_DROPPED
-        rca_system = RCASystem.FARM_EVIDENCE
-    
-    elif "DISCOVERY_SOURCE_COUNT_GE_2" in expected_set and "DISCOVERY_SOURCE_COUNT_LT_2" in actual_set:
-        rca_code = RCACode.DISCOVERY_SOURCE_COUNT_MISMATCH
-        rca_system = RCASystem.AOD_INGEST
-    elif "DISCOVERY_SOURCE_COUNT_LT_2" in expected_set and "DISCOVERY_SOURCE_COUNT_GE_2" in actual_set:
-        rca_code = RCACode.DISCOVERY_SOURCE_COUNT_MISMATCH
-        rca_system = RCASystem.FARM_EVIDENCE
-    
-    elif "ADMITTED_VIA_DISCOVERY" in expected_set and "REJECTED_NO_GATE" in actual_set:
-        rca_code = RCACode.DISCOVERY_ADMISSION_GATE_NOT_APPLIED
-        rca_system = RCASystem.AOD_ADMISSION
-    
-    elif ("NO_FINANCE" in expected_set and "HAS_FINANCE" in actual_set) or \
-         ("HAS_FINANCE" in expected_set and "NO_FINANCE" in actual_set):
-        rca_code = RCACode.FINANCE_EVIDENCE_INGESTION_MISMATCH
-        rca_system = RCASystem.AOD_INGEST
-    
-    elif ("NO_IDP" in expected_set and "HAS_IDP" in actual_set) or \
-         ("HAS_IDP" in expected_set and "NO_IDP" in actual_set) or \
-         ("NO_CMDB" in expected_set and "HAS_CMDB" in actual_set) or \
-         ("HAS_CMDB" in expected_set and "NO_CMDB" in actual_set):
-        rca_code = RCACode.SOR_MATCHING_MISMATCH
-        rca_system = RCASystem.AOD_CLASSIFICATION
-    
-    return MismatchRCA(
-        asset_key=asset_key,
-        mismatch_type=mismatch_type,
-        expected="shadow" if mismatch_type.startswith("shadow") else "zombie",
-        actual="not_classified" if "missed" in mismatch_type else "classified",
-        rca_code=rca_code,
-        rca_system=rca_system,
-        reason_diff=reason_diff
-    )
-
-
-def reconcile_run(
+def emit_actual_results(
     run_id: str,
     assets: list[Asset],
-    expected_shadow_keys: list[str],
-    expected_zombie_keys: list[str],
     activity_window_days: int = 90
-) -> ReconciliationResult:
+) -> ActualResultsOutput:
     """
-    Reconcile AOD actual results against Farm expectations.
+    Emit AOD's actual results for a run.
     
-    DIAGNOSTIC ONLY - does not change code or propose fixes.
+    This is the ONLY output function. AOD does not consume expected data.
+    Farm will take this output and compute diffs/RCA on its side.
     
     Args:
-        run_id: The run ID being reconciled
+        run_id: The run ID
         assets: List of admitted assets from AOD
-        expected_shadow_keys: Asset keys Farm expects to be shadow
-        expected_zombie_keys: Asset keys Farm expects to be zombie
         activity_window_days: Activity window for classification
     
     Returns:
-        ReconciliationResult with actual results and RCA for mismatches
+        ActualResultsOutput with all actual classifications and reason codes
     """
     shadow_actual = []
     zombie_actual = []
     admission_actual = {}
     actual_reasons = {}
+    asset_details = {}
     
-    asset_results = {}
     for asset in assets:
         result = classify_actual(asset, activity_window_days)
-        asset_results[result.asset_key] = result
         
         admission_actual[result.asset_key] = result.admission
         actual_reasons[result.asset_key] = [r.value for r in result.reasons]
+        
+        asset_details[result.asset_key] = {
+            "asset_id": result.asset_id,
+            "name": result.name,
+            "is_shadow": result.is_shadow,
+            "is_zombie": result.is_zombie,
+            "evidence_summary": result.evidence_summary
+        }
         
         if result.is_shadow:
             shadow_actual.append(result.asset_key)
         if result.is_zombie:
             zombie_actual.append(result.asset_key)
     
-    expected_shadow_normalized = [_normalize_key(k) for k in expected_shadow_keys]
-    expected_zombie_normalized = [_normalize_key(k) for k in expected_zombie_keys]
-    
-    shadow_actual_set = set(shadow_actual)
-    zombie_actual_set = set(zombie_actual)
-    expected_shadow_set = set(expected_shadow_normalized)
-    expected_zombie_set = set(expected_zombie_normalized)
-    
-    missed_shadows = expected_shadow_set - shadow_actual_set
-    extra_shadows = shadow_actual_set - expected_shadow_set
-    missed_zombies = expected_zombie_set - zombie_actual_set
-    extra_zombies = zombie_actual_set - expected_zombie_set
-    
-    mismatches = []
-    
-    for key in missed_shadows:
-        if key in asset_results:
-            result = asset_results[key]
-            expected_reasons = ["NO_IDP", "NO_CMDB", "HAS_FINANCE", "RECENT_ACTIVITY"]
-            mismatch = compute_rca(
-                key, 
-                "shadow_missed", 
-                expected_reasons,
-                [r.value for r in result.reasons]
-            )
-            mismatches.append(mismatch)
-    
-    for key in extra_shadows:
-        if key in asset_results:
-            result = asset_results[key]
-            expected_reasons = ["HAS_IDP"]
-            mismatch = compute_rca(
-                key,
-                "shadow_extra",
-                expected_reasons,
-                [r.value for r in result.reasons]
-            )
-            mismatches.append(mismatch)
-    
-    for key in missed_zombies:
-        if key in asset_results:
-            result = asset_results[key]
-            expected_reasons = ["HAS_IDP", "STALE_ACTIVITY"]
-            mismatch = compute_rca(
-                key,
-                "zombie_missed",
-                expected_reasons,
-                [r.value for r in result.reasons]
-            )
-            mismatches.append(mismatch)
-    
-    for key in extra_zombies:
-        if key in asset_results:
-            result = asset_results[key]
-            expected_reasons = ["HAS_IDP", "RECENT_ACTIVITY"]
-            mismatch = compute_rca(
-                key,
-                "zombie_extra",
-                expected_reasons,
-                [r.value for r in result.reasons]
-            )
-            mismatches.append(mismatch)
-    
-    rca_by_code = {}
-    rca_by_system = {}
-    for m in mismatches:
-        rca_by_code[m.rca_code.value] = rca_by_code.get(m.rca_code.value, 0) + 1
-        rca_by_system[m.rca_system.value] = rca_by_system.get(m.rca_system.value, 0) + 1
-    
     summary = {
         "total_assets": len(assets),
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
-        "expected_shadow_count": len(expected_shadow_keys),
-        "expected_zombie_count": len(expected_zombie_keys),
-        "missed_shadows": len(missed_shadows),
-        "extra_shadows": len(extra_shadows),
-        "missed_zombies": len(missed_zombies),
-        "extra_zombies": len(extra_zombies),
-        "total_mismatches": len(mismatches),
-        "rca_by_code": rca_by_code,
-        "rca_by_system": rca_by_system
+        "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),
+        "rejected_count": len([v for v in admission_actual.values() if v == "rejected"])
     }
     
-    return ReconciliationResult(
+    return ActualResultsOutput(
         run_id=run_id,
         shadow_actual=shadow_actual,
         zombie_actual=zombie_actual,
         admission_actual=admission_actual,
         actual_reasons=actual_reasons,
-        mismatches=mismatches,
+        asset_details=asset_details,
         summary=summary
     )

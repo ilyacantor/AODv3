@@ -1382,64 +1382,57 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
     )
 
 
-class AODAgentReconcileRequest(BaseModel):
-    """Request for AOD Agent reconciliation (diagnostic only)"""
+class AODActualResultsRequest(BaseModel):
+    """Request for AOD actual results (pure emitter - no expected data consumed)"""
     run_id: str
-    expected_shadow_keys: list[str] = Field(default_factory=list)
-    expected_zombie_keys: list[str] = Field(default_factory=list)
     activity_window_days: int = 90
 
 
-class MismatchRCAResponse(BaseModel):
-    """RCA for a single mismatch"""
-    asset_key: str
-    mismatch_type: str
-    expected: str
-    actual: str
-    rca_code: str
-    rca_system: str
-    reason_diff: dict
-
-
-class AODAgentReconcileResponse(BaseModel):
-    """Response for AOD Agent reconciliation (diagnostic only)"""
+class AODActualResultsResponse(BaseModel):
+    """
+    AOD Actual Results Response - Pure Emitter
+    
+    DESIGN PRINCIPLE:
+    - Farm owns reconciliation UI (has expected + actual + diffs)
+    - AOD owns its structured "actual" output only
+    - Farm displays side-by-side and runs the RCA reducer
+    
+    DATA FLOW:
+    - AOD publishes: shadow_actual, zombie_actual, admission_actual, actual_reason_codes
+    - Farm already has: shadow_expected, zombie_expected, expected_reason_codes
+    - Farm computes: extra, missed, rca_code per mismatch
+    
+    HARD RULE: AOD NEVER consumes Farm expected/rca data
+    """
     run_id: str
     shadow_actual: list[str]
     zombie_actual: list[str]
     admission_actual: dict[str, str]
     actual_reasons: dict[str, list[str]]
-    mismatches: list[MismatchRCAResponse]
+    asset_details: dict[str, dict]
     summary: dict
 
 
-@router.post("/debug/aod-agent-reconcile", response_model=AODAgentReconcileResponse)
-async def debug_aod_agent_reconcile(request: AODAgentReconcileRequest):
+@router.post("/debug/aod-agent-reconcile", response_model=AODActualResultsResponse)
+async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     """
-    AOD Agent Reconciliation - DIAGNOSTIC ONLY.
+    AOD Actual Results Emitter - Pure Output Only.
     
-    Produces structured actual results for reconciliation and deterministic
-    root-cause labels for each mismatch. Does NOT change any code.
+    DESIGN PRINCIPLE:
+    - Farm owns reconciliation UI (has expected + actual + diffs)
+    - AOD owns its structured "actual" output only
+    - Farm displays side-by-side and runs the RCA reducer
     
-    CRITICAL DIRECTIVE:
-    When reconciliation shows differences (extra/missed shadows/zombies), this
-    diagnoses using reason-code diffs and outputs the most likely RCA code.
-    It NEVER proposes fixes, patches, or code adjustments. Diagnosis only.
+    DATA FLOW:
+    - AOD publishes: shadow_actual, zombie_actual, admission_actual, actual_reason_codes
+    - Farm already has: shadow_expected, zombie_expected, expected_reason_codes
+    - Farm computes: extra, missed, rca_code per mismatch
     
-    RCA Codes:
-    - ACTIVITY_TIMESTAMP_DROPPED: Activity timestamp mismatch
-    - DISCOVERY_SOURCE_COUNT_MISMATCH: Discovery source count differs
-    - DISCOVERY_ADMISSION_GATE_NOT_APPLIED: Discovery admission gate not applied
-    - FINANCE_EVIDENCE_INGESTION_MISMATCH: Finance evidence ingestion differs
-    - SOR_MATCHING_MISMATCH: IdP/CMDB matching differs
-    - UNKNOWN: Cannot determine root cause
-    
-    RCA Systems:
-    - FARM_EVIDENCE: Issue originates in Farm data
-    - AOD_INGEST: Issue in AOD ingestion/normalization
-    - AOD_ADMISSION: Issue in AOD admission logic
-    - AOD_CLASSIFICATION: Issue in AOD classification logic
+    HARD RULE (prevents coupling):
+    - AOD NEVER consumes Farm expected/rca data
+    - AOD ONLY emits its own "actual + reasons"
     """
-    from ..pipeline.aod_agent_reconcile import reconcile_run
+    from ..pipeline.aod_agent_reconcile import emit_actual_results
     
     db = await get_db()
     
@@ -1456,6 +1449,7 @@ async def debug_aod_agent_reconcile(request: AODAgentReconcileRequest):
         raise HTTPException(status_code=404, detail=f"No assets found for run_id: {request.run_id}")
     
     from ..models.output_contracts import Asset
+    import json
     assets = []
     for row in assets_rows:
         asset_data = dict(row)
@@ -1463,53 +1457,32 @@ async def debug_aod_agent_reconcile(request: AODAgentReconcileRequest):
         asset_data["run_id"] = str(row["run_id"])
         
         if isinstance(asset_data.get("identifiers"), str):
-            import json
             asset_data["identifiers"] = json.loads(asset_data["identifiers"])
         if isinstance(asset_data.get("evidence_refs"), str):
-            import json
             asset_data["evidence_refs"] = json.loads(asset_data["evidence_refs"])
         if isinstance(asset_data.get("lens_status"), str):
-            import json
             asset_data["lens_status"] = json.loads(asset_data["lens_status"])
         if isinstance(asset_data.get("lens_coverage"), str):
-            import json
             asset_data["lens_coverage"] = json.loads(asset_data["lens_coverage"])
         if isinstance(asset_data.get("activity_evidence"), str):
-            import json
             asset_data["activity_evidence"] = json.loads(asset_data["activity_evidence"])
         if isinstance(asset_data.get("vendor_hypothesis"), str):
-            import json
             asset_data["vendor_hypothesis"] = json.loads(asset_data["vendor_hypothesis"])
         
         assets.append(Asset.model_validate(asset_data))
     
-    result = reconcile_run(
+    result = emit_actual_results(
         run_id=request.run_id,
         assets=assets,
-        expected_shadow_keys=request.expected_shadow_keys,
-        expected_zombie_keys=request.expected_zombie_keys,
         activity_window_days=request.activity_window_days
     )
     
-    mismatches_response = [
-        MismatchRCAResponse(
-            asset_key=m.asset_key,
-            mismatch_type=m.mismatch_type,
-            expected=m.expected,
-            actual=m.actual,
-            rca_code=m.rca_code.value,
-            rca_system=m.rca_system.value,
-            reason_diff=m.reason_diff
-        )
-        for m in result.mismatches
-    ]
-    
-    return AODAgentReconcileResponse(
+    return AODActualResultsResponse(
         run_id=result.run_id,
         shadow_actual=result.shadow_actual,
         zombie_actual=result.zombie_actual,
         admission_actual=result.admission_actual,
         actual_reasons=result.actual_reasons,
-        mismatches=mismatches_response,
+        asset_details=result.asset_details,
         summary=result.summary
     )

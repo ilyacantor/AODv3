@@ -1529,3 +1529,254 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
         asset_details=result.asset_details,
         summary=result.summary
     )
+
+
+class ExplainNonflagRequest(BaseModel):
+    """
+    Request for explain-nonflag endpoint.
+    
+    Farm sends ONLY keys + snapshot_id + ask-type.
+    No expected data is sent or consumed by AOD.
+    """
+    snapshot_id: str
+    asset_keys: list[str]
+    ask: str = Field(description="'shadow' | 'zombie' | 'both'")
+
+
+class NonflagExplanation(BaseModel):
+    """
+    Per-key explanation for why an asset was NOT flagged.
+    
+    Decisions:
+    - unknown_key: AOD never saw it / couldn't form candidate
+    - not_admitted: Saw it, but no admission gate satisfied
+    - admitted_not_shadow: Admitted, but fails shadow conditions (has presence)
+    - admitted_not_zombie: Admitted, but not stale (has recent activity)
+    """
+    asset_key: str
+    present_in_aod: bool
+    decision: str
+    reason_codes: list[str] = Field(default_factory=list)
+    primary_reason: str | None = None
+
+
+class ExplainNonflagResponse(BaseModel):
+    """Response for explain-nonflag endpoint"""
+    snapshot_id: str
+    ask: str
+    explanations: list[NonflagExplanation]
+
+
+@router.post("/reconcile/explain-nonflag", response_model=ExplainNonflagResponse)
+async def explain_nonflag(request: ExplainNonflagRequest):
+    """
+    Explain why specific assets are NOT in shadow/zombie lists.
+    
+    DESIGN PRINCIPLE:
+    - Farm asks AOD a neutral question: "Why isn't this asset flagged?"
+    - AOD returns its decision trace for NON-MEMBERSHIP
+    - AOD does NOT consume any expected data from Farm
+    
+    GUARDRAIL: Farm only sends keys + snapshot_id + ask-type.
+    """
+    from ..pipeline.derived_classifications import classify_shadow, compute_zombie_status
+    from datetime import datetime, timezone, timedelta
+    
+    db = await get_db()
+    
+    runs = await db.get_all_runs()
+    matching_run = None
+    for run in runs:
+        input_meta = run.input_meta if hasattr(run, 'input_meta') else run.get("input_meta", {})
+        if input_meta.get("snapshot_id") == request.snapshot_id:
+            matching_run = run
+            break
+    
+    if not matching_run:
+        explanations = []
+        for key in request.asset_keys:
+            explanations.append(NonflagExplanation(
+                asset_key=key,
+                present_in_aod=False,
+                decision="unknown_key",
+                reason_codes=["NO_RUN_FOR_SNAPSHOT"],
+                primary_reason="PRIMARY:NO_RUN_FOR_SNAPSHOT",
+                missing_inputs=["snapshot_not_processed"]
+            ))
+        return ExplainNonflagResponse(
+            snapshot_id=request.snapshot_id,
+            ask=request.ask,
+            explanations=explanations
+        )
+    
+    run_id = matching_run.run_id if hasattr(matching_run, 'run_id') else matching_run.get("run_id")
+    assets = await db.get_assets_by_run(run_id)
+    rejections_result = await db.get_rejections_by_run(run_id)
+    rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
+    
+    assets_by_key: dict[str, Any] = {}
+    for asset in assets:
+        name = (asset.name if hasattr(asset, 'name') else asset.get("name", "")).lower().strip()
+        assets_by_key[name] = asset
+        identifiers = asset.identifiers if hasattr(asset, 'identifiers') else asset.get("identifiers", {})
+        domains = identifiers.domains if hasattr(identifiers, 'domains') else identifiers.get("domains", [])
+        for domain in domains:
+            assets_by_key[domain.lower().strip()] = asset
+    
+    rejections_by_key: dict[str, dict] = {}
+    for rej in rejections:
+        name = rej.get("entity_name", "").lower().strip()
+        rejections_by_key[name] = rej
+        key = rej.get("entity_key", "").lower().strip()
+        rejections_by_key[key] = rej
+    
+    now = datetime.now(timezone.utc)
+    activity_cutoff = now - timedelta(days=90)
+    
+    explanations = []
+    for key in request.asset_keys:
+        normalized_key = key.lower().strip()
+        
+        asset = assets_by_key.get(normalized_key)
+        rejection = rejections_by_key.get(normalized_key)
+        
+        if asset:
+            lens_coverage = asset.lens_coverage if hasattr(asset, 'lens_coverage') else asset.get("lens_coverage", {})
+            activity_evidence = asset.activity_evidence if hasattr(asset, 'activity_evidence') else asset.get("activity_evidence", {})
+            
+            def get_coverage(lc, key):
+                if hasattr(lc, key):
+                    return getattr(lc, key)
+                elif isinstance(lc, dict):
+                    return lc.get(key)
+                return False
+            
+            def get_activity(ae, key):
+                if hasattr(ae, key):
+                    return getattr(ae, key)
+                elif isinstance(ae, dict):
+                    return ae.get(key)
+                return None
+            
+            reason_codes = []
+            
+            if get_coverage(lens_coverage, "idp"):
+                reason_codes.append("HAS_IDP")
+            else:
+                reason_codes.append("NO_IDP")
+            
+            if get_coverage(lens_coverage, "cmdb"):
+                reason_codes.append("HAS_CMDB")
+            else:
+                reason_codes.append("NO_CMDB")
+            
+            if get_coverage(lens_coverage, "finance"):
+                reason_codes.append("HAS_FINANCE")
+            else:
+                reason_codes.append("NO_FINANCE")
+            
+            if get_coverage(lens_coverage, "cloud"):
+                reason_codes.append("HAS_CLOUD")
+            else:
+                reason_codes.append("NO_CLOUD")
+            
+            if get_coverage(lens_coverage, "discovery"):
+                reason_codes.append("HAS_DISCOVERY")
+            else:
+                reason_codes.append("NO_DISCOVERY")
+            
+            latest_activity_str = get_activity(activity_evidence, "latest_activity_at")
+            if latest_activity_str:
+                try:
+                    if isinstance(latest_activity_str, str):
+                        latest_activity = datetime.fromisoformat(latest_activity_str.replace("Z", "+00:00"))
+                    else:
+                        latest_activity = latest_activity_str
+                    
+                    if latest_activity.tzinfo is None:
+                        latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+                    
+                    if latest_activity >= activity_cutoff:
+                        reason_codes.append("RECENT_ACTIVITY")
+                    else:
+                        reason_codes.append("STALE_ACTIVITY")
+                except:
+                    reason_codes.append("NO_ACTIVITY_TIMESTAMPS")
+            else:
+                reason_codes.append("NO_ACTIVITY_TIMESTAMPS")
+            
+            if request.ask in ("shadow", "both"):
+                has_presence = get_coverage(lens_coverage, "idp") or get_coverage(lens_coverage, "cmdb")
+                if has_presence:
+                    decision = "admitted_not_shadow"
+                    primary = "HAS_IDP" if get_coverage(lens_coverage, "idp") else "HAS_CMDB"
+                else:
+                    decision = "admitted_not_shadow"
+                    primary = "NO_IDP"
+                    
+            elif request.ask == "zombie":
+                has_presence = get_coverage(lens_coverage, "idp") or get_coverage(lens_coverage, "cmdb")
+                has_recent_activity = "RECENT_ACTIVITY" in reason_codes
+                
+                if not has_presence:
+                    decision = "admitted_not_zombie"
+                    primary = "NO_IDP"
+                elif has_recent_activity:
+                    decision = "admitted_not_zombie"
+                    primary = "RECENT_ACTIVITY"
+                else:
+                    decision = "admitted_not_zombie"
+                    primary = "STALE_ACTIVITY"
+            else:
+                decision = "admitted_not_shadow"
+                primary = reason_codes[0] if reason_codes else "UNKNOWN"
+            
+            explanations.append(NonflagExplanation(
+                asset_key=key,
+                present_in_aod=True,
+                decision=decision,
+                reason_codes=reason_codes,
+                primary_reason=primary
+            ))
+        
+        elif rejection:
+            reason_code = rejection.get("reason_code", "unknown")
+            reason_detail = rejection.get("reason_detail", "")
+            
+            reason_codes = []
+            if "discovery" in reason_code.lower() or "source" in reason_detail.lower():
+                reason_codes.append("INSUFFICIENT_DISCOVERY_SOURCES")
+            if "stale" in reason_detail.lower() or "activity" in reason_detail.lower():
+                reason_codes.append("STALE_ACTIVITY")
+            if "gate" in reason_code.lower() or "no_gate" in reason_code.lower():
+                reason_codes.append("REJECTED_NO_GATE")
+            if "finance" in reason_code.lower():
+                reason_codes.append("NO_FINANCE")
+            
+            if not reason_codes:
+                reason_codes.append("REJECTED_NO_GATE")
+            
+            primary = reason_codes[0] if reason_codes else "REJECTED_NO_GATE"
+            
+            explanations.append(NonflagExplanation(
+                asset_key=key,
+                present_in_aod=True,
+                decision="not_admitted",
+                reason_codes=reason_codes,
+                primary_reason=primary
+            ))
+        
+        else:
+            explanations.append(NonflagExplanation(
+                asset_key=key,
+                present_in_aod=False,
+                decision="unknown_key",
+                reason_codes=["NO_CANDIDATE", "NO_EVIDENCE_INGESTED"],
+                primary_reason="NO_CANDIDATE"
+            ))
+    
+    return ExplainNonflagResponse(
+        snapshot_id=request.snapshot_id,
+        ask=request.ask,
+        explanations=explanations
+    )

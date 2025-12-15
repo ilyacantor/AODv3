@@ -352,6 +352,14 @@
             return div.innerHTML;
         }
         
+        function formatDrillValue(value, field) {
+            if (value === 'unknown' || value === null || value === undefined) {
+                const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                return `Unknown ${fieldLabel}`;
+            }
+            return value;
+        }
+        
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
                 const btn = document.querySelector('.copy-json-btn');
@@ -622,8 +630,9 @@
             drillStack.forEach((state, index) => {
                 if (Object.keys(state.filters).length > 0) {
                     const lastFilter = Object.entries(state.filters).pop();
+                    const [filterField, filterValue] = lastFilter;
                     breadcrumbHtml += `<span class="breadcrumb-sep">›</span>`;
-                    breadcrumbHtml += `<span class="breadcrumb-item${index === drillStack.length - 1 ? ' active' : ''}" onclick="navigateToDrillLevel(${index})">${lastFilter[1]}</span>`;
+                    breadcrumbHtml += `<span class="breadcrumb-item${index === drillStack.length - 1 ? ' active' : ''}" onclick="navigateToDrillLevel(${index})">${formatDrillValue(filterValue, filterField)}</span>`;
                 }
             });
             breadcrumbEl.innerHTML = breadcrumbHtml;
@@ -657,7 +666,7 @@
             return options.map(opt => `
                 <div class="drill-group" onclick="drillIntoGroup('${rootType}', '${opt.field}', '${opt.value.replace(/'/g, "\\'")}')">
                     <div class="drill-group-header">
-                        <span class="drill-group-label">${opt.value}</span>
+                        <span class="drill-group-label">${formatDrillValue(opt.value, opt.field)}</span>
                         <span class="drill-group-count">${opt.count} item${opt.count !== 1 ? 's' : ''}</span>
                     </div>
                     <div class="drill-group-hint">${opt.canDrillDeeper ? 'Click to drill deeper' : 'Click to view details'}</div>

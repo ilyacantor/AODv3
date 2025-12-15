@@ -5,15 +5,14 @@ Computes Shadow and Zombie classifications from evidence AFTER the main pipeline
 These are computed on-read, not stored as flags.
 
 Shadow Asset = admitted asset with:
-  - finance evidence OR cloud presence OR discovery observations
+  - finance evidence OR cloud presence (NOT discovery - discovery alone is not proof)
   - AND no IdP match (no SSO / SCIM / service principal)
   - AND no CMDB match
   - AND has recent activity (within activity_window_days)
 
 Zombie Asset = admitted asset with:
   - CMDB or IdP presence
-  - AND no discovery observations or activity evidence (no cloud, no finance)
-  - OR has no recent activity (outside activity_window_days)
+  - AND no activity timestamps OR activity outside activity_window_days
 """
 
 from dataclasses import dataclass, field
@@ -72,9 +71,12 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     """
     Determine if an asset is a Shadow Asset.
     
-    Shadow = has evidence of existence (finance, cloud, or discovery observations)
+    Shadow = has evidence of existence (finance or cloud)
              but is NOT in identity systems and NOT in CMDB
              AND has recent activity within the activity window
+    
+    Note: Discovery observations are NOT considered for shadow classification
+    as they don't represent real-world proof of usage.
     
     Interpretation: "We know this software is used, but it's not being
     managed through official channels."
@@ -92,8 +94,6 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
     
-    has_discovery_observations = bool(asset.evidence_refs)
-    
     if has_idp or has_cmdb:
         return ClassificationResult(
             is_classified=False,
@@ -108,8 +108,6 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         presence_sources.append("finance evidence (spending/contracts)")
     if has_cloud:
         presence_sources.append("cloud infrastructure")
-    if has_discovery_observations:
-        presence_sources.append(f"discovery observations ({len(asset.evidence_refs)} refs)")
     
     if not presence_sources:
         return ClassificationResult(

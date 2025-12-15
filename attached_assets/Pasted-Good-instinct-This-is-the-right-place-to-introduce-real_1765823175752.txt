@@ -1,0 +1,172 @@
+Good instinct. This **is** the right place to introduce real intelligence — but it has to be **bounded, explainable, and reversible**, or you’ll poison trust early.
+
+I’ll keep this clean.
+
+---
+
+## Why this is happening (baseline truth)
+
+Nothing is “broken.”
+
+Discovery-only assets **cannot know vendor** because:
+
+* DNS / proxy / endpoint = **usage signals**
+* Vendor is an **identity claim**
+* Identity normally comes from IdP / CMDB / Finance / Cloud
+
+So `vendor = unknown` is *technically correct* today.
+
+The question is: **when is inference acceptable?**
+
+---
+
+## Correct design principle (anchor this)
+
+> **Inference may suggest identity, but must never assert it.**
+
+So:
+
+* No overwriting `vendor`
+* No pretending it’s authoritative
+* No coupling inference to admission or shadow logic
+
+---
+
+## The right design (minimal intelligence, no magic)
+
+### Add **Vendor Hypothesis**, not Vendor
+
+Introduce:
+
+```
+vendor_hypothesis = {
+  value: "MongoDB",
+  confidence: 0.85,
+  basis: "domain"
+}
+```
+
+And keep:
+
+```
+vendor = "unknown"
+```
+
+This is critical.
+
+---
+
+## Where this lives (important)
+
+**Normalization layer**, not discovery, not admission, not shadow logic.
+
+Pipeline:
+
+```
+Evidence
+ → Asset
+   → Normalization
+     → Vendor Hypothesis (optional)
+```
+
+No branching. No gating.
+
+---
+
+## How to infer (start dumb, stay safe)
+
+### Rule 1 — Domain-based only (for now)
+
+From:
+
+```
+docs.mongodb.com
+```
+
+Extract:
+
+```
+registered_domain = mongodb.com
+```
+
+Map:
+
+```
+mongodb.com → MongoDB
+```
+
+That’s it.
+
+No NLP. No embeddings. No LLM calls yet.
+
+---
+
+### Rule 2 — Very small curated map
+
+Start with:
+
+* Top ~50 SaaS / infra vendors
+* Hand-curated
+* Versioned
+
+This avoids hallucinations.
+
+---
+
+### Rule 3 — Confidence ceiling
+
+* Domain match = max confidence **0.9**
+* Never 1.0
+* Never treated as authoritative
+
+---
+
+## What this unlocks (without risk)
+
+* Shadow review UX becomes intelligible
+* Reconciling later IdP / finance matches becomes easier
+* You can show:
+
+  > “Likely MongoDB (based on domain usage)”
+
+But:
+
+* No policy actions
+* No compliance claims
+* No auto-governance
+
+---
+
+## What NOT to do (yet)
+
+* ❌ Do not replace `vendor`
+* ❌ Do not train ML on sparse discovery data
+* ❌ Do not let inference affect admission
+* ❌ Do not let inference affect shadow status
+
+That comes later.
+
+---
+
+## Why this is the right “first intelligence”
+
+* Deterministic
+* Auditable
+* Explainable
+* Reversible
+* Parallel-safe with Farm
+
+It adds **meaning**, not **behavior**.
+
+---
+
+## One-line CTO guidance
+
+> **Inference decorates reality; it does not redefine it.**
+
+If you want, next step can be:
+
+* the exact schema change (1 field)
+* or a rule for when hypothesis is upgraded to fact (when IdP/finance confirms)
+
+But you’re starting in the right place.

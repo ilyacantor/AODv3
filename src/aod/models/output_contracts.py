@@ -73,6 +73,18 @@ class ActivityEvidence(BaseModel):
     latest_activity_at: Optional[datetime] = None
 
 
+class VendorHypothesis(BaseModel):
+    """
+    Inferred vendor identity - decorative only.
+    
+    Inference decorates reality; it does not redefine it.
+    This is never authoritative and does not affect admission or shadow logic.
+    """
+    value: str
+    confidence: float = Field(ge=0.0, le=0.9, description="Max 0.9 - never authoritative")
+    basis: str = Field(description="How this was inferred: domain, pattern, etc.")
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
@@ -82,6 +94,7 @@ class Asset(BaseModel):
     asset_type: AssetType = AssetType.UNKNOWN
     identifiers: AssetIdentifiers = Field(default_factory=AssetIdentifiers)
     vendor: Optional[str] = None
+    vendor_hypothesis: Optional[VendorHypothesis] = None
     environment: Environment = Environment.UNKNOWN
     evidence_refs: list[str] = Field(default_factory=list)
     lens_status: LensStatuses = Field(default_factory=LensStatuses)

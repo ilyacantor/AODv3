@@ -19,7 +19,32 @@ Zombie Asset = admitted asset with:
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import re
 from ..models.output_contracts import Asset, LensStatus
+
+
+def derive_vendor_key(asset: Asset) -> str:
+    """
+    Derive a canonical vendor_key for reconciliation.
+    
+    Priority:
+    1. First domain from identifiers.domains (normalized)
+    2. Vendor name normalized to domain-style
+    3. Asset name normalized to domain-style
+    
+    Normalization: lowercase, remove spaces/special chars, no trailing 'com'
+    """
+    if asset.identifiers.domains:
+        domain = asset.identifiers.domains[0].lower()
+        domain = domain.replace("www.", "").replace(".com", "").replace(".io", "").replace(".org", "")
+        domain = re.sub(r'[^a-z0-9]', '', domain)
+        if domain:
+            return domain
+    
+    source = asset.vendor if asset.vendor else asset.name
+    key = source.lower()
+    key = re.sub(r'[^a-z0-9]', '', key)
+    return key
 
 
 def _utc_now() -> datetime:
@@ -325,6 +350,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
         if shadow_result.is_classified:
             shadow_assets.append({
                 "asset_id": str(asset.asset_id),
+                "vendor_key": derive_vendor_key(asset),
                 "name": asset.name,
                 "vendor": asset.vendor,
                 "asset_type": asset.asset_type.value,
@@ -351,6 +377,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
         elif zombie_result.is_classified:
             zombie_assets.append({
                 "asset_id": str(asset.asset_id),
+                "vendor_key": derive_vendor_key(asset),
                 "name": asset.name,
                 "vendor": asset.vendor,
                 "asset_type": asset.asset_type.value,

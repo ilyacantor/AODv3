@@ -49,11 +49,18 @@ async def reconcile_to_farm(
     logger.info(f"[RECONCILE-TRACE] snapshot_id={snapshot_id}")
     logger.info(f"[RECONCILE-TRACE] Total assets: {len(assets)}")
     logger.info(f"[RECONCILE-TRACE] Derived shadow_count={derived.shadow_count}, zombie_count={derived.zombie_count}, indeterminate={derived.indeterminate_count}")
-    logger.info(f"[RECONCILE-TRACE] Shadow assets (full list): {[a.get('name', '') for a in derived.shadow_assets]}")
-    logger.info(f"[RECONCILE-TRACE] Zombie assets (full list): {[a.get('name', '') for a in derived.zombie_assets]}")
+    logger.info(f"[RECONCILE-TRACE] Shadow assets (vendor_keys): {[a.get('vendor_key', '') for a in derived.shadow_assets]}")
+    logger.info(f"[RECONCILE-TRACE] Zombie assets (vendor_keys): {[a.get('vendor_key', '') for a in derived.zombie_assets]}")
     
-    shadow_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.shadow_assets[:10]]
-    zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]
+    # Send vendor_key as primary identifier, with display_name as optional context
+    shadow_asset_list = [
+        {"vendor_key": a.get("vendor_key", ""), "display_name": a.get("name", "")}
+        for a in derived.shadow_assets[:10]
+    ]
+    zombie_asset_list = [
+        {"vendor_key": a.get("vendor_key", ""), "display_name": a.get("name", "")}
+        for a in derived.zombie_assets[:10]
+    ]
     
     high_severity_findings = [
         {
@@ -83,8 +90,8 @@ async def reconcile_to_farm(
             "zombie_count": derived.zombie_count
         },
         "aod_lists": {
-            "shadow_assets": shadow_asset_names,
-            "zombie_assets": zombie_asset_names,
+            "shadow_assets": shadow_asset_list,
+            "zombie_assets": zombie_asset_list,
             "high_severity_findings": high_severity_findings
         }
     }

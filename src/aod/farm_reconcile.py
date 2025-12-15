@@ -44,19 +44,28 @@ async def reconcile_to_farm(
     
     def get_asset_key(asset) -> str:
         """Get canonical reconciliation key for an asset (registered domain preferred)"""
+        domains = []
+        name = ""
+        
         if isinstance(asset, dict):
             identifiers = asset.get("identifiers", {})
-            domains = identifiers.get("domains", []) if isinstance(identifiers, dict) else getattr(identifiers, "domains", [])
-            if domains:
-                return domains[0].lower()
-            return asset.get("name", "").lower().replace(" ", "_")
+            if isinstance(identifiers, dict):
+                domains = identifiers.get("domains", [])
+            elif hasattr(identifiers, "domains"):
+                domains = identifiers.domains or []
+            name = asset.get("name", "")
         else:
             identifiers = getattr(asset, "identifiers", None)
             if identifiers:
-                domains = getattr(identifiers, "domains", [])
-                if domains:
-                    return domains[0].lower()
-            return getattr(asset, "name", "").lower().replace(" ", "_")
+                if hasattr(identifiers, "domains"):
+                    domains = identifiers.domains or []
+                elif isinstance(identifiers, dict):
+                    domains = identifiers.get("domains", [])
+            name = getattr(asset, "name", "")
+        
+        if domains and len(domains) > 0:
+            return domains[0].lower()
+        return name.lower().replace(" ", "_")
     
     shadow_asset_keys = [get_asset_key(a) for a in derived.shadow_assets]
     zombie_asset_keys = [get_asset_key(a) for a in derived.zombie_assets]

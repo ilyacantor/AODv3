@@ -737,8 +737,33 @@ async def get_reconcile_payload(run_id: str):
     findings = await db.get_findings_by_run(run_id)
     derived = compute_derived_classifications(assets, activity_window_days=90)
     
-    shadow_asset_names = [a["name"] for a in derived.shadow_assets[:10]]
-    zombie_asset_names = [a["name"] for a in derived.zombie_assets[:10]]
+    def get_asset_key(asset) -> str:
+        """Get canonical reconciliation key (registered domain preferred)"""
+        domains = []
+        name = ""
+        
+        if isinstance(asset, dict):
+            identifiers = asset.get("identifiers", {})
+            if isinstance(identifiers, dict):
+                domains = identifiers.get("domains", [])
+            elif hasattr(identifiers, "domains"):
+                domains = identifiers.domains or []
+            name = asset.get("name", "")
+        else:
+            identifiers = getattr(asset, "identifiers", None)
+            if identifiers:
+                if hasattr(identifiers, "domains"):
+                    domains = identifiers.domains or []
+                elif isinstance(identifiers, dict):
+                    domains = identifiers.get("domains", [])
+            name = getattr(asset, "name", "")
+        
+        if domains and len(domains) > 0:
+            return domains[0].lower()
+        return name.lower().replace(" ", "_")
+    
+    shadow_asset_keys = [get_asset_key(a) for a in derived.shadow_assets]
+    zombie_asset_keys = [get_asset_key(a) for a in derived.zombie_assets]
     
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
@@ -747,6 +772,7 @@ async def get_reconcile_payload(run_id: str):
     ][:10]
     
     return {
+        "snapshot_id": run.input_meta.get("snapshot_id") if run.input_meta else None,
         "tenant_id": run.tenant_id,
         "aod_run_id": run.run_id,
         "aod_status": run.status.value,
@@ -757,13 +783,16 @@ async def get_reconcile_payload(run_id: str):
             "assets_admitted": run.counts.assets_admitted,
             "artifacts_recorded": run.counts.artifacts_recorded,
             "rejected": run.counts.rejected,
+            "ambiguous_matches": run.counts.ambiguous_matches,
             "findings_generated": run.counts.findings_generated,
             "shadow_count": derived.shadow_count,
             "zombie_count": derived.zombie_count
         },
+        "shadow_asset_keys": shadow_asset_keys,
+        "zombie_asset_keys": zombie_asset_keys,
         "aod_lists": {
-            "shadow_assets": shadow_asset_names,
-            "zombie_assets": zombie_asset_names,
+            "shadow_asset_keys_sample": shadow_asset_keys[:10],
+            "zombie_asset_keys_sample": zombie_asset_keys[:10],
             "high_severity_findings": high_severity_findings
         }
     }

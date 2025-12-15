@@ -345,6 +345,11 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
                 "classification": "shadow",
                 "reason": shadow_result.reason,
                 "evidence_summary": shadow_result.evidence_summary,
+                "identifiers": {
+                    "domains": list(asset.identifiers.domains) if asset.identifiers else [],
+                    "hostnames": list(asset.identifiers.hostnames) if asset.identifiers else [],
+                    "uris": list(asset.identifiers.uris) if asset.identifiers else []
+                },
                 "lens_status": {
                     "idp": asset.lens_status.idp.value,
                     "cmdb": asset.lens_status.cmdb.value,

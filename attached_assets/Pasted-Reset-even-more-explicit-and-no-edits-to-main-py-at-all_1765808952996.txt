@@ -1,0 +1,98 @@
+Reset: even more explicit, and no edits to main.py at all
+
+We eliminate the single biggest risk: touching the primary router file.
+
+New approach
+
+Do not register anything in main.py
+
+Create a separate standalone FastAPI app that runs on a different port/path, purely for Zombie v0.
+
+That makes it impossible to affect production routing.
+
+This is the cleanest “walled garden” you can do in a codebase.
+
+Hard-walled AOD prompt v2 (zero-touch to existing runtime)
+
+Paste this to Replit Agent 3 MAX in AOD:
+
+PROMPT (AOD — Zombie v0 Standalone App, ZERO TOUCH EXISTING)
+
+You are building a standalone Zombie v0 app inside the AOD repo. It must not touch existing runtime code.
+
+ABSOLUTE RULES
+
+You may not modify any existing files. Zero edits.
+
+You may only add new files under:
+
+src/experimental/zombie_v0_standalone/
+
+tools/experimental/
+
+Do not import or reuse any existing AOD classification or reconciliation modules. Logic must be written from scratch.
+
+Read-only DB access only.
+
+No UI changes. API only.
+
+Build
+
+Create new folder:
+src/experimental/zombie_v0_standalone/
+
+Create a standalone FastAPI app:
+
+File: src/experimental/zombie_v0_standalone/app.py
+
+It must define app = FastAPI(...)
+
+Endpoint:
+GET /zombies?run_id=...&window_days=...
+
+Output shape exactly:
+
+{"run_id":"...","window_days":90,"results":[{...}]}
+
+
+Add a runner script:
+
+File: tools/experimental/run_zombie_v0.py
+
+Runs uvicorn for this standalone app on port 5055 (or any unused port), e.g. 0.0.0.0:5055
+
+Must not start or depend on the main AOD server.
+
+DB connection:
+
+Use SUPABASE_DB_URL else DATABASE_URL
+
+Fail fast if neither set
+
+SELECT only
+
+Evidence logic:
+
+Exists = seen in any SOR evidence inside snapshots for run_id
+
+Activity = any observed_at within window
+
+Zombie = exists AND NOT activity
+
+No inference, no ML
+
+Verification (mandatory)
+
+Show a git diff --name-only proving only new files were added
+
+Run:
+
+python tools/experimental/run_zombie_v0.py
+
+curl "http://localhost:5055/zombies?run_id=run_c2e8e3054e6a&window_days=90" | head
+
+Paste the curl output
+
+Do not touch main.py. Do not touch existing routes. Do not touch frontend.
+
+END PROMPT

@@ -80,16 +80,29 @@ Runs must return one of these explicit statuses:
 
 ### Database Design
 
-SQLite persistence layer structured for future PostgreSQL migration. Key tables:
+PostgreSQL persistence layer using asyncpg. Single DB selection rule:
+- Priority: `SUPABASE_DB_URL` > `DATABASE_URL`
+- If neither is set, application fails fast with clear error
+- No SQLite fallback or other defaults allowed
+- `IGNORE_REPLIT_DB=true` ignores any REPLIT* env vars
+
+Key tables:
 - `runs` - Run logs with status and counts
 - `assets` - Admitted assets with lens statuses
 - `findings` - Generated findings linked to assets
 - `artifacts` - Non-system objects
-- `run_observation_samples` - Capped observation samples per run
-- `run_ambiguous_matches` - Ambiguous correlation groups
-- `run_rejections` - Rejected candidates with reasons
+- `observation_samples` - Capped observation samples per run
+- `ambiguous_matches` - Ambiguous correlation groups
+- `rejections` - Rejected candidates with reasons
 
 IDs are run-scoped using deterministic UUID generation from snapshot + content components.
+
+### Sanity Check
+
+Run `make sanity` to verify storage guardrails:
+- PASS if using external DB (SUPABASE_DB_URL or DATABASE_URL)
+- FAIL if any local SQLite files exist
+- Reports active DB source and ignores REPLIT* vars when IGNORE_REPLIT_DB=true
 
 ## External Dependencies
 
@@ -118,7 +131,7 @@ After a successful pipeline run from Farm, AOD automatically reconciles results 
 
 - **FastAPI** - Web framework
 - **Pydantic v2** - Data validation and serialization
-- **aiosqlite** - Async SQLite database
+- **asyncpg** - Async PostgreSQL database driver
 - **httpx** - Async HTTP client for Farm communication
 
 ### Frontend

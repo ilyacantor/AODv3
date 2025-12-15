@@ -4,7 +4,7 @@ from typing import Any, Optional
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 PST = timezone(timedelta(hours=-8))
 
@@ -1379,4 +1379,137 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
             "timestamp_loss_count": total_raw_with_ts - total_normalized_with_ts
         },
         conclusion=conclusion
+    )
+
+
+class AODAgentReconcileRequest(BaseModel):
+    """Request for AOD Agent reconciliation (diagnostic only)"""
+    run_id: str
+    expected_shadow_keys: list[str] = Field(default_factory=list)
+    expected_zombie_keys: list[str] = Field(default_factory=list)
+    activity_window_days: int = 90
+
+
+class MismatchRCAResponse(BaseModel):
+    """RCA for a single mismatch"""
+    asset_key: str
+    mismatch_type: str
+    expected: str
+    actual: str
+    rca_code: str
+    rca_system: str
+    reason_diff: dict
+
+
+class AODAgentReconcileResponse(BaseModel):
+    """Response for AOD Agent reconciliation (diagnostic only)"""
+    run_id: str
+    shadow_actual: list[str]
+    zombie_actual: list[str]
+    admission_actual: dict[str, str]
+    actual_reasons: dict[str, list[str]]
+    mismatches: list[MismatchRCAResponse]
+    summary: dict
+
+
+@router.post("/debug/aod-agent-reconcile", response_model=AODAgentReconcileResponse)
+async def debug_aod_agent_reconcile(request: AODAgentReconcileRequest):
+    """
+    AOD Agent Reconciliation - DIAGNOSTIC ONLY.
+    
+    Produces structured actual results for reconciliation and deterministic
+    root-cause labels for each mismatch. Does NOT change any code.
+    
+    CRITICAL DIRECTIVE:
+    When reconciliation shows differences (extra/missed shadows/zombies), this
+    diagnoses using reason-code diffs and outputs the most likely RCA code.
+    It NEVER proposes fixes, patches, or code adjustments. Diagnosis only.
+    
+    RCA Codes:
+    - ACTIVITY_TIMESTAMP_DROPPED: Activity timestamp mismatch
+    - DISCOVERY_SOURCE_COUNT_MISMATCH: Discovery source count differs
+    - DISCOVERY_ADMISSION_GATE_NOT_APPLIED: Discovery admission gate not applied
+    - FINANCE_EVIDENCE_INGESTION_MISMATCH: Finance evidence ingestion differs
+    - SOR_MATCHING_MISMATCH: IdP/CMDB matching differs
+    - UNKNOWN: Cannot determine root cause
+    
+    RCA Systems:
+    - FARM_EVIDENCE: Issue originates in Farm data
+    - AOD_INGEST: Issue in AOD ingestion/normalization
+    - AOD_ADMISSION: Issue in AOD admission logic
+    - AOD_CLASSIFICATION: Issue in AOD classification logic
+    """
+    from ..pipeline.aod_agent_reconcile import reconcile_run
+    
+    db = await get_db()
+    
+    assets_rows = await db.fetch(
+        '''SELECT asset_id, tenant_id, run_id, name, vendor, vendor_hypothesis,
+                  asset_type, environment, identifiers, evidence_refs,
+                  lens_status, lens_coverage, activity_evidence,
+                  observation_count, created_at
+           FROM assets WHERE run_id = $1''',
+        request.run_id
+    )
+    
+    if not assets_rows:
+        raise HTTPException(status_code=404, detail=f"No assets found for run_id: {request.run_id}")
+    
+    from ..models.output_contracts import Asset
+    assets = []
+    for row in assets_rows:
+        asset_data = dict(row)
+        asset_data["asset_id"] = str(row["asset_id"])
+        asset_data["run_id"] = str(row["run_id"])
+        
+        if isinstance(asset_data.get("identifiers"), str):
+            import json
+            asset_data["identifiers"] = json.loads(asset_data["identifiers"])
+        if isinstance(asset_data.get("evidence_refs"), str):
+            import json
+            asset_data["evidence_refs"] = json.loads(asset_data["evidence_refs"])
+        if isinstance(asset_data.get("lens_status"), str):
+            import json
+            asset_data["lens_status"] = json.loads(asset_data["lens_status"])
+        if isinstance(asset_data.get("lens_coverage"), str):
+            import json
+            asset_data["lens_coverage"] = json.loads(asset_data["lens_coverage"])
+        if isinstance(asset_data.get("activity_evidence"), str):
+            import json
+            asset_data["activity_evidence"] = json.loads(asset_data["activity_evidence"])
+        if isinstance(asset_data.get("vendor_hypothesis"), str):
+            import json
+            asset_data["vendor_hypothesis"] = json.loads(asset_data["vendor_hypothesis"])
+        
+        assets.append(Asset.model_validate(asset_data))
+    
+    result = reconcile_run(
+        run_id=request.run_id,
+        assets=assets,
+        expected_shadow_keys=request.expected_shadow_keys,
+        expected_zombie_keys=request.expected_zombie_keys,
+        activity_window_days=request.activity_window_days
+    )
+    
+    mismatches_response = [
+        MismatchRCAResponse(
+            asset_key=m.asset_key,
+            mismatch_type=m.mismatch_type,
+            expected=m.expected,
+            actual=m.actual,
+            rca_code=m.rca_code.value,
+            rca_system=m.rca_system.value,
+            reason_diff=m.reason_diff
+        )
+        for m in result.mismatches
+    ]
+    
+    return AODAgentReconcileResponse(
+        run_id=result.run_id,
+        shadow_actual=result.shadow_actual,
+        zombie_actual=result.zombie_actual,
+        admission_actual=result.admission_actual,
+        actual_reasons=result.actual_reasons,
+        mismatches=mismatches_response,
+        summary=result.summary
     )

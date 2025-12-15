@@ -87,6 +87,31 @@ FastAPI application with these key endpoints:
 - `GET /api/farm/snapshots` - Proxy to Farm for snapshot listing
 - `POST /api/debug/zombie-explain` - Debug endpoint for zombie classification explanations
 - `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
+- `POST /api/debug/aod-agent-reconcile` - AOD Agent diagnostic reconciliation (actual results + RCA codes)
+
+### AOD Agent Reconciliation
+
+The AOD Agent reconciliation endpoint is **diagnostic only** - it outputs actual results and deterministic RCA codes for mismatches without proposing code changes.
+
+**Outputs:**
+- `shadow_actual[]` - Assets classified as shadow
+- `zombie_actual[]` - Assets classified as zombie
+- `admission_actual[key]` - "admitted" | "rejected"
+- `actual_reasons[key]` - Canonical reason codes
+- `mismatches[]` - RCA for each mismatch with reason diffs
+
+**RCA Codes (deterministic reducer):**
+- `ACTIVITY_TIMESTAMP_DROPPED` - Farm says recent, AOD says stale
+- `DISCOVERY_SOURCE_COUNT_MISMATCH` - Discovery source count differs
+- `DISCOVERY_ADMISSION_GATE_NOT_APPLIED` - Discovery admission not applied
+- `FINANCE_EVIDENCE_INGESTION_MISMATCH` - Finance evidence differs
+- `SOR_MATCHING_MISMATCH` - IdP/CMDB matching differs
+
+**RCA Systems:**
+- `FARM_EVIDENCE` - Issue originates in Farm data
+- `AOD_INGEST` - Issue in normalization
+- `AOD_ADMISSION` - Issue in admission logic
+- `AOD_CLASSIFICATION` - Issue in classification logic
 
 ### Run Status Semantics
 

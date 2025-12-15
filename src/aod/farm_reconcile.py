@@ -85,6 +85,18 @@ async def reconcile_to_farm(
         if f.severity.value == "high"
     ][:10]
     
+    # INVARIANT: summary counts MUST equal list lengths (single source of truth)
+    payload_shadow_count = len(derived.shadow_assets)
+    payload_zombie_count = len(derived.zombie_assets)
+    
+    # Fail fast if invariant is violated
+    if payload_shadow_count != derived.shadow_count or payload_zombie_count != derived.zombie_count:
+        logger.error(f"[RECONCILE-INVARIANT-VIOLATION] Counts mismatch! "
+                     f"shadow: list={payload_shadow_count} vs derived={derived.shadow_count}, "
+                     f"zombie: list={payload_zombie_count} vs derived={derived.zombie_count}")
+    
+    logger.info(f"[RECONCILE-TRACE] Payload counts: shadow={payload_shadow_count}, zombie={payload_zombie_count}")
+    
     reconcile_payload = {
         "snapshot_id": snapshot_id,
         "tenant_id": run_log.tenant_id,
@@ -99,8 +111,8 @@ async def reconcile_to_farm(
             "rejected": run_log.counts.rejected,
             "ambiguous_matches": run_log.counts.ambiguous_matches,
             "findings_generated": run_log.counts.findings_generated,
-            "shadow_count": derived.shadow_count,
-            "zombie_count": derived.zombie_count
+            "shadow_count": payload_shadow_count,
+            "zombie_count": payload_zombie_count
         },
         "aod_lists": {
             "shadow_assets": shadow_asset_list,

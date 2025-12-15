@@ -1436,40 +1436,14 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     
     db = await get_db()
     
-    assets_rows = await db.fetch(
-        '''SELECT asset_id, tenant_id, run_id, name, vendor, vendor_hypothesis,
-                  asset_type, environment, identifiers, evidence_refs,
-                  lens_status, lens_coverage, activity_evidence,
-                  observation_count, created_at
-           FROM assets WHERE run_id = $1''',
-        request.run_id
-    )
+    run = await db.get_run(request.run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run not found: {request.run_id}")
     
-    if not assets_rows:
+    assets = await db.get_assets_by_run(request.run_id)
+    
+    if not assets:
         raise HTTPException(status_code=404, detail=f"No assets found for run_id: {request.run_id}")
-    
-    from ..models.output_contracts import Asset
-    import json
-    assets = []
-    for row in assets_rows:
-        asset_data = dict(row)
-        asset_data["asset_id"] = str(row["asset_id"])
-        asset_data["run_id"] = str(row["run_id"])
-        
-        if isinstance(asset_data.get("identifiers"), str):
-            asset_data["identifiers"] = json.loads(asset_data["identifiers"])
-        if isinstance(asset_data.get("evidence_refs"), str):
-            asset_data["evidence_refs"] = json.loads(asset_data["evidence_refs"])
-        if isinstance(asset_data.get("lens_status"), str):
-            asset_data["lens_status"] = json.loads(asset_data["lens_status"])
-        if isinstance(asset_data.get("lens_coverage"), str):
-            asset_data["lens_coverage"] = json.loads(asset_data["lens_coverage"])
-        if isinstance(asset_data.get("activity_evidence"), str):
-            asset_data["activity_evidence"] = json.loads(asset_data["activity_evidence"])
-        if isinstance(asset_data.get("vendor_hypothesis"), str):
-            asset_data["vendor_hypothesis"] = json.loads(asset_data["vendor_hypothesis"])
-        
-        assets.append(Asset.model_validate(asset_data))
     
     result = emit_actual_results(
         run_id=request.run_id,

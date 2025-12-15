@@ -119,6 +119,54 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     return False, ""
 
 
+DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
+
+
+def check_discovery_admission(
+    observations: Optional[list[Observation]],
+    min_sources: int = 2
+) -> tuple[bool, str]:
+    """
+    Check discovery-only admission criteria.
+    
+    Admit discovery-only candidates when usage is corroborated and recent:
+    - Evidence from ≥2 distinct discovery sources
+    - Recent activity ≤ 90 days
+    
+    This allows shadow IT to be admitted before finance/cloud evidence appears,
+    since usage signals typically precede contracts or infrastructure.
+    """
+    if not observations:
+        return False, ""
+    
+    from datetime import datetime, timedelta, timezone
+    
+    sources = set()
+    latest_activity: Optional[datetime] = None
+    
+    for obs in observations:
+        if obs.source:
+            sources.add(obs.source.lower())
+        if obs.observed_at:
+            if latest_activity is None or obs.observed_at > latest_activity:
+                latest_activity = obs.observed_at
+    
+    if len(sources) < min_sources:
+        return False, ""
+    
+    if latest_activity is None:
+        return False, ""
+    
+    cutoff = datetime.now(timezone.utc) - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
+    if latest_activity.tzinfo is None:
+        latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+    
+    if latest_activity < cutoff:
+        return False, ""
+    
+    return True, f"Discovery: {len(sources)} sources ({', '.join(sorted(sources))}), last activity {latest_activity.date()}"
+
+
 def determine_asset_type(correlation: CorrelationResult) -> AssetType:
     """Determine asset type from correlation evidence"""
     if correlation.cloud.status == MatchStatus.MATCHED:
@@ -264,6 +312,7 @@ def apply_admission_criteria(
     - CMDB plane: CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
     - Cloud plane: cloud match AND resource_type indicates real system/resource
     - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
+    - Discovery plane: ≥2 distinct sources AND recent activity ≤90 days (allows shadow IT admission)
     
     IMPORTANT: Vendor alone is not admission.
     
@@ -281,8 +330,9 @@ def apply_admission_criteria(
     cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
+    discovery_admitted, discovery_reason = check_discovery_admission(observations)
     
-    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted]):
+    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
             rejection_reason="No admission criteria satisfied"
@@ -297,6 +347,8 @@ def apply_admission_criteria(
         admission_reasons.append(cloud_reason)
     if finance_admitted:
         admission_reasons.append(finance_reason)
+    if discovery_admitted:
+        admission_reasons.append(discovery_reason)
     
     lens_status = LensStatuses(
         idp=LensStatus(correlation.idp.status.value),
@@ -309,7 +361,8 @@ def apply_admission_criteria(
         idp=idp_admitted,
         cmdb=cmdb_admitted,
         cloud=cloud_admitted,
-        finance=finance_admitted
+        finance=finance_admitted,
+        discovery=discovery_admitted
     )
     
     identifiers = AssetIdentifiers(
@@ -327,6 +380,8 @@ def apply_admission_criteria(
         tags.append("cloud_hosted")
     if finance_admitted:
         tags.append("finance_tracked")
+    if discovery_admitted:
+        tags.append("discovery_only")
     
     activity_evidence = extract_activity_timestamps(correlation, entity, observations)
     

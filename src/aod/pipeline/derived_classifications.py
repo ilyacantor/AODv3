@@ -5,7 +5,7 @@ Computes Shadow and Zombie classifications from evidence AFTER the main pipeline
 These are computed on-read, not stored as flags.
 
 Shadow Asset = admitted asset with:
-  - finance evidence OR cloud presence (NOT discovery - discovery alone is not proof)
+  - finance evidence OR cloud presence OR discovery (corroborated usage from >=2 sources)
   - AND no IdP match (no SSO / SCIM / service principal)
   - AND no CMDB match
   - AND has recent activity (within activity_window_days)
@@ -93,6 +93,7 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
+    has_discovery = asset.lens_coverage.discovery
     
     if has_idp or has_cmdb:
         return ClassificationResult(
@@ -108,6 +109,8 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         presence_sources.append("finance evidence (spending/contracts)")
     if has_cloud:
         presence_sources.append("cloud infrastructure")
+    if has_discovery:
+        presence_sources.append("discovery (corroborated usage)")
     
     if not presence_sources:
         return ClassificationResult(

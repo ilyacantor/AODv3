@@ -52,6 +52,7 @@ class LensCoverage(BaseModel):
     cmdb: bool = False
     cloud: bool = False
     finance: bool = False
+    discovery: bool = False
 
 
 class AssetIdentifiers(BaseModel):

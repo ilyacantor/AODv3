@@ -281,6 +281,7 @@
                 <button class="tab active" data-tab="summary">Summary</button>
                 <button class="tab" data-tab="assets">Assets</button>
                 <button class="tab" data-tab="findings">Findings</button>
+                <button class="tab" data-tab="diagnostics">Diagnostics</button>
             </div>
             <div id="summaryTab" class="tab-content">
                 <div id="runDescriptors" class="run-descriptors">
@@ -319,6 +320,57 @@
             <div id="findingsTab" class="tab-content hidden">
                 <div id="findingsLoading" class="loading hidden"><div class="spinner"></div>Loading findings...</div>
                 <div class="findings-list" id="findingsList"></div>
+            </div>
+            <div id="diagnosticsTab" class="tab-content hidden">
+                <div class="diagnostics-header">
+                    <h3 style="color: var(--purple-400); margin-bottom: 1rem;">AOD Agent Reconciliation</h3>
+                    <p style="color: var(--slate-400); font-size: 0.875rem; margin-bottom: 1rem;">
+                        Diagnostic analysis comparing AOD actual results against Farm expectations. 
+                        <strong style="color: var(--amber-400);">Diagnostic only - does not change code.</strong>
+                    </p>
+                </div>
+                <div class="form-group" style="max-width: 600px;">
+                    <label class="form-label">Expected Shadow Keys (comma-separated)</label>
+                    <input type="text" class="form-input" id="expectedShadowKeys" placeholder="e.g., mongodb-docs, notion-team">
+                </div>
+                <div class="form-group" style="max-width: 600px;">
+                    <label class="form-label">Expected Zombie Keys (comma-separated)</label>
+                    <input type="text" class="form-input" id="expectedZombieKeys" placeholder="e.g., legacy-app, old-service">
+                </div>
+                <button class="btn btn-primary" id="runReconciliation" style="margin-bottom: 1.5rem;">Run Reconciliation Analysis</button>
+                <div id="reconcileLoading" class="loading hidden"><div class="spinner"></div>Running reconciliation...</div>
+                <div id="reconcileError" class="error-message hidden"></div>
+                <div id="reconcileResults" class="hidden">
+                    <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                        <div class="stat-card"><div class="stat-value" id="rcTotalAssets">-</div><div class="stat-label">Total Assets</div></div>
+                        <div class="stat-card"><div class="stat-value stat-shadow" id="rcShadowActual">-</div><div class="stat-label">Shadow (Actual)</div></div>
+                        <div class="stat-card"><div class="stat-value stat-zombie" id="rcZombieActual">-</div><div class="stat-label">Zombie (Actual)</div></div>
+                        <div class="stat-card"><div class="stat-value" id="rcMismatches" style="color: var(--amber-400);">-</div><div class="stat-label">Mismatches</div></div>
+                    </div>
+                    <div id="rcMismatchSection" class="hidden" style="margin-top: 1.5rem;">
+                        <h4 style="color: var(--amber-400); margin-bottom: 1rem;">Mismatch Analysis (RCA)</h4>
+                        <div id="rcMismatchList" class="findings-list" style="max-height: 400px;"></div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+                        <div>
+                            <h4 style="color: var(--cyan-400); margin-bottom: 0.75rem;">Shadow Assets (Actual)</h4>
+                            <div id="rcShadowList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem;"></div>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--red-400); margin-bottom: 0.75rem;">Zombie Assets (Actual)</h4>
+                            <div id="rcZombieList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem;"></div>
+                        </div>
+                    </div>
+                    <div class="collapsible" style="margin-top: 1.5rem;">
+                        <div class="collapsible-header" id="rcRawToggle">
+                            <span class="collapsible-icon" id="rcRawIcon">&#9654;</span>
+                            <span>Raw Reconciliation Response</span>
+                        </div>
+                        <div class="collapsible-content hidden" id="rcRawContent">
+                            <pre id="rcRawJson" style="background: var(--slate-900); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.75rem; max-height: 400px; overflow-y: auto;"></pre>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -1333,6 +1385,132 @@
             helpModal.addEventListener('click', (e) => {
                 if (e.target.id === 'helpModal') helpModal.classList.remove('active');
             });
+        }
+        
+        // Diagnostics tab - AOD Agent Reconciliation
+        const rcRawToggle = document.getElementById('rcRawToggle');
+        const rcRawIcon = document.getElementById('rcRawIcon');
+        const rcRawContent = document.getElementById('rcRawContent');
+        if (rcRawToggle) {
+            rcRawToggle.addEventListener('click', () => {
+                rcRawContent.classList.toggle('hidden');
+                rcRawIcon.classList.toggle('open');
+            });
+        }
+        
+        document.getElementById('runReconciliation').addEventListener('click', async () => {
+            if (!currentRunId) {
+                document.getElementById('reconcileError').textContent = 'No run selected. Please select a run first.';
+                document.getElementById('reconcileError').classList.remove('hidden');
+                return;
+            }
+            
+            const shadowKeysInput = document.getElementById('expectedShadowKeys').value;
+            const zombieKeysInput = document.getElementById('expectedZombieKeys').value;
+            
+            const expectedShadowKeys = shadowKeysInput ? shadowKeysInput.split(',').map(k => k.trim()).filter(k => k) : [];
+            const expectedZombieKeys = zombieKeysInput ? zombieKeysInput.split(',').map(k => k.trim()).filter(k => k) : [];
+            
+            document.getElementById('reconcileLoading').classList.remove('hidden');
+            document.getElementById('reconcileResults').classList.add('hidden');
+            document.getElementById('reconcileError').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/debug/aod-agent-reconcile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        run_id: currentRunId,
+                        expected_shadow_keys: expectedShadowKeys,
+                        expected_zombie_keys: expectedZombieKeys,
+                        activity_window_days: 90
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                renderReconciliationResults(data);
+                
+            } catch (error) {
+                document.getElementById('reconcileError').textContent = `Reconciliation failed: ${error.message}`;
+                document.getElementById('reconcileError').classList.remove('hidden');
+            } finally {
+                document.getElementById('reconcileLoading').classList.add('hidden');
+            }
+        });
+        
+        function renderReconciliationResults(data) {
+            document.getElementById('rcTotalAssets').textContent = data.summary.total_assets || 0;
+            document.getElementById('rcShadowActual').textContent = data.summary.shadow_actual_count || 0;
+            document.getElementById('rcZombieActual').textContent = data.summary.zombie_actual_count || 0;
+            document.getElementById('rcMismatches').textContent = data.summary.total_mismatches || 0;
+            
+            // Render shadow list
+            const shadowList = document.getElementById('rcShadowList');
+            if (data.shadow_actual.length === 0) {
+                shadowList.innerHTML = '<div style="color: var(--slate-500);">No shadow assets detected</div>';
+            } else {
+                shadowList.innerHTML = data.shadow_actual.map(key => 
+                    `<div style="padding: 0.25rem 0; color: var(--amber-400);">${escapeHtml(key)}</div>`
+                ).join('');
+            }
+            
+            // Render zombie list
+            const zombieList = document.getElementById('rcZombieList');
+            if (data.zombie_actual.length === 0) {
+                zombieList.innerHTML = '<div style="color: var(--slate-500);">No zombie assets detected</div>';
+            } else {
+                zombieList.innerHTML = data.zombie_actual.map(key => 
+                    `<div style="padding: 0.25rem 0; color: var(--red-400);">${escapeHtml(key)}</div>`
+                ).join('');
+            }
+            
+            // Render mismatches
+            const mismatchSection = document.getElementById('rcMismatchSection');
+            const mismatchList = document.getElementById('rcMismatchList');
+            if (data.mismatches.length > 0) {
+                mismatchSection.classList.remove('hidden');
+                mismatchList.innerHTML = data.mismatches.map(m => {
+                    const rcaColor = m.rca_code === 'UNKNOWN' ? 'var(--slate-400)' : 'var(--amber-400)';
+                    const systemColor = {
+                        'FARM_EVIDENCE': 'var(--purple-400)',
+                        'AOD_INGEST': 'var(--cyan-400)',
+                        'AOD_ADMISSION': 'var(--green-400)',
+                        'AOD_CLASSIFICATION': 'var(--red-400)'
+                    }[m.rca_system] || 'var(--slate-400)';
+                    
+                    return `
+                        <div class="finding-item" style="flex-direction: column; gap: 0.5rem;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                <span style="font-weight: 600; color: white;">${escapeHtml(m.asset_key)}</span>
+                                <span class="severity-badge severity-med">${escapeHtml(m.mismatch_type)}</span>
+                            </div>
+                            <div style="display: flex; gap: 1rem; font-size: 0.875rem;">
+                                <span style="color: ${rcaColor};">RCA: ${escapeHtml(m.rca_code)}</span>
+                                <span style="color: ${systemColor};">System: ${escapeHtml(m.rca_system)}</span>
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--slate-500);">
+                                Expected: ${escapeHtml(m.expected)} | Actual: ${escapeHtml(m.actual)}
+                            </div>
+                            <details style="font-size: 0.75rem; color: var(--slate-400);">
+                                <summary style="cursor: pointer;">Reason Diff</summary>
+                                <pre style="margin-top: 0.5rem; background: var(--slate-900); padding: 0.5rem; border-radius: 4px; overflow-x: auto;">${safeJsonPreview(m.reason_diff, 1000)}</pre>
+                            </details>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                mismatchSection.classList.add('hidden');
+            }
+            
+            // Render raw JSON
+            document.getElementById('rcRawJson').textContent = JSON.stringify(data, null, 2);
+            
+            document.getElementById('reconcileResults').classList.remove('hidden');
         }
     </script>
     

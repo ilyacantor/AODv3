@@ -1,32 +1,62 @@
-# AOD Fresh - AutonomOS Discover
+# AOD Fresh - Phase 0: Presence Debug
 
 ## Overview
 
-AOD Fresh is the discovery module of AutonomOS, an enterprise operating system. It ingests raw enterprise evidence from AOS Farm and produces:
+AOD Fresh is the discovery module of AutonomOS. **Currently in Phase 0** - stripped down to basic presence verification before reintroducing classification logic.
 
-- **Asset Catalog** - Systems only (not internal objects like dashboards)
-- **Run Log** - Audit trail of what happened on each run
-- **Explainable Findings** - Rule-based findings with no anomaly scores or ML
+## Phase 0 Scope
 
-The system is designed to be deterministic (same input yields same output), evidence-only (no pre-adjudicated labels), and fully explainable.
+This is a minimal implementation focused on correctness:
 
-## User Preferences
+- **Debug Endpoint Only** - `/api/debug/presence` shows raw presence per vendor_key
+- **No Classifications** - No zombie/shadow heuristics
+- **No Reconciliation** - No auto-sync back to Farm
+- **No Counts/Labels** - Just raw presence booleans
 
-Preferred communication style: Simple, everyday language.
+## API Endpoints
 
-## System Architecture
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/health` | Health check, version v0.1.0-phase0 |
+| `GET /api/farm/tenants` | List available tenants from Farm |
+| `GET /api/farm/snapshots?tenant_id=X` | List snapshots for a tenant |
+| `POST /api/runs/from-farm` | Trigger discovery run from Farm snapshot |
+| `GET /api/runs` | List all runs |
+| `GET /api/runs/{run_id}` | Get run details |
+| `GET /api/catalog?run_id=X` | Get assets for a run |
+| **`GET /api/debug/presence?run_id=X`** | **Phase 0 debug table** |
 
-### Core Design Principles
+## Debug Presence Endpoint
 
-1. **No Ground Truth Ingestion** - Rejects banned fields like `is_shadow_it`, `ground_truth`, `inCMDB`. If present, marks run as `INVALID_INPUT_CONTRACT`
-2. **No ML/Anomaly Scores** - Only deterministic rules and explainable correlation
-3. **Deterministic** - Same snapshot + same config produces identical outputs with stable ordering
-4. **Evidence-Only Decisions** - Admission and findings derived only from plane evidence, never upstream labels
-5. **Assets vs Artifacts** - Systems are assets; internal objects (dashboards, reports) are artifacts and don't inflate asset counts
+Returns one row per unique `vendor_key`, aggregated across all assets:
 
-### Pipeline Architecture
+```json
+{
+  "run_id": "run_abc123",
+  "rows": [
+    {
+      "vendor_key": "slack",
+      "in_discovery": true,
+      "in_finance": true,
+      "in_idp": true,
+      "in_cmdb": false,
+      "latest_activity_at": "2025-12-15T01:18:46.459862+00:00"
+    }
+  ]
+}
+```
 
-The discovery pipeline runs in 7 sequential stages:
+### Presence Flags
+
+- **in_discovery**: True if `activity_evidence.discovery_observed_at` is set
+- **in_finance**: True if `lens_status.finance == MATCHED`
+- **in_idp**: True if `lens_status.idp == MATCHED`
+- **in_cmdb**: True if `lens_status.cmdb == MATCHED`
+- **latest_activity_at**: Most recent `activity_evidence.latest_activity_at` across all assets with this vendor_key
+
+## Pipeline Architecture
+
+The discovery pipeline runs unchanged from previous versions:
 
 | Stage | Module | Purpose |
 |-------|--------|---------|
@@ -38,9 +68,9 @@ The discovery pipeline runs in 7 sequential stages:
 | 6 | `artifact_handler.py` | Identify and record artifacts |
 | 7 | `findings_engine.py` | Generate deterministic findings |
 
-### Data Planes
+## Data Planes
 
-Evidence comes from 7 planes that represent different enterprise data sources:
+Evidence comes from 7 planes:
 
 - **Discovery** - Network observations (DNS, proxy, endpoint)
 - **IdP** - Identity provider data (SSO, SCIM, service principals)
@@ -50,99 +80,29 @@ Evidence comes from 7 planes that represent different enterprise data sources:
 - **Network** - DNS records, proxy logs, certificates
 - **Finance** - Vendors, contracts, transactions
 
-### Derived Classifications
-
-Shadow and Zombie classifications are computed post-pipeline as views, not stored flags:
-
-- **Shadow Asset** - Has activity evidence but no IdP or CMDB match
-- **Zombie Asset** - Has IdP/CMDB presence but no recent activity (30-day window)
-
-### Identity vs Evidence Contract
-
-**IDENTITY (required, canonical):**
-- `vendor_key`: Internal canonical vendor ID. Stable, source-agnostic, deterministic.
-  - Normalization: lowercase, alphanumeric only, no TLD
-  - Example: `yammer`, `hipchat`, `pivotaltracker`
-  - This is the ONLY field used for reconciliation and matching
-
-**EVIDENCE (optional, variable):**
-- `domain_key`: Legacy `*com` format for backward compatibility (e.g., `yammercom`)
-- `domains[]`: Actual domain evidence if known (e.g., `["yammer.com"]`)
-- `display_name`: Human-readable name (e.g., `Yammer`, `PIVOTAL TRACKER`)
-
-**RECONCILIATION CONTRACT:**
-- AOD MUST always emit `vendor_key` for every zombie/shadow asset
-- Farm MUST compare on `vendor_key` only
-- `domain_key` is temporary fallback for backward compat (to be deprecated)
-
-### API Structure
-
-FastAPI application with these key endpoints:
-
-- `POST /api/runs/from-farm` - Trigger discovery run from Farm snapshot
-- `GET /api/runs/{run_id}` - Get run details
-- `GET /api/runs/{run_id}/assets` - Get assets for a run
-- `GET /api/runs/{run_id}/findings` - Get findings for a run
-- `GET /api/farm/snapshots` - Proxy to Farm for snapshot listing
-- `POST /api/debug/zombie-explain` - Debug endpoint for zombie classification explanations
-- `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
-
-### Run Status Semantics
-
-Runs must return one of these explicit statuses:
-- `UPSTREAM_ERROR` - Farm unreachable or HTTP error
-- `INVALID_SNAPSHOT` - Schema mismatch or wrong version
-- `INVALID_INPUT_CONTRACT` - Banned fields present
-- `COMPLETED_NO_ASSETS` - Pipeline completed, nothing admitted
-- `COMPLETED_WITH_RESULTS` - Normal success with assets/findings
-
-### Database Design
-
-SQLite persistence layer structured for future PostgreSQL migration. Key tables:
-- `runs` - Run logs with status and counts
-- `assets` - Admitted assets with lens statuses
-- `findings` - Generated findings linked to assets
-- `artifacts` - Non-system objects
-- `run_observation_samples` - Capped observation samples per run
-- `run_ambiguous_matches` - Ambiguous correlation groups
-- `run_rejections` - Rejected candidates with reasons
-
-IDs are run-scoped using deterministic UUID generation from snapshot + content components.
-
 ## External Dependencies
 
 ### AOS Farm
 
-Farm is the upstream evidence source. AOD fetches snapshots via HTTP:
-
 - `FARM_URL` environment variable (required) - Base URL for Farm API
-- `FARM_SHARED_SECRET` environment variable (optional) - Auth header for reconciliation
 - `GET {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20` - List snapshots
 - `GET {FARM_URL}/api/snapshots/{snapshot_id}` - Fetch full snapshot
-- `POST {FARM_URL}/api/reconcile` - Auto-sync run results back to Farm
 
-Snapshots must have `meta.schema_version == "farm.v1"`. The `farm_adapter.py` module normalizes Farm wire format to AOD canonical schema.
+Snapshots must have `meta.schema_version == "farm.v1"`.
 
-### Farm Auto-Sync
-
-After a successful pipeline run from Farm, AOD automatically reconciles results back:
-
-- **Sync Status** - Tracked per run: `pending`, `synced`, `failed`, `not_applicable`
-- **Reconcile Payload** - Includes counts, shadow/zombie asset lists, high-severity findings
-- **UI Display** - Sync status badges shown on run list items (green=synced, red=failed, cyan=syncing)
-- **Error Handling** - Graceful handling of HTTP errors, connection errors, timeouts with error messages stored
-
-### Python Dependencies
+## Python Dependencies
 
 - **FastAPI** - Web framework
 - **Pydantic v2** - Data validation and serialization
 - **aiosqlite** - Async SQLite database
 - **httpx** - Async HTTP client for Farm communication
 
-### Frontend
+## What Was Removed (Phase 0 Reset)
 
-Single-page application served from `templates/index.html`:
-- Quicksand font family
-- AutonomOS color palette (cyan/purple/semantic colors)
-- Dropdown snapshot picker (no free-text Farm URL entry)
-- Drillable KPI cards with normalized view-models
+- `derived_classifications.py` - Zombie/shadow classification logic
+- `/api/runs/{run_id}/derived` - Derived classifications endpoint
+- `/api/debug/zombie-explain` - Zombie explanation endpoint
+- `/api/debug/zombie-reconcile` - Reconciliation debug endpoint
+- `/api/debug/timestamp-coverage` - Timestamp coverage analysis
+- Farm reconciliation from `POST /api/runs/from-farm`
+- Complex UI with stats, drill-down, tabs

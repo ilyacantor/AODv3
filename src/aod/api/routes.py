@@ -555,6 +555,186 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
     }
 
 
+@router.get("/runs/{run_id}/assets")
+async def get_run_assets(run_id: str, classification: Optional[str] = None):
+    """Get assets for a run, optionally filtered by classification"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    
+    if classification:
+        summary = compute_derived_classifications(assets, activity_window_days=90)
+        if classification == "zombie":
+            asset_ids = {a["asset_id"] for a in summary.zombie_assets}
+            assets = [a for a in assets if str(a.asset_id) in asset_ids]
+        elif classification == "shadow":
+            asset_ids = {a["asset_id"] for a in summary.shadow_assets}
+            assets = [a for a in assets if str(a.asset_id) in asset_ids]
+    
+    return {
+        "run_id": run_id,
+        "assets": [
+            {
+                "asset_id": str(a.asset_id),
+                "name": a.name,
+                "vendor": a.vendor,
+                "asset_type": a.asset_type.value,
+                "environment": a.environment.value,
+                "lens_status": {
+                    "idp": a.lens_status.idp.value,
+                    "cmdb": a.lens_status.cmdb.value,
+                    "cloud": a.lens_status.cloud.value,
+                    "finance": a.lens_status.finance.value
+                },
+                "activity_evidence": {
+                    "latest_activity_at": a.activity_evidence.latest_activity_at.isoformat() if a.activity_evidence.latest_activity_at else None
+                }
+            }
+            for a in assets
+        ],
+        "count": len(assets)
+    }
+
+
+@router.get("/runs/{run_id}/summary")
+async def get_run_summary(run_id: str):
+    """Get summary for a run including derived classifications"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    findings = await db.get_findings_by_run(run_id)
+    derived = compute_derived_classifications(assets, activity_window_days=90)
+    
+    return {
+        "run_id": run_id,
+        "tenant_id": run.tenant_id,
+        "status": run.status.value,
+        "started_at": run.started_at.isoformat(),
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "counts": {
+            "observations_in": run.counts.observations_in,
+            "candidates_out": run.counts.candidates_out,
+            "assets_admitted": run.counts.assets_admitted,
+            "artifacts_recorded": run.counts.artifacts_recorded,
+            "rejected": run.counts.rejected,
+            "findings_generated": run.counts.findings_generated,
+            "shadow_count": derived.shadow_count,
+            "zombie_count": derived.zombie_count
+        },
+        "sync_status": run.sync_status.value,
+        "sync_error": run.sync_error
+    }
+
+
+@router.get("/runs/{run_id}/classifications")
+async def get_classifications(run_id: str):
+    """Get shadow/zombie classifications for a run"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    derived = compute_derived_classifications(assets, activity_window_days=90)
+    
+    return {
+        "run_id": run_id,
+        "shadow_count": derived.shadow_count,
+        "zombie_count": derived.zombie_count,
+        "shadow_assets": [a["name"] for a in derived.shadow_assets],
+        "zombie_assets": [a["name"] for a in derived.zombie_assets]
+    }
+
+
+@router.get("/runs/{run_id}/reconcile-payload")
+async def get_reconcile_payload(run_id: str):
+    """Get the reconcile payload that would be sent to Farm"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    findings = await db.get_findings_by_run(run_id)
+    derived = compute_derived_classifications(assets, activity_window_days=90)
+    
+    shadow_asset_names = [a["name"] for a in derived.shadow_assets[:10]]
+    zombie_asset_names = [a["name"] for a in derived.zombie_assets[:10]]
+    
+    high_severity_findings = [
+        {
+            "finding_type": f.finding_type.value,
+            "severity": f.severity.value,
+            "explanation": f.explanation[:200]
+        }
+        for f in findings
+        if f.severity.value == "high"
+    ][:10]
+    
+    return {
+        "tenant_id": run.tenant_id,
+        "aod_run_id": run.run_id,
+        "aod_status": run.status.value,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "aod_summary": {
+            "observations_in": run.counts.observations_in,
+            "candidates_out": run.counts.candidates_out,
+            "assets_admitted": run.counts.assets_admitted,
+            "artifacts_recorded": run.counts.artifacts_recorded,
+            "rejected": run.counts.rejected,
+            "findings_generated": run.counts.findings_generated,
+            "shadow_count": derived.shadow_count,
+            "zombie_count": derived.zombie_count
+        },
+        "aod_lists": {
+            "shadow_assets": shadow_asset_names,
+            "zombie_assets": zombie_asset_names,
+            "high_severity_findings": high_severity_findings
+        }
+    }
+
+
+@router.get("/runs/{run_id}/lens")
+async def get_lens_summary(run_id: str):
+    """Get lens status summary for a run"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    
+    lens_counts = {
+        "idp": {"matched": 0, "unmatched": 0, "indeterminate": 0},
+        "cmdb": {"matched": 0, "unmatched": 0, "indeterminate": 0},
+        "cloud": {"matched": 0, "unmatched": 0, "indeterminate": 0},
+        "finance": {"matched": 0, "unmatched": 0, "indeterminate": 0}
+    }
+    
+    for asset in assets:
+        lens_counts["idp"][asset.lens_status.idp.value] += 1
+        lens_counts["cmdb"][asset.lens_status.cmdb.value] += 1
+        lens_counts["cloud"][asset.lens_status.cloud.value] += 1
+        lens_counts["finance"][asset.lens_status.finance.value] += 1
+    
+    return {
+        "run_id": run_id,
+        "total_assets": len(assets),
+        "lens_counts": lens_counts
+    }
+
+
 @router.get("/runs/{run_id}/derived")
 async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
     """

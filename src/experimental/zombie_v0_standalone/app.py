@@ -116,8 +116,19 @@ async def get_zombies(
         
         for asset in assets:
             asset_id = asset["asset_id"]
-            lens_status = asset["lens_status"] or {}
-            activity_evidence = asset["activity_evidence"] or {}
+            
+            import json
+            lens_raw = asset["lens_status"]
+            if isinstance(lens_raw, str):
+                lens_status = json.loads(lens_raw) if lens_raw else {}
+            else:
+                lens_status = lens_raw or {}
+            
+            activity_raw = asset["activity_evidence"]
+            if isinstance(activity_raw, str):
+                activity_evidence = json.loads(activity_raw) if activity_raw else {}
+            else:
+                activity_evidence = activity_raw or {}
             
             exists_in_sor = False
             existence_sources: list[str] = []

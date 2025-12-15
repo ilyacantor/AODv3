@@ -1204,3 +1204,55 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
         },
         conclusion=conclusion
     )
+
+
+v0_router = APIRouter(prefix="/v0")
+
+
+@v0_router.get("/zombies")
+async def v0_get_zombies(run_id: str, window_days: int):
+    """
+    Walled-off v0 zombie endpoint.
+    
+    Returns zombie asset_ids using strict logic:
+    - exists = asset appears in IdP or CMDB lens (matched status)
+    - activity = has observed_at within window_days
+    - zombie = exists AND NOT activity
+    """
+    db = await get_db()
+    
+    assets = await db.get_assets_by_run(run_id)
+    
+    if not assets:
+        raise HTTPException(status_code=404, detail=f"No data for run_id={run_id}")
+    
+    cutoff = now_pst() - timedelta(days=window_days)
+    zombie_asset_ids = []
+    
+    for asset in assets:
+        exists_in_sor = (
+            asset.lens_status.idp.value == "matched" or
+            asset.lens_status.cmdb.value == "matched"
+        )
+        
+        if not exists_in_sor:
+            continue
+        
+        latest_activity = asset.activity_evidence.latest_activity_at
+        if latest_activity and latest_activity.tzinfo is None:
+            latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+        
+        activity_in_window = False
+        if latest_activity:
+            cutoff_utc = cutoff.astimezone(timezone.utc)
+            if latest_activity >= cutoff_utc:
+                activity_in_window = True
+        
+        if exists_in_sor and not activity_in_window:
+            zombie_asset_ids.append(str(asset.asset_id))
+    
+    return {
+        "run_id": run_id,
+        "window_days": window_days,
+        "zombie_asset_ids": zombie_asset_ids
+    }

@@ -175,7 +175,7 @@ async def compute_zombies_v0(run_id: str, window_days: int) -> list[ZombieV0Resu
             finance_last_transaction_at
         FROM assets
         WHERE run_id = $1
-        ORDER BY name
+        ORDER BY asset_id
     """
     
     async with pool.acquire() as conn:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from ..models.input_contracts import Observation
+from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult
 
 
 @dataclass
@@ -17,6 +18,7 @@ class CandidateEntity:
     hostname: Optional[str] = None
     uri: Optional[str] = None
     vendor: Optional[str] = None
+    vendor_hypothesis: Optional[VendorHypothesisResult] = None
     observation_ids: list[str] = field(default_factory=list)
     source: str = "discovery"
     
@@ -116,6 +118,8 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
             entity.observation_ids.append(obs.observation_id)
             if domain and not entity.domain:
                 entity.domain = domain
+                if not entity.vendor_hypothesis:
+                    entity.vendor_hypothesis = infer_vendor_from_domain(domain)
             if hostname and not entity.hostname:
                 entity.hostname = hostname
             if uri and not entity.uri:
@@ -123,6 +127,7 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
             if vendor and not entity.vendor:
                 entity.vendor = vendor
         else:
+            vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
             entity = CandidateEntity(
                 entity_id=f"entity:{obs.observation_id}",
                 canonical_name=canonical_name,
@@ -131,6 +136,7 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
                 hostname=hostname,
                 uri=uri,
                 vendor=vendor,
+                vendor_hypothesis=vendor_hypothesis,
                 observation_ids=[obs.observation_id],
                 source=obs.source
             )

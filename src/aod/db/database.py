@@ -10,7 +10,8 @@ from uuid import UUID
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
-    AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType
+    AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType,
+    VendorHypothesis
 )
 
 
@@ -105,6 +106,7 @@ class Database:
                     asset_type TEXT NOT NULL,
                     identifiers TEXT NOT NULL DEFAULT '{}',
                     vendor TEXT,
+                    vendor_hypothesis TEXT,
                     environment TEXT NOT NULL,
                     evidence_refs TEXT NOT NULL DEFAULT '[]',
                     lens_status TEXT NOT NULL DEFAULT '{}',
@@ -116,6 +118,11 @@ class Database:
                     FOREIGN KEY (run_id) REFERENCES runs(run_id)
                 )
             """)
+            
+            try:
+                await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT")
+            except Exception:
+                pass
             
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
@@ -314,9 +321,9 @@ class Database:
                 """
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
-                    vendor, environment, evidence_refs, lens_status, lens_coverage,
+                    vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
                     activity_evidence, tags, admission_reason, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 """,
                 str(asset.asset_id),
                 asset.tenant_id,
@@ -325,6 +332,7 @@ class Database:
                 asset.asset_type.value,
                 asset.identifiers.model_dump_json(),
                 asset.vendor,
+                asset.vendor_hypothesis.model_dump_json() if asset.vendor_hypothesis else None,
                 asset.environment.value,
                 json.dumps(asset.evidence_refs),
                 asset.lens_status.model_dump_json(),
@@ -349,6 +357,11 @@ class Database:
         assets = []
         for row in rows:
             activity_evidence_data = row.get("activity_evidence", "{}")
+            vendor_hypothesis_data = row.get("vendor_hypothesis")
+            vendor_hypothesis = None
+            if vendor_hypothesis_data:
+                vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
+            
             assets.append(Asset(
                 asset_id=UUID(row["asset_id"]),
                 tenant_id=row["tenant_id"],
@@ -357,6 +370,7 @@ class Database:
                 asset_type=AssetType(row["asset_type"]),
                 identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
                 vendor=row["vendor"],
+                vendor_hypothesis=vendor_hypothesis,
                 environment=Environment(row["environment"]),
                 evidence_refs=json.loads(row["evidence_refs"]),
                 lens_status=LensStatuses.model_validate_json(row["lens_status"]),

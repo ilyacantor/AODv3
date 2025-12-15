@@ -385,6 +385,15 @@ def apply_admission_criteria(
     
     activity_evidence = extract_activity_timestamps(correlation, entity, observations)
     
+    from ..models.output_contracts import VendorHypothesis
+    vendor_hypothesis = None
+    if entity.vendor_hypothesis:
+        vendor_hypothesis = VendorHypothesis(
+            value=entity.vendor_hypothesis.value,
+            confidence=entity.vendor_hypothesis.confidence,
+            basis=entity.vendor_hypothesis.basis
+        )
+    
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, run_id, "asset", entity.original_name),
         tenant_id=tenant_id,
@@ -393,6 +402,7 @@ def apply_admission_criteria(
         asset_type=determine_asset_type(correlation),
         identifiers=identifiers,
         vendor=entity.vendor,
+        vendor_hypothesis=vendor_hypothesis,
         environment=determine_environment(correlation),
         evidence_refs=correlation.all_evidence_refs(),
         lens_status=lens_status,

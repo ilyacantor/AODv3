@@ -42,8 +42,24 @@ async def reconcile_to_farm(
     
     derived = compute_derived_classifications(assets, activity_window_days=90)
     
-    shadow_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.shadow_assets[:10]]
-    zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]
+    def get_asset_key(asset) -> str:
+        """Get canonical reconciliation key for an asset (registered domain preferred)"""
+        if isinstance(asset, dict):
+            identifiers = asset.get("identifiers", {})
+            domains = identifiers.get("domains", []) if isinstance(identifiers, dict) else getattr(identifiers, "domains", [])
+            if domains:
+                return domains[0].lower()
+            return asset.get("name", "").lower().replace(" ", "_")
+        else:
+            identifiers = getattr(asset, "identifiers", None)
+            if identifiers:
+                domains = getattr(identifiers, "domains", [])
+                if domains:
+                    return domains[0].lower()
+            return getattr(asset, "name", "").lower().replace(" ", "_")
+    
+    shadow_asset_keys = [get_asset_key(a) for a in derived.shadow_assets]
+    zombie_asset_keys = [get_asset_key(a) for a in derived.zombie_assets]
     
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
@@ -68,9 +84,11 @@ async def reconcile_to_farm(
             "shadow_count": derived.shadow_count,
             "zombie_count": derived.zombie_count
         },
+        "shadow_asset_keys": shadow_asset_keys,
+        "zombie_asset_keys": zombie_asset_keys,
         "aod_lists": {
-            "shadow_assets": shadow_asset_names,
-            "zombie_assets": zombie_asset_names,
+            "shadow_asset_keys_sample": shadow_asset_keys[:10],
+            "zombie_asset_keys_sample": zombie_asset_keys[:10],
             "high_severity_findings": high_severity_findings
         }
     }

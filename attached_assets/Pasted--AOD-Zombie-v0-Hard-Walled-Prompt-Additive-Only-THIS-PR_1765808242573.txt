@@ -1,0 +1,236 @@
+🚧 AOD — Zombie v0 Hard-Walled Prompt (Additive Only)
+
+THIS PROMPT OVERRIDES ALL PRIOR AOD PROMPTS
+
+You are working in the AOD repository.
+
+Your task is to add a completely isolated Zombie v0 experiment.
+
+You are NOT allowed to modify, refactor, reuse, or “improve” any existing AOD code paths.
+
+If you violate these constraints, the work is invalid.
+
+ABSOLUTE CONSTRAINTS (NON-NEGOTIABLE)
+❌ YOU MAY NOT
+
+Modify any existing file outside the explicitly allowed locations below
+
+Touch existing zombie logic, shadow logic, reconciliation logic, or grading logic
+
+Change existing routes, schemas, models, services, or UI components
+
+Import existing classification utilities into the new code
+
+“Clean up” or “reuse” existing helpers
+
+Rename anything
+
+Move anything
+
+Delete anything
+
+Change any existing tests or sanity checks
+
+✅ YOU MAY ONLY
+
+Add new files under new paths listed below
+
+Register one new route group under a new prefix
+
+Register one new UI tab/page
+
+Read from the database in read-only mode
+
+If you are unsure whether something counts as “existing code”:
+➡️ Assume it is forbidden.
+
+FILESYSTEM WALL (MANDATORY)
+
+You may create files ONLY in these new paths:
+
+src/experimental/zombie_v0/
+src/experimental/zombie_v0/api.py
+src/experimental/zombie_v0/logic.py
+src/experimental/zombie_v0/types.py
+src/experimental/zombie_v0/README.md
+
+frontend/pages/experimental/ZombieV0.tsx
+
+
+You may add ONE import registration line to:
+
+the main API router ONLY to mount the new router
+
+the frontend nav config ONLY to show the new tab
+
+No other files may be touched.
+
+PURPOSE (KEEP IT STUPID SIMPLE)
+
+Zombie v0 exists only to answer:
+
+“Given a run_id and X days, which assets are zombies?”
+
+No shadows.
+No reconciliation.
+No scoring.
+No ML.
+No reuse.
+
+DATA CONTRACT (LOCAL TO Zombie v0)
+Input (query params)
+
+run_id (required)
+
+window_days (required, integer)
+
+If either is missing → return HTTP 400.
+
+Output (exact shape)
+{
+  "run_id": "run_123",
+  "window_days": 90,
+  "results": [
+    {
+      "asset_id": "hipchatcom",
+      "exists_in_sor": true,
+      "activity_in_window": false,
+      "zombie": true,
+      "last_activity_observed_at": null,
+      "reason": "Exists in CMDB; no activity observed in last 90 days."
+    }
+  ]
+}
+
+
+No additional fields.
+No nested structures.
+No metadata.
+
+LOGIC RULES (DO NOT INTERPRET)
+
+Implement new logic, written from scratch, in logic.py.
+
+Definitions
+
+Exists = asset appears in any system of record:
+
+CMDB
+
+Billing
+
+IdP
+
+Cloud inventory
+
+Activity = any observed_at ≥ now - window_days
+
+Zombie rule (binary)
+zombie = exists AND NOT activity
+
+
+That’s it.
+
+API (NEW, WALLED)
+New router only
+
+Route prefix: /experimental/zombie_v0
+
+Endpoint
+GET /experimental/zombie_v0/zombies
+
+
+Must NOT call or reuse existing reconciliation endpoints
+
+Must NOT emit data to Farm
+
+Must NOT write to DB
+
+Must NOT call existing zombie logic
+
+UI (NEW, WALLED)
+New tab
+
+Label: Zombie v0
+
+Location: Experimental section only
+
+Page behavior
+
+Inputs:
+
+run_id (text)
+
+window_days (number)
+
+Button: “Run Zombie v0”
+
+Table output showing:
+
+asset_id
+
+zombie (true/false)
+
+reason
+
+No charts.
+No counts.
+No aggregation.
+
+READ-ONLY DB ACCESS RULE
+
+You may issue SELECT queries only
+
+You may NOT:
+
+insert
+
+update
+
+delete
+
+migrate
+
+create tables
+
+If you need data:
+
+query existing snapshots for run_id
+
+extract evidence from snapshot payloads
+
+VERIFICATION STEP (MANDATORY)
+
+After implementation, you must:
+
+Show a git diff summary proving:
+
+only new files were added
+
+only allowed registration lines were touched
+
+Run the app
+
+Show a screenshot of the Zombie v0 tab
+
+Show sample JSON output from:
+
+GET /experimental/zombie_v0/zombies?run_id=...&window_days=90
+
+
+If any existing behavior changes, stop immediately.
+
+INTENT (DO NOT IGNORE)
+
+This is a debug lane, not production code.
+It exists to:
+
+Prove correctness
+
+Eliminate routing ambiguity
+
+Isolate grading failures
+
+If this lane works, we will later swap callers, not rewrite logic.
+
+END OF PROMPT

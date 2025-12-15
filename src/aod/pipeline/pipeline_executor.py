@@ -3,8 +3,13 @@
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Any
+
+PST = timezone(timedelta(hours=-8))
+
+def now_pst() -> datetime:
+    return datetime.now(PST)
 
 from ..models.input_contracts import Snapshot
 from ..models.output_contracts import (

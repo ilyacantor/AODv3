@@ -378,6 +378,7 @@
                         name: { default: 'unknown' },
                         asset_type: { default: 'unknown' },
                         vendor: { default: 'unknown' },
+                        vendor_hypothesis: { default: null },
                         environment: { default: 'unknown' },
                         lens_status: { 
                             default: { idp: 'unmatched', cmdb: 'unmatched', cloud: 'unmatched', finance: 'unmatched' }
@@ -441,6 +442,7 @@
                     fields: {
                         name: { default: 'unknown' },
                         vendor: { default: 'unknown' },
+                        vendor_hypothesis: { default: null },
                         asset_type: { default: 'unknown' },
                         environment: { default: 'unknown' },
                         reason: { default: 'No reason available' },
@@ -453,6 +455,7 @@
                     fields: {
                         name: { default: 'unknown' },
                         vendor: { default: 'unknown' },
+                        vendor_hypothesis: { default: null },
                         asset_type: { default: 'unknown' },
                         environment: { default: 'unknown' },
                         reason: { default: 'No reason available' },
@@ -701,9 +704,27 @@
             const keyFacts = [];
             keyFactFields.forEach(field => {
                 if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {
-                    keyFacts.push({ label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: item[field] });
+                    let displayValue = item[field];
+                    if (field === 'vendor' && (displayValue === 'unknown' || !displayValue) && item.vendor_hypothesis) {
+                        const hyp = item.vendor_hypothesis;
+                        const conf = Math.round((hyp.confidence || 0) * 100);
+                        displayValue = `Likely ${hyp.value} (${conf}% confidence, based on ${hyp.basis})`;
+                    }
+                    keyFacts.push({ label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: displayValue });
                 }
             });
+            
+            if ((!item.vendor || item.vendor === 'unknown') && item.vendor_hypothesis) {
+                const hyp = item.vendor_hypothesis;
+                const conf = Math.round((hyp.confidence || 0) * 100);
+                const existingVendor = keyFacts.find(f => f.label === 'Vendor');
+                if (!existingVendor) {
+                    keyFacts.unshift({ 
+                        label: 'Vendor', 
+                        value: `Likely ${hyp.value} (${conf}% confidence, based on ${hyp.basis})` 
+                    });
+                }
+            }
             
             if (item.lens_status && typeof item.lens_status === 'object') {
                 const lenses = Object.entries(item.lens_status).map(([k, v]) => `${k}: ${v}`).join(', ');

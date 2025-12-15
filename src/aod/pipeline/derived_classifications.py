@@ -294,6 +294,10 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     Returns summary with counts and detailed lists.
     Indeterminate assets are counted but excluded from shadow/zombie lists.
     
+    Note: vendor_hypothesis is included in output dicts for UI DISPLAY ONLY.
+    It is NOT used in classification logic (classify_shadow/classify_zombie).
+    Inference decorates reality; it does not redefine it.
+    
     Args:
         assets: List of assets to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
@@ -324,10 +328,18 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             continue
         
         if shadow_result.is_classified:
+            vendor_hyp = None
+            if asset.vendor_hypothesis:
+                vendor_hyp = {
+                    "value": asset.vendor_hypothesis.value,
+                    "confidence": asset.vendor_hypothesis.confidence,
+                    "basis": asset.vendor_hypothesis.basis
+                }
             shadow_assets.append({
                 "asset_id": str(asset.asset_id),
                 "name": asset.name,
                 "vendor": asset.vendor,
+                "vendor_hypothesis": vendor_hyp,
                 "asset_type": asset.asset_type.value,
                 "environment": asset.environment.value,
                 "classification": "shadow",
@@ -351,10 +363,18 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
                 }
             })
         elif zombie_result.is_classified:
+            vendor_hyp = None
+            if asset.vendor_hypothesis:
+                vendor_hyp = {
+                    "value": asset.vendor_hypothesis.value,
+                    "confidence": asset.vendor_hypothesis.confidence,
+                    "basis": asset.vendor_hypothesis.basis
+                }
             zombie_assets.append({
                 "asset_id": str(asset.asset_id),
                 "name": asset.name,
                 "vendor": asset.vendor,
+                "vendor_hypothesis": vendor_hyp,
                 "asset_type": asset.asset_type.value,
                 "environment": asset.environment.value,
                 "classification": "zombie",

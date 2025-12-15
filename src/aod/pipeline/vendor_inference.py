@@ -3,9 +3,18 @@ Vendor Hypothesis Inference - Domain-based vendor identification.
 
 Design Principle: Inference decorates reality; it does not redefine it.
 
+INVARIANT: vendor_hypothesis is NON-DECISIONABLE metadata.
+It MUST NOT be referenced by:
+- admission.py (admission logic)
+- derived_classifications.py (classify_shadow, classify_zombie functions)
+- findings_engine.py (finding generation)
+- any policy, scoring, or automation logic
+
+Constraints:
 - This is decorative only - never affects admission or shadow logic
 - Max confidence is 0.9 - never authoritative
 - Based on curated domain mappings only (no ML, no NLP)
+- UI displays as suggestion: "Likely MongoDB (90% confidence)"
 """
 
 from dataclasses import dataclass

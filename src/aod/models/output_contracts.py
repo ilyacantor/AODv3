@@ -79,6 +79,15 @@ class VendorHypothesis(BaseModel):
     
     Inference decorates reality; it does not redefine it.
     This is never authoritative and does not affect admission or shadow logic.
+    
+    INVARIANT: vendor_hypothesis is NON-DECISIONABLE metadata.
+    It MUST NOT be referenced by:
+    - admission.py (admission logic)
+    - derived_classifications.py (classify_shadow, classify_zombie functions)
+    - findings_engine.py (finding generation)
+    - any policy, scoring, or automation logic
+    
+    Violation of this invariant breaks the evidence-only design principle.
     """
     value: str
     confidence: float = Field(ge=0.0, le=0.9, description="Max 0.9 - never authoritative")

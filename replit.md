@@ -74,6 +74,8 @@ Key constraints:
 - Does NOT affect shadow/zombie classification
 - UI displays inference as suggestion, not fact
 
+**INVARIANT**: `vendor_hypothesis` is NON-DECISIONABLE metadata. It MUST NOT be referenced by admission, classification, findings, policy, scoring, or automation logic.
+
 ### API Structure
 
 FastAPI application with these key endpoints:

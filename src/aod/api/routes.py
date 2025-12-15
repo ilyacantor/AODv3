@@ -517,6 +517,70 @@ async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
     }
 
 
+def _generate_ambiguous_explanation(item: dict) -> str:
+    """Generate plain English explanation for why a match is ambiguous."""
+    entity_name = item.get("entity_name", "Unknown")
+    plane = item.get("plane", "unknown")
+    candidate_ids = item.get("candidate_ids", [])
+    candidate_names = item.get("candidate_names", [])
+    
+    num_candidates = len(candidate_ids)
+    
+    plane_labels = {
+        "idp": "identity provider",
+        "cmdb": "CMDB",
+        "cloud": "cloud inventory",
+        "finance": "finance system",
+        "discovery": "discovery"
+    }
+    plane_label = plane_labels.get(plane, plane)
+    
+    if plane == "finance":
+        vendors = [n for n in candidate_names if not n.startswith("transaction_id=")]
+        transactions = [n for n in candidate_names if n.startswith("transaction_id=")]
+        
+        parts = []
+        if vendors:
+            parts.append(f"{len(vendors)} vendor record{'s' if len(vendors) > 1 else ''}")
+        if transactions:
+            parts.append(f"{len(transactions)} transaction{'s' if len(transactions) > 1 else ''}")
+        
+        records_desc = " and ".join(parts) if parts else f"{num_candidates} records"
+        
+        return (
+            f'"{entity_name}" matched {records_desc} in the {plane_label}. '
+            f"This is ambiguous because multiple separate payment records could represent "
+            f"the same vendor relationship, making it unclear which is authoritative."
+        )
+    
+    elif plane == "idp":
+        return (
+            f'"{entity_name}" matched {num_candidates} identity records. '
+            f"This is ambiguous because the application name appears in multiple SSO/SCIM entries, "
+            f"possibly due to naming variations or duplicate app registrations."
+        )
+    
+    elif plane == "cmdb":
+        return (
+            f'"{entity_name}" matched {num_candidates} CMDB configuration items. '
+            f"This is ambiguous because multiple CI records exist with similar names, "
+            f"possibly due to environment variants (dev/prod) or legacy entries."
+        )
+    
+    elif plane == "cloud":
+        return (
+            f'"{entity_name}" matched {num_candidates} cloud resources. '
+            f"This is ambiguous because multiple cloud assets share this name, "
+            f"possibly across regions, accounts, or resource types."
+        )
+    
+    else:
+        return (
+            f'"{entity_name}" matched {num_candidates} records in the {plane_label}. '
+            f"This is ambiguous because multiple records could represent this asset."
+        )
+
+
 @router.get("/runs/{run_id}/ambiguous")
 async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
     """Get ambiguous matches for a run"""
@@ -528,10 +592,15 @@ async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
     
     items, total = await db.get_ambiguous_matches_by_run(run_id, limit=limit, offset=offset)
     
+    enriched_items = []
+    for item in items:
+        item["explanation"] = _generate_ambiguous_explanation(item)
+        enriched_items.append(item)
+    
     return {
         "run_id": run_id,
-        "items": items,
-        "count": len(items),
+        "items": enriched_items,
+        "count": len(enriched_items),
         "total": total
     }
 

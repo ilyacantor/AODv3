@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
-from aod.api.routes import router, v0_router
+from aod.api.routes import router
 from aod.db.database import get_db
 
 app = FastAPI(
@@ -24,7 +24,6 @@ app.add_middleware(
 )
 
 app.include_router(router)
-app.include_router(v0_router)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"

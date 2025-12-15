@@ -10,8 +10,8 @@ PST = timezone(timedelta(hours=-8))
 def now_pst() -> datetime:
     return datetime.now(PST)
 
-from .models.output_contracts import RunLog, Asset, Finding, SyncStatus, ZombieClassification
-from .pipeline.derived_classifications import compute_derived_classifications, compute_zombie_classifications
+from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
+from .pipeline.derived_classifications import compute_derived_classifications
 
 
 async def reconcile_to_farm(
@@ -40,29 +40,10 @@ async def reconcile_to_farm(
     if not base_url:
         return False, "No Farm URL configured"
     
-    derived = compute_derived_classifications(assets, activity_window_days=90)
-    
-    zombie_classifications = compute_zombie_classifications(
-        assets, 
-        run_id=run_log.run_id, 
-        window_days=90
-    )
-    
-    zombie_results = [
-        {
-            "asset_id": zc.asset_id,
-            "classification": zc.classification.value,
-            "window_days": zc.window_days,
-            "evidence_checked": zc.evidence_checked,
-            "last_activity_observed_at": zc.last_activity_observed_at.isoformat() if zc.last_activity_observed_at else None,
-            "reason": zc.reason
-        }
-        for zc in zombie_classifications
-        if zc.classification == ZombieClassification.ZOMBIE
-    ][:10]
+    derived = compute_derived_classifications(assets, activity_window_days=30)
     
     shadow_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.shadow_assets[:10]]
-    zombie_asset_names = [zr["reason"] for zr in zombie_results[:10]]
+    zombie_asset_names = [a.get("name", "") if isinstance(a, dict) else getattr(a, "name", str(a)) for a in derived.zombie_assets[:10]]
     
     high_severity_findings = [
         {
@@ -94,7 +75,6 @@ async def reconcile_to_farm(
         "aod_lists": {
             "shadow_assets": shadow_asset_names,
             "zombie_assets": zombie_asset_names,
-            "zombie_classifications": zombie_results,
             "high_severity_findings": high_severity_findings
         }
     }

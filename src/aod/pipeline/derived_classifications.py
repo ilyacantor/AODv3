@@ -19,7 +19,7 @@ Zombie Asset = admitted asset with:
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from ..models.output_contracts import Asset, LensStatus, ZombieClassification, ZombieClassificationResult
+from ..models.output_contracts import Asset, LensStatus
 
 
 def _utc_now() -> datetime:
@@ -52,7 +52,7 @@ class DistributionDiagnostic:
     total_assets: int = 0
     with_idp_match: int = 0
     with_cmdb_match: int = 0
-    with_activity_in_window: int = 0
+    with_activity_last_30_days: int = 0
     with_any_activity_timestamp: int = 0
     indeterminate_count: int = 0
 
@@ -68,7 +68,7 @@ class DerivedClassificationSummary:
     distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
 
 
-def classify_shadow(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
+def classify_shadow(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
     """
     Determine if an asset is a Shadow Asset.
     
@@ -158,21 +158,16 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     )
 
 
-def compute_zombie_status(asset: Asset, window_days: int) -> tuple[bool, bool, str]:
+def compute_zombie_status(asset: Asset, window_days: int = 30) -> tuple[bool, bool, str]:
     """
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
-    Zombie = (exists in any system of record) AND (no timestamps within window)
-    Systems of record: IdP, CMDB, Cloud, Finance
+    Zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
     If there are NO timestamps at all, that still counts as "no timestamps within window"
-    
-    Per Zombie Recognition Contract v1.0:
-    - window_days is REQUIRED (no default)
-    - Existence check includes all systems of record
     
     Args:
         asset: The asset to check
-        window_days: Activity window in days - REQUIRED, no default
+        window_days: Activity window in days (default 30)
         
     Returns:
         Tuple of (is_zombie, is_indeterminate, reason)
@@ -181,21 +176,15 @@ def compute_zombie_status(asset: Asset, window_days: int) -> tuple[bool, bool, s
     
     has_idp = asset.lens_status.idp == LensStatus.MATCHED
     has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
-    has_cloud = asset.lens_status.cloud == LensStatus.MATCHED
-    has_finance = asset.lens_status.finance == LensStatus.MATCHED
     
-    if not (has_idp or has_cmdb or has_cloud or has_finance):
-        return False, False, "Not in any system of record (IdP, CMDB, Cloud, Finance) - cannot be zombie"
+    if not (has_idp or has_cmdb):
+        return False, False, "Not in IdP or CMDB - cannot be zombie"
     
     official_sources = []
     if has_idp:
         official_sources.append("IdP")
     if has_cmdb:
         official_sources.append("CMDB")
-    if has_cloud:
-        official_sources.append("Cloud")
-    if has_finance:
-        official_sources.append("Finance")
     
     latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     
@@ -210,12 +199,11 @@ def compute_zombie_status(asset: Asset, window_days: int) -> tuple[bool, bool, s
     return False, False, f"Not zombie: Recent activity at {latest.isoformat()}"
 
 
-def classify_zombie(asset: Asset, activity_window_days: int) -> ClassificationResult:
+def classify_zombie(asset: Asset, activity_window_days: int = 30) -> ClassificationResult:
     """
     Determine if an asset is a Zombie Asset.
     
-    Per Zombie Recognition Contract v1.0:
-    Zombie = exists in any system of record (IdP, CMDB, Cloud, Finance)
+    Zombie = exists in CMDB or IdP (official records)
              AND (has NO timestamped activity OR activity is outside the window)
     
     Interpretation: "This is in our official systems but we have no
@@ -227,19 +215,17 @@ def classify_zombie(asset: Asset, activity_window_days: int) -> ClassificationRe
     
     Args:
         asset: The asset to classify
-        activity_window_days: Number of days to consider for recent activity - REQUIRED
+        activity_window_days: Number of days to consider for recent activity (default 30)
     """
     has_idp = asset.lens_status.idp == LensStatus.MATCHED
     has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
-    has_cloud = asset.lens_status.cloud == LensStatus.MATCHED
-    has_finance = asset.lens_status.finance == LensStatus.MATCHED
     
-    if not (has_idp or has_cmdb or has_cloud or has_finance):
+    if not (has_idp or has_cmdb):
         return ClassificationResult(
             is_classified=False,
             is_indeterminate=False,
             classification_type="zombie",
-            reason="Asset not in any system of record (IdP, CMDB, Cloud, Finance) - cannot be zombie",
+            reason="Asset not in CMDB or IdP - cannot be zombie",
             evidence_summary=[]
         )
     
@@ -248,10 +234,6 @@ def classify_zombie(asset: Asset, activity_window_days: int) -> ClassificationRe
         official_presence.append("IdP/identity systems")
     if has_cmdb:
         official_presence.append("CMDB")
-    if has_cloud:
-        official_presence.append("Cloud")
-    if has_finance:
-        official_presence.append("Finance")
     
     latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     cutoff_date = _utc_now() - timedelta(days=activity_window_days)
@@ -304,154 +286,7 @@ def classify_zombie(asset: Asset, activity_window_days: int) -> ClassificationRe
     )
 
 
-def compute_zombie_classification(
-    asset: Asset,
-    run_id: str,
-    window_days: int
-) -> ZombieClassificationResult:
-    """
-    Contract-compliant zombie classification per Zombie Recognition Contract v1.0.
-    
-    Zombie Definition (binary):
-    1. Exists - Asset appears in ≥1 system of record (CMDB, Billing, IdP, Cloud inventory)
-    2. No activity within window - No observed_at ≥ (now - window_days)
-    3. Evidence exhaustiveness - All sources checked must be enumerated
-    
-    FORBIDDEN:
-    - Anomaly scores, percentile cutoffs, "low usage" heuristics
-    - Inferred last_seen, generated_at as activity
-    - Confidence/probability outputs
-    
-    Args:
-        asset: The asset to classify
-        run_id: The run ID for this classification
-        window_days: Activity window in days - REQUIRED, no default
-        
-    Returns:
-        ZombieClassificationResult with contract-compliant output
-    """
-    evidence_checked: list[str] = ["IdP", "CMDB", "Cloud", "Billing", "AccessLogs"]
-    existence_sources: list[str] = []
-    
-    has_idp = asset.lens_status.idp == LensStatus.MATCHED
-    has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
-    has_cloud = asset.lens_status.cloud == LensStatus.MATCHED
-    has_finance = asset.lens_status.finance == LensStatus.MATCHED
-    
-    if has_idp:
-        existence_sources.append("IdP")
-    if has_cmdb:
-        existence_sources.append("CMDB")
-    if has_cloud:
-        existence_sources.append("Cloud")
-    if has_finance:
-        existence_sources.append("Billing")
-    
-    activity_timestamps: list[tuple[str, datetime]] = []
-    
-    if asset.activity_evidence.idp_last_login_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.idp_last_login_at)
-        if ts:
-            activity_timestamps.append(("IdP login", ts))
-    
-    if asset.activity_evidence.discovery_observed_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.discovery_observed_at)
-        if ts:
-            activity_timestamps.append(("AccessLogs", ts))
-    
-    if asset.activity_evidence.cloud_observed_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.cloud_observed_at)
-        if ts:
-            activity_timestamps.append(("Cloud", ts))
-    
-    if asset.activity_evidence.endpoint_last_seen_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.endpoint_last_seen_at)
-        if ts:
-            activity_timestamps.append(("AccessLogs", ts))
-    
-    if asset.activity_evidence.network_last_seen_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.network_last_seen_at)
-        if ts:
-            activity_timestamps.append(("AccessLogs", ts))
-    
-    if asset.activity_evidence.finance_last_transaction_at:
-        ts = _ensure_utc_aware(asset.activity_evidence.finance_last_transaction_at)
-        if ts:
-            activity_timestamps.append(("Billing", ts))
-    
-    if not existence_sources:
-        return ZombieClassificationResult(
-            run_id=run_id,
-            asset_id=str(asset.asset_id),
-            classification=ZombieClassification.NOT_ZOMBIE,
-            window_days=window_days,
-            evidence_checked=evidence_checked,
-            last_activity_observed_at=None,
-            reason="Asset does not exist in any system of record (IdP, CMDB, Cloud, Finance)."
-        )
-    
-    latest_activity: Optional[datetime] = None
-    if activity_timestamps:
-        latest_activity = max(ts for _, ts in activity_timestamps)
-    
-    cutoff = _utc_now() - timedelta(days=window_days)
-    
-    if latest_activity is None:
-        return ZombieClassificationResult(
-            run_id=run_id,
-            asset_id=str(asset.asset_id),
-            classification=ZombieClassification.ZOMBIE,
-            window_days=window_days,
-            evidence_checked=evidence_checked,
-            last_activity_observed_at=None,
-            reason=f"Asset exists in {', '.join(existence_sources)} but has no observed activity timestamps."
-        )
-    
-    if latest_activity < cutoff:
-        return ZombieClassificationResult(
-            run_id=run_id,
-            asset_id=str(asset.asset_id),
-            classification=ZombieClassification.ZOMBIE,
-            window_days=window_days,
-            evidence_checked=evidence_checked,
-            last_activity_observed_at=latest_activity,
-            reason=f"Asset exists in {', '.join(existence_sources)} but last activity was {latest_activity.strftime('%Y-%m-%d')}, outside {window_days}-day window."
-        )
-    
-    return ZombieClassificationResult(
-        run_id=run_id,
-        asset_id=str(asset.asset_id),
-        classification=ZombieClassification.NOT_ZOMBIE,
-        window_days=window_days,
-        evidence_checked=evidence_checked,
-        last_activity_observed_at=latest_activity,
-        reason=f"Asset has activity within {window_days}-day window (last: {latest_activity.strftime('%Y-%m-%d')})."
-    )
-
-
-def compute_zombie_classifications(
-    assets: list[Asset],
-    run_id: str,
-    window_days: int
-) -> list[ZombieClassificationResult]:
-    """
-    Compute contract-compliant zombie classifications for all assets.
-    
-    Args:
-        assets: List of assets to classify
-        run_id: The run ID for this classification batch
-        window_days: Activity window in days - REQUIRED, no default
-        
-    Returns:
-        List of ZombieClassificationResult for each asset
-    """
-    return [
-        compute_zombie_classification(asset, run_id, window_days)
-        for asset in assets
-    ]
-
-
-def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 90) -> DerivedClassificationSummary:
+def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 30) -> DerivedClassificationSummary:
     """
     Compute derived classifications for all assets.
     
@@ -478,7 +313,7 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             distribution.with_any_activity_timestamp += 1
             latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
             if latest is not None and latest > cutoff_date:
-                distribution.with_activity_in_window += 1
+                distribution.with_activity_last_30_days += 1
         
         shadow_result = classify_shadow(asset, activity_window_days)
         zombie_result = classify_zombie(asset, activity_window_days)

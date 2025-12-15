@@ -190,35 +190,3 @@ class RunLog(BaseModel):
     failure_reasons: list[str] = Field(default_factory=list)
     sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
     sync_error: Optional[str] = None
-
-
-class ZombieClassification(str, Enum):
-    """Zombie classification result - binary only"""
-    ZOMBIE = "ZOMBIE"
-    NOT_ZOMBIE = "NOT_ZOMBIE"
-
-
-class ZombieClassificationResult(BaseModel):
-    """
-    Contract-compliant zombie classification output.
-    
-    Zombie Recognition Contract v1.0:
-    - Binary classification only (ZOMBIE or NOT_ZOMBIE)
-    - No anomaly scores, percentile cutoffs, or confidence values
-    - Evidence exhaustiveness - all sources checked must be enumerated
-    - window_days must be explicit (no defaults)
-    """
-    run_id: str
-    asset_id: str
-    classification: ZombieClassification
-    window_days: int
-    evidence_checked: list[str] = Field(
-        description="All evidence sources that were checked for activity"
-    )
-    last_activity_observed_at: Optional[datetime] = Field(
-        default=None,
-        description="Most recent observed_at timestamp from any evidence source, or null if none"
-    )
-    reason: str = Field(
-        description="Plain-English, one sentence, factual explanation"
-    )

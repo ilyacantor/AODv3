@@ -556,7 +556,7 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/runs/{run_id}/derived")
-async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
+async def get_derived_classifications(run_id: str, activity_window_days: int = 30):
     """
     Get derived classifications (Shadow/Zombie) for a run.
     
@@ -591,7 +591,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
             "total_assets": summary.distribution.total_assets,
             "with_idp_match": summary.distribution.with_idp_match,
             "with_cmdb_match": summary.distribution.with_cmdb_match,
-            "with_activity_in_window": summary.distribution.with_activity_in_window,
+            "with_activity_last_30_days": summary.distribution.with_activity_last_30_days,
             "with_any_activity_timestamp": summary.distribution.with_any_activity_timestamp,
             "indeterminate_count": summary.distribution.indeterminate_count
         },
@@ -616,7 +616,7 @@ class ZombieExplainRequest(BaseModel):
     tenant_id: str
     run_id: str
     keys: list[str]
-    window_days: int = 90
+    window_days: int = 30
 
 
 class KeyExplanation(BaseModel):
@@ -842,7 +842,7 @@ class ZombieReconcileRequest(BaseModel):
     run_id: str
     expected_zombie_keys: list[str]
     extra_zombie_keys: list[str]
-    window_days: int = 90
+    window_days: int = 30
 
 
 class ZombieReconcileResponse(BaseModel):
@@ -1204,55 +1204,3 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
         },
         conclusion=conclusion
     )
-
-
-v0_router = APIRouter(prefix="/v0")
-
-
-@v0_router.get("/zombies")
-async def v0_get_zombies(run_id: str, window_days: int):
-    """
-    Walled-off v0 zombie endpoint.
-    
-    Returns zombie asset_ids using strict logic:
-    - exists = asset appears in IdP or CMDB lens (matched status)
-    - activity = has observed_at within window_days
-    - zombie = exists AND NOT activity
-    """
-    db = await get_db()
-    
-    assets = await db.get_assets_by_run(run_id)
-    
-    if not assets:
-        raise HTTPException(status_code=404, detail=f"No data for run_id={run_id}")
-    
-    cutoff = now_pst() - timedelta(days=window_days)
-    zombie_asset_ids = []
-    
-    for asset in assets:
-        exists_in_sor = (
-            asset.lens_status.idp.value == "matched" or
-            asset.lens_status.cmdb.value == "matched"
-        )
-        
-        if not exists_in_sor:
-            continue
-        
-        latest_activity = asset.activity_evidence.latest_activity_at
-        if latest_activity and latest_activity.tzinfo is None:
-            latest_activity = latest_activity.replace(tzinfo=timezone.utc)
-        
-        activity_in_window = False
-        if latest_activity:
-            cutoff_utc = cutoff.astimezone(timezone.utc)
-            if latest_activity >= cutoff_utc:
-                activity_in_window = True
-        
-        if exists_in_sor and not activity_in_window:
-            zombie_asset_ids.append(str(asset.asset_id))
-    
-    return {
-        "run_id": run_id,
-        "window_days": window_days,
-        "zombie_asset_ids": zombie_asset_ids
-    }

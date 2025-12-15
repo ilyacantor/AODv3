@@ -55,35 +55,7 @@ Evidence comes from 7 planes that represent different enterprise data sources:
 Shadow and Zombie classifications are computed post-pipeline as views, not stored flags:
 
 - **Shadow Asset** - Has activity evidence but no IdP or CMDB match
-- **Zombie Asset** - Exists in any system of record (IdP, CMDB, Cloud, Finance) but no recent activity
-
-#### Zombie Recognition Contract v1.0
-
-Zombie classification follows a strict contract:
-
-**Definition (binary):**
-1. **Exists** - Asset appears in ≥1 system of record (CMDB, Billing, IdP, Cloud)
-2. **No activity within window** - No `observed_at` ≥ (now - window_days)
-3. **Evidence exhaustiveness** - All sources checked must be enumerated
-
-**Required Output Format:**
-```json
-{
-  "run_id": "...",
-  "asset_id": "...",
-  "classification": "ZOMBIE" | "NOT_ZOMBIE",
-  "window_days": X,
-  "evidence_checked": ["IdP", "CMDB", "Cloud", "Billing", "AccessLogs"],
-  "last_activity_observed_at": "timestamp | null",
-  "reason": "Plain-English, one sentence, factual"
-}
-```
-
-**Forbidden:**
-- Anomaly scores, percentile cutoffs, "low usage" heuristics
-- Inferred last_seen, generated_at as activity
-- Confidence/probability outputs
-- Default window_days value (must be explicit)
+- **Zombie Asset** - Has IdP/CMDB presence but no recent activity (30-day window)
 
 ### API Structure
 

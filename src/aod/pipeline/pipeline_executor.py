@@ -131,6 +131,29 @@ async def execute_pipeline(
         
         correlations = correlate_entities_to_planes(candidates, indexes)
         
+        def is_finance_truly_ambiguous(plane_match) -> bool:
+            """
+            Finance is NOT ambiguous if all records are from the same vendor.
+            A vendor with multiple transactions is EXPECTED, not ambiguous.
+            True ambiguity = multiple DIFFERENT vendors matching.
+            """
+            if not plane_match.matched_records:
+                return False
+            
+            vendor_names = set()
+            for rec in plane_match.matched_records:
+                if rec is None:
+                    continue
+                vendor_name = None
+                if hasattr(rec, 'name'):
+                    vendor_name = rec.name
+                elif hasattr(rec, 'vendor_name'):
+                    vendor_name = rec.vendor_name
+                if vendor_name:
+                    vendor_names.add(vendor_name.lower().strip())
+            
+            return len(vendor_names) > 1
+        
         ambiguous_count = 0
         for c in correlations:
             planes_ambiguous = []
@@ -141,7 +164,8 @@ async def execute_pipeline(
             if c.cloud.status == MatchStatus.AMBIGUOUS:
                 planes_ambiguous.append("cloud")
             if c.finance.status == MatchStatus.AMBIGUOUS:
-                planes_ambiguous.append("finance")
+                if is_finance_truly_ambiguous(c.finance):
+                    planes_ambiguous.append("finance")
             
             if planes_ambiguous:
                 ambiguous_count += 1

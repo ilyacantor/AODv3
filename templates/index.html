@@ -804,7 +804,8 @@
             if (keyFacts.length > 0) {
                 html += `<div class="key-facts-grid">`;
                 keyFacts.forEach(fact => {
-                    html += `<div class="key-fact"><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, 200)}</div></div>`;
+                    const maxLen = (fact.label.toLowerCase() === 'explanation') ? 1000 : 200;
+                    html += `<div class="key-fact" ${fact.label.toLowerCase() === 'explanation' ? 'style="grid-column: 1 / -1;"' : ''}><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, maxLen)}</div></div>`;
                 });
                 html += `</div>`;
             }

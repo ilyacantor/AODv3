@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AOD Phase 0 - Presence Debug</title>
+    <title>AOD Fresh - AutonomOS Discover</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --cyan-400: #22D3EE; --cyan-500: #06B6D4; --cyan-600: #0891B2;
+            --purple-400: #C084FC; --purple-500: #A855F7; --purple-600: #9333EA;
             --green-400: #4ADE80; --green-500: #22C55E;
             --amber-400: #FBBF24; --amber-500: #F59E0B;
             --red-400: #F87171; --red-500: #EF4444;
@@ -19,30 +20,62 @@
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Quicksand', sans-serif; background: linear-gradient(135deg, var(--slate-950) 0%, var(--slate-900) 100%); color: white; min-height: 100vh; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); }
         .logo { display: flex; align-items: center; gap: 0.75rem; }
-        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, var(--cyan-600) 0%, var(--amber-500) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; }
+        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, var(--cyan-600) 0%, var(--purple-600) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; }
         .logo-text { font-size: 1.5rem; font-weight: 700; color: white; }
-        .logo-text span { color: var(--amber-400); }
-        .phase-badge { background: var(--amber-500); color: black; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+        .logo-text span { color: var(--cyan-400); }
         .health-status { display: flex; align-items: center; gap: 0.5rem; color: var(--slate-400); font-size: 0.875rem; }
         .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-400); }
         .health-dot.error { background: var(--red-400); }
         main { padding: 2rem; }
         .section { background: rgba(30, 41, 59, 0.4); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .section-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
         .section.compact { flex: 1; min-width: 300px; max-width: 500px; }
-        .section-title { font-size: 1.25rem; font-weight: 600; color: var(--cyan-400); margin-bottom: 1rem; }
+        .section-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .run-descriptors { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--slate-800); border-radius: 8px; }
+        .run-desc-item { display: flex; gap: 0.5rem; align-items: center; }
+        .run-desc-label { color: var(--slate-500); font-size: 0.875rem; }
+        .run-desc-value { color: var(--cyan-400); font-weight: 600; font-size: 0.875rem; }
+        .section:hover { border-color: rgba(6, 182, 212, 0.5); }
+        .section-title { font-size: 1.25rem; font-weight: 600; color: var(--cyan-400); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
         .form-group { margin-bottom: 1rem; }
         .form-label { display: block; margin-bottom: 0.5rem; color: var(--slate-400); font-weight: 500; }
-        .form-select { width: 100%; padding: 0.75rem 1rem; background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: 8px; color: white; font-family: 'Quicksand', sans-serif; font-size: 1rem; }
-        .form-select:focus { outline: none; border-color: var(--cyan-500); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2); }
+        .form-input, .form-select { width: 100%; padding: 0.75rem 1rem; background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: 8px; color: white; font-family: 'Quicksand', sans-serif; font-size: 1rem; }
+        .form-input:focus, .form-select:focus { outline: none; border-color: var(--cyan-500); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2); }
+        .form-input::placeholder { color: var(--slate-500); }
         .form-select option { background: var(--gray-800); color: white; }
+        .form-row { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end; }
         .btn { padding: 0.75rem 1.5rem; border-radius: 8px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; border: none; }
         .btn-primary { background: var(--cyan-600); color: white; }
         .btn-primary:hover { background: var(--cyan-500); }
         .btn-primary:disabled { background: var(--slate-700); color: var(--slate-500); cursor: not-allowed; }
+        .btn-secondary { background: var(--gray-800); color: var(--slate-400); }
+        .btn-secondary:hover { background: var(--gray-700); color: white; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
+        .stat-value.stat-shadow { color: var(--amber-400); }
+        .stat-value.stat-zombie { color: var(--red-400); }
+        .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
+        .findings-list { max-height: 400px; overflow-y: auto; }
+        .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
+        .severity-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .severity-high { background: rgba(239, 68, 68, 0.2); color: var(--red-400); border: 1px solid rgba(239, 68, 68, 0.4); }
+        .severity-med { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); border: 1px solid rgba(245, 158, 11, 0.4); }
+        .severity-low { background: rgba(34, 197, 94, 0.2); color: var(--green-400); border: 1px solid rgba(34, 197, 94, 0.4); }
+        .finding-type { font-size: 0.75rem; color: var(--purple-400); margin-bottom: 0.25rem; }
+        .finding-explanation { color: var(--slate-400); font-size: 0.875rem; }
+        .assets-table { width: 100%; border-collapse: collapse; }
+        .assets-table th, .assets-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--slate-700); }
+        .assets-table th { color: var(--slate-400); font-weight: 600; font-size: 0.875rem; }
+        .assets-table td { color: white; }
+        .asset-type-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: rgba(168, 85, 247, 0.2); color: var(--purple-400); border: 1px solid rgba(168, 85, 247, 0.4); }
+        .lens-indicators { display: flex; gap: 0.25rem; }
+        .lens-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .lens-matched { background: var(--green-400); }
+        .lens-ambiguous { background: var(--amber-400); }
+        .lens-unmatched { background: var(--slate-500); }
         .loading { display: flex; align-items: center; justify-content: center; padding: 2rem; color: var(--slate-400); }
         .spinner { width: 24px; height: 24px; border: 3px solid var(--slate-700); border-top-color: var(--cyan-400); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -50,123 +83,875 @@
         .success-message { background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: var(--green-400); padding: 1rem; border-radius: 8px; margin-top: 1rem; }
         .hidden { display: none; }
         .runs-list { margin-top: 1rem; max-height: 320px; overflow-y: auto; }
-        .run-item { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0.75rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s ease; }
+        .run-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s ease; }
         .run-item:hover { background: var(--gray-800); }
         .run-item.selected { border: 1px solid var(--cyan-500); }
+        .run-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
         .run-info { display: flex; align-items: center; gap: 0.75rem; width: 100%; }
         .run-tenant { font-weight: 600; color: var(--cyan-400); }
         .run-meta { display: flex; gap: 0.75rem; font-size: 0.8rem; color: var(--slate-400); }
+        .run-size { background: var(--gray-700); padding: 0.15rem 0.4rem; border-radius: 4px; }
+        .run-profile { color: var(--purple-400); }
+        .run-id { font-weight: 600; color: var(--cyan-400); }
         .run-status { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
         .run-status.completed, .run-status.completed_with_results { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
         .run-status.completed_no_assets { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); }
         .run-status.failed, .run-status.upstream_error, .run-status.invalid_snapshot { background: rgba(239, 68, 68, 0.2); color: var(--red-400); }
-        .config-note { font-size: 0.875rem; color: var(--slate-500); margin-bottom: 1rem; }
-        .empty-state { text-align: center; padding: 2rem; color: var(--slate-500); }
+        .run-status.running, .run-status.pending { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .sync-status { padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; margin-left: 0.5rem; }
+        .sync-status.synced { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
+        .sync-status.pending { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .sync-status.failed { background: rgba(239, 68, 68, 0.2); color: var(--red-400); }
+        .sync-status.not_applicable { display: none; }
+        .download-btn { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
         .table-container { overflow-x: auto; }
-        .presence-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        .presence-table th { text-align: left; padding: 0.75rem; color: var(--slate-400); border-bottom: 2px solid var(--slate-700); font-weight: 600; background: var(--slate-800); }
-        .presence-table td { padding: 0.75rem; border-bottom: 1px solid var(--slate-700); }
-        .presence-table tr:hover { background: rgba(6, 182, 212, 0.05); }
-        .vendor-key { font-weight: 600; color: var(--cyan-400); font-family: monospace; }
-        .presence-yes { color: var(--green-400); font-weight: 600; }
-        .presence-no { color: var(--slate-500); }
-        .timestamp { font-family: monospace; font-size: 0.8rem; color: var(--slate-400); }
-        .timestamp.none { color: var(--slate-600); font-style: italic; }
-        .run-desc { display: flex; gap: 2rem; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--slate-800); border-radius: 8px; flex-wrap: wrap; }
-        .run-desc-item { display: flex; gap: 0.5rem; align-items: center; }
-        .run-desc-label { color: var(--slate-500); font-size: 0.875rem; }
-        .run-desc-value { color: var(--cyan-400); font-weight: 600; font-size: 0.875rem; }
-        .count-badge { background: var(--cyan-600); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 600; font-size: 0.875rem; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--slate-500); }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--slate-700); padding-bottom: 0.5rem; }
+        .tab { padding: 0.5rem 1rem; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600; cursor: pointer; border-radius: 6px 6px 0 0; transition: all 0.2s ease; }
+        .tab:hover { color: white; background: var(--slate-800); }
+        .tab.active { color: var(--cyan-400); background: var(--slate-800); }
+        .button-row { display: flex; gap: 1rem; margin-top: 1rem; }
+        .config-note { font-size: 0.875rem; color: var(--slate-500); margin-bottom: 1rem; }
+        .collapsible { margin-top: 1rem; }
+        .collapsible-header { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--slate-400); font-size: 0.875rem; padding: 0.5rem 0; }
+        .collapsible-header:hover { color: var(--cyan-400); }
+        .collapsible-icon { transition: transform 0.2s ease; }
+        .collapsible-icon.open { transform: rotate(90deg); }
+        .collapsible-content { padding: 1rem 0; }
+        .outcome-panel { margin-top: 1rem; padding: 1rem; border-radius: 8px; display: flex; align-items: center; gap: 1rem; }
+        .outcome-panel.success { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); }
+        .outcome-panel.warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); }
+        .outcome-panel.error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); }
+        .outcome-badge { padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; }
+        .outcome-badge.success { background: rgba(34, 197, 94, 0.3); color: var(--green-400); }
+        .outcome-badge.warning { background: rgba(245, 158, 11, 0.3); color: var(--amber-400); }
+        .outcome-badge.error { background: rgba(239, 68, 68, 0.3); color: var(--red-400); }
+        .outcome-explanation { color: var(--slate-400); font-size: 0.875rem; }
+        .snapshot-picker { margin-top: 1rem; }
+        .stat-card.clickable { cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent; }
+        .stat-card.clickable:hover { border-color: var(--cyan-500); background: var(--gray-800); transform: translateY(-2px); }
+        .drill-panel { background: rgba(30, 41, 59, 0.6); border: 1px solid var(--cyan-600); border-radius: 12px; padding: 1.5rem; margin-top: 1rem; }
+        .drill-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .drill-panel-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
+        .breadcrumb { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .breadcrumb-item { color: var(--slate-400); font-size: 0.875rem; cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s ease; }
+        .breadcrumb-item:hover { color: var(--cyan-400); background: var(--slate-800); }
+        .breadcrumb-item.active { color: var(--cyan-400); cursor: default; }
+        .breadcrumb-sep { color: var(--slate-500); font-size: 0.75rem; }
+        .drill-group { background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent; }
+        .drill-group:hover { border-color: var(--cyan-500); background: var(--gray-800); }
+        .drill-group-header { display: flex; justify-content: space-between; align-items: center; }
+        .drill-group-label { font-weight: 600; color: white; }
+        .drill-group-count { color: var(--cyan-400); font-weight: 600; }
+        .drill-group-hint { color: var(--slate-500); font-size: 0.75rem; margin-top: 0.25rem; }
+        .drill-detail { background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; }
+        .drill-detail-name { font-weight: 600; color: white; margin-bottom: 0.5rem; }
+        .drill-detail-row { display: flex; gap: 1rem; font-size: 0.875rem; color: var(--slate-400); margin-bottom: 0.25rem; }
+        .drill-detail-label { color: var(--slate-500); min-width: 100px; }
+        .drill-no-data { text-align: center; padding: 2rem; color: var(--slate-500); }
+        .drill-error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--red-400); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; }
+        .btn-back { background: var(--slate-700); color: white; padding: 0.5rem 1rem; font-size: 0.875rem; }
+        .btn-back:hover { background: var(--slate-600); }
+        .header-actions { display: flex; align-items: center; gap: 1rem; }
+        .btn-help { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem; }
+        .btn-help:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
+        .item-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--slate-700); }
+        .item-detail-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
+        .item-detail-meta { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+        .item-detail-tag { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; background: rgba(168, 85, 247, 0.2); color: var(--purple-400); }
+        .key-facts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+        .key-fact { background: var(--gray-800); border-radius: 6px; padding: 0.6rem 0.75rem; }
+        .key-fact-label { font-size: 0.7rem; color: var(--slate-500); text-transform: uppercase; margin-bottom: 0.15rem; }
+        .key-fact-value { font-size: 0.9rem; color: white; word-break: break-word; }
+        .records-section { margin-top: 1rem; }
+        .records-section-title { font-size: 0.875rem; font-weight: 600; color: var(--slate-400); margin-bottom: 0.5rem; }
+        .records-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .records-table th { text-align: left; padding: 0.4rem 0.5rem; color: var(--slate-500); border-bottom: 1px solid var(--slate-700); font-weight: 600; }
+        .records-table td { padding: 0.4rem 0.5rem; color: var(--slate-300); border-bottom: 1px solid var(--slate-800); }
+        .pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--slate-700); }
+        .pagination-info { font-size: 0.75rem; color: var(--slate-500); }
+        .pagination-btns { display: flex; gap: 0.5rem; }
+        .pagination-btn { padding: 0.3rem 0.6rem; font-size: 0.75rem; background: var(--slate-700); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .pagination-btn:hover { background: var(--slate-600); }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .raw-json-section { margin-top: 1rem; border-top: 1px solid var(--slate-700); padding-top: 0.75rem; }
+        .raw-json-toggle { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--slate-500); font-size: 0.8rem; }
+        .raw-json-toggle:hover { color: var(--cyan-400); }
+        .raw-json-content { margin-top: 0.5rem; display: none; }
+        .raw-json-content.open { display: block; }
+        .raw-json-pre { background: var(--slate-950); border: 1px solid var(--slate-700); border-radius: 6px; padding: 0.75rem; font-family: monospace; font-size: 0.7rem; color: var(--slate-400); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+        .copy-json-btn { margin-top: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.7rem; background: var(--slate-700); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .copy-json-btn:hover { background: var(--cyan-600); }
+        @media (max-width: 600px) { .key-facts-grid { grid-template-columns: 1fr; } }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.2s ease; }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal { background: var(--gray-900); border: 1px solid var(--slate-700); border-radius: 12px; max-width: 700px; max-height: 85vh; overflow-y: auto; margin: 1rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--slate-700); position: sticky; top: 0; background: var(--gray-900); }
+        .modal-title { font-size: 1.25rem; font-weight: 600; color: var(--cyan-400); }
+        .modal-close { background: transparent; border: none; color: var(--slate-400); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; }
+        .modal-close:hover { color: white; }
+        .modal-body { padding: 1.5rem; }
+        .help-section { margin-bottom: 1.5rem; }
+        .help-section:last-child { margin-bottom: 0; }
+        .help-section-title { font-size: 1rem; font-weight: 600; color: white; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+        .help-section-title::before { content: ''; width: 4px; height: 1rem; background: var(--cyan-500); border-radius: 2px; }
+        .help-text { color: var(--slate-400); font-size: 0.9rem; line-height: 1.6; margin-bottom: 0.75rem; }
+        .help-list { list-style: none; padding: 0; margin: 0; }
+        .help-list li { padding: 0.5rem 0; padding-left: 1.25rem; position: relative; color: var(--slate-400); font-size: 0.9rem; line-height: 1.5; }
+        .help-list li::before { content: ''; position: absolute; left: 0; top: 0.85rem; width: 6px; height: 6px; background: var(--purple-500); border-radius: 50%; }
+        .help-list strong { color: var(--cyan-400); font-weight: 600; }
+        .help-kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-top: 0.75rem; }
+        .help-kpi-item { background: var(--slate-800); border-radius: 8px; padding: 0.75rem; }
+        .help-kpi-name { font-weight: 600; color: var(--cyan-400); font-size: 0.875rem; margin-bottom: 0.25rem; }
+        .help-kpi-desc { color: var(--slate-400); font-size: 0.8rem; line-height: 1.4; }
+        @media (max-width: 600px) { .help-kpi-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
     <header>
-        <div class="logo">
-            <div class="logo-icon">A</div>
-            <div class="logo-text">AOD <span>Phase 0</span></div>
-            <span class="phase-badge">PRESENCE DEBUG</span>
-        </div>
-        <div class="health-status">
-            <div class="health-dot" id="healthDot"></div>
-            <span id="healthText">Checking...</span>
+        <div class="logo"><div class="logo-icon">A</div><div class="logo-text">AOD <span>Fresh</span></div></div>
+        <div class="header-actions">
+            <button class="btn-help" id="helpBtn">? Help</button>
+            <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
         </div>
     </header>
-    
     <main class="container">
         <div class="section-row">
-            <div class="section compact">
-                <h2 class="section-title">Fetch from Farm</h2>
-                <p class="config-note">Farm URL configured via environment</p>
-                
+        <div class="section compact">
+            <h2 class="section-title">Fetch from Farm</h2>
+            <p class="config-note">Farm URL configured via environment</p>
+            
+            <div class="form-group">
+                <label class="form-label">Tenant</label>
+                <select class="form-select" id="tenantSelect" disabled>
+                    <option value="">Loading tenants...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Snapshot Size</label>
+                <select class="form-select" id="sizeSelect">
+                    <option value="">All sizes</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                </select>
+            </div>
+            
+            <div class="snapshot-picker" id="snapshotPicker">
                 <div class="form-group">
-                    <label class="form-label">Tenant</label>
-                    <select class="form-select" id="tenantSelect" disabled>
-                        <option value="">Loading tenants...</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Snapshot</label>
+                    <label class="form-label">Select Snapshot</label>
                     <select class="form-select" id="snapshotSelect" disabled>
                         <option value="">Select a tenant first</option>
                     </select>
                 </div>
-                
-                <div id="fetchMessage" class="hidden"></div>
-                
-                <button class="btn btn-primary" id="fetchFromFarm" style="margin-top: 1rem;">Fetch & Run Discovery</button>
             </div>
             
-            <div class="section compact">
-                <h2 class="section-title">Discovery Runs</h2>
-                <div id="runsLoading" class="loading hidden"><div class="spinner"></div>Loading runs...</div>
-                <div id="runsList" class="runs-list"><div class="empty-state">No runs yet. Fetch a snapshot to get started.</div></div>
+            <div class="collapsible">
+                <div class="collapsible-header" id="advancedToggle">
+                    <span class="collapsible-icon" id="advancedIcon">&#9654;</span>
+                    <span>Advanced: Manual Snapshot ID</span>
+                </div>
+                <div class="collapsible-content hidden" id="advancedContent">
+                    <div class="form-group">
+                        <label class="form-label">Snapshot ID (manual entry)</label>
+                        <input type="text" class="form-input" id="snapshotIdManual" placeholder="snapshot-123">
+                    </div>
+                </div>
+            </div>
+            
+            <div id="outcomePanel" class="hidden"></div>
+            <div id="fetchMessage" class="hidden"></div>
+            
+            <div class="button-row">
+                <button class="btn btn-primary" id="fetchFromFarm">Fetch & Run Discovery</button>
             </div>
         </div>
         
-        <div class="section hidden" id="presenceSection">
-            <h2 class="section-title">Presence Debug Table</h2>
-            <div id="runDesc" class="run-desc">
-                <div class="run-desc-item"><span class="run-desc-label">Run ID:</span><span class="run-desc-value" id="descRunId">-</span></div>
+        <div class="section compact">
+            <h2 class="section-title">Discovery Runs</h2>
+            <div id="runsLoading" class="loading hidden"><div class="spinner"></div>Loading runs...</div>
+            <div id="runsList" class="runs-list"><div class="empty-state">No runs yet. Fetch a snapshot to get started.</div></div>
+        </div>
+        </div>
+        
+        <div class="section hidden" id="resultsSection">
+            <h2 class="section-title">Results</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="summary">Summary</button>
+                <button class="tab" data-tab="assets">Assets</button>
+                <button class="tab" data-tab="findings">Findings</button>
             </div>
-            <div id="presenceLoading" class="loading hidden"><div class="spinner"></div>Loading presence data...</div>
-            <div class="table-container">
-                <table class="presence-table" id="presenceTable">
-                    <thead>
-                        <tr>
-                            <th>vendor_key</th>
-                            <th>in_discovery</th>
-                            <th>in_finance</th>
-                            <th>in_idp</th>
-                            <th>in_cmdb</th>
-                            <th>latest_activity_at</th>
-                        </tr>
-                    </thead>
-                    <tbody id="presenceBody">
-                    </tbody>
-                </table>
+            <div id="summaryTab" class="tab-content">
+                <div id="runDescriptors" class="run-descriptors">
+                    <div class="run-desc-item"><span class="run-desc-label">Run ID:</span><span class="run-desc-value" id="descRunId">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Tenant:</span><span class="run-desc-value" id="descTenant">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Status:</span><span class="run-desc-value" id="descStatus">-</span></div>
+                    <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
+                </div>
+                <div id="summaryStats" class="stats-grid">
+                    <div class="stat-card clickable" data-drill-type="observations"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
+                    <div class="stat-card clickable" data-drill-type="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
+                    <div class="stat-card clickable" data-drill-type="artifacts"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card clickable" data-drill-type="ambiguous"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card clickable" data-drill-type="rejections"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                    <div class="stat-card clickable" data-drill-type="shadow"><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
+                    <div class="stat-card clickable" data-drill-type="zombie"><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
+                </div>
+                <div id="drillPanel" class="drill-panel hidden">
+                    <div class="drill-panel-header">
+                        <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
+                        <button class="btn btn-back" id="drillBackBtn">← Back</button>
+                    </div>
+                    <div class="breadcrumb" id="drillBreadcrumb"></div>
+                    <div id="drillError" class="drill-error hidden"></div>
+                    <div id="drillContent"></div>
+                </div>
+            </div>
+            <div id="assetsTab" class="tab-content hidden">
+                <div id="assetsLoading" class="loading hidden"><div class="spinner"></div>Loading assets...</div>
+                <div class="table-container">
+                    <table class="assets-table"><thead><tr><th>Name</th><th>Type</th><th>Vendor</th><th>Environment</th><th>Lens Coverage</th></tr></thead><tbody id="assetsBody"></tbody></table>
+                </div>
+                <button class="btn btn-secondary download-btn" id="downloadCatalog">Download Catalog JSON</button>
+            </div>
+            <div id="findingsTab" class="tab-content hidden">
+                <div id="findingsLoading" class="loading hidden"><div class="spinner"></div>Loading findings...</div>
+                <div class="findings-list" id="findingsList"></div>
             </div>
         </div>
     </main>
-    
     <script>
-        let currentRunId = null;
+        let currentRunId = null, catalogData = null, loadedSnapshots = [];
+        let drillStack = [];
+        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
+        function safeStr(value, maxLen = 200) {
+            if (value === null || value === undefined) return 'N/A';
+            const str = String(value);
+            if (str.length <= maxLen) return escapeHtml(str);
+            return escapeHtml(str.slice(0, maxLen)) + '...';
+        }
+        
+        function safeJsonPreview(obj, maxLen = 5000) {
+            if (obj === null || obj === undefined) return 'null';
+            try {
+                const str = JSON.stringify(obj, null, 2);
+                if (str.length <= maxLen) return escapeHtml(str);
+                return escapeHtml(str.slice(0, maxLen)) + '\n... [truncated]';
+            } catch (e) {
+                return '[Error serializing object]';
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('.copy-json-btn');
+                if (btn) {
+                    const original = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => btn.textContent = original, 1500);
+                }
+            });
+        }
+        
+        const DRILL_SCHEMA = {
+            entities: {
+                assets: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        lens_status: { 
+                            default: { idp: 'unmatched', cmdb: 'unmatched', cloud: 'unmatched', finance: 'unmatched' }
+                        },
+                        identifiers: { default: {} },
+                        deterministic_id: { default: 'unknown' }
+                    },
+                    drillPaths: ['asset_type', 'vendor', 'environment'],
+                    displayName: 'Assets'
+                },
+                findings: {
+                    fields: {
+                        finding_type: { default: 'unknown' },
+                        severity: { default: 'unknown' },
+                        explanation: { default: 'No explanation available' },
+                        asset_id: { default: null },
+                        created_at: { default: null }
+                    },
+                    drillPaths: ['finding_type', 'severity'],
+                    displayName: 'Findings'
+                },
+                artifacts: {
+                    fields: {
+                        artifact_type: { default: 'unknown' },
+                        source_lens: { default: 'unknown' },
+                        asset_id: { default: null },
+                        data: { default: {} }
+                    },
+                    drillPaths: ['artifact_type', 'source_lens'],
+                    displayName: 'Artifacts'
+                },
+                observations: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        domain: { default: null },
+                        source: { default: 'unknown' },
+                        category: { default: null }
+                    },
+                    drillPaths: ['source', 'category'],
+                    displayName: 'Observations'
+                },
+                ambiguous: {
+                    fields: {
+                        entity_name: { default: 'unknown' },
+                        plane: { default: 'unknown' },
+                        candidate_names: { default: [] }
+                    },
+                    drillPaths: ['plane'],
+                    displayName: 'Ambiguous Matches'
+                },
+                rejections: {
+                    fields: {
+                        entity_name: { default: 'unknown' },
+                        reason_code: { default: 'unknown' },
+                        reason_detail: { default: 'No details available' }
+                    },
+                    drillPaths: ['reason_code'],
+                    displayName: 'Rejections'
+                },
+                shadow: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        reason: { default: 'No reason available' },
+                        evidence_summary: { default: [] }
+                    },
+                    drillPaths: ['asset_type', 'vendor'],
+                    displayName: 'Shadow Assets'
+                },
+                zombie: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        asset_type: { default: 'unknown' },
+                        environment: { default: 'unknown' },
+                        reason: { default: 'No reason available' },
+                        evidence_summary: { default: [] }
+                    },
+                    drillPaths: ['asset_type', 'vendor'],
+                    displayName: 'Zombie Assets'
+                }
+            },
+            summaryCardMappings: {
+                statAssets: 'assets',
+                statFindings: 'findings',
+                statArtifacts: 'artifacts',
+                statObservations: 'observations',
+                statAmbiguous: 'ambiguous',
+                statRejected: 'rejections',
+                statShadow: 'shadow',
+                statZombie: 'zombie'
+            }
+        };
+        
+        function normalizeResponse(type, data) {
+            const errors = [];
+            const schema = DRILL_SCHEMA.entities[type];
+            
+            if (!schema) {
+                errors.push(`Unknown entity type: ${type}`);
+                return { data: [], errors };
+            }
+            
+            if (!Array.isArray(data)) {
+                errors.push(`Expected array for ${type}, got ${typeof data}`);
+                return { data: [], errors };
+            }
+            
+            const normalized = data.map((item, index) => {
+                const result = {};
+                try {
+                    for (const [field, config] of Object.entries(schema.fields)) {
+                        const value = item?.[field];
+                        if (value === undefined || value === null || value === '') {
+                            if (typeof config.default === 'object' && config.default !== null) {
+                                result[field] = JSON.parse(JSON.stringify(config.default));
+                            } else {
+                                result[field] = config.default;
+                            }
+                        } else if (typeof config.default === 'object' && config.default !== null && typeof value === 'object') {
+                            result[field] = { ...JSON.parse(JSON.stringify(config.default)), ...value };
+                        } else {
+                            result[field] = value;
+                        }
+                    }
+                    Object.keys(item || {}).forEach(key => {
+                        if (!(key in result)) result[key] = item[key];
+                    });
+                } catch (e) {
+                    errors.push(`Error normalizing ${type}[${index}]: ${e.message}`);
+                    for (const [field, config] of Object.entries(schema.fields)) {
+                        result[field] = typeof config.default === 'object' && config.default !== null
+                            ? JSON.parse(JSON.stringify(config.default))
+                            : config.default;
+                    }
+                }
+                return result;
+            });
+            
+            return { data: normalized, errors };
+        }
+        
+        function executeDrill({ rootType, filters = {}, level = 0 }) {
+            const schema = DRILL_SCHEMA.entities[rootType];
+            if (!schema) {
+                return { items: [], nextDrillOptions: [], canDrillFurther: false, error: `Unknown type: ${rootType}` };
+            }
+            
+            const sourceData = normalizedData[rootType] || [];
+            let filtered = sourceData;
+            
+            for (const [key, value] of Object.entries(filters)) {
+                filtered = filtered.filter(item => (item[key] ?? 'unknown') === value);
+            }
+            
+            const drillPaths = schema.drillPaths || [];
+            const usedFields = Object.keys(filters);
+            const availablePaths = drillPaths.filter(p => !usedFields.includes(p));
+            
+            if (filtered.length <= 1 || availablePaths.length === 0) {
+                return { items: filtered, nextDrillOptions: [], canDrillFurther: false };
+            }
+            
+            const nextField = availablePaths[0];
+            const groups = {};
+            filtered.forEach(item => {
+                const val = item[nextField] ?? 'unknown';
+                groups[val] = groups[val] || [];
+                groups[val].push(item);
+            });
+            
+            const nextDrillOptions = Object.entries(groups).map(([value, items]) => ({
+                field: nextField,
+                value,
+                count: items.length,
+                canDrillDeeper: availablePaths.length > 1 || items.length > 1
+            }));
+            
+            return {
+                items: filtered,
+                nextDrillOptions: nextDrillOptions.sort((a, b) => b.count - a.count),
+                canDrillFurther: true,
+                groupField: nextField
+            };
+        }
+        
+        function pushDrill(drillState) {
+            drillStack.push(drillState);
+            renderDrillPanel();
+        }
+        
+        function popDrill() {
+            if (drillStack.length > 0) {
+                drillStack.pop();
+                if (drillStack.length === 0) {
+                    hideDrillPanel();
+                } else {
+                    renderDrillPanel();
+                }
+            }
+        }
+        
+        function navigateToDrillLevel(level) {
+            while (drillStack.length > level + 1) {
+                drillStack.pop();
+            }
+            if (drillStack.length === 0) {
+                hideDrillPanel();
+            } else {
+                renderDrillPanel();
+            }
+        }
+        
+        function hideDrillPanel() {
+            drillStack = [];
+            document.getElementById('drillPanel').classList.add('hidden');
+        }
+        
+        function showDrillError(message) {
+            const errorEl = document.getElementById('drillError');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+        
+        function hideDrillError() {
+            document.getElementById('drillError').classList.add('hidden');
+        }
+        
+        function renderDrillPanel() {
+            if (drillStack.length === 0) {
+                hideDrillPanel();
+                return;
+            }
+            
+            hideDrillError();
+            const panel = document.getElementById('drillPanel');
+            const titleEl = document.getElementById('drillPanelTitle');
+            const breadcrumbEl = document.getElementById('drillBreadcrumb');
+            const contentEl = document.getElementById('drillContent');
+            
+            const currentState = drillStack[drillStack.length - 1];
+            const schema = DRILL_SCHEMA.entities[currentState.rootType];
+            const displayName = schema?.displayName || currentState.rootType;
+            
+            titleEl.textContent = `Drill Down: ${displayName}`;
+            
+            let breadcrumbHtml = `<span class="breadcrumb-item" onclick="navigateToDrillLevel(-1)">${displayName}</span>`;
+            drillStack.forEach((state, index) => {
+                if (Object.keys(state.filters).length > 0) {
+                    const lastFilter = Object.entries(state.filters).pop();
+                    breadcrumbHtml += `<span class="breadcrumb-sep">›</span>`;
+                    breadcrumbHtml += `<span class="breadcrumb-item${index === drillStack.length - 1 ? ' active' : ''}" onclick="navigateToDrillLevel(${index})">${lastFilter[1]}</span>`;
+                }
+            });
+            breadcrumbEl.innerHTML = breadcrumbHtml;
+            
+            const result = executeDrill(currentState);
+            
+            if (result.error) {
+                showDrillError(result.error);
+                contentEl.innerHTML = '';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
+            if (result.items.length === 0) {
+                contentEl.innerHTML = '<div class="drill-no-data">No items found matching the current filters.</div>';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
+            if (!result.canDrillFurther || result.nextDrillOptions.length === 0) {
+                contentEl.innerHTML = renderDetailView(currentState.rootType, result.items);
+            } else {
+                contentEl.innerHTML = renderGroupView(currentState.rootType, result.nextDrillOptions, result.groupField);
+            }
+            
+            panel.classList.remove('hidden');
+        }
+        
+        function renderGroupView(rootType, options, groupField) {
+            const fieldLabel = groupField.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            return options.map(opt => `
+                <div class="drill-group" onclick="drillIntoGroup('${rootType}', '${opt.field}', '${opt.value.replace(/'/g, "\\'")}')">
+                    <div class="drill-group-header">
+                        <span class="drill-group-label">${opt.value}</span>
+                        <span class="drill-group-count">${opt.count} item${opt.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="drill-group-hint">${opt.canDrillDeeper ? 'Click to drill deeper' : 'Click to view details'}</div>
+                </div>
+            `).join('');
+        }
+        
+        function renderDetailView(rootType, items) {
+            if (items.length === 0) {
+                return '<div class="drill-no-data">No further details available.</div>';
+            }
+            
+            const schema = DRILL_SCHEMA.entities[rootType];
+            if (!schema) {
+                return '<div class="drill-no-data">Unknown entity type.</div>';
+            }
+            
+            detailPagination.items = items;
+            detailPagination.rootType = rootType;
+            detailPagination.itemIndex = 0;
+            
+            return renderSingleItemDetail(items[0], rootType, 0, items.length);
+        }
+        
+        function renderSingleItemDetail(item, rootType, index, total) {
+            const schema = DRILL_SCHEMA.entities[rootType];
+            const name = item.name || item.entity_name || item.finding_type || item.artifact_type || 'Item';
+            const plane = item.plane || item.source_lens || item.source || null;
+            const itemType = item.asset_type || item.artifact_type || item.finding_type || item.reason_code || null;
+            
+            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'severity', 'reason', 'reason_detail', 'explanation'];
+            const keyFacts = [];
+            keyFactFields.forEach(field => {
+                if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {
+                    keyFacts.push({ label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: item[field] });
+                }
+            });
+            
+            if (item.lens_status && typeof item.lens_status === 'object') {
+                const lenses = Object.entries(item.lens_status).map(([k, v]) => `${k}: ${v}`).join(', ');
+                keyFacts.push({ label: 'Lens Status', value: lenses });
+            }
+            
+            if (item.identifiers && typeof item.identifiers === 'object' && Object.keys(item.identifiers).length > 0) {
+                const ids = Object.entries(item.identifiers).map(([k, v]) => `${k}: ${safeStr(v, 50)}`).join(', ');
+                keyFacts.push({ label: 'Identifiers', value: ids });
+            }
+            
+            let html = `<div class="drill-detail" style="padding: 1.25rem;">`;
+            
+            html += `<div class="item-detail-header">
+                <div>
+                    <div class="item-detail-title">${safeStr(name, 100)}</div>
+                    <div class="item-detail-meta">
+                        ${plane ? `<span class="item-detail-tag">${safeStr(plane, 30)}</span>` : ''}
+                        ${itemType ? `<span class="item-detail-tag">${safeStr(itemType, 30)}</span>` : ''}
+                    </div>
+                </div>
+                ${total > 1 ? `<div style="color: var(--slate-500); font-size: 0.8rem;">Item ${index + 1} of ${total}</div>` : ''}
+            </div>`;
+            
+            if (keyFacts.length > 0) {
+                html += `<div class="key-facts-grid">`;
+                keyFacts.forEach(fact => {
+                    html += `<div class="key-fact"><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, 200)}</div></div>`;
+                });
+                html += `</div>`;
+            }
+            
+            const arrayFields = ['transactions', 'records', 'data', 'evidence_summary', 'candidate_names', 'raw_data'];
+            arrayFields.forEach(field => {
+                const arr = item[field];
+                if (Array.isArray(arr) && arr.length > 0) {
+                    html += renderRecordsTable(field, arr);
+                } else if (field === 'data' && typeof arr === 'object' && arr !== null && !Array.isArray(arr)) {
+                    const dataArrays = Object.entries(arr).filter(([k, v]) => Array.isArray(v) && v.length > 0);
+                    dataArrays.forEach(([key, value]) => {
+                        html += renderRecordsTable(key, value);
+                    });
+                }
+            });
+            
+            const rawJson = JSON.stringify(item, null, 2);
+            const jsonId = `rawJson_${index}`;
+            html += `<div class="raw-json-section">
+                <div class="raw-json-toggle" onclick="toggleRawJson('${jsonId}')">
+                    <span id="${jsonId}_icon">▶</span> Raw JSON (advanced)
+                </div>
+                <div class="raw-json-content" id="${jsonId}">
+                    <pre class="raw-json-pre">${safeJsonPreview(item, 5000)}</pre>
+                    <button class="copy-json-btn" onclick="copyToClipboard(\`${rawJson.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`)">Copy JSON</button>
+                </div>
+            </div>`;
+            
+            if (total > 1) {
+                html += `<div class="pagination-controls">
+                    <span class="pagination-info">Viewing item ${index + 1} of ${total}</span>
+                    <div class="pagination-btns">
+                        <button class="pagination-btn" onclick="navigateDetailItem(${index - 1})" ${index === 0 ? 'disabled' : ''}>← Prev</button>
+                        <button class="pagination-btn" onclick="navigateDetailItem(${index + 1})" ${index >= total - 1 ? 'disabled' : ''}>Next →</button>
+                    </div>
+                </div>`;
+            }
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function renderRecordsTable(title, records) {
+            if (!records || records.length === 0) return '';
+            
+            const pageSize = 25;
+            const pageId = `records_${title.replace(/\s+/g, '_')}`;
+            
+            let columns = [];
+            if (typeof records[0] === 'object' && records[0] !== null) {
+                columns = Object.keys(records[0]).slice(0, 6);
+            }
+            
+            let html = `<div class="records-section" id="${pageId}_section">
+                <div class="records-section-title">${title.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (${records.length})</div>`;
+            
+            if (columns.length > 0) {
+                html += `<table class="records-table"><thead><tr>`;
+                columns.forEach(col => {
+                    html += `<th>${col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`;
+                });
+                html += `</tr></thead><tbody>`;
+                
+                const displayRecords = records.slice(0, pageSize);
+                displayRecords.forEach(rec => {
+                    html += `<tr>`;
+                    columns.forEach(col => {
+                        let val = rec[col];
+                        if (typeof val === 'object' && val !== null) {
+                            val = JSON.stringify(val);
+                        }
+                        html += `<td>${safeStr(val, 80)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
+                
+                if (records.length > pageSize) {
+                    html += `<div class="pagination-info" style="margin-top: 0.5rem;">Showing ${pageSize} of ${records.length} records</div>`;
+                }
+            } else {
+                const displayItems = records.slice(0, pageSize);
+                html += `<div style="font-size: 0.85rem; color: var(--slate-400);">${displayItems.map(r => safeStr(r, 100)).join(', ')}</div>`;
+                if (records.length > pageSize) {
+                    html += `<div class="pagination-info" style="margin-top: 0.5rem;">Showing ${pageSize} of ${records.length} items</div>`;
+                }
+            }
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function toggleRawJson(id) {
+            const content = document.getElementById(id);
+            const icon = document.getElementById(id + '_icon');
+            if (content) {
+                content.classList.toggle('open');
+                if (icon) icon.textContent = content.classList.contains('open') ? '▼' : '▶';
+            }
+        }
+        
+        function navigateDetailItem(newIndex) {
+            if (newIndex < 0 || newIndex >= detailPagination.items.length) return;
+            detailPagination.itemIndex = newIndex;
+            const contentEl = document.getElementById('drillContent');
+            if (contentEl) {
+                contentEl.innerHTML = renderSingleItemDetail(
+                    detailPagination.items[newIndex], 
+                    detailPagination.rootType, 
+                    newIndex, 
+                    detailPagination.items.length
+                );
+            }
+        }
+        
+        function drillIntoGroup(rootType, field, value) {
+            const currentState = drillStack.length > 0 ? drillStack[drillStack.length - 1] : { rootType, filters: {}, level: 0 };
+            const newFilters = { ...currentState.filters, [field]: value };
+            pushDrill({ rootType, filters: newFilters, level: currentState.level + 1 });
+        }
+        
+        async function loadDrillData(type, runId) {
+            const endpointMap = {
+                observations: `/api/runs/${runId}/observations?limit=500`,
+                ambiguous: `/api/runs/${runId}/ambiguous?limit=500`,
+                rejections: `/api/runs/${runId}/rejections?limit=500`
+            };
+            
+            const endpoint = endpointMap[type];
+            if (!endpoint) return;
+            
+            try {
+                const r = await fetch(endpoint);
+                if (!r.ok) {
+                    console.error(`Failed to load ${type} drill data`);
+                    normalizedData[type] = [];
+                    return;
+                }
+                const data = await r.json();
+                const items = data.items || [];
+                const { data: normalized, errors } = normalizeResponse(type, items);
+                normalizedData[type] = normalized;
+                if (errors.length > 0) console.warn(`${type} normalization errors:`, errors);
+            } catch (e) {
+                console.error(`Error loading ${type} drill data:`, e);
+                normalizedData[type] = [];
+            }
+        }
+        
+        async function initiateDrill(type) {
+            if (!currentRunId) return;
+            
+            if (['observations', 'ambiguous', 'rejections'].includes(type)) {
+                await loadDrillData(type, currentRunId);
+            }
+            
+            if (['shadow', 'zombie'].includes(type) && normalizedData[type].length === 0) {
+                try {
+                    const dr = await fetch(`/api/runs/${currentRunId}/derived`);
+                    if (dr.ok) {
+                        const derived = await dr.json();
+                        const items = type === 'shadow' ? (derived.shadow_assets || []) : (derived.zombie_assets || []);
+                        const { data: normalized } = normalizeResponse(type, items);
+                        normalizedData[type] = normalized;
+                    }
+                } catch (e) { console.error(`Error loading ${type} drill data:`, e); }
+            }
+            
+            const sourceData = normalizedData[type] || [];
+            if (sourceData.length === 0) {
+                drillStack = [];
+                const panel = document.getElementById('drillPanel');
+                const titleEl = document.getElementById('drillPanelTitle');
+                const contentEl = document.getElementById('drillContent');
+                const schema = DRILL_SCHEMA.entities[type];
+                titleEl.textContent = `Drill Down: ${schema?.displayName || type}`;
+                document.getElementById('drillBreadcrumb').innerHTML = '';
+                contentEl.innerHTML = '<div class="drill-no-data">No drill data captured for this run.</div>';
+                panel.classList.remove('hidden');
+                return;
+            }
+            
+            drillStack = [];
+            pushDrill({ rootType: type, filters: {}, level: 0 });
+        }
+        
+        const STATUS_CONFIG = {
+            'completed_with_results': { type: 'success', label: 'Completed', explanation: 'Pipeline completed successfully with assets discovered.' },
+            'completed_no_assets': { type: 'warning', label: 'No Assets', explanation: 'Pipeline completed but no assets met admission criteria.' },
+            'completed': { type: 'success', label: 'Completed', explanation: 'Pipeline completed successfully.' },
+            'upstream_error': { type: 'error', label: 'Upstream Error', explanation: 'Failed to fetch data from Farm (server unreachable, non-JSON response, or HTTP error).' },
+            'invalid_snapshot': { type: 'error', label: 'Invalid Snapshot', explanation: 'Snapshot failed validation (wrong schema version, missing planes, or invalid format).' },
+            'invalid_input_contract': { type: 'error', label: 'Invalid Input', explanation: 'Snapshot does not conform to the expected input contract.' },
+            'failed': { type: 'error', label: 'Failed', explanation: 'Pipeline execution failed unexpectedly.' },
+            'running': { type: 'warning', label: 'Running', explanation: 'Pipeline is currently executing.' },
+            'pending': { type: 'warning', label: 'Pending', explanation: 'Pipeline is queued for execution.' }
+        };
+        
+        function showOutcome(status, message) {
+            const panel = document.getElementById('outcomePanel');
+            const config = STATUS_CONFIG[status] || { type: 'error', label: status, explanation: message };
+            panel.className = `outcome-panel ${config.type}`;
+            panel.innerHTML = `<span class="outcome-badge ${config.type}">${config.label}</span><span class="outcome-explanation">${message || config.explanation}</span>`;
+            panel.classList.remove('hidden');
+        }
+        
+        function hideOutcome() {
+            document.getElementById('outcomePanel').classList.add('hidden');
+        }
+
         async function checkHealth() {
             try {
-                const r = await fetch('/api/health');
-                const data = await r.json();
-                document.getElementById('healthDot').classList.toggle('error', data.status !== 'healthy');
-                document.getElementById('healthText').textContent = data.status === 'healthy' ? `v${data.version}` : 'Error';
-            } catch {
-                document.getElementById('healthDot').classList.add('error');
-                document.getElementById('healthText').textContent = 'Offline';
-            }
+                const r = await fetch('/api/health'); const d = await r.json();
+                document.getElementById('healthDot').classList.remove('error');
+                document.getElementById('healthText').textContent = `v${d.version} - Healthy`;
+            } catch { document.getElementById('healthDot').classList.add('error'); document.getElementById('healthText').textContent = 'Offline'; }
         }
         
         async function loadTenants() {
             const select = document.getElementById('tenantSelect');
             const msg = document.getElementById('fetchMessage');
+            const snapshotSelect = document.getElementById('snapshotSelect');
+            
+            select.disabled = true;
+            snapshotSelect.disabled = true;
+            snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
+            msg.classList.add('hidden');
+            
             try {
                 const r = await fetch('/api/farm/tenants');
                 if (!r.ok) {
@@ -174,23 +959,31 @@
                     throw new Error(e.detail || 'Failed to load tenants');
                 }
                 const data = await r.json();
-                if (data.tenants.length === 0) {
-                    select.innerHTML = '<option value="">No tenants found</option>';
+                const tenants = data.tenants || [];
+                
+                if (tenants.length === 0) {
+                    select.innerHTML = '<option value="">No tenants found in Farm</option>';
+                    select.disabled = true;
                 } else {
                     select.innerHTML = '<option value="">Select a tenant...</option>' +
-                        data.tenants.map(t => `<option value="${t}">${t}</option>`).join('');
+                        tenants.map(t => `<option value="${t}">${t}</option>`).join('');
                     select.disabled = false;
                 }
+                msg.className = 'success-message';
+                msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;
+                msg.classList.remove('hidden');
             } catch (e) {
                 msg.className = 'error-message';
                 msg.textContent = e.message;
                 msg.classList.remove('hidden');
                 select.innerHTML = '<option value="">Failed to load tenants</option>';
+                select.disabled = true;
             }
         }
         
         async function loadSnapshots() {
             const tenantId = document.getElementById('tenantSelect').value;
+            const size = document.getElementById('sizeSelect').value;
             const select = document.getElementById('snapshotSelect');
             const msg = document.getElementById('fetchMessage');
             
@@ -204,182 +997,386 @@
             select.innerHTML = '<option value="">Loading snapshots...</option>';
             
             try {
-                const r = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                let url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
+                if (size) {
+                    url += `&size=${encodeURIComponent(size)}`;
+                }
+                const r = await fetch(url);
                 if (!r.ok) {
                     const e = await r.json();
                     throw new Error(e.detail || 'Failed to load snapshots');
                 }
                 const data = await r.json();
-                const snapshots = data.snapshots || [];
+                loadedSnapshots = data.snapshots || [];
                 
-                if (snapshots.length === 0) {
-                    select.innerHTML = '<option value="">No snapshots found</option>';
+                if (loadedSnapshots.length === 0) {
+                    select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
+                    select.disabled = true;
                 } else {
-                    const sorted = [...snapshots].sort((a, b) => {
+                    const sorted = [...loadedSnapshots].sort((a, b) => {
                         const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
                         const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
                         return dateB - dateA;
                     });
-                    select.innerHTML = sorted.map((s, i) => {
+                    const mostRecentId = sorted[0]?.snapshot_id || sorted[0]?.id || '';
+                    
+                    select.innerHTML = loadedSnapshots.map(s => {
                         const id = s.snapshot_id || s.id || 'unknown';
                         const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';
-                        return `<option value="${id}"${i === 0 ? ' selected' : ''}>${id} - ${created}</option>`;
+                        const profile = (s.enterprise_profile && s.realism_profile) 
+                            ? `${s.enterprise_profile}/${s.realism_profile}` 
+                            : '';
+                        let label = id;
+                        if (profile) label += ` — ${profile}`;
+                        if (created) label += ` — ${created}`;
+                        return `<option value="${id}"${id === mostRecentId ? ' selected' : ''}>${label}</option>`;
                     }).join('');
                     select.disabled = false;
                 }
-                msg.classList.add('hidden');
+                msg.className = 'success-message';
+                msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
+                msg.classList.remove('hidden');
             } catch (e) {
                 msg.className = 'error-message';
                 msg.textContent = e.message;
                 msg.classList.remove('hidden');
                 select.innerHTML = '<option value="">Failed to load snapshots</option>';
+                select.disabled = true;
             }
         }
         
         async function loadRuns() {
-            const loading = document.getElementById('runsLoading');
-            const list = document.getElementById('runsList');
+            const loading = document.getElementById('runsLoading'), list = document.getElementById('runsList');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch('/api/runs');
-                let runs = await r.json();
+                const r = await fetch('/api/runs'); let runs = await r.json();
                 runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
-                if (runs.length === 0) {
-                    list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>';
-                } else {
-                    list.innerHTML = runs.map(run => `
-                        <div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
+                if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
+                else {
+                    list.innerHTML = runs.map(run => {
+                        const syncBadge = run.sync_status && run.sync_status !== 'not_applicable' 
+                            ? `<span class="sync-status ${run.sync_status}" title="${run.sync_error || ''}">${run.sync_status === 'synced' ? 'SYNCED' : run.sync_status === 'failed' ? 'SYNC FAILED' : 'SYNCING'}</span>` 
+                            : '';
+                        const tenant = run.tenant_id || '-';
+                        const size = run.input_meta?.scale || '-';
+                        const profile = run.input_meta?.enterprise_profile || '-';
+                        return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
                             <div class="run-info">
-                                <span class="run-tenant">${run.tenant_id || '-'}</span>
-                                <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>
+                                <span class="run-tenant">${tenant}</span>
+                                <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}
                             </div>
                             <div class="run-meta">
-                                <span>${run.counts?.assets_admitted || 0} assets</span>
-                                <span>${new Date(run.started_at).toLocaleString()}</span>
+                                <span class="run-size">${size}</span>
+                                <span class="run-profile">${profile}</span>
                             </div>
-                        </div>
-                    `).join('');
-                    document.querySelectorAll('.run-item').forEach(item => {
-                        item.addEventListener('click', () => selectRun(item.dataset.runId));
-                    });
+                        </div>`;
+                    }).join('');
+                    document.querySelectorAll('.run-item').forEach(item => item.addEventListener('click', () => selectRun(item.dataset.runId)));
                 }
-            } catch {
-                list.innerHTML = '<div class="error-message">Failed to load runs</div>';
-            } finally {
-                loading.classList.add('hidden');
-            }
+            } catch { list.innerHTML = '<div class="error-message">Failed to load runs</div>'; }
+            finally { loading.classList.add('hidden'); }
         }
         
         async function selectRun(runId) {
             currentRunId = runId;
-            document.querySelectorAll('.run-item').forEach(item => {
-                item.classList.toggle('selected', item.dataset.runId === runId);
-            });
-            document.getElementById('presenceSection').classList.remove('hidden');
-            await loadPresence(runId);
+            hideDrillPanel();
+            document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
+            document.getElementById('resultsSection').classList.remove('hidden');
+            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId)]);
         }
         
-        async function loadPresence(runId) {
-            const loading = document.getElementById('presenceLoading');
-            const body = document.getElementById('presenceBody');
-            
-            loading.classList.remove('hidden');
-            document.getElementById('descRunId').textContent = runId;
+        async function loadRunDetails(runId) {
+            try {
+                const r = await fetch(`/api/runs/${runId}`); const run = await r.json();
+                document.getElementById('descRunId').textContent = run.run_id;
+                document.getElementById('descTenant').textContent = run.tenant_id;
+                document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
+                document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
+                document.getElementById('statObservations').textContent = run.counts.observations_in;
+                document.getElementById('statAssets').textContent = run.counts.assets_admitted;
+                document.getElementById('statArtifacts').textContent = run.counts.artifacts_recorded;
+                document.getElementById('statFindings').textContent = run.counts.findings_generated;
+                document.getElementById('statAmbiguous').textContent = run.counts.ambiguous_matches;
+                document.getElementById('statRejected').textContent = run.counts.rejected;
+            } catch (e) { console.error('Failed to load run details:', e); }
             
             try {
-                const r = await fetch(`/api/debug/presence?run_id=${runId}`);
-                if (!r.ok) {
-                    const e = await r.json();
-                    throw new Error(e.detail || 'Failed to load presence data');
-                }
-                const data = await r.json();
-                
-                if (data.rows.length === 0) {
-                    body.innerHTML = '<tr><td colspan="6" class="empty-state">No assets in this run</td></tr>';
+                const dr = await fetch(`/api/runs/${runId}/derived`);
+                if (dr.ok) {
+                    const derived = await dr.json();
+                    document.getElementById('statShadow').textContent = derived.shadow_count ?? 0;
+                    document.getElementById('statZombie').textContent = derived.zombie_count ?? 0;
+                    
+                    const { data: shadowNorm, errors: shadowErrs } = normalizeResponse('shadow', derived.shadow_assets || []);
+                    normalizedData.shadow = shadowNorm;
+                    if (shadowErrs.length > 0) console.warn('Shadow normalization errors:', shadowErrs);
+                    
+                    const { data: zombieNorm, errors: zombieErrs } = normalizeResponse('zombie', derived.zombie_assets || []);
+                    normalizedData.zombie = zombieNorm;
+                    if (zombieErrs.length > 0) console.warn('Zombie normalization errors:', zombieErrs);
                 } else {
-                    body.innerHTML = data.rows.map(row => `
-                        <tr>
-                            <td class="vendor-key">${escapeHtml(row.vendor_key)}</td>
-                            <td class="${row.in_discovery ? 'presence-yes' : 'presence-no'}">${row.in_discovery ? 'YES' : 'no'}</td>
-                            <td class="${row.in_finance ? 'presence-yes' : 'presence-no'}">${row.in_finance ? 'YES' : 'no'}</td>
-                            <td class="${row.in_idp ? 'presence-yes' : 'presence-no'}">${row.in_idp ? 'YES' : 'no'}</td>
-                            <td class="${row.in_cmdb ? 'presence-yes' : 'presence-no'}">${row.in_cmdb ? 'YES' : 'no'}</td>
-                            <td class="timestamp ${row.latest_activity_at ? '' : 'none'}">${row.latest_activity_at || 'null'}</td>
-                        </tr>
-                    `).join('');
+                    document.getElementById('statShadow').textContent = '-';
+                    document.getElementById('statZombie').textContent = '-';
+                    normalizedData.shadow = [];
+                    normalizedData.zombie = [];
                 }
             } catch (e) {
-                body.innerHTML = `<tr><td colspan="6" class="error-message">${escapeHtml(e.message)}</td></tr>`;
-            } finally {
-                loading.classList.add('hidden');
+                console.error('Failed to load derived classifications:', e);
+                document.getElementById('statShadow').textContent = '-';
+                document.getElementById('statZombie').textContent = '-';
+                normalizedData.shadow = [];
+                normalizedData.zombie = [];
             }
         }
         
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        async function loadAssets(runId) {
+            const loading = document.getElementById('assetsLoading'), body = document.getElementById('assetsBody');
+            loading.classList.remove('hidden');
+            try {
+                const r = await fetch(`/api/catalog?run_id=${runId}`); catalogData = await r.json();
+                const { data: normalized, errors } = normalizeResponse('assets', catalogData.assets || []);
+                normalizedData.assets = normalized;
+                if (errors.length > 0) console.warn('Asset normalization errors:', errors);
+                
+                if (normalized.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>'; }
+                else { body.innerHTML = normalized.map(a => `<tr><td>${a.name}</td><td><span class="asset-type-badge">${a.asset_type}</span></td><td>${a.vendor || '-'}</td><td>${a.environment}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status?.idp || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cmdb || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cloud || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.finance || 'unmatched'}"></div></div></td></tr>`).join(''); }
+            } catch (e) { 
+                console.error('Failed to load assets:', e);
+                normalizedData.assets = [];
+                body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; 
+            }
+            finally { loading.classList.add('hidden'); }
+        }
+        
+        async function loadFindings(runId) {
+            const loading = document.getElementById('findingsLoading'), list = document.getElementById('findingsList');
+            loading.classList.remove('hidden');
+            try {
+                const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
+                const { data: normalized, errors } = normalizeResponse('findings', data.findings || []);
+                normalizedData.findings = normalized;
+                if (errors.length > 0) console.warn('Findings normalization errors:', errors);
+                
+                if (normalized.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
+                else { list.innerHTML = normalized.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${(f.finding_type || 'unknown').replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
+            } catch (e) { 
+                console.error('Failed to load findings:', e);
+                normalizedData.findings = [];
+                list.innerHTML = '<div class="error-message">Failed to load findings</div>'; 
+            }
+            finally { loading.classList.add('hidden'); }
+        }
+        
+        async function loadArtifacts(runId) {
+            try {
+                const r = await fetch(`/api/artifacts?run_id=${runId}`);
+                if (r.ok) {
+                    const data = await r.json();
+                    const { data: normalized, errors } = normalizeResponse('artifacts', data.artifacts || []);
+                    normalizedData.artifacts = normalized;
+                    if (errors.length > 0) console.warn('Artifacts normalization errors:', errors);
+                } else {
+                    normalizedData.artifacts = [];
+                }
+            } catch (e) {
+                console.error('Failed to load artifacts:', e);
+                normalizedData.artifacts = [];
+            }
         }
         
         document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
+        document.getElementById('sizeSelect').addEventListener('change', loadSnapshots);
+        
+        document.getElementById('advancedToggle').addEventListener('click', () => {
+            const content = document.getElementById('advancedContent');
+            const icon = document.getElementById('advancedIcon');
+            content.classList.toggle('hidden');
+            icon.classList.toggle('open');
+        });
         
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {
             const tenantId = document.getElementById('tenantSelect').value;
-            const snapshotId = document.getElementById('snapshotSelect').value;
+            const snapshotSelect = document.getElementById('snapshotSelect').value;
+            const snapshotManual = document.getElementById('snapshotIdManual').value.trim();
+            const snapshotId = snapshotManual || snapshotSelect;
             const msg = document.getElementById('fetchMessage');
             
-            if (!tenantId) {
-                msg.className = 'error-message';
-                msg.textContent = 'Please select a Tenant';
-                msg.classList.remove('hidden');
-                return;
+            hideOutcome();
+            
+            if (!tenantId) { 
+                msg.className = 'error-message'; 
+                msg.textContent = 'Please select a Tenant'; 
+                msg.classList.remove('hidden'); 
+                return; 
             }
-            if (!snapshotId) {
-                msg.className = 'error-message';
-                msg.textContent = 'Please select a Snapshot';
-                msg.classList.remove('hidden');
-                return;
+            if (!snapshotId) { 
+                msg.className = 'error-message'; 
+                msg.textContent = 'Please select a snapshot or enter a Snapshot ID manually'; 
+                msg.classList.remove('hidden'); 
+                return; 
             }
             
-            const btn = document.getElementById('fetchFromFarm');
-            btn.disabled = true;
+            const btn = document.getElementById('fetchFromFarm'); 
+            btn.disabled = true; 
             btn.textContent = 'Fetching...';
             msg.classList.add('hidden');
             
             try {
-                const r = await fetch('/api/runs/from-farm', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId })
+                const r = await fetch('/api/runs/from-farm', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
                 });
                 
                 const result = await r.json();
                 
                 if (!r.ok) {
-                    throw new Error(result.detail || 'Farm fetch failed');
+                    const errorDetail = result.detail || 'Farm fetch failed';
+                    if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
+                        showOutcome('upstream_error', errorDetail);
+                    } else if (errorDetail.includes('INVALID_INPUT_CONTRACT') || errorDetail.includes('INVALID_SNAPSHOT')) {
+                        showOutcome('invalid_snapshot', errorDetail);
+                    } else {
+                        showOutcome('failed', errorDetail);
+                    }
+                    return;
                 }
                 
-                msg.className = 'success-message';
-                msg.textContent = result.message;
-                msg.classList.remove('hidden');
-                
-                currentRunId = result.run_id;
-                await loadRuns();
+                showOutcome(result.status, result.message);
+                currentRunId = result.run_id; 
+                await loadRuns(); 
                 await selectRun(result.run_id);
-            } catch (e) {
-                msg.className = 'error-message';
-                msg.textContent = e.message;
-                msg.classList.remove('hidden');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Fetch & Run Discovery';
+            } catch (e) { 
+                showOutcome('upstream_error', e.message);
+            } finally { 
+                btn.disabled = false; 
+                btn.textContent = 'Fetch & Run Discovery'; 
             }
         });
         
-        checkHealth();
+        document.getElementById('downloadCatalog').addEventListener('click', () => { 
+            if (!catalogData) return; 
+            const blob = new Blob([JSON.stringify(catalogData, null, 2)], { type: 'application/json' }); 
+            const url = URL.createObjectURL(blob); 
+            const a = document.createElement('a'); 
+            a.href = url; 
+            a.download = `catalog-${currentRunId}.json`; 
+            a.click(); 
+            URL.revokeObjectURL(url); 
+        });
+        
+        document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => { 
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); 
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden')); 
+            tab.classList.add('active'); 
+            document.getElementById(`${tab.dataset.tab}Tab`).classList.remove('hidden'); 
+        }));
+        
+        document.querySelectorAll('.stat-card.clickable').forEach(card => {
+            card.addEventListener('click', () => {
+                const drillType = card.dataset.drillType;
+                if (drillType && currentRunId) {
+                    initiateDrill(drillType);
+                }
+            });
+        });
+        
+        document.getElementById('drillBackBtn').addEventListener('click', () => {
+            popDrill();
+        });
+        
+        checkHealth(); 
         loadRuns();
         loadTenants();
         setInterval(checkHealth, 30000);
+        
+        const helpBtn = document.getElementById('helpBtn');
+        const helpModal = document.getElementById('helpModal');
+        const helpModalClose = document.getElementById('helpModalClose');
+        if (helpBtn && helpModal) {
+            helpBtn.addEventListener('click', () => helpModal.classList.add('active'));
+        }
+        if (helpModalClose && helpModal) {
+            helpModalClose.addEventListener('click', () => helpModal.classList.remove('active'));
+        }
+        if (helpModal) {
+            helpModal.addEventListener('click', (e) => {
+                if (e.target.id === 'helpModal') helpModal.classList.remove('active');
+            });
+        }
     </script>
+    
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">How AOD Works</span>
+                <button class="modal-close" id="helpModalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3 class="help-section-title">What is AOD?</h3>
+                    <p class="help-text">AOD (AutonomOS Discover) finds and catalogs the software systems your organization uses. It analyzes evidence from multiple sources - login records, cloud inventories, network logs, and more - to build a complete picture of your software landscape.</p>
+                </div>
+                
+                <div class="help-section">
+                    <h3 class="help-section-title">The 6 Numbers Explained</h3>
+                    <div class="help-kpi-grid">
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Observations</div>
+                            <div class="help-kpi-desc">Raw sightings of software from various sources. Think of these as "we saw this software somewhere" - not yet verified.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Assets</div>
+                            <div class="help-kpi-desc">Confirmed software systems that passed quality checks. These are the real applications your organization uses.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Artifacts</div>
+                            <div class="help-kpi-desc">Non-system items found during discovery - dashboards, reports, spreadsheets. Useful to track, but not software systems.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Findings</div>
+                            <div class="help-kpi-desc">Issues or gaps discovered - like "this app has no owner" or "not found in your CMDB." Things that need attention.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Ambiguous</div>
+                            <div class="help-kpi-desc">Cases where we found multiple possible matches and couldn't decide. These need a human to review and pick the right one.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Rejected</div>
+                            <div class="help-kpi-desc">Items we saw but excluded from the catalog - didn't meet the quality bar or weren't real software systems.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Shadow</div>
+                            <div class="help-kpi-desc">Unmanaged assets - software in use that isn't tracked in official systems like CMDB or Finance.</div>
+                        </div>
+                        <div class="help-kpi-item">
+                            <div class="help-kpi-name">Zombie</div>
+                            <div class="help-kpi-desc">Inactive assets - software still in records but showing no recent usage or activity.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="help-section">
+                    <h3 class="help-section-title">Using Drill-Down</h3>
+                    <ul class="help-list">
+                        <li><strong>Click any number</strong> to explore the data behind it</li>
+                        <li><strong>Filter by category</strong> - click groups to narrow down (e.g., by type, vendor, or source)</li>
+                        <li><strong>Keep drilling</strong> until you reach individual items</li>
+                        <li><strong>Navigate back</strong> using the breadcrumb trail or Back button</li>
+                    </ul>
+                </div>
+                
+                <div class="help-section">
+                    <h3 class="help-section-title">Getting Started</h3>
+                    <ul class="help-list">
+                        <li><strong>Select a tenant</strong> from the dropdown (your organization)</li>
+                        <li><strong>Pick a snapshot</strong> - a point-in-time collection of evidence</li>
+                        <li><strong>Click "Fetch & Run Discovery"</strong> to analyze the data</li>
+                        <li><strong>Review the results</strong> - explore assets, findings, and drill into the numbers</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

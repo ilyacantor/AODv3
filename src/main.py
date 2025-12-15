@@ -1,12 +1,5 @@
 """AOD Fresh - AutonomOS Discover Main Application"""
 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s:%(name)s:%(message)s'
-)
-
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse

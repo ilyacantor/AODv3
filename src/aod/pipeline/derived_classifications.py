@@ -27,16 +27,20 @@ def derive_vendor_key(asset: Asset) -> str:
     """
     Derive a canonical vendor_key for reconciliation.
     
-    Priority:
-    1. First domain from identifiers.domains (normalized)
-    2. Vendor name normalized to domain-style
-    3. Asset name normalized to domain-style
+    This is the INTERNAL CANONICAL ID - stable, source-agnostic.
     
-    Normalization: lowercase, remove spaces/special chars, no trailing 'com'
+    Priority:
+    1. First domain from identifiers.domains (normalized, stripped of TLD)
+    2. Vendor name normalized
+    3. Asset name normalized
+    
+    Normalization: lowercase, alphanumeric only, no TLD
     """
     if asset.identifiers.domains:
         domain = asset.identifiers.domains[0].lower()
-        domain = domain.replace("www.", "").replace(".com", "").replace(".io", "").replace(".org", "")
+        domain = domain.replace("www.", "")
+        for tld in [".com", ".io", ".org", ".net", ".co", ".app"]:
+            domain = domain.replace(tld, "")
         domain = re.sub(r'[^a-z0-9]', '', domain)
         if domain:
             return domain
@@ -45,6 +49,22 @@ def derive_vendor_key(asset: Asset) -> str:
     key = source.lower()
     key = re.sub(r'[^a-z0-9]', '', key)
     return key
+
+
+def derive_domain_key(asset: Asset) -> str:
+    """
+    Derive a domain_key (legacy *com format) as evidence/alias.
+    
+    This is for backward compatibility with systems expecting domain-style keys.
+    Format: vendorname + 'com' (e.g., 'yammercom', 'hipchatcom')
+    """
+    vendor_key = derive_vendor_key(asset)
+    return f"{vendor_key}com"
+
+
+def get_asset_domains(asset: Asset) -> list[str]:
+    """Get all known domains for an asset as evidence."""
+    return list(asset.identifiers.domains) if asset.identifiers.domains else []
 
 
 def _utc_now() -> datetime:
@@ -351,7 +371,9 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             shadow_assets.append({
                 "asset_id": str(asset.asset_id),
                 "vendor_key": derive_vendor_key(asset),
-                "name": asset.name,
+                "domain_key": derive_domain_key(asset),
+                "domains": get_asset_domains(asset),
+                "display_name": asset.name,
                 "vendor": asset.vendor,
                 "asset_type": asset.asset_type.value,
                 "environment": asset.environment.value,
@@ -378,7 +400,9 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             zombie_assets.append({
                 "asset_id": str(asset.asset_id),
                 "vendor_key": derive_vendor_key(asset),
-                "name": asset.name,
+                "domain_key": derive_domain_key(asset),
+                "domains": get_asset_domains(asset),
+                "display_name": asset.name,
                 "vendor": asset.vendor,
                 "asset_type": asset.asset_type.value,
                 "environment": asset.environment.value,

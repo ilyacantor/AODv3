@@ -343,7 +343,8 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
                     "idp": asset.lens_coverage.idp,
                     "cmdb": asset.lens_coverage.cmdb,
                     "cloud": asset.lens_coverage.cloud,
-                    "finance": asset.lens_coverage.finance
+                    "finance": asset.lens_coverage.finance,
+                    "discovery": asset.lens_coverage.discovery
                 },
                 "activity_evidence": {
                     "latest_activity_at": asset.activity_evidence.latest_activity_at.isoformat() if asset.activity_evidence.latest_activity_at else None
@@ -369,7 +370,8 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
                     "idp": asset.lens_coverage.idp,
                     "cmdb": asset.lens_coverage.cmdb,
                     "cloud": asset.lens_coverage.cloud,
-                    "finance": asset.lens_coverage.finance
+                    "finance": asset.lens_coverage.finance,
+                    "discovery": asset.lens_coverage.discovery
                 },
                 "activity_evidence": {
                     "latest_activity_at": asset.activity_evidence.latest_activity_at.isoformat() if asset.activity_evidence.latest_activity_at else None

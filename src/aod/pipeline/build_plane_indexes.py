@@ -102,6 +102,7 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
         
         vendor_name = normalize_string(vendor.name)
         add_to_index(index.by_vendor_product, vendor_name, f"vendor:{vendor.vendor_id}")
+        add_to_index(index.by_canonical_name, vendor_name, f"vendor:{vendor.vendor_id}")
         
         for product in vendor.products:
             product_key = f"{vendor_name}:{normalize_string(product)}"

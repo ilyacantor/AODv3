@@ -62,15 +62,12 @@ class TestShadowZombieTimestamps:
         assert "Zombie" in result.reason
         assert "stale" in result.reason.lower()
     
-    def test_not_shadow_when_finance_only(self):
+    def test_shadow_paid_but_unmanaged(self):
         """
-        Not Shadow: Asset has finance evidence but no IdP or CMDB.
+        Shadow: Asset has finance evidence (paid for) but not in IdP or CMDB.
         
-        Policy: Finance-only = governed, not shadow. HAS_FINANCE means the asset is
-        tracked/governed via finance systems, aligning with Farm's interpretation.
-        
-        Scenario: We're paying for software - it's tracked via finance.
-        Expected: NOT classified as Shadow IT (finance = governance).
+        Scenario: We're paying for software but it's not in SSO or asset registry.
+        Expected: Classified as Shadow IT.
         """
         recent_date = datetime.utcnow() - timedelta(days=5)
         
@@ -78,7 +75,7 @@ class TestShadowZombieTimestamps:
             asset_id=uuid4(),
             tenant_id="test",
             run_id="test-run",
-            name="Finance-Only Governed App",
+            name="Unmanaged Paid App",
             asset_type=AssetType.SAAS,
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
@@ -103,9 +100,9 @@ class TestShadowZombieTimestamps:
         
         result = classify_shadow(asset, activity_window_days=30)
         
-        assert result.is_classified is False
+        assert result.is_classified is True
         assert result.is_indeterminate is False
-        assert "governance" in result.reason.lower()
+        assert "Shadow" in result.reason
     
     def test_not_zombie_when_recent_activity(self):
         """
@@ -188,17 +185,14 @@ class TestShadowZombieTimestamps:
         result = classify_shadow(asset, activity_window_days=30)
         
         assert result.is_classified is False
-        assert "governance" in result.reason.lower()
+        assert "IdP or CMDB presence" in result.reason
     
     def test_indeterminate_when_no_timestamps(self):
         """
-        Indeterminate: Asset has cloud evidence but no activity timestamps.
+        Indeterminate: Asset has no activity timestamps.
         
-        Scenario: Asset has cloud presence but no timestamp data.
-        Expected: Indeterminate classification (can't determine shadow without activity).
-        
-        Note: Using cloud evidence instead of finance because finance-only is now
-        considered governance (not shadow) per Farm alignment policy.
+        Scenario: Asset exists but we have no timestamp data.
+        Expected: Indeterminate classification.
         """
         asset = Asset(
             asset_id=uuid4(),
@@ -209,19 +203,19 @@ class TestShadowZombieTimestamps:
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
-                cloud=LensStatus.MATCHED,
-                finance=LensStatus.UNMATCHED
+                cloud=LensStatus.UNMATCHED,
+                finance=LensStatus.MATCHED
             ),
             lens_coverage=LensCoverage(
                 idp=False,
                 cmdb=False,
-                cloud=True,
-                finance=False
+                cloud=False,
+                finance=True
             ),
             activity_evidence=ActivityEvidence(),
-            evidence_refs=["cloud:instance1"],
-            tags=["cloud_detected"],
-            admission_reason="Cloud match"
+            evidence_refs=["finance:txn1"],
+            tags=["finance_tracked"],
+            admission_reason="Finance match"
         )
         
         result = classify_shadow(asset, activity_window_days=30)
@@ -235,13 +229,10 @@ class TestShadowZombieTimestamps:
         
         Scenario:
         - 1 managed-but-stale asset (IdP matched, stale) → Zombie
-        - 1 cloud-only unmanaged asset (cloud, recent, no governance) → Shadow
-        - 1 finance-only asset (governed, not shadow or zombie) → Clean
-        - 1 no-timestamp cloud asset → Indeterminate
+        - 1 paid-for-but-unmanaged asset (finance, recent) → Shadow
+        - 1 no-timestamp asset → Indeterminate
         
         Expected: 1 zombie, 1 shadow, 1 indeterminate
-        
-        Note: Finance-only is NOT shadow per Farm alignment policy.
         """
         stale_date = datetime.utcnow() - timedelta(days=60)
         recent_date = datetime.utcnow() - timedelta(days=5)
@@ -277,28 +268,6 @@ class TestShadowZombieTimestamps:
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
-                cloud=LensStatus.MATCHED,
-                finance=LensStatus.UNMATCHED
-            ),
-            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=True, finance=False),
-            activity_evidence=ActivityEvidence(
-                cloud_observed_at=recent_date,
-                latest_activity_at=recent_date
-            ),
-            evidence_refs=["cloud:instance1"],
-            tags=["cloud_detected"],
-            admission_reason="Cloud match: infrastructure detected"
-        )
-        
-        finance_governed_asset = Asset(
-            asset_id=uuid4(),
-            tenant_id="test",
-            run_id="test-run",
-            name="Finance Governed App",
-            asset_type=AssetType.SAAS,
-            lens_status=LensStatuses(
-                idp=LensStatus.UNMATCHED,
-                cmdb=LensStatus.UNMATCHED,
                 cloud=LensStatus.UNMATCHED,
                 finance=LensStatus.MATCHED
             ),
@@ -321,17 +290,17 @@ class TestShadowZombieTimestamps:
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
-                cloud=LensStatus.MATCHED,
-                finance=LensStatus.UNMATCHED
+                cloud=LensStatus.UNMATCHED,
+                finance=LensStatus.MATCHED
             ),
-            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=True, finance=False),
+            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=False, finance=True),
             activity_evidence=ActivityEvidence(),
-            evidence_refs=["cloud:instance2"],
-            tags=["cloud_detected"],
-            admission_reason="Cloud match"
+            evidence_refs=["finance:txn2"],
+            tags=["finance_tracked"],
+            admission_reason="Finance match"
         )
         
-        assets = [zombie_asset, shadow_asset, finance_governed_asset, indeterminate_asset]
+        assets = [zombie_asset, shadow_asset, indeterminate_asset]
         summary = compute_derived_classifications(assets, activity_window_days=30)
         
         assert summary.zombie_count == 1
@@ -344,11 +313,11 @@ class TestShadowZombieTimestamps:
         assert len(summary.shadow_assets) == 1
         assert summary.shadow_assets[0]["name"] == "Shadow App"
         
-        assert summary.distribution.total_assets == 4
+        assert summary.distribution.total_assets == 3
         assert summary.distribution.with_idp_match == 1
         assert summary.distribution.with_cmdb_match == 0
-        assert summary.distribution.with_any_activity_timestamp == 3
-        assert summary.distribution.with_activity_last_30_days == 2
+        assert summary.distribution.with_any_activity_timestamp == 2
+        assert summary.distribution.with_activity_last_30_days == 1
     
     def test_configurable_activity_window(self):
         """

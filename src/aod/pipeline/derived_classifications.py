@@ -19,6 +19,24 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from ..models.output_contracts import Asset, LensStatus
+from .vendor_inference import DOMAIN_TO_VENDOR
+
+
+def _build_vendor_to_domain_map() -> dict[str, str]:
+    """Build reverse mapping from vendor name to canonical domain."""
+    vendor_to_domain: dict[str, str] = {}
+    for domain, vendor in DOMAIN_TO_VENDOR.items():
+        vendor_key = vendor.lower().strip()
+        if vendor_key not in vendor_to_domain:
+            vendor_to_domain[vendor_key] = domain
+        else:
+            current = vendor_to_domain[vendor_key]
+            if domain.endswith(('.com', '.so', '.io', '.us')) and not current.endswith(('.com', '.so', '.io', '.us')):
+                vendor_to_domain[vendor_key] = domain
+    return vendor_to_domain
+
+
+VENDOR_TO_DOMAIN = _build_vendor_to_domain_map()
 
 
 def _utc_now() -> datetime:
@@ -68,9 +86,18 @@ class DomainRollup:
     latest_activity_at: Optional[datetime]
     entity_names: list[str]
     entity_count: int
+    is_domain_canonical: bool = True
     
     def is_shadow(self, activity_window_days: int = 90) -> bool:
-        """Domain-level shadow: no governance + has existence evidence + recent activity"""
+        """
+        Domain-level shadow: no governance + has existence evidence + recent activity.
+        
+        INVARIANT: Only domain-canonical assets count as shadow.
+        Internal identifiers (name-derived keys) are excluded from shadow counts.
+        """
+        if not self.is_domain_canonical:
+            return False
+        
         has_governance = self.has_idp or self.has_cmdb
         has_existence = self.has_finance or self.has_cloud or self.has_discovery
         
@@ -85,7 +112,15 @@ class DomainRollup:
         return latest is not None and latest >= cutoff
     
     def is_zombie(self, activity_window_days: int = 90) -> bool:
-        """Domain-level zombie: has governance + stale/no activity"""
+        """
+        Domain-level zombie: has governance + stale/no activity.
+        
+        INVARIANT: Only domain-canonical assets count as zombie.
+        Internal identifiers (name-derived keys) are excluded from zombie counts.
+        """
+        if not self.is_domain_canonical:
+            return False
+        
         has_governance = self.has_idp or self.has_cmdb
         
         if not has_governance:
@@ -477,15 +512,55 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     
     domain_rollups = compute_domain_rollups(assets, activity_window_days)
     
+    domain_shadow_count = sum(1 for r in domain_rollups.values() if r.is_shadow(activity_window_days))
+    domain_zombie_count = sum(1 for r in domain_rollups.values() if r.is_zombie(activity_window_days))
+    
     return DerivedClassificationSummary(
-        shadow_count=len(shadow_assets),
-        zombie_count=len(zombie_assets),
+        shadow_count=domain_shadow_count,
+        zombie_count=domain_zombie_count,
         indeterminate_count=indeterminate_count,
         shadow_assets=shadow_assets,
         zombie_assets=zombie_assets,
         distribution=distribution,
         domain_rollups=domain_rollups
     )
+
+
+def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
+    """
+    Resolve the canonical domain key for an asset.
+    
+    Returns:
+        Tuple of (domain_key, is_canonical) where is_canonical indicates
+        whether the key represents a registered domain (True) or is name-derived (False).
+    
+    Priority order:
+    1. asset.identifiers.domains (explicit domain from evidence) -> canonical
+    2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
+    3. Asset name if it looks like a domain -> canonical
+    4. Fallback: normalized name -> NOT canonical
+    
+    INVARIANT: This must match the key resolution in aod_agent_reconcile.py
+    to ensure UI counts match reconciliation counts.
+    """
+    if asset.identifiers and asset.identifiers.domains:
+        for domain in asset.identifiers.domains:
+            if domain and "." in domain:
+                return (domain.lower().strip(), True)
+    
+    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = asset.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            return (VENDOR_TO_DOMAIN[vendor_key], True)
+    
+    name = asset.name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3) and parts[-1].isalpha():
+            return (name, True)
+    
+    import re
+    return (re.sub(r'[^a-z0-9]', '', name.lower()), False)
 
 
 def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) -> dict[str, DomainRollup]:
@@ -503,18 +578,14 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
     
     This ensures that if ANY entity under a domain has evidence,
     the domain is considered to have that evidence for reconciliation purposes.
+    
+    INVARIANT: Domain key resolution matches aod_agent_reconcile.py to ensure
+    UI counts match reconciliation counts (eliminating IRL breach).
     """
     rollups: dict[str, DomainRollup] = {}
     
     for asset in assets:
-        domains = []
-        if asset.identifiers and asset.identifiers.domains:
-            domains = list(asset.identifiers.domains)
-        
-        if not domains:
-            domain_key = asset.name.lower().replace(" ", "_")
-        else:
-            domain_key = domains[0].lower()
+        domain_key, is_canonical = _resolve_domain_key(asset)
         
         has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
@@ -548,7 +619,8 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
                 has_discovery=has_discovery,
                 latest_activity_at=latest_activity,
                 entity_names=[asset.name],
-                entity_count=1
+                entity_count=1,
+                is_domain_canonical=is_canonical
             )
     
     return rollups

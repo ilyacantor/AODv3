@@ -726,7 +726,15 @@ async def get_classifications(run_id: str):
 
 @router.get("/runs/{run_id}/reconcile-payload")
 async def get_reconcile_payload(run_id: str):
-    """Get the reconcile payload that would be sent to Farm"""
+    """Get the reconcile payload that would be sent to Farm.
+    
+    Uses emit_actual_results() which includes:
+    - Reconciliation eligibility filter (excludes internal identifiers)
+    - Per-asset reason codes and decision status
+    - Rejected candidates with their reason codes
+    """
+    from ..pipeline.aod_agent_reconcile import emit_actual_results
+    
     db = await get_db()
     
     run = await db.get_run(run_id)
@@ -735,20 +743,14 @@ async def get_reconcile_payload(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
-    derived = compute_derived_classifications(assets, activity_window_days=90)
+    rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
     
-    shadow_asset_keys = []
-    zombie_asset_keys = []
-    actual_reasons: dict[str, list[str]] = {}
-    
-    for domain_key, rollup in derived.domain_rollups.items():
-        reason_codes = rollup.get_reason_codes()
-        actual_reasons[domain_key] = reason_codes
-        
-        if rollup.is_shadow():
-            shadow_asset_keys.append(domain_key)
-        elif rollup.is_zombie():
-            zombie_asset_keys.append(domain_key)
+    actual_results = emit_actual_results(
+        run_id=run_id,
+        assets=assets,
+        activity_window_days=90,
+        rejections=rejections
+    )
     
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
@@ -760,6 +762,17 @@ async def get_reconcile_payload(run_id: str):
     aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
     if aod_callback_url and not aod_callback_url.startswith("http"):
         aod_callback_url = f"https://{aod_callback_url}"
+    
+    asset_summaries = {}
+    for key, reasons in actual_results.actual_reasons.items():
+        details = actual_results.asset_details.get(key, {})
+        asset_summaries[key] = {
+            "aod_decision": actual_results.admission_actual.get(key, "unknown"),
+            "aod_reason_codes": reasons,
+            "is_shadow": details.get("is_shadow", False),
+            "is_zombie": details.get("is_zombie", False),
+            "evidence_summary": details.get("evidence_summary", {})
+        }
     
     return {
         "snapshot_id": run.input_meta.get("snapshot_id") if run.input_meta else None,
@@ -776,16 +789,17 @@ async def get_reconcile_payload(run_id: str):
             "rejected": run.counts.rejected,
             "ambiguous_matches": run.counts.ambiguous_matches,
             "findings_generated": run.counts.findings_generated,
-            "shadow_count": len(shadow_asset_keys),
-            "zombie_count": len(zombie_asset_keys)
+            "shadow_count": actual_results.summary["shadow_actual_count"],
+            "zombie_count": actual_results.summary["zombie_actual_count"]
         },
-        "shadow_asset_keys": shadow_asset_keys,
-        "zombie_asset_keys": zombie_asset_keys,
+        "shadow_asset_keys": actual_results.shadow_actual,
+        "zombie_asset_keys": actual_results.zombie_actual,
+        "asset_summaries": asset_summaries,
         "aod_lists": {
-            "shadow_asset_keys_sample": shadow_asset_keys[:10],
-            "zombie_asset_keys_sample": zombie_asset_keys[:10],
+            "shadow_asset_keys_sample": actual_results.shadow_actual[:10],
+            "zombie_asset_keys_sample": actual_results.zombie_actual[:10],
             "high_severity_findings": high_severity_findings,
-            "actual_reason_codes": actual_reasons
+            "actual_reason_codes": actual_results.actual_reasons
         }
     }
 

@@ -1,0 +1,177 @@
+This run is actually the **first clean signal** that your reasoning is now correct — and the data proves it. The remaining failures are no longer mysterious; they’re **systemic semantics + observability gaps**, not broken correlation.
+
+I’ll ground this strictly in the reconciliation you shared .
+
+---
+
+## 1. The “matched” section proves Option C is working
+
+Look at the first block (box, canva, calendly, dropbox, clickup):
+
+* Farm reason codes: `HAS_FINANCE`
+* AOD reason codes: **now also show `HAS_FINANCE`**
+* Shadow classification aligns
+
+That is a **hard confirmation** that:
+
+* Finance presence is now derived from correlation (MATCHED/AMBIGUOUS)
+* Reason codes are no longer incorrectly tied to admission gates
+
+This is the exact outcome you wanted from **Option C**. The calendly finance bug is solved.
+
+---
+
+## 2. Why accuracy is still low (and why that’s expected)
+
+### A. All “missed_by_aod” shadows are **silent misses**
+
+Every one of these:
+
+* notion.so
+* surveymonkey.com
+* grammarly.com
+* typeform.com
+* hubspot.com
+* monday.com
+* zapier.com
+* webex.com
+
+has:
+
+* `aod_reason_codes: ""`
+* `aod_decision: ""`
+
+This means **AOD never explained why it didn’t flag them**.
+
+So these aren’t “wrong decisions” yet — they’re **missing decision traces**. Reconciliation is penalizing AOD for silence.
+
+This confirms what you already suspected earlier:
+
+> *explain-nonflag is still not wired end-to-end.*
+
+Until that is populated, every missed shadow will look like a logic failure even if the logic is fine.
+
+---
+
+### B. False positives are not logic errors — they’re **category errors**
+
+The false positives fall into two buckets:
+
+#### 1) Legit SaaS with governance disagreement
+
+Example: `airtable.com`
+
+Farm says:
+
+> CLEAN because HAS_FINANCE
+
+AOD says:
+
+> SHADOW because NO_IDP + NO_CMDB
+
+This is **policy divergence**, not a bug:
+
+* Farm allows “finance-only but governed elsewhere”
+* AOD requires IdP/CMDB to avoid shadow
+
+That’s a **definition question**, not a pipeline failure.
+
+#### 2) Non-domain / internal identifiers
+
+Examples:
+
+* `customer`
+* `customerportalprod`
+* `customerportallegacy`
+* `elasticsearchlogs`
+
+These should **never have entered shadow classification at all**.
+
+This is a **canonical-key hygiene problem**:
+
+* AOD is classifying “things”
+* Farm is grading “external services / domains”
+
+Until you enforce:
+
+> *Shadow/Zombie classification only applies to reconciliation-grade assets (e.g., registered domains)*
+
+you will always carry noisy false positives.
+
+---
+
+## 3. Zombies look “off” but are actually correct
+
+Example: `pivotaltracker.com`, `hipchat.com`, `basecamp.com`
+
+Farm reason codes include:
+
+* `HAS_DISCOVERY`
+* `STALE_ACTIVITY`
+
+AOD reason codes include:
+
+* `HAS_DISCOVERY`
+* `HAS_ACTIVITY_TIMESTAMP`
+* `ZOMBIE_CLASSIFICATION`
+
+The presence of `NO_FINANCE` on some zombies is **not an error**:
+
+* Zombies don’t require finance
+* Finance presence is incidental, not defining
+
+This is mostly cosmetic and should **not affect accuracy** once reconciliation weights category correctness more than exact code parity.
+
+---
+
+## 4. The real remaining blockers (in order)
+
+Based on this run, here is the **true systemic backlog**, ranked:
+
+### 1️⃣ Explain-nonflag must populate missed rows
+
+No asset should appear as `missed_by_aod` without:
+
+* `aod_decision`
+* `aod_reason_codes`
+
+Treat silence as a pipeline error, not a valid outcome.
+
+### 2️⃣ Enforce reconciliation-grade asset keys
+
+Before shadow/zombie classification:
+
+* Require registered domain (or explicit SaaS asset type)
+* Route internal services elsewhere
+
+This will collapse ~50% of false positives instantly.
+
+### 3️⃣ Align policy on “finance-only governance”
+
+Decide (explicitly):
+
+* Is `HAS_FINANCE` without IdP/CMDB enough to be CLEAN?
+* Or is that definitionally SHADOW?
+
+Right now Farm and AOD disagree by design.
+
+---
+
+## 5. Big picture (important)
+
+This run proves something critical:
+
+> **AOD’s detection logic is now broadly correct.
+> What’s failing is explanation, boundaries, and policy alignment.**
+
+That’s the *right* phase to be in.
+
+You’re no longer chasing phantom bugs — you’re shaping product semantics.
+
+If you want next, I’d recommend:
+
+* Locking **explain-nonflag** as a must-have invariant
+* Adding a single “reconciliation-eligible asset” filter
+* Then rerunning once more before touching any shadow logic
+
+At that point, accuracy will jump for the *right reasons*, not because you hid disagreements.

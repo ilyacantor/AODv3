@@ -168,6 +168,13 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "cisco.com": "Cisco",
     "vmware.com": "VMware",
     "citrix.com": "Citrix",
+    "basecamp.com": "Basecamp",
+    "evernote.com": "Evernote",
+    "surveymonkey.com": "Momentive",
+    "getfeedback.com": "Momentive",
+    "pivotaltracker.com": "Pivotal",
+    "broadcom.com": "CA Technologies",
+    "apache.org": "Apache",
 }
 
 

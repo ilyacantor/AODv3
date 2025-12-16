@@ -31,6 +31,31 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from ..models.output_contracts import Asset, LensStatus
+from .vendor_inference import DOMAIN_TO_VENDOR
+
+
+def _build_vendor_to_domain_map() -> dict[str, str]:
+    """
+    Build reverse mapping from vendor name to canonical domain.
+    
+    Uses DOMAIN_TO_VENDOR from vendor_inference.py.
+    When a vendor has multiple domains, prefer the primary one (.com, .so, .io).
+    """
+    vendor_to_domain: dict[str, str] = {}
+    
+    for domain, vendor in DOMAIN_TO_VENDOR.items():
+        vendor_key = vendor.lower().strip()
+        if vendor_key not in vendor_to_domain:
+            vendor_to_domain[vendor_key] = domain
+        else:
+            current = vendor_to_domain[vendor_key]
+            if domain.endswith(('.com', '.so', '.io', '.us')) and not current.endswith(('.com', '.so', '.io', '.us')):
+                vendor_to_domain[vendor_key] = domain
+    
+    return vendor_to_domain
+
+
+VENDOR_TO_DOMAIN = _build_vendor_to_domain_map()
 
 
 class ReasonCode(str, Enum):
@@ -236,10 +261,15 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
 
 def _extract_registered_domain(asset: Asset) -> str | None:
     """
-    Extract the registered domain from asset identifiers.
+    Extract the registered domain from asset identifiers or vendor.
     
     INVARIANT: If any entity has a resolvable registered domain, the asset_key
     MUST be that registered domain (e.g., notion.so).
+    
+    Priority order:
+    1. asset.identifiers.domains (explicit domain from evidence)
+    2. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN
+    3. Asset name if it looks like a domain (contains valid TLD)
     
     Returns the first valid registered domain, or None if not available.
     """
@@ -247,6 +277,18 @@ def _extract_registered_domain(asset: Asset) -> str | None:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
                 return domain.lower().strip()
+    
+    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = asset.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            return VENDOR_TO_DOMAIN[vendor_key]
+    
+    name = asset.name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3) and parts[-1].isalpha():
+            return name
+    
     return None
 
 

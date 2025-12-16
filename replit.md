@@ -124,6 +124,28 @@ Farm uses these codes to determine root cause of mismatches:
 - `ACTIVITY_TIMESTAMP_DROPPED` - Farm says recent, AOD says stale
 - `DISCOVERY_SOURCE_COUNT_MISMATCH` - Discovery source count differs
 
+### Domain-Keyed Asset Aggregation
+
+**INVARIANT:** When any evidence contains a registered domain (from discovery URLs, proxy logs, finance vendor domains, or vendor name lookup), the asset_key MUST be that registered domain.
+
+**Key Resolution Order:**
+1. `asset.identifiers.domains` - Explicit domain from evidence
+2. `VENDOR_TO_DOMAIN[asset.vendor]` - Reverse lookup from vendor name
+3. Asset name if it looks like a domain (contains valid TLD)
+4. Fallback: normalized name (for internal systems only)
+
+**Domain-Level Aggregation:**
+Multiple assets sharing the same domain key are merged:
+- `is_shadow`/`is_zombie`: OR semantics (if any variant is shadow, domain is shadow)
+- `reason_codes`: union of all variant codes
+- `aliases`: list of source asset names for traceability
+
+**Example:**
+- `Notion (Legacy)` + `Notion-prod` → Both roll up under `notion.so`
+- `aliases: ["Notion (Legacy)", "Notion-prod"]`
+
+This eliminates KEY_NORMALIZATION_MISMATCH errors in Farm reconciliation by ensuring AOD and Farm use the same canonical domain keys.
+
 ### Explain Non-Flag Endpoint
 
 `POST /api/reconcile/explain-nonflag` - Farm can ask AOD why specific assets are NOT flagged as shadow/zombie.

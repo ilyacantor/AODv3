@@ -19,7 +19,8 @@ async def reconcile_to_farm(
     assets: list[Asset],
     findings: list[Finding],
     snapshot_id: str,
-    farm_url: Optional[str] = None
+    farm_url: Optional[str] = None,
+    rejections: Optional[list[dict]] = None
 ) -> tuple[bool, Optional[str]]:
     """
     Reconcile AOD results back to Farm.
@@ -32,6 +33,7 @@ async def reconcile_to_farm(
         findings: List of generated findings
         snapshot_id: The source snapshot ID
         farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
+        rejections: Optional list of rejection records for candidates that didn't pass admission
     
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -61,6 +63,29 @@ async def reconcile_to_farm(
         if f.severity.value == "high"
     ][:10]
     
+    rejection_reasons: dict[str, list[str]] = {}
+    if rejections:
+        for rej in rejections:
+            entity_key = rej.get("entity_key", "")
+            entity_name = rej.get("entity_name", "")
+            reason_code = rej.get("reason_code", "unknown")
+            reason_detail = rej.get("reason_detail", "")
+            evidence_summary = rej.get("evidence_summary", {})
+            
+            reason_codes = [f"REJECTED:{reason_code.upper()}"]
+            
+            if reason_detail:
+                reason_codes.append(f"DETAIL:{reason_detail[:100]}")
+            
+            if isinstance(evidence_summary, dict):
+                for plane, status in evidence_summary.items():
+                    if status and status != "no_match":
+                        reason_codes.append(f"{plane.upper()}:{status.upper()}")
+            
+            key = entity_name.lower().strip() if entity_name else entity_key.lower().strip()
+            if key:
+                rejection_reasons[key] = reason_codes
+    
     aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
     if aod_callback_url and not aod_callback_url.startswith("http"):
         aod_callback_url = f"https://{aod_callback_url}"
@@ -89,7 +114,8 @@ async def reconcile_to_farm(
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],
             "high_severity_findings": high_severity_findings,
-            "actual_reason_codes": actual_reasons
+            "actual_reason_codes": actual_reasons,
+            "rejection_reasons": rejection_reasons
         }
     }
     

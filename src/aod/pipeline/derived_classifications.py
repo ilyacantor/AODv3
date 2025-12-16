@@ -5,9 +5,10 @@ Computes Shadow and Zombie classifications from evidence AFTER the main pipeline
 These are computed on-read, not stored as flags.
 
 Shadow Asset = admitted asset with:
-  - finance evidence OR cloud presence OR discovery (corroborated usage from >=2 sources)
+  - cloud presence OR discovery (corroborated usage from >=2 sources)
   - AND no IdP match (no SSO / SCIM / service principal)
   - AND no CMDB match
+  - AND no Finance match (Finance-only = governed, not shadow - aligns with Farm)
   - AND has recent activity (within activity_window_days)
 
 Zombie Asset = admitted asset with:
@@ -33,6 +34,87 @@ def _ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+# Known SaaS patterns that should be allowed even without standard domain format
+KNOWN_SAAS_PATTERNS = frozenset({
+    "microsoft 365", "microsoft365", "office 365", "office365",
+    "google workspace", "g suite", "gsuite",
+    "salesforce", "servicenow", "workday", "slack", "zoom",
+    "dropbox", "box", "github", "gitlab", "jira", "confluence",
+    "atlassian", "adobe", "aws", "azure", "gcp", "okta",
+    "zendesk", "hubspot", "docusign", "asana", "monday",
+    "trello", "notion", "figma", "miro", "airtable",
+})
+
+# Valid TLDs (common ones for external domains)
+VALID_TLDS = frozenset({
+    "com", "org", "net", "io", "co", "edu", "gov", "mil",
+    "biz", "info", "me", "app", "dev", "ai", "cloud",
+    "tech", "online", "site", "xyz", "uk", "de", "fr",
+    "jp", "cn", "au", "ca", "in", "br", "ru", "it", "es",
+    "nl", "pl", "se", "no", "dk", "fi", "ch", "at", "be",
+    "us", "tv", "cc", "ly", "to", "fm", "so", "gg",
+})
+
+
+def is_reconcilable_domain(name: str) -> bool:
+    """
+    Check if a domain/name is eligible for reconciliation (shadow/zombie classification).
+    
+    Returns True only for valid external domains or known SaaS patterns.
+    Returns False for internal identifiers that shouldn't be classified.
+    
+    Validation Rules:
+    - Must contain at least one dot (.)
+    - Must have a valid TLD (com, org, net, io, co, etc.)
+    - Must NOT be a single word without TLD
+    - Must NOT look like internal hostnames (e.g., "customerportal", "elasticsearchlogs")
+    - Exception: Allow known SaaS patterns even if they don't match standard domain format
+    
+    Args:
+        name: The domain key or asset name to check
+        
+    Returns:
+        True if the name represents a valid external domain or known SaaS
+    """
+    if not name:
+        return False
+    
+    name_lower = name.lower().strip()
+    
+    # Replace underscores with spaces for pattern matching (domain_key uses underscores)
+    name_normalized = name_lower.replace("_", " ")
+    
+    # Check for known SaaS patterns (exception - allow even without domain format)
+    for pattern in KNOWN_SAAS_PATTERNS:
+        if pattern in name_normalized or name_normalized in pattern:
+            return True
+    
+    # Must contain at least one dot for domain format
+    if "." not in name_lower:
+        return False
+    
+    # Extract the TLD (last part after the last dot)
+    parts = name_lower.split(".")
+    if len(parts) < 2:
+        return False
+    
+    tld = parts[-1]
+    
+    # Remove any port numbers or paths that might be attached
+    tld = tld.split(":")[0].split("/")[0]
+    
+    # Check for valid TLD
+    if tld not in VALID_TLDS:
+        return False
+    
+    # Ensure the domain part (before TLD) is not empty
+    domain_part = ".".join(parts[:-1])
+    if not domain_part:
+        return False
+    
+    return True
 
 
 @dataclass
@@ -70,9 +152,14 @@ class DomainRollup:
     entity_count: int
     
     def is_shadow(self, activity_window_days: int = 90) -> bool:
-        """Domain-level shadow: no governance + has existence evidence + recent activity"""
-        has_governance = self.has_idp or self.has_cmdb
-        has_existence = self.has_finance or self.has_cloud or self.has_discovery
+        """Domain-level shadow: no governance + has existence evidence + recent activity
+        
+        Policy: Finance-only = governed, not shadow. HAS_FINANCE means the asset is
+        tracked/governed via finance systems, aligning with Farm's interpretation.
+        """
+        # Finance counts as governance - assets with HAS_FINANCE are tracked/governed
+        has_governance = self.has_idp or self.has_cmdb or self.has_finance
+        has_existence = self.has_cloud or self.has_discovery
         
         if has_governance or not has_existence:
             return False
@@ -155,17 +242,21 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     """
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Policy: Finance-only = governed, not shadow. HAS_FINANCE means the asset is
+    # tracked/governed via finance systems, aligning with Farm's interpretation.
+    has_finance_governance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
     has_discovery = asset.lens_coverage.discovery
     
-    if has_idp or has_cmdb:
+    # Finance counts as governance - assets with HAS_FINANCE are tracked/governed
+    if has_idp or has_cmdb or has_finance_governance:
         return ClassificationResult(
             is_classified=False,
             is_indeterminate=False,
             classification_type="shadow",
-            reason="Asset has IdP or CMDB presence - not shadow",
+            reason="Asset has governance (IdP/CMDB/Finance) - not shadow",
             evidence_summary=[]
         )
     
@@ -515,6 +606,12 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
             domain_key = asset.name.lower().replace(" ", "_")
         else:
             domain_key = domains[0].lower()
+        
+        # Skip non-reconcilable domains (internal identifiers)
+        # This prevents internal names like "customer", "elasticsearchlogs" from
+        # being classified as shadow/zombie - only valid external domains qualify
+        if not is_reconcilable_domain(domain_key):
+            continue
         
         has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)

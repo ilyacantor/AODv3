@@ -66,6 +66,9 @@ def build_reconcile_payload(
         }
     
     return {
+        "payload_version": 2,
+        "has_asset_summaries": len(asset_summaries) > 0,
+        "asset_summaries_count": len(asset_summaries),
         "snapshot_id": snapshot_id,
         "tenant_id": run_log.tenant_id,
         "aod_run_id": run_log.run_id,

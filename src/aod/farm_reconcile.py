@@ -42,85 +42,18 @@ async def reconcile_to_farm(
     
     derived = compute_derived_classifications(assets, activity_window_days=90)
     
-    def get_asset_key(asset) -> str:
-        """Get canonical reconciliation key for an asset (registered domain preferred)"""
-        domains = []
-        name = ""
-        
-        if isinstance(asset, dict):
-            identifiers = asset.get("identifiers", {})
-            if isinstance(identifiers, dict):
-                domains = identifiers.get("domains", [])
-            elif hasattr(identifiers, "domains"):
-                domains = identifiers.domains or []
-            name = asset.get("name", "")
-        else:
-            identifiers = getattr(asset, "identifiers", None)
-            if identifiers:
-                if hasattr(identifiers, "domains"):
-                    domains = identifiers.domains or []
-                elif isinstance(identifiers, dict):
-                    domains = identifiers.get("domains", [])
-            name = getattr(asset, "name", "")
-        
-        if domains and len(domains) > 0:
-            return domains[0].lower()
-        return name.lower().replace(" ", "_")
-    
-    shadow_asset_keys = [get_asset_key(a) for a in derived.shadow_assets]
-    zombie_asset_keys = [get_asset_key(a) for a in derived.zombie_assets]
-    
-    def get_reason_codes(asset: dict) -> list[str]:
-        """Generate canonical reason codes for an asset"""
-        codes = []
-        lens_coverage = asset.get("lens_coverage", {})
-        activity_evidence = asset.get("activity_evidence", {})
-        
-        if lens_coverage.get("idp"):
-            codes.append("HAS_IDP")
-        else:
-            codes.append("NO_IDP")
-        
-        if lens_coverage.get("cmdb"):
-            codes.append("HAS_CMDB")
-        else:
-            codes.append("NO_CMDB")
-        
-        if lens_coverage.get("finance"):
-            codes.append("HAS_FINANCE")
-        else:
-            codes.append("NO_FINANCE")
-        
-        if lens_coverage.get("cloud"):
-            codes.append("HAS_CLOUD")
-        else:
-            codes.append("NO_CLOUD")
-        
-        if lens_coverage.get("discovery"):
-            codes.append("HAS_DISCOVERY")
-        else:
-            codes.append("NO_DISCOVERY")
-        
-        latest_activity = activity_evidence.get("latest_activity_at")
-        if latest_activity:
-            codes.append("HAS_ACTIVITY_TIMESTAMP")
-        else:
-            codes.append("NO_ACTIVITY_TIMESTAMPS")
-        
-        return codes
-    
+    shadow_asset_keys = []
+    zombie_asset_keys = []
     actual_reasons: dict[str, list[str]] = {}
-    for asset in derived.shadow_assets:
-        key = get_asset_key(asset)
-        codes = get_reason_codes(asset)
-        codes.append("SHADOW_CLASSIFICATION")
-        actual_reasons[key] = codes
     
-    for asset in derived.zombie_assets:
-        key = get_asset_key(asset)
-        codes = get_reason_codes(asset)
-        codes.append("ZOMBIE_CLASSIFICATION")
-        actual_reasons[key] = codes
+    for domain_key, rollup in derived.domain_rollups.items():
+        reason_codes = rollup.get_reason_codes()
+        actual_reasons[domain_key] = reason_codes
+        
+        if rollup.is_shadow():
+            shadow_asset_keys.append(domain_key)
+        elif rollup.is_zombie():
+            zombie_asset_keys.append(domain_key)
     
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
@@ -147,8 +80,8 @@ async def reconcile_to_farm(
             "rejected": run_log.counts.rejected,
             "ambiguous_matches": run_log.counts.ambiguous_matches,
             "findings_generated": run_log.counts.findings_generated,
-            "shadow_count": derived.shadow_count,
-            "zombie_count": derived.zombie_count
+            "shadow_count": len(shadow_asset_keys),
+            "zombie_count": len(zombie_asset_keys)
         },
         "shadow_asset_keys": shadow_asset_keys,
         "zombie_asset_keys": zombie_asset_keys,

@@ -56,6 +56,7 @@ class ReasonCode(str, Enum):
     ADMITTED_VIA_CLOUD = "ADMITTED_VIA_CLOUD"
     ADMITTED_VIA_DISCOVERY = "ADMITTED_VIA_DISCOVERY"
     REJECTED_NO_GATE = "REJECTED_NO_GATE"
+    NOT_RECONCILIATION_ELIGIBLE = "NOT_RECONCILIATION_ELIGIBLE"
 
 
 @dataclass
@@ -103,6 +104,42 @@ def _normalize_key(key: str) -> str:
     """Normalize asset key for matching."""
     import re
     return re.sub(r'[^a-z0-9]', '', key.lower())
+
+
+def is_reconciliation_eligible(asset: Asset) -> bool:
+    """
+    Determine if an asset is eligible for shadow/zombie reconciliation.
+    
+    Only assets that represent external services (registered domains, known SaaS)
+    should be classified. Internal identifiers like "customer", "elasticsearchlogs"
+    should be excluded from shadow/zombie classification to avoid false positives.
+    
+    Eligibility criteria:
+    1. Has at least one registered domain in identifiers.domains
+    2. OR has an explicit vendor (not "unknown")
+    3. OR has a domain-like name (contains "." with valid TLD pattern)
+    
+    NOTE: vendor_hypothesis is NOT used here as it is NON-DECISIONABLE metadata.
+    Per invariant: vendor_hypothesis MUST NOT be referenced by admission, classification,
+    findings, policy, scoring, or automation logic.
+    
+    Internal identifiers are excluded by failing all criteria above.
+    """
+    if asset.identifiers and asset.identifiers.domains:
+        for domain in asset.identifiers.domains:
+            if domain and "." in domain:
+                return True
+    
+    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        return True
+    
+    name = asset.name.lower()
+    if "." in name and not name.startswith("."):
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) >= 2:
+            return True
+    
+    return False
 
 
 def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple[list[ReasonCode], dict]:
@@ -202,8 +239,18 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     Produce the actual classification result for an asset.
     
     This is AOD's view of what the asset IS - not what it should be.
+    
+    IMPORTANT: Only reconciliation-eligible assets (registered domains, known SaaS)
+    are classified as shadow/zombie. Internal identifiers are excluded to prevent
+    false positives.
     """
     reasons, evidence = compute_asset_reasons(asset, activity_window_days)
+    
+    eligible = is_reconciliation_eligible(asset)
+    evidence["reconciliation_eligible"] = eligible
+    
+    if not eligible:
+        reasons.append(ReasonCode.NOT_RECONCILIATION_ELIGIBLE)
     
     has_idp = ReasonCode.HAS_IDP in reasons
     has_cmdb = ReasonCode.HAS_CMDB in reasons
@@ -213,14 +260,16 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
     
     is_shadow = False
-    if not has_idp and not has_cmdb:
-        if (has_finance or has_cloud or has_discovery) and has_recent_activity:
-            is_shadow = True
-    
     is_zombie = False
-    if has_idp or has_cmdb:
-        if not has_recent_activity:
-            is_zombie = True
+    
+    if eligible:
+        if not has_idp and not has_cmdb:
+            if (has_finance or has_cloud or has_discovery) and has_recent_activity:
+                is_shadow = True
+        
+        if has_idp or has_cmdb:
+            if not has_recent_activity:
+                is_zombie = True
     
     asset_key = _normalize_key(asset.name)
     
@@ -236,10 +285,56 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     )
 
 
+def _compute_rejection_reasons(rejection: dict) -> list[str]:
+    """
+    Compute reason codes for a rejected candidate.
+    
+    Derives reason codes from rejection metadata to explain
+    why the candidate was not admitted.
+    """
+    reasons = []
+    reason_code = rejection.get("reason_code", "").lower()
+    reason_detail = rejection.get("reason_detail", "").lower()
+    evidence = rejection.get("evidence_summary", {})
+    
+    if "discovery" in reason_code or "source" in reason_detail:
+        reasons.append("DISCOVERY_SOURCE_COUNT_LT_2")
+    if "stale" in reason_detail or "activity" in reason_detail:
+        reasons.append("STALE_ACTIVITY")
+    if "no_gate" in reason_code or "gate" in reason_code:
+        reasons.append("REJECTED_NO_GATE")
+    
+    if evidence.get("has_idp"):
+        reasons.append("HAS_IDP")
+    else:
+        reasons.append("NO_IDP")
+    
+    if evidence.get("has_cmdb"):
+        reasons.append("HAS_CMDB")
+    else:
+        reasons.append("NO_CMDB")
+    
+    if evidence.get("has_finance"):
+        reasons.append("HAS_FINANCE")
+    else:
+        reasons.append("NO_FINANCE")
+    
+    if evidence.get("has_discovery"):
+        reasons.append("HAS_DISCOVERY")
+    else:
+        reasons.append("NO_DISCOVERY")
+    
+    if not reasons:
+        reasons.append("REJECTED_NO_GATE")
+    
+    return reasons
+
+
 def emit_actual_results(
     run_id: str,
     assets: list[Asset],
-    activity_window_days: int = 90
+    activity_window_days: int = 90,
+    rejections: list[dict] | None = None
 ) -> ActualResultsOutput:
     """
     Emit AOD's actual results for a run.
@@ -247,10 +342,15 @@ def emit_actual_results(
     This is the ONLY output function. AOD does not consume expected data.
     Farm will take this output and compute diffs/RCA on its side.
     
+    IMPORTANT: Includes BOTH admitted assets AND rejected candidates.
+    This ensures Farm reconciliation always has aod_reason_codes for every
+    asset it asks about.
+    
     Args:
         run_id: The run ID
         assets: List of admitted assets from AOD
         activity_window_days: Activity window for classification
+        rejections: Optional list of rejected candidates with their metadata
     
     Returns:
         ActualResultsOutput with all actual classifications and reason codes
@@ -280,8 +380,31 @@ def emit_actual_results(
         if result.is_zombie:
             zombie_actual.append(result.asset_key)
     
+    if rejections:
+        for rej in rejections:
+            entity_key = _normalize_key(rej.get("entity_name", "") or rej.get("entity_key", ""))
+            if not entity_key or entity_key in admission_actual:
+                continue
+            
+            reasons = _compute_rejection_reasons(rej)
+            
+            admission_actual[entity_key] = "rejected"
+            actual_reasons[entity_key] = reasons
+            asset_details[entity_key] = {
+                "asset_id": None,
+                "name": rej.get("entity_name", entity_key),
+                "is_shadow": False,
+                "is_zombie": False,
+                "evidence_summary": {
+                    "rejection_reason": rej.get("reason_code", "unknown"),
+                    "rejection_detail": rej.get("reason_detail", ""),
+                    "original_evidence": rej.get("evidence_summary", {})
+                }
+            }
+    
     summary = {
         "total_assets": len(assets),
+        "total_candidates": len(assets) + (len(rejections) if rejections else 0),
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
         "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),

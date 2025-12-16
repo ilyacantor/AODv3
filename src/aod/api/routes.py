@@ -1521,6 +1521,10 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     HARD RULE (prevents coupling):
     - AOD NEVER consumes Farm expected/rca data
     - AOD ONLY emits its own "actual + reasons"
+    
+    IMPORTANT: Includes BOTH admitted assets AND rejected candidates.
+    This ensures Farm reconciliation always has aod_reason_codes for every
+    asset it asks about (no more empty aod_reason_codes for missed assets).
     """
     from ..pipeline.aod_agent_reconcile import emit_actual_results
     
@@ -1532,13 +1536,17 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     
     assets = await db.get_assets_by_run(request.run_id)
     
-    if not assets:
-        raise HTTPException(status_code=404, detail=f"No assets found for run_id: {request.run_id}")
+    rejections_result = await db.get_rejections_by_run(request.run_id, limit=1000)
+    rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
+    
+    if not assets and not rejections:
+        raise HTTPException(status_code=404, detail=f"No assets or rejections found for run_id: {request.run_id}")
     
     result = emit_actual_results(
         run_id=request.run_id,
-        assets=assets,
-        activity_window_days=request.activity_window_days
+        assets=assets or [],
+        activity_window_days=request.activity_window_days,
+        rejections=rejections
     )
     
     return AODActualResultsResponse(

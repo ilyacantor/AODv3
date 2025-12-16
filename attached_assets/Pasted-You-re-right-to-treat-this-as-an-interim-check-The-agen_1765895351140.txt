@@ -1,0 +1,55 @@
+You’re right to treat this as an interim check. The agent is drifting into “do everything + change policy + touch tests” territory. That’s *sometimes* OK, but only if you pin the invariants and sequence.
+
+Here’s the simple, strategic guidance:
+
+## Don’t do “all three” in parallel
+
+These three items are **not symmetric**. One is observability, one is hygiene, one is product policy.
+
+**Correct order:**
+
+1. **Explain-nonflag** (observability)
+2. **Reconciliation-eligible filter** (hygiene / boundary)
+3. **Policy alignment** (product decision)
+
+If the agent jumps to #3 first (“HAS_FINANCE counts as governance → not shadow”), you’ll hide real errors and muddy the measurement.
+
+## Red flag in what the agent said
+
+> “Modify classify_shadow and DomainRollup to include HAS_FINANCE as governance…”
+
+That is **policy change**. It will change counts and can make you *feel* better without actually fixing the pipeline.
+
+You should explicitly tell the agent:
+
+* **Do not change shadow/zombie policy in this pass.**
+* **Do not modify tests except to reflect already-decided semantics (presence vs admission).**
+* **Goal is to improve RCA fidelity, not to increase accuracy by redefining “shadow.”**
+
+## What test changes are acceptable right now
+
+Only tests that were asserting the *old broken semantics*:
+
+* Reason codes must reflect **presence** (LensStatuses / correlated evidence), not admission gates.
+
+Not acceptable:
+
+* “Adjust tests to match new policy that finance means governed.”
+* “Update expected counts” unless driven by explain/nonflag or eligibility filter.
+
+## The crisp instruction to give the agent
+
+Paste this (verbatim) to the agent:
+
+> **STOP: do not change policy.**
+> This pass is *plumbing only*:
+>
+> 1. Wire `explain-nonflag` so every `missed_by_aod` has `aod_decision` + `aod_reason_codes` (no blanks).
+> 2. Add `reconciliation_eligible` filter (registered domains / known SaaS) and route non-eligible keys to a separate bucket (do not classify them as shadow/zombie).
+> 3. Update reason codes to reflect **presence** not admission (LensStatuses).
+>    **DO NOT** modify `classify_shadow`/`classify_zombie` policy or treat `HAS_FINANCE` as governance in this pass.
+>    Tests may change only where they asserted old admission-based presence semantics.
+
+That gives you guardrails without suffocating progress.
+
+If you want, drop the diff / PR summary the agent produced and I’ll call out in 30 seconds which changes violate the above.

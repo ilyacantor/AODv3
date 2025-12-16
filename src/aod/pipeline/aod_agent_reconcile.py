@@ -131,6 +131,24 @@ def _normalize_key(key: str) -> str:
     return re.sub(r'[^a-z0-9]', '', key.lower())
 
 
+def _normalize_name_for_vendor_lookup(name: str) -> str:
+    """
+    Normalize asset name for vendor lookup by stripping common suffixes.
+    
+    Examples:
+        "Notion-prod" -> "notion"
+        "Notion (Legacy)" -> "notion"
+        "Monday.com-Test" -> "monday.com"
+        "Zapier Integration" -> "zapier"
+    """
+    import re
+    name = name.lower().strip()
+    name = re.sub(r'\s*[\(\[].*?[\)\]]', '', name)
+    name = re.sub(r'[-_]\s*(prod|dev|test|staging|legacy|integration|api|v\d+).*$', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s+(prod|dev|test|staging|legacy|integration|api)$', '', name, flags=re.IGNORECASE)
+    return name.strip()
+
+
 def is_reconciliation_eligible(asset: Asset) -> bool:
     """
     Determine if an asset is eligible for shadow/zombie reconciliation.
@@ -139,10 +157,11 @@ def is_reconciliation_eligible(asset: Asset) -> bool:
     should be classified. Internal identifiers like "customer", "elasticsearchlogs"
     should be excluded from shadow/zombie classification to avoid false positives.
     
-    Eligibility criteria:
+    Eligibility criteria (DOMAIN PROMOTION):
     1. Has at least one registered domain in identifiers.domains
     2. OR has an explicit vendor (not "unknown")
-    3. OR has a domain-like name (contains "." with valid TLD pattern)
+    3. OR normalized name matches a known vendor in VENDOR_TO_DOMAIN
+    4. OR has a domain-like name (contains "." with valid TLD pattern)
     
     NOTE: vendor_hypothesis is NOT used here as it is NON-DECISIONABLE metadata.
     Per invariant: vendor_hypothesis MUST NOT be referenced by admission, classification,
@@ -156,6 +175,10 @@ def is_reconciliation_eligible(asset: Asset) -> bool:
                 return True
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        return True
+    
+    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
+    if normalized_name in VENDOR_TO_DOMAIN:
         return True
     
     name = asset.name.lower()
@@ -266,10 +289,11 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     INVARIANT: If any entity has a resolvable registered domain, the asset_key
     MUST be that registered domain (e.g., notion.so).
     
-    Priority order:
+    Priority order (DOMAIN PROMOTION):
     1. asset.identifiers.domains (explicit domain from evidence)
     2. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN
-    3. Asset name if it looks like a domain (contains valid TLD)
+    3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN
+    4. Asset name if it looks like a domain (contains valid TLD)
     
     Returns the first valid registered domain, or None if not available.
     """
@@ -282,6 +306,10 @@ def _extract_registered_domain(asset: Asset) -> str | None:
         vendor_key = asset.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
             return VENDOR_TO_DOMAIN[vendor_key]
+    
+    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
+    if normalized_name in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_name]
     
     name = asset.name.lower().strip()
     if "." in name:

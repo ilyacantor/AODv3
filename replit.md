@@ -128,11 +128,18 @@ Farm uses these codes to determine root cause of mismatches:
 
 **INVARIANT:** When any evidence contains a registered domain (from discovery URLs, proxy logs, finance vendor domains, or vendor name lookup), the asset_key MUST be that registered domain.
 
-**Key Resolution Order:**
+**Key Resolution Order (DOMAIN PROMOTION):**
 1. `asset.identifiers.domains` - Explicit domain from evidence
 2. `VENDOR_TO_DOMAIN[asset.vendor]` - Reverse lookup from vendor name
-3. Asset name if it looks like a domain (contains valid TLD)
-4. Fallback: normalized name (for internal systems only)
+3. **NAME-BASED PROMOTION** - Normalize asset name and look up in VENDOR_TO_DOMAIN
+4. Asset name if it looks like a domain (contains valid TLD)
+5. Fallback: normalized name (for internal systems only) - NOT reconciliation-eligible
+
+**Name Normalization for Vendor Lookup:**
+Asset names like "Notion-prod", "Monday.com-Test", "Zapier Integration" are normalized:
+- Strip parenthetical content: "Notion (Legacy)" → "notion"
+- Strip common suffixes: "-prod", "-dev", "-test", "-staging", "-api", "-integration"
+- Match against VENDOR_TO_DOMAIN for canonical domain
 
 **Domain-Level Aggregation:**
 Multiple assets sharing the same domain key are merged:
@@ -143,6 +150,11 @@ Multiple assets sharing the same domain key are merged:
 **Example:**
 - `Notion (Legacy)` + `Notion-prod` → Both roll up under `notion.so`
 - `aliases: ["Notion (Legacy)", "Notion-prod"]`
+
+**Canonical Flag Tracking:**
+Only assets with `is_domain_canonical=True` are counted in shadow/zombie stats:
+- Domain-keyed assets (from steps 1-4) → canonical, counted
+- Name-derived fallbacks (step 5) → NOT canonical, excluded from counts
 
 This eliminates KEY_NORMALIZATION_MISMATCH errors in Farm reconciliation by ensuring AOD and Farm use the same canonical domain keys.
 

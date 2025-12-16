@@ -526,6 +526,24 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     )
 
 
+def _normalize_name_for_vendor_lookup(name: str) -> str:
+    """
+    Normalize asset name for vendor lookup by stripping common suffixes.
+    
+    Examples:
+        "Notion-prod" -> "notion"
+        "Notion (Legacy)" -> "notion"
+        "Monday.com-Test" -> "monday.com"
+        "Zapier Integration" -> "zapier"
+    """
+    import re
+    name = name.lower().strip()
+    name = re.sub(r'\s*[\(\[].*?[\)\]]', '', name)
+    name = re.sub(r'[-_]\s*(prod|dev|test|staging|legacy|integration|api|v\d+).*$', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s+(prod|dev|test|staging|legacy|integration|api)$', '', name, flags=re.IGNORECASE)
+    return name.strip()
+
+
 def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
     """
     Resolve the canonical domain key for an asset.
@@ -534,11 +552,12 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
         Tuple of (domain_key, is_canonical) where is_canonical indicates
         whether the key represents a registered domain (True) or is name-derived (False).
     
-    Priority order:
+    Priority order (DOMAIN PROMOTION):
     1. asset.identifiers.domains (explicit domain from evidence) -> canonical
     2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
-    3. Asset name if it looks like a domain -> canonical
-    4. Fallback: normalized name -> NOT canonical
+    3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
+    4. Asset name if it looks like a domain -> canonical
+    5. Fallback: normalized name -> NOT canonical
     
     INVARIANT: This must match the key resolution in aod_agent_reconcile.py
     to ensure UI counts match reconciliation counts.
@@ -552,6 +571,10 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
         vendor_key = asset.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
             return (VENDOR_TO_DOMAIN[vendor_key], True)
+    
+    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
+    if normalized_name in VENDOR_TO_DOMAIN:
+        return (VENDOR_TO_DOMAIN[normalized_name], True)
     
     name = asset.name.lower().strip()
     if "." in name:

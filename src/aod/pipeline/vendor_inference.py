@@ -166,6 +166,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "sap.com": "SAP",
     "ibm.com": "IBM",
     "cisco.com": "Cisco",
+    "webex.com": "Webex",
     "vmware.com": "VMware",
     "citrix.com": "Citrix",
     "basecamp.com": "Basecamp",

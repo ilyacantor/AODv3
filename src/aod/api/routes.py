@@ -327,6 +327,85 @@ async def create_run_from_farm(request: FarmRunRequest):
     )
 
 
+class ResyncRequest(BaseModel):
+    """Request for re-syncing a run to Farm"""
+    run_id: str
+
+
+class ResyncResponse(BaseModel):
+    """Response for re-sync operation"""
+    run_id: str
+    sync_status: str
+    sync_error: Optional[str] = None
+    shadow_asset_keys: list[str]
+    zombie_asset_keys: list[str]
+    asset_summaries_keys: list[str]
+
+
+@router.post("/runs/resync", response_model=ResyncResponse)
+async def resync_run_to_farm(request: ResyncRequest):
+    """
+    Re-sync an existing run to Farm.
+    
+    This endpoint allows manually re-triggering the Farm callback for an existing run.
+    Useful for testing that the callback payload contains correct domain-keyed assets.
+    
+    Returns the sync status and a sample of the payload that was sent.
+    """
+    db = await get_db()
+    run = await db.get_run(request.run_id)
+    
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+    
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured")
+    
+    snapshot_id = run.input_meta.get("snapshot_id")
+    if not snapshot_id:
+        raise HTTPException(status_code=400, detail="Run has no snapshot_id in metadata")
+    
+    assets = await db.get_assets_by_run(request.run_id)
+    findings = await db.get_findings_by_run(request.run_id)
+    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=1000)
+    
+    success, error = await reconcile_to_farm(
+        run_log=run,
+        assets=assets,
+        findings=findings,
+        snapshot_id=snapshot_id,
+        farm_url=farm_url,
+        rejections=rejections
+    )
+    
+    if success:
+        run.sync_status = SyncStatus.SYNCED
+        run.sync_error = None
+    else:
+        run.sync_status = SyncStatus.FAILED
+        run.sync_error = error
+    
+    await db.update_run(run)
+    
+    from ..pipeline.aod_agent_reconcile import emit_actual_results
+    actual_results = emit_actual_results(
+        run_id=request.run_id,
+        assets=assets,
+        activity_window_days=90,
+        rejections=rejections
+    )
+    
+    return ResyncResponse(
+        run_id=request.run_id,
+        sync_status=run.sync_status.value,
+        sync_error=run.sync_error,
+        shadow_asset_keys=actual_results.shadow_actual,
+        zombie_asset_keys=actual_results.zombie_actual,
+        asset_summaries_keys=sorted(actual_results.actual_reasons.keys())
+    )
+
+
 @router.get("/runs/latest", response_model=RunDetailResponse)
 async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
     """

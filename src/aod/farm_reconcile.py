@@ -96,7 +96,8 @@ def build_reconcile_payload(
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],
             "high_severity_findings": high_severity_findings,
-            "actual_reason_codes": actual_results.actual_reasons
+            "actual_reason_codes": actual_results.actual_reasons,
+            "asset_summaries": asset_summaries
         }
     }
 

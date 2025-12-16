@@ -65,6 +65,9 @@ def build_reconcile_payload(
             "evidence_summary": details.get("evidence_summary", {})
         }
     
+    shadow_asset_keys = sorted([k for k, v in asset_summaries.items() if v.get("is_shadow")])
+    zombie_asset_keys = sorted([k for k, v in asset_summaries.items() if v.get("is_zombie")])
+    
     return {
         "payload_version": 2,
         "has_asset_summaries": len(asset_summaries) > 0,
@@ -83,15 +86,15 @@ def build_reconcile_payload(
             "rejected": run_log.counts.rejected,
             "ambiguous_matches": run_log.counts.ambiguous_matches,
             "findings_generated": run_log.counts.findings_generated,
-            "shadow_count": actual_results.summary["shadow_actual_count"],
-            "zombie_count": actual_results.summary["zombie_actual_count"]
+            "shadow_count": len(shadow_asset_keys),
+            "zombie_count": len(zombie_asset_keys)
         },
-        "shadow_asset_keys": actual_results.shadow_actual,
-        "zombie_asset_keys": actual_results.zombie_actual,
+        "shadow_asset_keys": shadow_asset_keys,
+        "zombie_asset_keys": zombie_asset_keys,
         "asset_summaries": asset_summaries,
         "aod_lists": {
-            "shadow_asset_keys_sample": actual_results.shadow_actual[:10],
-            "zombie_asset_keys_sample": actual_results.zombie_actual[:10],
+            "shadow_asset_keys_sample": shadow_asset_keys[:10],
+            "zombie_asset_keys_sample": zombie_asset_keys[:10],
             "high_severity_findings": high_severity_findings,
             "actual_reason_codes": actual_results.actual_reasons
         }

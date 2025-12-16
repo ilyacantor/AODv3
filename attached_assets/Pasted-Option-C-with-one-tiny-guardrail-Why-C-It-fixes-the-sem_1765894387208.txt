@@ -1,0 +1,49 @@
+Option **C**, with one tiny guardrail.
+
+### Why C
+
+* It fixes the semantic bug **without touching schema**.
+* You already have the correct truth source: `LensStatuses` is “correlation presence”.
+* Your current `LensCoverage` is “admission gate passed”. That’s still useful internally, just not for “HAS_*” reason codes.
+
+### The guardrail (so we don’t drift again)
+
+**Rename the reason codes mentally (and in comments):**
+
+* `HAS_FINANCE` / `HAS_DISCOVERY` mean **presence** (from `LensStatuses` + discovery observations)
+* If you need to show “admitted via finance”, use a different token later (e.g., `FINANCE_GATE_PASSED`) — don’t overload `HAS_FINANCE`.
+
+### Implement C precisely (no oscillation)
+
+Update only the *reason code computation* paths:
+
+1. **In DomainRollup.get_reason_codes()**
+
+* Use `asset.lens_status.finance in {MATCHED, AMBIGUOUS}` → emit `HAS_FINANCE`
+* Same for idp/cmdb/cloud
+* For discovery: use “any discovery observations exist” (not discovery admission). If you don’t store that directly, derive it from “observations seen” / “discovery sources count > 0”.
+
+2. **In compute_asset_reasons()**
+
+* Same rules as above, so Farm and AOD agent reconcile emit identical semantics.
+
+Leave admission exactly as-is. Leave `LensCoverage` as-is for now.
+
+### Clarify “asset evidence” (what it should mean)
+
+For reconciliation and reason codes, **evidence = plane presence**:
+
+* Finance evidence: any correlated finance record (matched or ambiguous)
+* Discovery evidence: any discovery observation (even stale)
+* IdP evidence: any IdP match status (matched/ambiguous)
+
+Admission is a *policy decision* layered on top.
+
+### Quick expected outcome
+
+After C:
+
+* Zombies will stop saying `NO_DISCOVERY` when there were discovery observations (they’ll still be zombies because they’re stale).
+* Calendly-like cases stop showing `NO_FINANCE` if finance correlation succeeded, even if finance gate didn’t admit.
+
+If you want the least risky follow-on: later add optional “gate passed” codes, but **don’t block on that**.

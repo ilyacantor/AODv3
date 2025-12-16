@@ -109,6 +109,10 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     """
     Compute the canonical reason codes for an asset's current state.
     
+    IMPORTANT: HAS_* codes mean PRESENCE (evidence exists in plane), not admission.
+    - HAS_FINANCE = finance correlation found evidence (MATCHED or AMBIGUOUS)
+    - HAS_DISCOVERY = discovery observations exist (even if stale)
+    
     Returns:
         Tuple of (reasons list, evidence summary dict)
     """
@@ -117,9 +121,12 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_finance = asset.lens_coverage.finance
-    has_cloud = asset.lens_coverage.cloud
-    has_discovery = asset.lens_coverage.discovery
+    has_finance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_discovery = any(
+        isinstance(ref, str) and ref.startswith("discovery:")
+        for ref in asset.evidence_refs
+    ) or asset.activity_evidence.discovery_observed_at is not None
     
     if has_idp:
         reasons.append(ReasonCode.HAS_IDP)

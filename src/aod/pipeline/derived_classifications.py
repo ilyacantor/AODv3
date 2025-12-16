@@ -497,8 +497,12 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
     - has_cmdb = OR(all entities with this domain)
     - etc.
     
-    This ensures that if ANY entity under a domain is governed,
-    the domain is considered governed for reconciliation purposes.
+    IMPORTANT: HAS_* means PRESENCE (evidence exists), not admission gate passed.
+    - has_finance = True if finance correlation found evidence (MATCHED/AMBIGUOUS)
+    - has_discovery = True if discovery observations exist (even if stale)
+    
+    This ensures that if ANY entity under a domain has evidence,
+    the domain is considered to have that evidence for reconciliation purposes.
     """
     rollups: dict[str, DomainRollup] = {}
     
@@ -514,9 +518,12 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
         
         has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_finance = asset.lens_coverage.finance
-        has_cloud = asset.lens_coverage.cloud
-        has_discovery = asset.lens_coverage.discovery
+        has_finance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        has_discovery = any(
+            isinstance(ref, str) and ref.startswith("discovery:")
+            for ref in asset.evidence_refs
+        ) or asset.activity_evidence.discovery_observed_at is not None
         latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
         
         if domain_key in rollups:

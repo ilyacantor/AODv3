@@ -89,6 +89,8 @@ FastAPI application with these key endpoints:
 - `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
 - `POST /api/debug/aod-agent-reconcile` - AOD Agent diagnostic reconciliation (actual results + RCA codes)
 - `POST /api/reconcile/explain-nonflag` - Explain why specific assets are NOT in shadow/zombie lists
+- `GET /api/runs/{run_id}/reconcile-payload` - Get the exact payload that would be sent to Farm (uses shared helper)
+- `POST /api/runs/resync` - Re-trigger Farm callback for existing run (for debugging/verification)
 
 ### AOD Actual Results Emitter
 

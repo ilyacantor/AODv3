@@ -2,7 +2,7 @@
 
 import os
 import httpx
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime, timezone, timedelta
 
 PST = timezone(timedelta(hours=-8))
@@ -14,39 +14,29 @@ from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
 from .pipeline.aod_agent_reconcile import emit_actual_results
 
 
-async def reconcile_to_farm(
+def build_reconcile_payload(
     run_log: RunLog,
     assets: list[Asset],
     findings: list[Finding],
     snapshot_id: str,
-    farm_url: Optional[str] = None,
     rejections: list[dict] | None = None
-) -> tuple[bool, Optional[str]]:
+) -> dict[str, Any]:
     """
-    Reconcile AOD results back to Farm.
+    Build the reconcile payload for Farm.
     
-    POSTs a summary of the run results to {FARM_URL}/api/reconcile
-    
-    Uses emit_actual_results() which includes:
-    - Reconciliation eligibility filter (excludes internal identifiers)
-    - Per-asset reason codes and decision status
-    - Rejected candidates with their reason codes
+    SINGLE SOURCE OF TRUTH for payload structure.
+    Used by both reconcile_to_farm() and /api/runs/{run_id}/reconcile-payload endpoint.
     
     Args:
         run_log: The completed run log
         assets: List of admitted assets
         findings: List of generated findings
         snapshot_id: The source snapshot ID
-        farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
         rejections: Optional list of rejected candidates
     
     Returns:
-        Tuple of (success: bool, error_message: Optional[str])
+        The reconcile payload dict ready to be sent to Farm or returned via API
     """
-    base_url = farm_url or os.environ.get("FARM_URL")
-    if not base_url:
-        return False, "No Farm URL configured"
-    
     actual_results = emit_actual_results(
         run_id=run_log.run_id,
         assets=assets,
@@ -75,7 +65,7 @@ async def reconcile_to_farm(
             "evidence_summary": details.get("evidence_summary", {})
         }
     
-    reconcile_payload = {
+    return {
         "snapshot_id": snapshot_id,
         "tenant_id": run_log.tenant_id,
         "aod_run_id": run_log.run_id,
@@ -103,6 +93,46 @@ async def reconcile_to_farm(
             "actual_reason_codes": actual_results.actual_reasons
         }
     }
+
+
+async def reconcile_to_farm(
+    run_log: RunLog,
+    assets: list[Asset],
+    findings: list[Finding],
+    snapshot_id: str,
+    farm_url: Optional[str] = None,
+    rejections: list[dict] | None = None
+) -> tuple[bool, Optional[str]]:
+    """
+    Reconcile AOD results back to Farm.
+    
+    POSTs a summary of the run results to {FARM_URL}/api/reconcile
+    
+    Uses build_reconcile_payload() which is the single source of truth for
+    payload structure, shared with the /api/runs/{run_id}/reconcile-payload endpoint.
+    
+    Args:
+        run_log: The completed run log
+        assets: List of admitted assets
+        findings: List of generated findings
+        snapshot_id: The source snapshot ID
+        farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
+        rejections: Optional list of rejected candidates
+    
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
+    base_url = farm_url or os.environ.get("FARM_URL")
+    if not base_url:
+        return False, "No Farm URL configured"
+    
+    reconcile_payload = build_reconcile_payload(
+        run_log=run_log,
+        assets=assets,
+        findings=findings,
+        snapshot_id=snapshot_id,
+        rejections=rejections
+    )
     
     headers = {"Content-Type": "application/json"}
     

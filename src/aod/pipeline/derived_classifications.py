@@ -57,6 +57,70 @@ class DistributionDiagnostic:
 
 
 @dataclass
+class DomainRollup:
+    """Aggregated governance signals for a domain (OR logic across entities)"""
+    domain_key: str
+    has_idp: bool
+    has_cmdb: bool
+    has_finance: bool
+    has_cloud: bool
+    has_discovery: bool
+    latest_activity_at: Optional[datetime]
+    entity_names: list[str]
+    entity_count: int
+    
+    def is_shadow(self, activity_window_days: int = 90) -> bool:
+        """Domain-level shadow: no governance + has existence evidence + recent activity"""
+        has_governance = self.has_idp or self.has_cmdb
+        has_existence = self.has_finance or self.has_cloud or self.has_discovery
+        
+        if has_governance or not has_existence:
+            return False
+        
+        if self.latest_activity_at is None:
+            return False
+        
+        cutoff = _utc_now() - timedelta(days=activity_window_days)
+        latest = _ensure_utc_aware(self.latest_activity_at)
+        return latest is not None and latest >= cutoff
+    
+    def is_zombie(self, activity_window_days: int = 90) -> bool:
+        """Domain-level zombie: has governance + stale/no activity"""
+        has_governance = self.has_idp or self.has_cmdb
+        
+        if not has_governance:
+            return False
+        
+        if self.latest_activity_at is None:
+            return True
+        
+        cutoff = _utc_now() - timedelta(days=activity_window_days)
+        latest = _ensure_utc_aware(self.latest_activity_at)
+        return latest is not None and latest < cutoff
+    
+    def get_reason_codes(self) -> list[str]:
+        """Generate canonical reason codes for this domain"""
+        codes = []
+        codes.append("HAS_IDP" if self.has_idp else "NO_IDP")
+        codes.append("HAS_CMDB" if self.has_cmdb else "NO_CMDB")
+        codes.append("HAS_FINANCE" if self.has_finance else "NO_FINANCE")
+        codes.append("HAS_CLOUD" if self.has_cloud else "NO_CLOUD")
+        codes.append("HAS_DISCOVERY" if self.has_discovery else "NO_DISCOVERY")
+        
+        if self.latest_activity_at is not None:
+            codes.append("HAS_ACTIVITY_TIMESTAMP")
+        else:
+            codes.append("NO_ACTIVITY_TIMESTAMP")
+        
+        if self.is_shadow():
+            codes.append("SHADOW_CLASSIFICATION")
+        elif self.is_zombie():
+            codes.append("ZOMBIE_CLASSIFICATION")
+        
+        return codes
+
+
+@dataclass
 class DerivedClassificationSummary:
     """Summary of derived classifications for a run"""
     shadow_count: int
@@ -65,6 +129,7 @@ class DerivedClassificationSummary:
     shadow_assets: list[dict]
     zombie_assets: list[dict]
     distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
+    domain_rollups: dict[str, DomainRollup] = field(default_factory=dict)
 
 
 def classify_shadow(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
@@ -410,11 +475,73 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     
     distribution.indeterminate_count = indeterminate_count
     
+    domain_rollups = compute_domain_rollups(assets, activity_window_days)
+    
     return DerivedClassificationSummary(
         shadow_count=len(shadow_assets),
         zombie_count=len(zombie_assets),
         indeterminate_count=indeterminate_count,
         shadow_assets=shadow_assets,
         zombie_assets=zombie_assets,
-        distribution=distribution
+        distribution=distribution,
+        domain_rollups=domain_rollups
     )
+
+
+def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) -> dict[str, DomainRollup]:
+    """
+    Compute domain-level rollups using OR logic across entities.
+    
+    For reconciliation, governance signals are aggregated at domain level:
+    - has_idp = OR(all entities with this domain)
+    - has_cmdb = OR(all entities with this domain)
+    - etc.
+    
+    This ensures that if ANY entity under a domain is governed,
+    the domain is considered governed for reconciliation purposes.
+    """
+    rollups: dict[str, DomainRollup] = {}
+    
+    for asset in assets:
+        domains = []
+        if asset.identifiers and asset.identifiers.domains:
+            domains = list(asset.identifiers.domains)
+        
+        if not domains:
+            domain_key = asset.name.lower().replace(" ", "_")
+        else:
+            domain_key = domains[0].lower()
+        
+        has_idp = asset.lens_status.idp == LensStatus.MATCHED
+        has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+        has_finance = asset.lens_coverage.finance
+        has_cloud = asset.lens_coverage.cloud
+        has_discovery = asset.lens_coverage.discovery
+        latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+        
+        if domain_key in rollups:
+            r = rollups[domain_key]
+            r.has_idp = r.has_idp or has_idp
+            r.has_cmdb = r.has_cmdb or has_cmdb
+            r.has_finance = r.has_finance or has_finance
+            r.has_cloud = r.has_cloud or has_cloud
+            r.has_discovery = r.has_discovery or has_discovery
+            r.entity_names.append(asset.name)
+            r.entity_count += 1
+            if latest_activity is not None:
+                if r.latest_activity_at is None or latest_activity > r.latest_activity_at:
+                    r.latest_activity_at = latest_activity
+        else:
+            rollups[domain_key] = DomainRollup(
+                domain_key=domain_key,
+                has_idp=has_idp,
+                has_cmdb=has_cmdb,
+                has_finance=has_finance,
+                has_cloud=has_cloud,
+                has_discovery=has_discovery,
+                latest_activity_at=latest_activity,
+                entity_names=[asset.name],
+                entity_count=1
+            )
+    
+    return rollups

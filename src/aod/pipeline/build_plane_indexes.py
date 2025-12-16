@@ -122,6 +122,12 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
         if vendor_record:
             vendor_name = normalize_string(vendor_record.name)
             add_to_index(index.by_vendor_product, vendor_name, record_id)
+            add_to_index(index.by_canonical_name, vendor_name, record_id)
+        
+        if contract.vendor_name:
+            vendor_name_from_contract = normalize_string(contract.vendor_name)
+            add_to_index(index.by_canonical_name, vendor_name_from_contract, record_id)
+            add_to_index(index.by_vendor_product, vendor_name_from_contract, record_id)
         
         if contract.product:
             product_name = normalize_string(contract.product)

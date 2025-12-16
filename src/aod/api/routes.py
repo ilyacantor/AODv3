@@ -294,13 +294,15 @@ async def create_run_from_farm(request: FarmRunRequest):
         
         assets = await db.get_assets_by_run(run_id)
         findings = await db.get_findings_by_run(run_id)
+        rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
         
         success, error = await reconcile_to_farm(
             run_log=result.run_log,
             assets=assets,
             findings=findings,
             snapshot_id=request.snapshot_id,
-            farm_url=farm_url
+            farm_url=farm_url,
+            rejections=rejections
         )
         
         if success:

@@ -11,7 +11,7 @@ def now_pst() -> datetime:
     return datetime.now(PST)
 
 from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
-from .pipeline.derived_classifications import compute_derived_classifications
+from .pipeline.aod_agent_reconcile import emit_actual_results
 
 
 async def reconcile_to_farm(
@@ -19,12 +19,18 @@ async def reconcile_to_farm(
     assets: list[Asset],
     findings: list[Finding],
     snapshot_id: str,
-    farm_url: Optional[str] = None
+    farm_url: Optional[str] = None,
+    rejections: list[dict] | None = None
 ) -> tuple[bool, Optional[str]]:
     """
     Reconcile AOD results back to Farm.
     
     POSTs a summary of the run results to {FARM_URL}/api/reconcile
+    
+    Uses emit_actual_results() which includes:
+    - Reconciliation eligibility filter (excludes internal identifiers)
+    - Per-asset reason codes and decision status
+    - Rejected candidates with their reason codes
     
     Args:
         run_log: The completed run log
@@ -32,6 +38,7 @@ async def reconcile_to_farm(
         findings: List of generated findings
         snapshot_id: The source snapshot ID
         farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
+        rejections: Optional list of rejected candidates
     
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -40,20 +47,12 @@ async def reconcile_to_farm(
     if not base_url:
         return False, "No Farm URL configured"
     
-    derived = compute_derived_classifications(assets, activity_window_days=90)
-    
-    shadow_asset_keys = []
-    zombie_asset_keys = []
-    actual_reasons: dict[str, list[str]] = {}
-    
-    for domain_key, rollup in derived.domain_rollups.items():
-        reason_codes = rollup.get_reason_codes()
-        actual_reasons[domain_key] = reason_codes
-        
-        if rollup.is_shadow():
-            shadow_asset_keys.append(domain_key)
-        elif rollup.is_zombie():
-            zombie_asset_keys.append(domain_key)
+    actual_results = emit_actual_results(
+        run_id=run_log.run_id,
+        assets=assets,
+        activity_window_days=90,
+        rejections=rejections
+    )
     
     high_severity_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
@@ -64,6 +63,17 @@ async def reconcile_to_farm(
     aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
     if aod_callback_url and not aod_callback_url.startswith("http"):
         aod_callback_url = f"https://{aod_callback_url}"
+    
+    asset_summaries = {}
+    for key, reasons in actual_results.actual_reasons.items():
+        details = actual_results.asset_details.get(key, {})
+        asset_summaries[key] = {
+            "aod_decision": actual_results.admission_actual.get(key, "unknown"),
+            "aod_reason_codes": reasons,
+            "is_shadow": details.get("is_shadow", False),
+            "is_zombie": details.get("is_zombie", False),
+            "evidence_summary": details.get("evidence_summary", {})
+        }
     
     reconcile_payload = {
         "snapshot_id": snapshot_id,
@@ -80,16 +90,17 @@ async def reconcile_to_farm(
             "rejected": run_log.counts.rejected,
             "ambiguous_matches": run_log.counts.ambiguous_matches,
             "findings_generated": run_log.counts.findings_generated,
-            "shadow_count": len(shadow_asset_keys),
-            "zombie_count": len(zombie_asset_keys)
+            "shadow_count": actual_results.summary["shadow_actual_count"],
+            "zombie_count": actual_results.summary["zombie_actual_count"]
         },
-        "shadow_asset_keys": shadow_asset_keys,
-        "zombie_asset_keys": zombie_asset_keys,
+        "shadow_asset_keys": actual_results.shadow_actual,
+        "zombie_asset_keys": actual_results.zombie_actual,
+        "asset_summaries": asset_summaries,
         "aod_lists": {
-            "shadow_asset_keys_sample": shadow_asset_keys[:10],
-            "zombie_asset_keys_sample": zombie_asset_keys[:10],
+            "shadow_asset_keys_sample": actual_results.shadow_actual[:10],
+            "zombie_asset_keys_sample": actual_results.zombie_actual[:10],
             "high_severity_findings": high_severity_findings,
-            "actual_reason_codes": actual_reasons
+            "actual_reason_codes": actual_results.actual_reasons
         }
     }
     

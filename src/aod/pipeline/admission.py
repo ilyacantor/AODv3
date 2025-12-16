@@ -40,8 +40,9 @@ def check_idp_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check IdP plane admission criteria:
     - IdP match AND (has_sso OR has_scim OR idp_type==service_principal)
+    NOTE: Both MATCHED and AMBIGUOUS count as having IdP evidence.
     """
-    if correlation.idp.status != MatchStatus.MATCHED:
+    if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
     for record in correlation.idp.matched_records:
@@ -60,8 +61,9 @@ def check_cmdb_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check CMDB plane admission criteria:
     - CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
+    NOTE: Both MATCHED and AMBIGUOUS count as having CMDB evidence.
     """
-    if correlation.cmdb.status != MatchStatus.MATCHED:
+    if correlation.cmdb.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
     for record in correlation.cmdb.matched_records:
@@ -79,8 +81,9 @@ def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check Cloud plane admission criteria:
     - Cloud match AND resource_type indicates real system/resource
+    NOTE: Both MATCHED and AMBIGUOUS count as having Cloud evidence.
     """
-    if correlation.cloud.status != MatchStatus.MATCHED:
+    if correlation.cloud.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
     for record in correlation.cloud.matched_records:
@@ -99,8 +102,9 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     - Finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
     
     IMPORTANT: Vendor alone is not admission.
+    NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
     """
-    if correlation.finance.status != MatchStatus.MATCHED:
+    if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
     has_contract = False

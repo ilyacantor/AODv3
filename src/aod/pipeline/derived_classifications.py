@@ -153,8 +153,8 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
-    has_idp = asset.lens_status.idp == LensStatus.MATCHED
-    has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
@@ -240,8 +240,8 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     """
     from datetime import timedelta
     
-    has_idp = asset.lens_status.idp == LensStatus.MATCHED
-    has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
     if not (has_idp or has_cmdb):
         return False, False, "Not in IdP or CMDB - cannot be zombie"
@@ -283,8 +283,8 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
-    has_idp = asset.lens_status.idp == LensStatus.MATCHED
-    has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
     if not (has_idp or has_cmdb):
         return ClassificationResult(
@@ -512,8 +512,8 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
         else:
             domain_key = domains[0].lower()
         
-        has_idp = asset.lens_status.idp == LensStatus.MATCHED
-        has_cmdb = asset.lens_status.cmdb == LensStatus.MATCHED
+        has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_finance = asset.lens_coverage.finance
         has_cloud = asset.lens_coverage.cloud
         has_discovery = asset.lens_coverage.discovery

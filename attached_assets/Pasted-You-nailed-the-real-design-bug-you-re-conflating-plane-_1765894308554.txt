@@ -1,0 +1,65 @@
+You nailed the real design bug: **you’re conflating “plane presence” with “admitted-via-that-plane.”** That’s why the system keeps feeling spooky.
+
+### What’s actually wrong (in one sentence)
+
+`lens_coverage` is being used as **coverage**, but it’s populated with **admission-gate booleans**.
+
+So `HAS_FINANCE` currently means “finance admission gate passed,” not “finance plane has evidence.”
+
+That’s why:
+
+* Calendly can have a finance match + contract but still show `NO_FINANCE` if the finance admission gate didn’t pass for whatever reason.
+* Zombies show `NO_DISCOVERY` because discovery admission is “recent + ≥2 sources,” which zombies will fail by definition.
+
+### The correct design (simple, systemic)
+
+You need **two fields**, not one:
+
+1. **PlanePresence** (aka *evidence presence*, correlation-level)
+
+* `presence.finance = True` if correlation status is `MATCHED OR AMBIGUOUS` (or if any finance record matched)
+* `presence.discovery = True` if any discovery observation exists (even stale)
+* Same for IdP/CMDB/Cloud
+
+2. **AdmissionVia** (aka *gate success*)
+
+* `admitted_via.finance = True` only if finance gate passed (contract/recurring/etc.)
+* `admitted_via.discovery = True` only if your discovery-only admission rule passed (≥2 sources + recent)
+
+Then:
+
+* **Reason codes** should use **PlanePresence** (`HAS_FINANCE` means presence)
+* **Admission stats** should use **AdmissionVia**
+* Shadow/zombie logic should use **Presence** + your rules (e.g., zombie can have `HAS_DISCOVERY` but still be stale)
+
+### Why Farm and AOD disagree
+
+Farm is grading “HAS_DISCOVERY / HAS_FINANCE” as **presence** (A).
+AOD is emitting those codes as **admission** (B).
+
+So you’re both right — you’re just speaking different languages with the same token names.
+
+### Minimal fix without “belt and suspenders”
+
+Don’t change the world. Do this:
+
+* Keep `lens_coverage` but **redefine it to mean PlanePresence** (true if correlated evidence exists).
+* Add a separate `admission_via` (or `lens_admission`) if you still need to display/compute “admitted via X.”
+
+If you refuse to add a field, then at least rename:
+
+* `lens_coverage` → `admission_coverage` (but that’s worse UX because “HAS_FINANCE” becomes misleading forever).
+
+### Apply it to your two issues
+
+* **Calendly NO_FINANCE** becomes impossible if `HAS_FINANCE` is presence-based.
+* **Zombies NO_DISCOVERY** goes away (they can still be stale, but they did have discovery evidence).
+
+### One crisp invariant to adopt
+
+> **Presence answers: “do we have evidence in this plane?”**
+> **Admission answers: “was this plane sufficient to admit the asset?”**
+
+If you adopt that, your reconciliation stops fighting semantics and starts exposing real bugs.
+
+If you paste your current `LensCoverage` definition (fields/types) I can suggest the *cleanest* minimal schema change (one additional object, no explosion).

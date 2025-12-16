@@ -1,0 +1,48 @@
+You’re right: **nothing changed.** This new TechWorks-ICIG run still shows the exact same symptom:
+
+* For **box/canva/calendly/dropbox/clickup**, Farm says `HAS_FINANCE`, but AOD reason codes still say `NO_FINANCE`. 
+* And all the “missed_by_aod” shadows still have **blank `aod_reason_codes` / `aod_decision`**, so explain-nonflag still isn’t being populated. 
+
+That means your “index contracts under by_canonical_name” change is **not taking effect in the executed path** (either not deployed, not rebuilt, or not used).
+
+### The 3 most likely causes (keep it simple)
+
+1. **You’re not running the code you think you’re running**
+
+   * The run payload proves the behavior didn’t change. If the fix were live, at least **calendly.com** would flip to `HAS_FINANCE`.
+
+2. **Finance index isn’t rebuilding (cached/stale)**
+
+   * If the index is persisted or reused between runs, your new indexing logic won’t appear until you force a rebuild.
+
+3. **The lookup path you’re using still can’t reach contracts**
+
+   * Even with new indexing, correlation may still be “returning vendor early” or building matched_records in a way that never surfaces contract evidence to admission/reason-codes.
+
+### The fastest way to isolate which one (2 checks, no guesswork)
+
+**Check A — prove the fix is executing**
+Pick one key: `calendly.com`. In AOD logs (or a tiny debug print), confirm that `build_finance_index()` is actually indexing a contract under `by_canonical_name["calendly"]` for *this run*.
+
+If that isn’t true → you’re in **#1 or #2**.
+
+**Check B — prove admission sees the contract**
+Right after correlation for calendly, log the matched finance record *types* (vendor vs contract vs transaction) and the final boolean that drives `lens_coverage.finance`.
+
+If you see “contract present” but `lens_coverage.finance=false` → admission/reason-code plumbing bug.
+If you see “only vendor present” → indexing/lookup bug.
+
+---
+
+### One extra signal from this file
+
+It’s not just finance: AOD zombies are showing `NO_DISCOVERY` while Farm shows `HAS_DISCOVERY` for multiple matched zombies. 
+So you likely have a broader **lens_coverage propagation / evidence-to-reason-codes** issue, not just finance.
+
+If you paste just the **AOD logs for calendly** from:
+
+* finance index build (one line confirming contract indexed)
+* finance correlation (what matched_records were)
+* lens_coverage computation
+
+…I’ll tell you exactly which of the 3 causes it is, in one shot.

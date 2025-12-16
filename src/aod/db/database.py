@@ -640,3 +640,140 @@ class Database:
             for row in rows
         ]
         return items, total
+    
+    async def create_observation_samples_batch(self, samples: list[tuple]) -> None:
+        """Batch insert observation samples. Each tuple: (id, run_id, name, domain, source, category, raw_preview, created_at)"""
+        if not samples:
+            return
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                samples
+            )
+    
+    async def create_ambiguous_matches_batch(self, matches: list[tuple]) -> None:
+        """Batch insert ambiguous matches. Each tuple: (id, run_id, entity_key, entity_name, plane, candidate_ids_json, candidate_names_json, match_keys_json, created_at)"""
+        if not matches:
+            return
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
+                matches
+            )
+    
+    async def create_rejections_batch(self, rejections: list[tuple]) -> None:
+        """Batch insert rejections. Each tuple: (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary_json, created_at)"""
+        if not rejections:
+            return
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                rejections
+            )
+    
+    async def create_assets_batch(self, assets: list[Asset]) -> None:
+        """Batch insert assets"""
+        if not assets:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for asset in assets:
+            rows.append((
+                str(asset.asset_id),
+                asset.tenant_id,
+                asset.run_id,
+                asset.name,
+                asset.asset_type.value,
+                asset.identifiers.model_dump_json(),
+                asset.vendor,
+                asset.vendor_hypothesis.model_dump_json() if asset.vendor_hypothesis else None,
+                asset.environment.value,
+                json.dumps(asset.evidence_refs),
+                asset.lens_status.model_dump_json(),
+                asset.lens_coverage.model_dump_json(),
+                asset.activity_evidence.model_dump_json(),
+                json.dumps(asset.tags),
+                asset.admission_reason,
+                asset.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO assets (
+                    asset_id, tenant_id, run_id, name, asset_type, identifiers,
+                    vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
+                    activity_evidence, tags, admission_reason, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                """,
+                rows
+            )
+    
+    async def create_findings_batch(self, findings: list[Finding]) -> None:
+        """Batch insert findings"""
+        if not findings:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for f in findings:
+            rows.append((
+                str(f.finding_id),
+                str(f.asset_id) if f.asset_id else None,
+                f.tenant_id,
+                f.run_id,
+                f.finding_type.value,
+                f.severity.value,
+                f.explanation,
+                json.dumps(f.evidence_refs),
+                f.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO findings (
+                    finding_id, asset_id, tenant_id, run_id, finding_type,
+                    severity, explanation, evidence_refs, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
+                rows
+            )
+    
+    async def create_artifacts_batch(self, artifacts: list[Artifact]) -> None:
+        """Batch insert artifacts"""
+        if not artifacts:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for artifact in artifacts:
+            rows.append((
+                str(artifact.artifact_id),
+                artifact.tenant_id,
+                artifact.run_id,
+                str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
+                artifact.name,
+                artifact.artifact_type.value,
+                artifact.source,
+                artifact.evidence_ref,
+                artifact.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO artifacts (
+                    artifact_id, tenant_id, run_id, parent_asset_id, name,
+                    artifact_type, source, evidence_ref, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
+                rows
+            )

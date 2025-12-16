@@ -103,7 +103,8 @@ async def execute_pipeline(
         candidates = normalize_observations(observations)
         run_log.counts.candidates_out = len(candidates)
         
-        for i, candidate in enumerate(candidates[:MAX_OBSERVATION_SAMPLES]):
+        obs_samples = []
+        for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:
             sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.entity_id))
             raw_data = {
                 "entity_id": candidate.entity_id,
@@ -116,16 +117,11 @@ async def execute_pipeline(
                 "source": candidate.source
             }
             raw_preview = json.dumps(raw_data)[:500]
-            await db.create_observation_sample(
-                sample_id=sample_id,
-                run_id=run_id,
-                name=candidate.original_name,
-                domain=candidate.domain,
-                source=candidate.source,
-                category=None,
-                raw_preview=raw_preview,
-                created_at=started_at
-            )
+            obs_samples.append((
+                sample_id, run_id, candidate.original_name, candidate.domain,
+                candidate.source, None, raw_preview, started_at.isoformat()
+            ))
+        await db.create_observation_samples_batch(obs_samples)
         
         indexes = build_plane_indexes(snapshot.planes)
         
@@ -155,6 +151,7 @@ async def execute_pipeline(
             return len(vendor_names) > 1
         
         ambiguous_count = 0
+        ambiguous_matches_batch = []
         for c in correlations:
             planes_ambiguous = []
             if c.idp.status == MatchStatus.AMBIGUOUS:
@@ -181,17 +178,12 @@ async def execute_pipeline(
                             candidate_names.append(str(rec))
                     
                     match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.entity_id, plane))
-                    await db.create_ambiguous_match(
-                        match_id=match_id,
-                        run_id=run_id,
-                        entity_key=c.entity.entity_id,
-                        entity_name=c.entity.original_name,
-                        plane=plane,
-                        candidate_ids=plane_match.matched_ids,
-                        candidate_names=candidate_names[:10],
-                        match_keys=[plane_match.match_method or "unknown"],
-                        created_at=started_at
-                    )
+                    ambiguous_matches_batch.append((
+                        match_id, run_id, c.entity.entity_id, c.entity.original_name, plane,
+                        json.dumps(plane_match.matched_ids), json.dumps(candidate_names[:10]),
+                        json.dumps([plane_match.match_method or "unknown"]), started_at.isoformat()
+                    ))
+        await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
         
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
@@ -200,23 +192,18 @@ async def execute_pipeline(
         correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
         
         assets = []
-        rejected_count = 0
+        rejections_batch = []
         
         for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
-                rejected_count += 1
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
-                await db.create_rejection(
-                    rejection_id=rejection_id,
-                    run_id=run_id,
-                    entity_key=candidate.entity_id,
-                    entity_name=candidate.original_name,
-                    reason_code="no_correlation",
-                    reason_detail="Entity not found in correlation results",
-                    evidence_summary={"source": candidate.source, "domain": candidate.domain},
-                    created_at=started_at
-                )
+                rejections_batch.append((
+                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    "no_correlation", "Entity not found in correlation results",
+                    json.dumps({"source": candidate.source, "domain": candidate.domain}),
+                    started_at.isoformat()
+                ))
                 continue
             
             entity_observations = [obs for obs in observations if obs.name == candidate.original_name or obs.domain == candidate.domain]
@@ -225,38 +212,29 @@ async def execute_pipeline(
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
-                rejected_count += 1
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
-                await db.create_rejection(
-                    rejection_id=rejection_id,
-                    run_id=run_id,
-                    entity_key=candidate.entity_id,
-                    entity_name=candidate.original_name,
-                    reason_code="admission_failed",
-                    reason_detail=admission_result.rejection_reason or "No admission criteria satisfied",
-                    evidence_summary={
+                rejections_batch.append((
+                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
+                    json.dumps({
                         "idp_status": correlation.idp.status.value,
                         "cmdb_status": correlation.cmdb.status.value,
                         "cloud_status": correlation.cloud.status.value,
                         "finance_status": correlation.finance.status.value
-                    },
-                    created_at=started_at
-                )
+                    }),
+                    started_at.isoformat()
+                ))
         
+        await db.create_rejections_batch(rejections_batch)
         run_log.counts.assets_admitted = len(assets)
-        run_log.counts.rejected = rejected_count
+        run_log.counts.rejected = len(rejections_batch)
         
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
         run_log.counts.findings_generated = len(findings)
         
-        for asset in assets:
-            await db.create_asset(asset)
-        
-        for artifact in artifacts:
-            await db.create_artifact(artifact)
-        
-        for finding in findings:
-            await db.create_finding(finding)
+        await db.create_assets_batch(assets)
+        await db.create_artifacts_batch(artifacts)
+        await db.create_findings_batch(findings)
         
         if len(assets) > 0:
             run_log.status = RunStatus.COMPLETED_WITH_RESULTS

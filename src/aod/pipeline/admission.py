@@ -172,8 +172,18 @@ def check_discovery_admission(
 
 
 def determine_asset_type(correlation: CorrelationResult) -> AssetType:
-    """Determine asset type from correlation evidence"""
-    if correlation.cloud.status == MatchStatus.MATCHED:
+    """
+    Determine asset type from correlation evidence.
+    
+    AMBIGUOUS is treated the same as MATCHED for type inference - if we found
+    evidence (even with multiple matches), we can still infer the type.
+    """
+    has_cloud = correlation.cloud.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    has_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    has_idp = correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    has_finance = correlation.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    
+    if has_cloud:
         for record in correlation.cloud.matched_records:
             if isinstance(record, CloudResource):
                 rt = record.resource_type.lower()
@@ -183,7 +193,7 @@ def determine_asset_type(correlation: CorrelationResult) -> AssetType:
                     return AssetType.SERVICE
                 return AssetType.CLOUD_RESOURCE
     
-    if correlation.cmdb.status == MatchStatus.MATCHED:
+    if has_cmdb:
         for record in correlation.cmdb.matched_records:
             if isinstance(record, CMDBConfigItem):
                 ct = record.ci_type.lower()
@@ -195,10 +205,10 @@ def determine_asset_type(correlation: CorrelationResult) -> AssetType:
                     return AssetType.SERVICE
                 return AssetType.SAAS
     
-    if correlation.idp.status == MatchStatus.MATCHED:
+    if has_idp:
         return AssetType.SAAS
     
-    if correlation.finance.status == MatchStatus.MATCHED:
+    if has_finance:
         return AssetType.SAAS
     
     return AssetType.UNKNOWN

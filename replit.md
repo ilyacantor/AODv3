@@ -33,10 +33,27 @@ The discovery pipeline runs in 7 sequential stages:
 | 1 | `validate_snapshot.py` | Schema validation, banned field rejection |
 | 2 | `normalize_observations.py` | Normalize names/domains, derive candidate entities |
 | 3 | `build_plane_indexes.py` | Build indexes for efficient correlation |
-| 4 | `correlate_entities.py` | Three-pass correlation across planes |
+| 4 | `correlate_entities.py` | Four-pass correlation with disambiguation |
 | 5 | `admission.py` | Apply admission criteria to determine assets |
 | 6 | `artifact_handler.py` | Identify and record artifacts |
 | 7 | `findings_engine.py` | Generate deterministic findings |
+
+### Correlation Disambiguation
+
+When multiple matches occur during correlation, the system attempts to disambiguate using these codes:
+
+| Code | Meaning | Resolution |
+|------|---------|------------|
+| `NONE` | Single clear match | MATCHED |
+| `MULTI_ENV` | Same app in dev/staging/prod CIs | MATCHED (pick prod) |
+| `LEGACY` | Old/deprecated CI alongside current | MATCHED (pick current) |
+| `DUPLICATE` | True duplicate records | MATCHED (pick first) |
+| `PARENT_VENDOR` | Matched parent vendor, not product | **UNMATCHED** |
+| `UNRESOLVED` | Could not disambiguate | AMBIGUOUS |
+
+**PARENT_VENDOR Prevention:** When vendor-only matching finds multiple products from the same vendor (e.g., Trello matching Confluence+Hipchat via "Atlassian"), the match is rejected as UNMATCHED.
+
+**Substring False Positive Prevention:** Contains matching uses `KNOWN_DISTINCT_PRODUCTS` blocklist to prevent false matches like "box"→"dropbox", "git"→"github", etc.
 
 ### Data Planes
 

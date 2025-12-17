@@ -51,6 +51,14 @@ An inference layer generates a `vendor_hypothesis` (max 0.9 confidence) from dom
 
 A FastAPI application exposes endpoints for triggering runs (`/api/runs/from-farm`), retrieving run details, assets, and findings, and debug/reconciliation endpoints.
 
+### Finance Admission Policy
+
+Finance evidence requires **recurring spend** to qualify for admission:
+- Contracts must have `is_recurring=true` and `amount > 0`
+- Transactions must have `is_recurring=true` and `amount > 0`
+
+One-time purchases and expense reimbursements are not actionable shadow IT and are excluded from finance-based admission.
+
 ### AOD Actual Results Emitter
 
 AOD publishes its structured "actual" output (`shadow_actual`, `zombie_actual`, `admission_actual`, `actual_reason_codes`) to Farm for reconciliation. AOD outputs canonical reason codes (e.g., `HAS_IDP`, `NO_CMDB`) for all assets, ensuring no blank reason codes.

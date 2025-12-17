@@ -100,7 +100,10 @@ def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
 def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check Finance plane admission criteria:
-    - Finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
+    - Finance match AND recurring spend (contract or transaction)
+    
+    POLICY: One-time purchases and expense reimbursements are not actionable.
+    Only recurring spend qualifies for finance-based admission.
     
     IMPORTANT: Vendor alone is not admission.
     NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
@@ -108,17 +111,12 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
-    has_contract = False
-    has_recurring_transaction = False
-    
     for record in correlation.finance.matched_records:
         if isinstance(record, Contract):
-            if record.amount > 0:
-                has_contract = True
-                return True, f"Finance match: Contract for ${record.amount}"
+            if record.is_recurring and record.amount > 0:
+                return True, f"Finance match: Recurring contract ${record.amount}"
         elif isinstance(record, Transaction):
             if record.is_recurring and record.amount > 0:
-                has_recurring_transaction = True
                 return True, f"Finance match: Recurring transaction ${record.amount}"
     
     return False, ""

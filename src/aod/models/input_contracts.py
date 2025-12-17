@@ -201,6 +201,7 @@ class Contract(BaseModel):
     currency: str = "USD"
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    is_recurring: bool = False
     raw_data: Optional[dict[str, Any]] = None
 
 

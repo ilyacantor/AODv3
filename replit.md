@@ -40,8 +40,10 @@ Evidence is sourced from 7 planes: Discovery, IdP, CMDB, Cloud, Endpoint, Networ
 ### Derived Classifications
 
 Shadow and Zombie classifications are derived post-pipeline:
--   **Shadow Asset**: Active but lacks IdP or CMDB presence.
+-   **Shadow Asset**: Discovered + Active + Ungoverned (has discovery/cloud evidence, recent activity within 90 days, but NO IdP or CMDB presence).
 -   **Zombie Asset**: Has IdP/CMDB presence but no recent activity (90-day window).
+
+**Shadow Policy (Dec 2025):** Finance is NOT a trigger or gate for shadow classification. Shadow depends ONLY on discovery presence + activity recency + governance status. Finance evidence is retained as context/annotation only (reason codes like `HAS_FINANCE`/`NO_FINANCE` for priority/scoring), but never affects the shadow True/False decision.
 
 ### Vendor Hypothesis (Inference Layer)
 

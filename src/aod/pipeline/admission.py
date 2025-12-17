@@ -12,6 +12,7 @@ from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, C
 from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity
+from .vendor_inference import DOMAIN_TO_VENDOR
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -171,12 +172,15 @@ def check_discovery_admission(
     return True, f"Discovery: {len(sources)} sources ({', '.join(sorted(sources))}), last activity {latest_activity.date()}"
 
 
-def determine_asset_type(correlation: CorrelationResult) -> AssetType:
+def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:
     """
     Determine asset type from correlation evidence.
     
     AMBIGUOUS is treated the same as MATCHED for type inference - if we found
     evidence (even with multiple matches), we can still infer the type.
+    
+    Fallback: If no correlation evidence gives a type, check if the entity's
+    domain is in our known SaaS vendor list (DOMAIN_TO_VENDOR).
     """
     has_cloud = correlation.cloud.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
     has_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
@@ -210,6 +214,11 @@ def determine_asset_type(correlation: CorrelationResult) -> AssetType:
     
     if has_finance:
         return AssetType.SAAS
+    
+    if entity and entity.domain:
+        domain_key = entity.domain.lower().strip()
+        if domain_key in DOMAIN_TO_VENDOR:
+            return AssetType.SAAS
     
     return AssetType.UNKNOWN
 
@@ -413,7 +422,7 @@ def apply_admission_criteria(
         tenant_id=tenant_id,
         run_id=run_id,
         name=entity.original_name,
-        asset_type=determine_asset_type(correlation),
+        asset_type=determine_asset_type(correlation, entity),
         identifiers=identifiers,
         vendor=entity.vendor,
         vendor_hypothesis=vendor_hypothesis,

@@ -392,22 +392,23 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     Compute derived classifications for all assets.
     
     Returns summary with counts and detailed lists.
-    Indeterminate assets are counted but excluded from shadow/zombie lists.
+    
+    IMPORTANT: Both counts AND drilldown lists use DOMAIN-AGGREGATED assets.
+    This ensures KPI count (16) matches drilldown count (16), not individual
+    asset count (49). Multiple assets sharing the same domain are merged.
     
     Note: vendor_hypothesis is included in output dicts for UI DISPLAY ONLY.
-    It is NOT used in classification logic (classify_shadow/classify_zombie).
+    It is NOT used in classification logic.
     Inference decorates reality; it does not redefine it.
     
     Args:
         assets: List of assets to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
-    shadow_assets = []
-    zombie_assets = []
-    indeterminate_count = 0
-    
     cutoff_date = _utc_now() - timedelta(days=activity_window_days)
     distribution = DistributionDiagnostic(total_assets=len(assets))
+    
+    domain_to_assets: dict[str, list[Asset]] = {}
     
     for asset in assets:
         if asset.lens_status.idp == LensStatus.MATCHED:
@@ -420,104 +421,104 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
             if latest is not None and latest > cutoff_date:
                 distribution.with_activity_last_30_days += 1
         
-        shadow_result = classify_shadow(asset, activity_window_days)
-        zombie_result = classify_zombie(asset, activity_window_days)
-        
-        if shadow_result.is_indeterminate or zombie_result.is_indeterminate:
-            indeterminate_count += 1
-            continue
-        
-        if shadow_result.is_classified:
-            vendor_hyp = None
-            if asset.vendor_hypothesis:
-                vendor_hyp = {
-                    "value": asset.vendor_hypothesis.value,
-                    "confidence": asset.vendor_hypothesis.confidence,
-                    "basis": asset.vendor_hypothesis.basis
-                }
-            shadow_assets.append({
-                "asset_id": str(asset.asset_id),
-                "name": asset.name,
-                "vendor": asset.vendor,
-                "vendor_hypothesis": vendor_hyp,
-                "asset_type": asset.asset_type.value,
-                "environment": asset.environment.value,
-                "classification": "shadow",
-                "reason": shadow_result.reason,
-                "evidence_summary": shadow_result.evidence_summary,
-                "identifiers": {
-                    "domains": list(asset.identifiers.domains) if asset.identifiers else [],
-                    "hostnames": list(asset.identifiers.hostnames) if asset.identifiers else [],
-                    "uris": list(asset.identifiers.uris) if asset.identifiers else []
-                },
-                "lens_status": {
-                    "idp": asset.lens_status.idp.value,
-                    "cmdb": asset.lens_status.cmdb.value,
-                    "cloud": asset.lens_status.cloud.value,
-                    "finance": asset.lens_status.finance.value
-                },
-                "lens_coverage": {
-                    "idp": asset.lens_coverage.idp,
-                    "cmdb": asset.lens_coverage.cmdb,
-                    "cloud": asset.lens_coverage.cloud,
-                    "finance": asset.lens_coverage.finance,
-                    "discovery": asset.lens_coverage.discovery
-                },
-                "activity_evidence": {
-                    "latest_activity_at": asset.activity_evidence.latest_activity_at.isoformat() if asset.activity_evidence.latest_activity_at else None
-                }
-            })
-        elif zombie_result.is_classified:
-            vendor_hyp = None
-            if asset.vendor_hypothesis:
-                vendor_hyp = {
-                    "value": asset.vendor_hypothesis.value,
-                    "confidence": asset.vendor_hypothesis.confidence,
-                    "basis": asset.vendor_hypothesis.basis
-                }
-            zombie_assets.append({
-                "asset_id": str(asset.asset_id),
-                "name": asset.name,
-                "vendor": asset.vendor,
-                "vendor_hypothesis": vendor_hyp,
-                "asset_type": asset.asset_type.value,
-                "environment": asset.environment.value,
-                "classification": "zombie",
-                "reason": zombie_result.reason,
-                "evidence_summary": zombie_result.evidence_summary,
-                "identifiers": {
-                    "domains": list(asset.identifiers.domains) if asset.identifiers else [],
-                    "hostnames": list(asset.identifiers.hostnames) if asset.identifiers else [],
-                    "uris": list(asset.identifiers.uris) if asset.identifiers else []
-                },
-                "lens_status": {
-                    "idp": asset.lens_status.idp.value,
-                    "cmdb": asset.lens_status.cmdb.value,
-                    "cloud": asset.lens_status.cloud.value,
-                    "finance": asset.lens_status.finance.value
-                },
-                "lens_coverage": {
-                    "idp": asset.lens_coverage.idp,
-                    "cmdb": asset.lens_coverage.cmdb,
-                    "cloud": asset.lens_coverage.cloud,
-                    "finance": asset.lens_coverage.finance,
-                    "discovery": asset.lens_coverage.discovery
-                },
-                "activity_evidence": {
-                    "latest_activity_at": asset.activity_evidence.latest_activity_at.isoformat() if asset.activity_evidence.latest_activity_at else None
-                }
-            })
-    
-    distribution.indeterminate_count = indeterminate_count
+        domain_key, _ = _resolve_domain_key(asset)
+        if domain_key not in domain_to_assets:
+            domain_to_assets[domain_key] = []
+        domain_to_assets[domain_key].append(asset)
     
     domain_rollups = compute_domain_rollups(assets, activity_window_days)
     
-    domain_shadow_count = sum(1 for r in domain_rollups.values() if r.is_shadow(activity_window_days))
-    domain_zombie_count = sum(1 for r in domain_rollups.values() if r.is_zombie(activity_window_days))
+    shadow_assets = []
+    zombie_assets = []
+    indeterminate_count = 0
+    
+    for domain_key, rollup in domain_rollups.items():
+        domain_assets = domain_to_assets.get(domain_key, [])
+        if not domain_assets:
+            continue
+        
+        representative = domain_assets[0]
+        
+        vendor_hyp = None
+        for a in domain_assets:
+            if a.vendor_hypothesis:
+                vendor_hyp = {
+                    "value": a.vendor_hypothesis.value,
+                    "confidence": a.vendor_hypothesis.confidence,
+                    "basis": a.vendor_hypothesis.basis
+                }
+                break
+        
+        all_domains = set()
+        all_hostnames = set()
+        all_uris = set()
+        for a in domain_assets:
+            if a.identifiers:
+                all_domains.update(a.identifiers.domains)
+                all_hostnames.update(a.identifiers.hostnames)
+                all_uris.update(a.identifiers.uris)
+        
+        base_entry = {
+            "asset_id": str(representative.asset_id),
+            "name": domain_key if rollup.is_domain_canonical else representative.name,
+            "vendor": representative.vendor,
+            "vendor_hypothesis": vendor_hyp,
+            "asset_type": representative.asset_type.value,
+            "environment": representative.environment.value,
+            "identifiers": {
+                "domains": sorted(all_domains),
+                "hostnames": sorted(all_hostnames),
+                "uris": sorted(all_uris)
+            },
+            "lens_status": {
+                "idp": "matched" if rollup.has_idp else "unmatched",
+                "cmdb": "matched" if rollup.has_cmdb else "unmatched",
+                "cloud": "matched" if rollup.has_cloud else "unmatched",
+                "finance": "matched" if rollup.has_finance else "unmatched"
+            },
+            "lens_coverage": {
+                "idp": rollup.has_idp,
+                "cmdb": rollup.has_cmdb,
+                "cloud": rollup.has_cloud,
+                "finance": rollup.has_finance,
+                "discovery": rollup.has_discovery
+            },
+            "activity_evidence": {
+                "latest_activity_at": rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else None
+            },
+            "entity_count": rollup.entity_count,
+            "aliases": rollup.entity_names if rollup.entity_count > 1 else []
+        }
+        
+        if rollup.is_shadow(activity_window_days):
+            shadow_assets.append({
+                **base_entry,
+                "classification": "shadow",
+                "reason": f"Shadow IT: {domain_key} found via evidence but missing from official systems",
+                "evidence_summary": [
+                    f"Presence: {', '.join(filter(None, ['finance' if rollup.has_finance else None, 'cloud' if rollup.has_cloud else None, 'discovery' if rollup.has_discovery else None]))}",
+                    "Gaps: No IdP match; No CMDB match",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}"
+                ]
+            })
+        elif rollup.is_zombie(activity_window_days):
+            zombie_assets.append({
+                **base_entry,
+                "classification": "zombie",
+                "reason": f"Zombie: {domain_key} in official systems but stale/no activity",
+                "evidence_summary": [
+                    f"Official presence: {', '.join(filter(None, ['IdP' if rollup.has_idp else None, 'CMDB' if rollup.has_cmdb else None]))}",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'none'}"
+                ]
+            })
+        elif not rollup.is_domain_canonical:
+            indeterminate_count += 1
+    
+    distribution.indeterminate_count = indeterminate_count
     
     return DerivedClassificationSummary(
-        shadow_count=domain_shadow_count,
-        zombie_count=domain_zombie_count,
+        shadow_count=len(shadow_assets),
+        zombie_count=len(zombie_assets),
         indeterminate_count=indeterminate_count,
         shadow_assets=shadow_assets,
         zombie_assets=zombie_assets,

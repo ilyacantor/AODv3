@@ -167,28 +167,6 @@ def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:
     Valid matches:
     - "userservice" matching "userserviceprod" (same product, env suffix)
     - "billing" matching "billingapi" (same product, function suffix)
-    
-    TODO: LLM-ASSISTED DISAMBIGUATION
-    --------------------------------
-    The current approach uses a hardcoded KNOWN_DISTINCT_PRODUCTS blocklist,
-    which is fragile and incomplete. A more robust solution would be to call
-    an LLM to determine semantic similarity between product names:
-    
-    Example prompt:
-        "Are 'Box' and 'Dropbox' the same software product or different products?
-         Respond with: SAME_PRODUCT, DIFFERENT_PRODUCTS, or UNCERTAIN"
-    
-    Benefits:
-    - Handles novel product pairs without hardcoding
-    - Understands context (e.g., "GitHub" vs "Git" are related but different)
-    - Can explain reasoning for audit trail
-    
-    Implementation notes:
-    - Cache results to avoid repeated API calls for same pairs
-    - Use structured output (JSON mode) for reliable parsing
-    - Set temperature=0 for deterministic responses
-    - Fallback to UNCERTAIN → reject match (conservative)
-    - Consider batch API for efficiency during pipeline runs
     """
     if canonical == indexed_name:
         return True

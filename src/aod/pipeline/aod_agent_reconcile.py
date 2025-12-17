@@ -490,9 +490,7 @@ def emit_actual_results(
         has_idp = "HAS_IDP" in reasons
         has_cmdb = "HAS_CMDB" in reasons
         has_recurring_finance = "HAS_RECURRING_FINANCE" in reasons
-        has_onetime_finance = "HAS_ONETIME_FINANCE" in reasons
         has_cloud = "HAS_CLOUD" in reasons
-        has_discovery = "HAS_DISCOVERY" in reasons
         has_recent_activity = "RECENT_ACTIVITY" in reasons
         is_canonical = agg.get("is_canonical", False)
         
@@ -501,9 +499,8 @@ def emit_actual_results(
         
         if is_canonical:
             if not has_idp and not has_cmdb:
-                if has_onetime_finance and not has_recurring_finance and not has_cloud and not has_discovery:
-                    pass
-                elif (has_recurring_finance or has_cloud or has_discovery) and has_recent_activity:
+                has_actionable_spend = has_recurring_finance or has_cloud
+                if has_actionable_spend and has_recent_activity:
                     is_shadow = True
             
             if has_idp or has_cmdb:

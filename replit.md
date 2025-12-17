@@ -40,10 +40,14 @@ Evidence is sourced from 7 planes: Discovery, IdP, CMDB, Cloud, Endpoint, Networ
 ### Derived Classifications
 
 Shadow and Zombie classifications are derived post-pipeline:
--   **Shadow Asset**: Active but lacks IdP or CMDB presence, WITH actionable spend (recurring finance, cloud, or discovery evidence). One-time purchases and expense reimbursements are NOT flagged as shadow per Farm policy.
+-   **Shadow Asset**: Active but lacks IdP or CMDB presence, WITH actionable spend (recurring finance or cloud evidence). One-time purchases and discovery-only signals are NOT flagged as shadow.
 -   **Zombie Asset**: Has IdP/CMDB presence but no recent activity (90-day window).
 
-**Recurring Spend Policy**: Assets with only one-time finance transactions (HAS_ONETIME_FINANCE) and no cloud/discovery evidence are NOT classified as shadow. This filters expense reimbursements and one-time purchases that don't represent ongoing SaaS subscriptions.
+**Actionable Spend Policy**: Shadow classification requires ACTIONABLE spend evidence:
+- **Recurring finance** (contracts or recurring transactions with `HAS_RECURRING_FINANCE`), OR
+- **Cloud evidence** (actual infrastructure with `HAS_CLOUD`)
+
+Discovery alone (`HAS_DISCOVERY`) or one-time finance (`HAS_ONETIME_FINANCE`) without recurring spend/cloud is NOT sufficient for shadow classification. This filters expense reimbursements, one-time purchases, and discovery-only signals that don't represent ongoing SaaS subscriptions requiring governance action.
 
 ### Vendor Hypothesis (Inference Layer)
 

@@ -52,7 +52,6 @@ class LensCoverage(BaseModel):
     cmdb: bool = False
     cloud: bool = False
     finance: bool = False
-    finance_recurring: bool = False  # True only if contract or recurring transaction
     discovery: bool = False
 
 

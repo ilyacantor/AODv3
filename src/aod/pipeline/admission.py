@@ -97,42 +97,31 @@ def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     return False, ""
 
 
-def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str, bool]:
+def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check Finance plane admission criteria:
     - Finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
     
     IMPORTANT: Vendor alone is not admission.
     NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
-    
-    Returns:
-        Tuple of (admitted, reason, is_recurring)
-        - is_recurring: True if contract or recurring transaction (actionable shadow IT)
-        - is_recurring: False if one-time purchase/expense reimbursement (not actionable)
     """
     if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
-        return False, "", False
+        return False, ""
     
     has_contract = False
     has_recurring_transaction = False
-    has_onetime_transaction = False
     
     for record in correlation.finance.matched_records:
         if isinstance(record, Contract):
             if record.amount > 0:
                 has_contract = True
-                return True, f"Finance match: Contract for ${record.amount}", True
+                return True, f"Finance match: Contract for ${record.amount}"
         elif isinstance(record, Transaction):
             if record.is_recurring and record.amount > 0:
                 has_recurring_transaction = True
-                return True, f"Finance match: Recurring transaction ${record.amount}", True
-            elif record.amount > 0:
-                has_onetime_transaction = True
+                return True, f"Finance match: Recurring transaction ${record.amount}"
     
-    if has_onetime_transaction:
-        return True, "Finance match: One-time transaction (not actionable shadow)", False
-    
-    return False, "", False
+    return False, ""
 
 
 DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
@@ -387,7 +376,7 @@ def apply_admission_criteria(
     idp_admitted, idp_reason = check_idp_admission(correlation)
     cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
-    finance_admitted, finance_reason, finance_recurring = check_finance_admission(correlation)
+    finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(observations)
     
     if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
@@ -420,7 +409,6 @@ def apply_admission_criteria(
         cmdb=cmdb_admitted,
         cloud=cloud_admitted,
         finance=finance_admitted,
-        finance_recurring=finance_recurring,
         discovery=discovery_admitted
     )
     

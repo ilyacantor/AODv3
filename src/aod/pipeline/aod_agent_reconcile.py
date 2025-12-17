@@ -63,8 +63,6 @@ class ReasonCode(str, Enum):
     HAS_IDP = "HAS_IDP"
     HAS_CMDB = "HAS_CMDB"
     HAS_FINANCE = "HAS_FINANCE"
-    HAS_RECURRING_FINANCE = "HAS_RECURRING_FINANCE"  # Contract or recurring transaction
-    HAS_ONETIME_FINANCE = "HAS_ONETIME_FINANCE"      # One-time purchase, not actionable shadow
     HAS_CLOUD = "HAS_CLOUD"
     HAS_DISCOVERY = "HAS_DISCOVERY"
     NO_IDP = "NO_IDP"
@@ -227,10 +225,6 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     
     if has_finance:
         reasons.append(ReasonCode.HAS_FINANCE)
-        if asset.lens_coverage.finance_recurring:
-            reasons.append(ReasonCode.HAS_RECURRING_FINANCE)
-        else:
-            reasons.append(ReasonCode.HAS_ONETIME_FINANCE)
     else:
         reasons.append(ReasonCode.NO_FINANCE)
     
@@ -282,7 +276,6 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
         "cmdb": asset.lens_coverage.cmdb,
         "cloud": asset.lens_coverage.cloud,
         "finance": asset.lens_coverage.finance,
-        "finance_recurring": asset.lens_coverage.finance_recurring,
         "discovery": asset.lens_coverage.discovery
     }
     
@@ -339,14 +332,6 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
-    
-    SHADOW POLICY:
-    - qualifying_presence = HAS_RECURRING_FINANCE OR HAS_CLOUD
-    - activity_present = HAS_DISCOVERY OR HAS_FINANCE OR HAS_CLOUD
-    - Shadow = qualifying_presence AND activity_present AND NOT (has_idp OR has_cmdb)
-    
-    Discovery alone does NOT constitute qualifying presence - it only counts toward activity.
-    One-time finance (expense reimbursements) does NOT constitute qualifying presence.
     """
     reasons, evidence = compute_asset_reasons(asset, activity_window_days)
     
@@ -358,21 +343,17 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     
     has_idp = ReasonCode.HAS_IDP in reasons
     has_cmdb = ReasonCode.HAS_CMDB in reasons
-    has_recurring_finance = ReasonCode.HAS_RECURRING_FINANCE in reasons
+    has_finance = ReasonCode.HAS_FINANCE in reasons
     has_cloud = ReasonCode.HAS_CLOUD in reasons
     has_discovery = ReasonCode.HAS_DISCOVERY in reasons
-    has_finance = ReasonCode.HAS_FINANCE in reasons
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
-    
-    qualifying_presence = has_recurring_finance or has_cloud
-    activity_present = has_discovery or has_finance or has_cloud
     
     is_shadow = False
     is_zombie = False
     
     if eligible:
         if not has_idp and not has_cmdb:
-            if qualifying_presence and activity_present and has_recent_activity:
+            if (has_finance or has_cloud or has_discovery) and has_recent_activity:
                 is_shadow = True
         
         if has_idp or has_cmdb:
@@ -501,22 +482,18 @@ def emit_actual_results(
         reasons = agg["reasons"]
         has_idp = "HAS_IDP" in reasons
         has_cmdb = "HAS_CMDB" in reasons
-        has_recurring_finance = "HAS_RECURRING_FINANCE" in reasons
         has_finance = "HAS_FINANCE" in reasons
         has_cloud = "HAS_CLOUD" in reasons
         has_discovery = "HAS_DISCOVERY" in reasons
         has_recent_activity = "RECENT_ACTIVITY" in reasons
         is_canonical = agg.get("is_canonical", False)
         
-        qualifying_presence = has_recurring_finance or has_cloud
-        activity_present = has_discovery or has_finance or has_cloud
-        
         is_shadow = False
         is_zombie = False
         
         if is_canonical:
             if not has_idp and not has_cmdb:
-                if qualifying_presence and activity_present and has_recent_activity:
+                if (has_finance or has_cloud or has_discovery) and has_recent_activity:
                     is_shadow = True
             
             if has_idp or has_cmdb:
@@ -579,15 +556,6 @@ def emit_actual_results(
     shadow_actual = sorted(set(shadow_actual))
     zombie_actual = sorted(set(zombie_actual))
     
-    recurring_finance_count = sum(
-        1 for agg in domain_aggregates.values() 
-        if "HAS_RECURRING_FINANCE" in agg["reasons"]
-    )
-    recurring_finance_shadows = sum(
-        1 for agg in domain_aggregates.values() 
-        if "HAS_RECURRING_FINANCE" in agg["reasons"] and agg["is_shadow"]
-    )
-    
     summary = {
         "total_assets": len(assets),
         "total_candidates": len(assets) + (len(rejections) if rejections else 0),
@@ -595,9 +563,7 @@ def emit_actual_results(
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
         "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),
-        "rejected_count": len([v for v in admission_actual.values() if v == "rejected"]),
-        "recurring_finance_count": recurring_finance_count,
-        "recurring_finance_shadows": recurring_finance_shadows
+        "rejected_count": len([v for v in admission_actual.values() if v == "rejected"])
     }
     
     return ActualResultsOutput(

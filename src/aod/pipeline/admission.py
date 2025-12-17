@@ -215,10 +215,34 @@ def determine_asset_type(correlation: CorrelationResult, entity: Optional[Candid
     if has_finance:
         return AssetType.SAAS
     
-    if entity and entity.domain:
-        domain_key = entity.domain.lower().strip()
-        if domain_key in DOMAIN_TO_VENDOR:
-            return AssetType.SAAS
+    KNOWN_DATABASE_DOMAINS = {
+        "postgresql.org", "postgres.org", "mysql.com", "mysql.org",
+        "mariadb.org", "mariadb.com", "mongodb.com", "mongodb.org",
+        "redis.io", "redis.com", "cassandra.apache.org", "couchbase.com",
+        "neo4j.com", "influxdata.com", "timescale.com", "cockroachlabs.com",
+        "planetscale.com", "supabase.com", "supabase.io", "neon.tech",
+        "fauna.com", "arangodb.com", "dgraph.io", "singlestore.com"
+    }
+    
+    KNOWN_DATABASE_NAMES = {
+        "postgresql", "postgres", "mysql", "mariadb", "mongodb", "mongo",
+        "redis", "cassandra", "couchbase", "neo4j", "influxdb", "timescaledb",
+        "cockroachdb", "planetscale", "supabase", "neon", "fauna", "arangodb",
+        "dgraph", "singlestore", "dynamodb", "aurora", "rds"
+    }
+    
+    if entity:
+        if entity.domain:
+            domain_key = entity.domain.lower().strip()
+            if domain_key in KNOWN_DATABASE_DOMAINS:
+                return AssetType.DATABASE
+            if domain_key in DOMAIN_TO_VENDOR:
+                return AssetType.SAAS
+        
+        name_key = entity.original_name.lower().strip().replace("-", "").replace("_", "")
+        for db_name in KNOWN_DATABASE_NAMES:
+            if db_name in name_key:
+                return AssetType.DATABASE
     
     return AssetType.UNKNOWN
 

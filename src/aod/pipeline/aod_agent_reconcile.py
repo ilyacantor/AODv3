@@ -63,6 +63,8 @@ class ReasonCode(str, Enum):
     HAS_IDP = "HAS_IDP"
     HAS_CMDB = "HAS_CMDB"
     HAS_FINANCE = "HAS_FINANCE"
+    HAS_RECURRING_FINANCE = "HAS_RECURRING_FINANCE"  # Contract or recurring transaction
+    HAS_ONETIME_FINANCE = "HAS_ONETIME_FINANCE"      # One-time purchase, not actionable shadow
     HAS_CLOUD = "HAS_CLOUD"
     HAS_DISCOVERY = "HAS_DISCOVERY"
     NO_IDP = "NO_IDP"
@@ -225,6 +227,10 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     
     if has_finance:
         reasons.append(ReasonCode.HAS_FINANCE)
+        if asset.lens_coverage.finance_recurring:
+            reasons.append(ReasonCode.HAS_RECURRING_FINANCE)
+        else:
+            reasons.append(ReasonCode.HAS_ONETIME_FINANCE)
     else:
         reasons.append(ReasonCode.NO_FINANCE)
     
@@ -276,6 +282,7 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
         "cmdb": asset.lens_coverage.cmdb,
         "cloud": asset.lens_coverage.cloud,
         "finance": asset.lens_coverage.finance,
+        "finance_recurring": asset.lens_coverage.finance_recurring,
         "discovery": asset.lens_coverage.discovery
     }
     
@@ -482,7 +489,8 @@ def emit_actual_results(
         reasons = agg["reasons"]
         has_idp = "HAS_IDP" in reasons
         has_cmdb = "HAS_CMDB" in reasons
-        has_finance = "HAS_FINANCE" in reasons
+        has_recurring_finance = "HAS_RECURRING_FINANCE" in reasons
+        has_onetime_finance = "HAS_ONETIME_FINANCE" in reasons
         has_cloud = "HAS_CLOUD" in reasons
         has_discovery = "HAS_DISCOVERY" in reasons
         has_recent_activity = "RECENT_ACTIVITY" in reasons
@@ -493,7 +501,9 @@ def emit_actual_results(
         
         if is_canonical:
             if not has_idp and not has_cmdb:
-                if (has_finance or has_cloud or has_discovery) and has_recent_activity:
+                if has_onetime_finance and not has_recurring_finance and not has_cloud and not has_discovery:
+                    pass
+                elif (has_recurring_finance or has_cloud or has_discovery) and has_recent_activity:
                     is_shadow = True
             
             if has_idp or has_cmdb:

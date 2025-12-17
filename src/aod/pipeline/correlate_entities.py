@@ -555,36 +555,58 @@ def correlate_to_plane(
     
     canonical = entity.canonical_name
     name_matches = plane_index.by_canonical_name.get(canonical, [])
+    
+    def _vendor_has_recurring_finance() -> bool:
+        """Check if parent vendor has recurring finance in the index."""
+        if not entity.vendor or not plane_index.by_vendor_product:
+            return False
+        vendor_key = normalize_string(entity.vendor)
+        vendor_record_ids = plane_index.by_vendor_product.get(vendor_key, [])
+        for vid in vendor_record_ids:
+            vrecord = plane_index.records.get(vid)
+            if _is_recurring_finance_record(vrecord):
+                return True
+        return False
+    
     if len(name_matches) == 1:
-        return PlaneMatch(
-            status=MatchStatus.MATCHED,
-            matched_ids=name_matches,
-            matched_records=[plane_index.records.get(mid) for mid in name_matches],
-            match_method="canonical_name",
-            ambiguity_code=AmbiguityCode.NONE
-        )
-    elif len(name_matches) > 1:
-        records = [plane_index.records.get(mid) for mid in name_matches]
-        code, detail, resolved = disambiguate_matches(entity, name_matches, records, "canonical_name")
-        
-        if resolved and len(resolved) == 1:
+        matched_record = plane_index.records.get(name_matches[0])
+        has_recurring = _is_recurring_finance_record(matched_record)
+        if not has_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
-                matched_ids=resolved,
-                matched_records=[plane_index.records.get(resolved[0])],
+                matched_ids=name_matches,
+                matched_records=[matched_record],
+                match_method="canonical_name",
+                ambiguity_code=AmbiguityCode.NONE
+            )
+    elif len(name_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in name_matches]
+        has_any_recurring = any(_is_recurring_finance_record(r) for r in records if r)
+        if not has_any_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
+            code, detail, resolved = disambiguate_matches(entity, name_matches, records, "canonical_name")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="canonical_name",
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=name_matches,
+                matched_records=records,
                 match_method="canonical_name",
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
-        
-        return PlaneMatch(
-            status=MatchStatus.AMBIGUOUS,
-            matched_ids=name_matches,
-            matched_records=records,
-            match_method="canonical_name",
-            ambiguity_code=code,
-            disambiguation_detail=detail
-        )
     
     fuzzy_matches: list[str] = []
     for indexed_name, record_ids in plane_index.by_canonical_name.items():
@@ -594,35 +616,44 @@ def correlate_to_plane(
     fuzzy_matches = list(set(fuzzy_matches))
     
     if len(fuzzy_matches) == 1:
-        return PlaneMatch(
-            status=MatchStatus.MATCHED,
-            matched_ids=fuzzy_matches,
-            matched_records=[plane_index.records.get(mid) for mid in fuzzy_matches],
-            match_method="fuzzy",
-            ambiguity_code=AmbiguityCode.NONE
-        )
-    elif len(fuzzy_matches) > 1:
-        records = [plane_index.records.get(mid) for mid in fuzzy_matches]
-        code, detail, resolved = disambiguate_matches(entity, fuzzy_matches, records, "fuzzy")
-        
-        if resolved and len(resolved) == 1:
+        matched_record = plane_index.records.get(fuzzy_matches[0])
+        has_recurring = _is_recurring_finance_record(matched_record)
+        if not has_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
-                matched_ids=resolved,
-                matched_records=[plane_index.records.get(resolved[0])],
+                matched_ids=fuzzy_matches,
+                matched_records=[matched_record],
+                match_method="fuzzy",
+                ambiguity_code=AmbiguityCode.NONE
+            )
+    elif len(fuzzy_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in fuzzy_matches]
+        has_any_recurring = any(_is_recurring_finance_record(r) for r in records if r)
+        if not has_any_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
+            code, detail, resolved = disambiguate_matches(entity, fuzzy_matches, records, "fuzzy")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="fuzzy",
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=fuzzy_matches,
+                matched_records=records,
                 match_method="fuzzy",
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
-        
-        return PlaneMatch(
-            status=MatchStatus.AMBIGUOUS,
-            matched_ids=fuzzy_matches,
-            matched_records=records,
-            match_method="fuzzy",
-            ambiguity_code=code,
-            disambiguation_detail=detail
-        )
     
     contains_matches: list[str] = []
     for indexed_name, record_ids in plane_index.by_canonical_name.items():
@@ -632,35 +663,44 @@ def correlate_to_plane(
     contains_matches = list(set(contains_matches))
     
     if len(contains_matches) == 1:
-        return PlaneMatch(
-            status=MatchStatus.MATCHED,
-            matched_ids=contains_matches,
-            matched_records=[plane_index.records.get(mid) for mid in contains_matches],
-            match_method="contains",
-            ambiguity_code=AmbiguityCode.NONE
-        )
-    elif len(contains_matches) > 1:
-        records = [plane_index.records.get(mid) for mid in contains_matches]
-        code, detail, resolved = disambiguate_matches(entity, contains_matches, records, "contains")
-        
-        if resolved and len(resolved) == 1:
+        matched_record = plane_index.records.get(contains_matches[0])
+        has_recurring = _is_recurring_finance_record(matched_record)
+        if not has_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
-                matched_ids=resolved,
-                matched_records=[plane_index.records.get(resolved[0])],
+                matched_ids=contains_matches,
+                matched_records=[matched_record],
+                match_method="contains",
+                ambiguity_code=AmbiguityCode.NONE
+            )
+    elif len(contains_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in contains_matches]
+        has_any_recurring = any(_is_recurring_finance_record(r) for r in records if r)
+        if not has_any_recurring and _vendor_has_recurring_finance():
+            pass
+        else:
+            code, detail, resolved = disambiguate_matches(entity, contains_matches, records, "contains")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="contains",
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=contains_matches,
+                matched_records=records,
                 match_method="contains",
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
-        
-        return PlaneMatch(
-            status=MatchStatus.AMBIGUOUS,
-            matched_ids=contains_matches,
-            matched_records=records,
-            match_method="contains",
-            ambiguity_code=code,
-            disambiguation_detail=detail
-        )
     
     if entity.vendor and plane_index.by_vendor_product:
         vendor_key = normalize_string(entity.vendor)

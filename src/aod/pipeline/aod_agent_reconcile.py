@@ -501,17 +501,9 @@ def emit_actual_results(
         
         if is_canonical:
             if not has_idp and not has_cmdb:
-                has_actionable_spend = has_recurring_finance or has_cloud
-                is_onetime_only = has_onetime_finance and not has_recurring_finance and not has_cloud
-                has_weak_discovery = "DISCOVERY_SOURCE_COUNT_LT_2" in reasons
-                
-                if is_onetime_only:
+                if has_onetime_finance and not has_recurring_finance and not has_cloud and not has_discovery:
                     pass
-                elif has_weak_discovery and not has_actionable_spend:
-                    pass
-                elif has_actionable_spend and has_recent_activity:
-                    is_shadow = True
-                elif has_discovery and has_recent_activity and not is_onetime_only:
+                elif (has_recurring_finance or has_cloud or has_discovery) and has_recent_activity:
                     is_shadow = True
             
             if has_idp or has_cmdb:

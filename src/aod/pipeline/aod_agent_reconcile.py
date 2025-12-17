@@ -466,20 +466,42 @@ def emit_actual_results(
         if key not in domain_aggregates:
             domain_aggregates[key] = {
                 "admission": result.admission,
-                "is_shadow": result.is_shadow,
-                "is_zombie": result.is_zombie,
                 "reasons": set(r.value for r in result.reasons),
                 "asset_ids": [result.asset_id],
                 "names": [result.name],
-                "evidence_summary": result.evidence_summary
+                "evidence_summary": result.evidence_summary,
+                "is_canonical": result.evidence_summary.get("key_source") == "registered_domain"
             }
         else:
             agg = domain_aggregates[key]
-            agg["is_shadow"] = agg["is_shadow"] or result.is_shadow
-            agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
             agg["reasons"].update(r.value for r in result.reasons)
             agg["asset_ids"].append(result.asset_id)
             agg["names"].append(result.name)
+    
+    for key, agg in domain_aggregates.items():
+        reasons = agg["reasons"]
+        has_idp = "HAS_IDP" in reasons
+        has_cmdb = "HAS_CMDB" in reasons
+        has_finance = "HAS_FINANCE" in reasons
+        has_cloud = "HAS_CLOUD" in reasons
+        has_discovery = "HAS_DISCOVERY" in reasons
+        has_recent_activity = "RECENT_ACTIVITY" in reasons
+        is_canonical = agg.get("is_canonical", False)
+        
+        is_shadow = False
+        is_zombie = False
+        
+        if is_canonical:
+            if not has_idp and not has_cmdb:
+                if (has_finance or has_cloud or has_discovery) and has_recent_activity:
+                    is_shadow = True
+            
+            if has_idp or has_cmdb:
+                if not has_recent_activity:
+                    is_zombie = True
+        
+        agg["is_shadow"] = is_shadow
+        agg["is_zombie"] = is_zombie
     
     shadow_actual = []
     zombie_actual = []

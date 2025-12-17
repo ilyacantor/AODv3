@@ -42,6 +42,56 @@ LEGACY_MARKERS = {
 }
 
 
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(s1) < len(s2):
+        s1, s2 = s2, s1
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    prev_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (c1 != c2)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    
+    return prev_row[-1]
+
+
+def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2) -> bool:
+    """
+    Check if two names are a fuzzy match (typo tolerance).
+    
+    Handles cases like:
+    - "monday" vs "mondayc" (truncation/typo)
+    - "monday" vs "monady" (transposition)
+    
+    Rules:
+    - Names must be at least 4 chars to avoid false positives
+    - One must be a prefix of the other with ≤2 extra chars, OR
+    - Edit distance ≤ max_distance for similar-length names
+    """
+    if len(name1) < 4 or len(name2) < 4:
+        return False
+    
+    if name1.startswith(name2) and len(name1) - len(name2) <= 2:
+        return True
+    if name2.startswith(name1) and len(name2) - len(name1) <= 2:
+        return True
+    
+    len_diff = abs(len(name1) - len(name2))
+    if len_diff <= 2:
+        distance = _levenshtein_distance(name1, name2)
+        return distance <= max_distance
+    
+    return False
+
+
 @dataclass
 class PlaneMatch:
     """Match result for a single plane"""
@@ -489,6 +539,44 @@ def correlate_to_plane(
             matched_ids=name_matches,
             matched_records=records,
             match_method="canonical_name",
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
+    fuzzy_matches: list[str] = []
+    for indexed_name, record_ids in plane_index.by_canonical_name.items():
+        if _is_fuzzy_match(canonical, indexed_name):
+            fuzzy_matches.extend(record_ids)
+    
+    fuzzy_matches = list(set(fuzzy_matches))
+    
+    if len(fuzzy_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=fuzzy_matches,
+            matched_records=[plane_index.records.get(mid) for mid in fuzzy_matches],
+            match_method="fuzzy",
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(fuzzy_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in fuzzy_matches]
+        code, detail, resolved = disambiguate_matches(entity, fuzzy_matches, records, "fuzzy")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="fuzzy",
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=fuzzy_matches,
+            matched_records=records,
+            match_method="fuzzy",
             ambiguity_code=code,
             disambiguation_detail=detail
         )

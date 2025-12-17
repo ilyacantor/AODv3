@@ -51,6 +51,14 @@ When multiple matches occur during correlation, the system attempts to disambigu
 | `PARENT_VENDOR` | Matched parent vendor, not product | **UNMATCHED** |
 | `UNRESOLVED` | Could not disambiguate | AMBIGUOUS |
 
+**Evidence-Driven Resolution Principle:** Disambiguation resolves ONLY when CMDB fields support it; otherwise keeps AMBIGUOUS with reason=UNRESOLVED.
+
+| Code | Required Evidence |
+|------|-------------------|
+| `MULTI_ENV` | `environment` or `environment_type` field differs between records |
+| `LEGACY` | `status`, `is_deprecated`, or `lifecycle_state` indicates deprecated |
+| `DUPLICATE` | Records have identical `name`, `vendor`, and `app_type` fields |
+
 **PARENT_VENDOR Prevention:** When vendor-only matching finds multiple products from the same vendor (e.g., Trello matching Confluence+Hipchat via "Atlassian"), the match is rejected as UNMATCHED.
 
 **Substring False Positive Prevention:** Contains matching uses `KNOWN_DISTINCT_PRODUCTS` blocklist to prevent false matches like "box"→"dropbox", "git"→"github", etc.

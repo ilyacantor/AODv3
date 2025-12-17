@@ -217,6 +217,47 @@ def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:
     return False
 
 
+def _get_record_field(record: Any, field: str, default: Any = None) -> Any:
+    """Extract a field from a record (handles dict or object)."""
+    if record is None:
+        return default
+    if isinstance(record, dict):
+        return record.get(field, default)
+    return getattr(record, field, default)
+
+
+def _is_deprecated_by_field(record: Any) -> bool:
+    """Check if a record is deprecated based on actual CMDB fields."""
+    status = str(_get_record_field(record, "status", "") or "").lower()
+    lifecycle = str(_get_record_field(record, "lifecycle_state", "") or "").lower()
+    is_deprecated = _get_record_field(record, "is_deprecated", False)
+    is_retired = _get_record_field(record, "is_retired", False)
+    
+    deprecated_statuses = {"deprecated", "retired", "archived", "decommissioned", "obsolete", "inactive"}
+    
+    if is_deprecated or is_retired:
+        return True
+    if status in deprecated_statuses:
+        return True
+    if lifecycle in deprecated_statuses:
+        return True
+    
+    return False
+
+
+def _get_environment_field(record: Any) -> Optional[str]:
+    """Extract environment from actual CMDB field."""
+    env = _get_record_field(record, "environment")
+    if env:
+        return str(env).lower()
+    
+    env_type = _get_record_field(record, "environment_type")
+    if env_type:
+        return str(env_type).lower()
+    
+    return None
+
+
 def disambiguate_matches(
     entity: CandidateEntity,
     matched_ids: list[str],
@@ -224,7 +265,15 @@ def disambiguate_matches(
     match_method: str
 ) -> tuple[AmbiguityCode, Optional[str], Optional[list[str]]]:
     """
-    Analyze multiple matches and attempt to disambiguate.
+    Analyze multiple matches and attempt to disambiguate using EVIDENCE from record fields.
+    
+    PRINCIPLE: Resolve only when CMDB fields support it; otherwise keep AMBIGUOUS.
+    
+    Evidence-driven resolution:
+    - MULTI_ENV: Only if `environment` field differs between records
+    - LEGACY: Only if `status`, `is_deprecated`, or `lifecycle_state` indicates deprecated
+    - DUPLICATE: Only if records have identical key fields
+    - PARENT_VENDOR: Vendor-only match with no product match
     
     Returns:
         Tuple of (ambiguity_code, detail_message, resolved_ids)
@@ -253,71 +302,71 @@ def disambiguate_matches(
             None
         )
     
-    base_names = {}
+    deprecated_records = []
+    active_records = []
     for i, record in enumerate(matched_records):
-        record_name = _get_record_name(record)
-        base = _extract_base_name(record_name)
-        if base not in base_names:
-            base_names[base] = []
-        base_names[base].append((matched_ids[i], record_name, record))
+        if _is_deprecated_by_field(record):
+            deprecated_records.append((matched_ids[i], _get_record_name(record), record))
+        else:
+            active_records.append((matched_ids[i], _get_record_name(record), record))
     
-    if len(base_names) == 1:
-        base_name = list(base_names.keys())[0]
-        records_info = base_names[base_name]
-        
-        legacy_records = [(rid, rname) for rid, rname, _ in records_info if _is_legacy_name(rname)]
-        current_records = [(rid, rname) for rid, rname, _ in records_info if not _is_legacy_name(rname)]
-        
-        if legacy_records and current_records:
-            best_id = current_records[0][0]
-            return (
-                AmbiguityCode.LEGACY,
-                f"Resolved: picked current '{current_records[0][1]}' over legacy '{legacy_records[0][1]}'",
-                [best_id]
-            )
-        
-        names = [rname for _, rname, _ in records_info]
-        env_detected = []
-        for name in names:
-            for suffix in ENV_SUFFIXES:
-                if suffix in name.lower():
-                    env_detected.append(suffix)
-                    break
-        
-        if len(set(env_detected)) > 1 or (len(env_detected) > 0 and len(names) > 1):
-            prod_record = None
-            for rid, rname, _ in records_info:
-                rname_lower = rname.lower()
-                if "prod" in rname_lower or "production" in rname_lower or "prd" in rname_lower:
-                    prod_record = (rid, rname)
-                    break
-            
-            if prod_record:
+    if deprecated_records and active_records and len(active_records) == 1:
+        best = active_records[0]
+        deprecated_names = [r[1] for r in deprecated_records]
+        return (
+            AmbiguityCode.LEGACY,
+            f"Evidence: picked active '{best[1]}' (status field) over deprecated: {deprecated_names}",
+            [best[0]]
+        )
+    
+    env_groups: dict[str, list[tuple[str, str, Any]]] = {}
+    records_with_env = 0
+    for i, record in enumerate(matched_records):
+        env = _get_environment_field(record)
+        if env:
+            records_with_env += 1
+            if env not in env_groups:
+                env_groups[env] = []
+            env_groups[env].append((matched_ids[i], _get_record_name(record), record))
+    
+    if records_with_env == len(matched_records) and len(env_groups) > 1:
+        prod_envs = {"prod", "production", "prd", "live"}
+        for env_name in prod_envs:
+            if env_name in env_groups and len(env_groups[env_name]) == 1:
+                best = env_groups[env_name][0]
+                other_envs = [e for e in env_groups.keys() if e not in prod_envs]
                 return (
                     AmbiguityCode.MULTI_ENV,
-                    f"Same app in multiple environments, picked prod: {prod_record[1]}",
-                    [prod_record[0]]
-                )
-            else:
-                best_id = records_info[0][0]
-                return (
-                    AmbiguityCode.MULTI_ENV,
-                    f"Same app in multiple environments: {names}",
-                    [best_id]
+                    f"Evidence: picked prod '{best[1]}' (environment={env_name}) over envs: {other_envs}",
+                    [best[0]]
                 )
         
-        vendors = set(_get_record_vendor(r) for _, _, r in records_info)
-        if len(vendors) == 1:
-            return (
-                AmbiguityCode.DUPLICATE,
-                f"Duplicate records for same app: {names}",
-                [records_info[0][0]]
-            )
+        all_names = [_get_record_name(r) for r in matched_records]
+        return (
+            AmbiguityCode.UNRESOLVED,
+            f"Multiple environments but no single prod: {list(env_groups.keys())}. Records: {all_names}",
+            None
+        )
+    
+    def get_identity_tuple(record: Any) -> tuple:
+        return (
+            normalize_string(_get_record_name(record)),
+            normalize_string(_get_record_vendor(record) or ""),
+            normalize_string(str(_get_record_field(record, "app_type", "") or "")),
+        )
+    
+    identities = [get_identity_tuple(r) for r in matched_records]
+    if len(set(identities)) == 1:
+        return (
+            AmbiguityCode.DUPLICATE,
+            f"Evidence: true duplicates (identical name/vendor/type), picked first",
+            [matched_ids[0]]
+        )
     
     all_names = [_get_record_name(r) for r in matched_records]
     return (
         AmbiguityCode.UNRESOLVED,
-        f"Could not disambiguate between: {all_names}",
+        f"No field-level evidence to disambiguate: {all_names}",
         None
     )
 

@@ -432,7 +432,8 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
     zombie_assets = []
     indeterminate_count = 0
     
-    for domain_key, rollup in domain_rollups.items():
+    for domain_key in sorted(domain_rollups.keys()):
+        rollup = domain_rollups[domain_key]
         domain_assets = domain_to_assets.get(domain_key, [])
         if not domain_assets:
             continue
@@ -471,23 +472,30 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
                 "uris": sorted(all_uris)
             },
             "lens_status": {
-                "idp": "matched" if rollup.has_idp else "unmatched",
-                "cmdb": "matched" if rollup.has_cmdb else "unmatched",
-                "cloud": "matched" if rollup.has_cloud else "unmatched",
-                "finance": "matched" if rollup.has_finance else "unmatched"
+                "idp": representative.lens_status.idp.value,
+                "cmdb": representative.lens_status.cmdb.value,
+                "cloud": representative.lens_status.cloud.value,
+                "finance": representative.lens_status.finance.value
             },
             "lens_coverage": {
-                "idp": rollup.has_idp,
-                "cmdb": rollup.has_cmdb,
-                "cloud": rollup.has_cloud,
-                "finance": rollup.has_finance,
-                "discovery": rollup.has_discovery
+                "idp": representative.lens_coverage.idp,
+                "cmdb": representative.lens_coverage.cmdb,
+                "cloud": representative.lens_coverage.cloud,
+                "finance": representative.lens_coverage.finance,
+                "discovery": representative.lens_coverage.discovery
             },
             "activity_evidence": {
                 "latest_activity_at": rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else None
             },
             "entity_count": rollup.entity_count,
-            "aliases": rollup.entity_names if rollup.entity_count > 1 else []
+            "aliases": rollup.entity_names if rollup.entity_count > 1 else [],
+            "aggregated_evidence": {
+                "has_idp": rollup.has_idp,
+                "has_cmdb": rollup.has_cmdb,
+                "has_finance": rollup.has_finance,
+                "has_cloud": rollup.has_cloud,
+                "has_discovery": rollup.has_discovery
+            }
         }
         
         if rollup.is_shadow(activity_window_days):

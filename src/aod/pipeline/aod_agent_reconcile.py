@@ -194,9 +194,12 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     """
     Compute the canonical reason codes for an asset's current state.
     
-    IMPORTANT: HAS_* codes mean PRESENCE (evidence exists in plane), not admission.
-    - HAS_FINANCE = finance correlation found evidence (MATCHED or AMBIGUOUS)
+    IMPORTANT: HAS_* codes mean ACTIONABLE PRESENCE (evidence that passed policy checks).
+    - HAS_FINANCE = finance evidence with RECURRING spend (one-time purchases excluded)
     - HAS_DISCOVERY = discovery observations exist (even if stale)
+    
+    Uses lens_coverage (admission result) not lens_status (raw correlation) to ensure
+    policy filters like recurring spend are respected.
     
     Returns:
         Tuple of (reasons list, evidence summary dict)
@@ -206,7 +209,7 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_finance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_discovery = any(
         isinstance(ref, str) and ref.startswith("discovery:")

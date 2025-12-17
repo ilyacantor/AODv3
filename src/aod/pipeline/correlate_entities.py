@@ -536,13 +536,27 @@ def correlate_to_plane(
         vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
         
         if len(vendor_matches) == 1:
-            return PlaneMatch(
-                status=MatchStatus.MATCHED,
-                matched_ids=vendor_matches,
-                matched_records=[plane_index.records.get(mid) for mid in vendor_matches],
-                match_method="vendor",
-                ambiguity_code=AmbiguityCode.NONE
-            )
+            matched_record = plane_index.records.get(vendor_matches[0])
+            matched_name = normalize_string(_get_record_name(matched_record)) if matched_record else ""
+            entity_name = entity.canonical_name
+            
+            if matched_name == entity_name or matched_name in entity_name or entity_name in matched_name:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=vendor_matches,
+                    matched_records=[matched_record],
+                    match_method="vendor",
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            else:
+                return PlaneMatch(
+                    status=MatchStatus.UNMATCHED,
+                    matched_ids=[],
+                    matched_records=[],
+                    match_method="vendor",
+                    ambiguity_code=AmbiguityCode.PARENT_VENDOR,
+                    disambiguation_detail=f"Vendor-only match rejected: {entity.original_name} matched vendor {entity.vendor} but product name '{matched_name}' differs"
+                )
         elif len(vendor_matches) > 1:
             records = [plane_index.records.get(mid) for mid in vendor_matches]
             code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor")

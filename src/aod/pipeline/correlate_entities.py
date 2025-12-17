@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
+from ..models.input_contracts import Contract, Transaction
 
 
 class MatchStatus(str, Enum):
@@ -154,6 +155,44 @@ def _get_record_name(record: Any) -> str:
     if isinstance(record, dict):
         return record.get("name", "") or record.get("app_name", "") or record.get("product", "") or ""
     return getattr(record, "name", "") or getattr(record, "app_name", "") or getattr(record, "product", "") or ""
+
+
+def _is_recurring_finance_record(record: Any) -> bool:
+    """Check if a finance record represents recurring spend.
+    
+    Recurring finance includes:
+    - Contracts (always recurring by nature - they represent ongoing agreements)
+    - Transactions with is_recurring=True
+    
+    One-time purchases and expense reimbursements are NOT recurring.
+    """
+    if record is None:
+        return False
+    if isinstance(record, Contract):
+        return True
+    if isinstance(record, Transaction):
+        return getattr(record, 'is_recurring', False) or False
+    return False
+
+
+def _filter_recurring_finance_records(records: list[Any]) -> tuple[list[str], list[Any]]:
+    """Filter finance records to only include recurring ones.
+    
+    Returns:
+        Tuple of (record_ids, records) for recurring finance only
+    """
+    recurring_ids = []
+    recurring_records = []
+    for record in records:
+        if record is None:
+            continue
+        if _is_recurring_finance_record(record):
+            if isinstance(record, Contract):
+                recurring_ids.append(f"contract:{record.contract_id}")
+            elif isinstance(record, Transaction):
+                recurring_ids.append(f"transaction:{record.transaction_id}")
+            recurring_records.append(record)
+    return recurring_ids, recurring_records
 
 
 def _get_record_vendor(record: Any) -> str:
@@ -641,19 +680,38 @@ def correlate_to_plane(
                     ambiguity_code=AmbiguityCode.NONE
                 )
             else:
+                if _is_recurring_finance_record(matched_record):
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=vendor_matches,
+                        matched_records=[matched_record],
+                        match_method="parent_vendor",
+                        ambiguity_code=AmbiguityCode.PARENT_VENDOR,
+                        disambiguation_detail=f"Parent vendor finance: {entity.original_name} inherits recurring finance from vendor {entity.vendor}"
+                    )
                 return PlaneMatch(
                     status=MatchStatus.UNMATCHED,
                     matched_ids=[],
                     matched_records=[],
                     match_method="vendor",
                     ambiguity_code=AmbiguityCode.PARENT_VENDOR,
-                    disambiguation_detail=f"Vendor-only match rejected: {entity.original_name} matched vendor {entity.vendor} but product name '{matched_name}' differs"
+                    disambiguation_detail=f"Vendor-only match rejected: {entity.original_name} matched vendor {entity.vendor} but product name '{matched_name}' differs and no recurring finance"
                 )
         elif len(vendor_matches) > 1:
             records = [plane_index.records.get(mid) for mid in vendor_matches]
             code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor")
             
             if code == AmbiguityCode.PARENT_VENDOR:
+                recurring_ids, recurring_records = _filter_recurring_finance_records(records)
+                if recurring_records:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=recurring_ids,
+                        matched_records=recurring_records,
+                        match_method="parent_vendor",
+                        ambiguity_code=AmbiguityCode.PARENT_VENDOR,
+                        disambiguation_detail=f"Parent vendor finance: {entity.original_name} inherits {len(recurring_records)} recurring finance records from vendor {entity.vendor}"
+                    )
                 return PlaneMatch(
                     status=MatchStatus.UNMATCHED,
                     matched_ids=[],

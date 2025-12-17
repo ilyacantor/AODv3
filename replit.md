@@ -120,6 +120,24 @@ FastAPI application with these key endpoints:
 - `HAS_DISCOVERY`, `NO_DISCOVERY` - Discovery evidence
 - `RECENT_ACTIVITY`, `STALE_ACTIVITY`, `NO_ACTIVITY_TIMESTAMPS` - Activity status
 - `DISCOVERY_SOURCE_COUNT_GE_2`, `DISCOVERY_SOURCE_COUNT_LT_2` - Discovery source count
+- `NO_REASON_DATA` - Fallback when no other reason codes apply (contract invariant: never blank)
+
+**Contract Invariants:**
+1. **Zero blank reason codes** - Every `asset_summaries[key].aod_reason_codes` MUST be non-empty
+2. **Zero KEY_NORMALIZATION_MISMATCH** - If evidence contains a registered domain, the key MUST be that domain
+3. **Lists derived from summaries** - `shadow_asset_keys` and `zombie_asset_keys` are derived from `asset_summaries.is_shadow/is_zombie` flags (single source of truth)
+
+**Payload Contract (v2):**
+```json
+{
+  "payload_version": 2,
+  "has_asset_summaries": true,
+  "asset_summaries_count": N,
+  "asset_summaries": { "<key>": { "aod_decision": "...", "aod_reason_codes": [...], ... } },
+  "shadow_asset_keys": [...],  // derived from asset_summaries.is_shadow
+  "zombie_asset_keys": [...]   // derived from asset_summaries.is_zombie
+}
+```
 
 **RCA Reducer (owned by Farm, not AOD):**
 Farm uses these codes to determine root cause of mismatches:

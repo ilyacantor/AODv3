@@ -57,9 +57,13 @@ def build_reconcile_payload(
     asset_summaries = {}
     for key, reasons in actual_results.actual_reasons.items():
         details = actual_results.asset_details.get(key, {})
+        decision = actual_results.admission_actual.get(key, "unknown")
+        
+        reason_codes = reasons if reasons else ["NO_REASON_DATA"]
+        
         asset_summaries[key] = {
-            "aod_decision": actual_results.admission_actual.get(key, "unknown"),
-            "aod_reason_codes": reasons,
+            "aod_decision": decision,
+            "aod_reason_codes": reason_codes,
             "is_shadow": details.get("is_shadow", False),
             "is_zombie": details.get("is_zombie", False),
             "evidence_summary": details.get("evidence_summary", {})

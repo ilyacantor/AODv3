@@ -356,7 +356,7 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     
     if eligible:
         if not has_idp and not has_cmdb:
-            if (has_finance or has_cloud or has_discovery) and has_recent_activity:
+            if (has_cloud or has_discovery) and has_recent_activity:
                 is_shadow = True
         
         if has_idp or has_cmdb:
@@ -496,7 +496,7 @@ def emit_actual_results(
         
         if is_canonical:
             if not has_idp and not has_cmdb:
-                if (has_finance or has_cloud or has_discovery) and has_recent_activity:
+                if (has_cloud or has_discovery) and has_recent_activity:
                     is_shadow = True
             
             if has_idp or has_cmdb:

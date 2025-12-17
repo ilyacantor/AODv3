@@ -99,7 +99,7 @@ class DomainRollup:
             return False
         
         has_governance = self.has_idp or self.has_cmdb
-        has_existence = self.has_finance or self.has_cloud or self.has_discovery
+        has_existence = self.has_cloud or self.has_discovery
         
         if has_governance or not has_existence:
             return False
@@ -205,8 +205,6 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         )
     
     presence_sources = []
-    if has_finance:
-        presence_sources.append("finance evidence (spending/contracts)")
     if has_cloud:
         presence_sources.append("cloud infrastructure")
     if has_discovery:

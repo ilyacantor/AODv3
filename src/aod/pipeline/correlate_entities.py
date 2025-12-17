@@ -144,12 +144,16 @@ def _is_legacy_name(name: str) -> bool:
 
 
 def _get_record_name(record: Any) -> str:
-    """Extract name from a record (handles dict or object)."""
+    """Extract name from a record (handles dict or object).
+    
+    For finance records (Contract, Transaction), also checks the 'product' field
+    since that's where the product name is stored (e.g., "Slack" in a Salesforce contract).
+    """
     if record is None:
         return ""
     if isinstance(record, dict):
-        return record.get("name", "") or record.get("app_name", "") or ""
-    return getattr(record, "name", "") or getattr(record, "app_name", "") or ""
+        return record.get("name", "") or record.get("app_name", "") or record.get("product", "") or ""
+    return getattr(record, "name", "") or getattr(record, "app_name", "") or getattr(record, "product", "") or ""
 
 
 def _get_record_vendor(record: Any) -> str:

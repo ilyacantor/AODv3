@@ -2,10 +2,12 @@
 
 ## Overview
 
-AOD Fresh is the discovery module of AutonomOS - an enterprise operating system. It ingests raw enterprise evidence and produces:
+AOD Fresh is the discovery module of AutonomOS - an enterprise operating system. It ingests raw enterprise evidence from AOS Farm and produces:
 - An **Asset Catalog** (systems only; not internal objects like dashboards)
-- A **Run Log** (what happened on each run)
-- **Explainable findings** (rule-based; no anomaly scores)
+- A **Run Log** (audit trail of what happened on each run)
+- **Explainable Findings** (rule-based; no anomaly scores or ML)
+
+The system is designed to be deterministic (same input yields same output), evidence-only (no pre-adjudicated labels), and fully explainable.
 
 ## Project Architecture
 
@@ -19,11 +21,12 @@ src/
     │   └── routes.py       # API endpoints
     ├── db/
     │   ├── __init__.py
-    │   └── database.py     # SQLite persistence layer
+    │   └── database.py     # PostgreSQL persistence layer (asyncpg)
     ├── models/
     │   ├── __init__.py
     │   ├── input_contracts.py   # Pydantic models for snapshot input
     │   └── output_contracts.py  # Pydantic models for assets, findings, etc.
+    ├── farm_reconcile.py   # Farm auto-sync and reconciliation
     └── pipeline/
         ├── __init__.py
         ├── validate_snapshot.py      # Stage 1: Schema validation
@@ -33,172 +36,167 @@ src/
         ├── admission.py              # Stage 5: Admission criteria
         ├── artifact_handler.py       # Stage 6: Artifact handling
         ├── findings_engine.py        # Stage 7: Generate findings
-        └── pipeline_executor.py      # Orchestrate all stages
+        ├── pipeline_executor.py      # Orchestrate all stages
+        ├── derived_classifications.py # Shadow/Zombie computation
+        ├── aod_agent_reconcile.py    # Emit actual results for Farm
+        ├── vendor_inference.py       # Vendor hypothesis (non-decisionable)
+        └── farm_adapter.py           # Farm wire format normalization
 
 templates/
 └── index.html              # AOD Console UI
 
 tests/
-└── test_aod.py             # Test suite
+└── test_*.py               # Test suites
 ```
 
 ## Non-Negotiables
 
-1. **No ground truth ingestion** - Rejects banned fields like `is_shadow_it`, `ground_truth`, `inCMDB`
-2. **No ML/anomaly scores** - Only deterministic rules
-3. **Deterministic** - Same input yields same output
-4. **Evidence-only decisions** - Admission based only on plane evidence
-5. **Assets vs Artifacts** - Dashboards/reports/calculators are artifacts, never assets
-
-Guardrail: No “green-test theater” (Stop optimizing for “done without errors”)
-The anti-pattern we are eliminating
-
-Agents frequently “solve” problems by making the system look clean:
-
-“All tests pass” while the feature fails the first real eval
-
-Papering over contract mismatches by making schemas permissive
-
-Converting upstream errors into “not found” or “empty” results
-
-Overwriting history / collapsing identity scopes to avoid collisions
-
-Adding hidden shortcuts / labels / join keys that make synthetic demos work but are IRL-invalid
-
-This is forbidden. The goal is not “no errors”; the goal is “correct semantics.”
-
-Definition of “DONE” (must satisfy all)
-
-A change is DONE only if it meets all 4:
-
-Semantics preserved
-
-The behavior matches the stated IRL meaning of the feature (not just the test).
-
-If semantics changed, it must be explicitly called out as a breaking change.
-
-No cheating
-
-No overwrites to silence conflicts
-
-No “optional everything” to dodge validation
-
-No silent fallbacks that hide upstream failure
-
-No ground-truth labels or shared join keys that wouldn’t exist IRL
-
-Proof is real
-
-Tests are not proof by themselves.
-
-Provide one of:
-
-a minimal reproduction showing failure-before / success-after, OR
-
-a “before/after” output diff from a real run (Farm → AOD → UI) that demonstrates the user-visible behavior.
-
-Negative test included
-
-Add at least one test that ensures the cheat can’t come back:
-
-upstream returns HTML/empty → must become UPSTREAM_ERROR (not “no evidence”)
-
-missing required fields → INVALID_INPUT_CONTRACT (not silently defaulted)
-
-re-run same snapshot twice → history preserved (no overwrite)
-
-Required “Fix Proposal Format” (agents must follow)
-
-For any fix, output exactly:
-
-What broke (1–2 sentences)
-
-Why it broke (root cause)
-
-What I changed (one paragraph, no code dump)
-
-Why this is IRL-correct (1–3 bullets)
-
-What would have been the tempting cheat (1 bullet) and why we did not do it
-
-How I proved it (tests + one real run / fixture)
-
-If the agent cannot provide this format, it must stop and say “I can’t prove it yet.”
-
-“All tests pass” is not an acceptable claim by itself
-
-If the agent says “57 tests pass,” it must also include:
-
-which test(s) prove the user-visible behavior
-
-and at least one eval (a run output / API response / UI behavior) demonstrating success
-
-If it can’t show that, “tests pass” is treated as noise.
-
-Fail loudly on reality violations
-
-When data is bad or missing, do NOT “handle” it by pretending it’s fine.
-Use explicit error statuses (e.g., UPSTREAM_ERROR, INVALID_SNAPSHOT, INVALID_INPUT_CONTRACT) and surface the reason.
-
-Default strategy when unsure
-
-Prefer:
-
-Adapters (normalize into canonical contract) over weakening contracts
-
-Run-scoped identities over overwrites
-
-Explicit errors over silent fallbacks
-
-Evidence-only derivations over labels
-
-## Prompt shortcuts
-
-1. **DCCE or dcce** - don't change code, explain
+1. **No ground truth ingestion** - Rejects banned fields like `is_shadow_it`, `ground_truth`, `inCMDB`. If present, marks run as `INVALID_INPUT_CONTRACT`
+2. **No ML/anomaly scores** - Only deterministic rules and explainable correlation
+3. **Deterministic** - Same snapshot + same config produces identical outputs with stable ordering
+4. **Evidence-only decisions** - Admission and findings derived only from plane evidence, never upstream labels
+5. **Assets vs Artifacts** - Dashboards/reports/calculators are artifacts, never assets; they don't inflate asset counts
 
 ## Tech Stack
 
 - **Python 3.11**
 - **FastAPI** with **Pydantic v2**
-- **SQLite** persistence (structured for PostgreSQL migration)
+- **PostgreSQL** persistence via **asyncpg** (external DB required)
 - **Uvicorn** server
+- **httpx** for async HTTP to Farm
+
+## Database Configuration
+
+Single DB selection rule (no fallbacks):
+- Priority: `SUPABASE_DB_URL` > `DATABASE_URL`
+- If neither is set, application fails fast with clear error
+- No SQLite fallback or other defaults allowed
+- `IGNORE_REPLIT_DB=true` ignores any REPLIT* env vars
+
+Run `make sanity` to verify storage guardrails.
 
 ## API Endpoints
 
-- `POST /api/runs` - Create discovery run (file upload)
-- `POST /api/runs/json` - Create discovery run (JSON body)
-- `POST /api/runs/from-farm` - Create discovery run from Farm HTTP pull
-- `GET /api/farm/snapshots?tenant_id=...` - List available snapshots from Farm (proxy)
+### Core Discovery
+- `POST /api/runs/from-farm` - Create discovery run from Farm snapshot
 - `GET /api/runs` - List all runs
 - `GET /api/runs/{run_id}` - Get run details
-- `GET /api/catalog?run_id=...` - Get assets for run
-- `GET /api/findings?run_id=...` - Get findings for run
-- `GET /api/artifacts?run_id=...` - Get artifacts for run
+- `GET /api/runs/{run_id}/assets` - Get assets for a run
+- `GET /api/runs/{run_id}/findings` - Get findings for a run
+- `GET /api/runs/{run_id}/artifacts` - Get artifacts for a run
+- `GET /api/runs/{run_id}/derived` - Get shadow/zombie classifications
+
+### Farm Integration
+- `GET /api/farm/snapshots?tenant_id=...` - List available snapshots from Farm (proxy)
+- `GET /api/runs/{run_id}/reconcile-payload` - Get the exact payload that would be sent to Farm
+- `POST /api/runs/resync` - Re-trigger Farm callback for existing run
+
+### Debug & Reconciliation
+- `POST /api/debug/zombie-explain` - Debug endpoint for zombie classification explanations
+- `POST /api/debug/zombie-reconcile` - Reconcile zombie classifications against Farm expectations
+- `POST /api/debug/aod-agent-reconcile` - AOD Agent diagnostic reconciliation (actual results + RCA codes)
+- `POST /api/reconcile/explain-nonflag` - Explain why specific assets are NOT in shadow/zombie lists
+
+### Health
 - `GET /api/health` - Health check
 
-### Farm HTTP Pull Integration
+## Run Status Values
 
-The `/api/runs/from-farm` endpoint fetches snapshots from an AOS Farm server:
+Runs must return one of these explicit statuses:
+- `UPSTREAM_ERROR` - Farm unreachable or HTTP error
+- `INVALID_SNAPSHOT` - Schema mismatch or wrong version
+- `INVALID_INPUT_CONTRACT` - Banned fields present
+- `COMPLETED_NO_ASSETS` - Pipeline completed, nothing admitted
+- `COMPLETED_WITH_RESULTS` - Normal success with assets/findings
 
+## Derived Classifications
+
+Shadow and Zombie are computed as **derived views** after the main pipeline using **timestamped activity signals** (not stored flags).
+
+### Shadow Asset
+- Has activity evidence (Finance, Cloud, or Discovery)
+- AND no IdP match (no SSO / SCIM / service principal)
+- AND no CMDB match
+- AND has **recent activity** within window (default 90 days)
+
+*Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
+
+### Zombie Asset
+- CMDB or IdP presence (officially managed)
+- AND (**no activity timestamps** OR activity **outside 90-day window**)
+
+*Interpretation: "This is in our official systems but we have no evidence anyone is actually using it."*
+
+## Farm Reconciliation
+
+### Design Principle (prevents coupling)
+- Farm owns reconciliation UI (has expected + actual + diffs)
+- AOD owns its structured "actual" output only
+- Farm displays side-by-side and runs the RCA reducer
+- **HARD RULE: AOD NEVER consumes Farm expected/rca data. AOD ONLY emits its own "actual + reasons".**
+
+### Contract Invariants
+1. **Zero blank reason codes** - Every `asset_summaries[key].aod_reason_codes` MUST be non-empty
+2. **Zero KEY_NORMALIZATION_MISMATCH** - If evidence contains a registered domain, the key MUST be that domain
+3. **Lists derived from summaries** - `shadow_asset_keys` and `zombie_asset_keys` are derived from `asset_summaries.is_shadow/is_zombie` flags (single source of truth)
+
+### Payload Contract (v2)
 ```json
-POST /api/runs/from-farm
 {
-  "tenant_id": "my-tenant",
-  "farm_base_url": "https://farm.example.com",
-  "snapshot_id": "snapshot-123"
+  "payload_version": 2,
+  "has_asset_summaries": true,
+  "asset_summaries_count": N,
+  "asset_summaries": { "<key>": { "aod_decision": "...", "aod_reason_codes": [...], ... } },
+  "shadow_asset_keys": [...],
+  "zombie_asset_keys": [...]
 }
 ```
 
-Validates:
-- HTTP status code (must be 2xx, 404 returns explicit "not found" error)
-- Content-Type includes JSON (HTML responses rejected with clear error)
-- Body is non-empty JSON
-- `meta.schema_version == "farm.v1"` (wrong version returns INVALID_INPUT_CONTRACT)
+### Canonical Reason Codes
+- `HAS_IDP`, `NO_IDP` - IdP presence
+- `HAS_CMDB`, `NO_CMDB` - CMDB presence
+- `HAS_FINANCE`, `NO_FINANCE` - Finance evidence
+- `HAS_CLOUD`, `NO_CLOUD` - Cloud evidence
+- `HAS_DISCOVERY`, `NO_DISCOVERY` - Discovery evidence
+- `RECENT_ACTIVITY`, `STALE_ACTIVITY`, `NO_ACTIVITY_TIMESTAMPS` - Activity status
+- `DISCOVERY_SOURCE_COUNT_GE_2`, `DISCOVERY_SOURCE_COUNT_LT_2` - Discovery source count
+- `NO_REASON_DATA` - Fallback when no other reason codes apply
+- `NOT_RECONCILIATION_ELIGIBLE` - Name-derived key (not domain-keyed)
+
+## Domain-Keyed Asset Aggregation
+
+**INVARIANT:** When any evidence contains a registered domain, the asset_key MUST be that registered domain.
+
+**Key Resolution Order (DOMAIN PROMOTION):**
+1. `asset.identifiers.domains` - Explicit domain from evidence
+2. `VENDOR_TO_DOMAIN[asset.vendor]` - Reverse lookup from vendor name
+3. **NAME-BASED PROMOTION** - Normalize asset name and look up in VENDOR_TO_DOMAIN
+4. Asset name if it looks like a domain (contains valid TLD)
+5. Fallback: normalized name (for internal systems only) - NOT reconciliation-eligible
+
+**Name Normalization for Vendor Lookup:**
+Asset names like "Notion-prod", "Monday.com-Test", "Zapier Integration" are normalized:
+- Strip parenthetical content: "Notion (Legacy)" → "notion"
+- Strip common suffixes: "-prod", "-dev", "-test", "-staging", "-api", "-integration"
+- Match against VENDOR_TO_DOMAIN for canonical domain
+
+## Vendor Hypothesis (Inference Layer)
+
+Design principle: **Inference decorates reality; it does not redefine it.**
+
+For discovery-only assets, vendor is typically unknown. The system infers a `vendor_hypothesis` from domain patterns:
+
+- **Location**: Normalization layer only (Stage 2)
+- **Max confidence**: 0.9 (never authoritative)
+- **Basis**: Curated domain-to-vendor mapping (~120 SaaS vendors)
+
+**INVARIANT**: `vendor_hypothesis` is NON-DECISIONABLE metadata. It MUST NOT be referenced by admission, classification, findings, policy, scoring, or automation logic.
 
 ## Running the Application
 
 ```bash
-python src/main.py
+# Start server
+python -m uvicorn src.main:app --host 0.0.0.0 --port 5000 --reload
 ```
 
 Access the UI at http://localhost:5000
@@ -209,6 +207,14 @@ Access the UI at http://localhost:5000
 pytest tests/ -v
 ```
 
+## Nuke Prevention Check
+
+Run `python scripts/nuke_check.py` to verify pipeline health:
+- Verifies FARM_URL, server health, tenant/snapshot access
+- Runs discovery pipeline and validates status codes
+- Determinism check: runs same snapshot twice, compares outputs
+- See `README_NUKE_CHECK.md` for full documentation
+
 ## UI Design
 
 Uses AutonomOS palette:
@@ -217,138 +223,24 @@ Uses AutonomOS palette:
 - Dark foundation: Slate-900/950
 - Font: Quicksand
 
-## Run Status Values (IRL Semantics)
+## Quality Guardrails
 
-- `UPSTREAM_ERROR` - Farm unreachable / non-JSON / HTTP error
-- `INVALID_SNAPSHOT` - Schema mismatch / wrong version / missing planes  
-- `COMPLETED_NO_ASSETS` - Pipeline completed; nothing admitted
-- `COMPLETED_WITH_RESULTS` - Normal success with assets
-- `COMPLETED` - General success (legacy)
-- `FAILED` - Pipeline execution failed
-- `INVALID_INPUT_CONTRACT` - Snapshot doesn't conform to input contract
+### Definition of "DONE"
+A change is DONE only if it meets all 4:
+1. **Semantics preserved** - Behavior matches stated IRL meaning
+2. **No cheating** - No overwrites, optional-everything, silent fallbacks, or ground-truth labels
+3. **Proof is real** - Tests alone are not proof; show before/after output from a real run
+4. **Negative test included** - Ensure the cheat can't come back
 
-## Farm Snapshot Normalization
-
-The pipeline includes a contract-driven normalization adapter (`src/aod/pipeline/farm_adapter.py`) that transforms raw Farm JSON into canonical AOD schema.
-
-**Validation Flow:** `fetch raw → normalize_farm_snapshot() → Snapshot.model_validate(normalized)`
-
-**Architecture:**
-- All field mappings defined in `FIELD_MAPPING` tables (not ad-hoc transformations)
-- Separate mapping tables for each record type: META, OBSERVATION, IDP_OBJECT, CMDB_CI, etc.
-- Unknown fields preserved in `raw_data` object
-- Fails fast with `NormalizationError` and clear missing field messages
-
-**Key Mappings:**
-| Farm Wire | Canonical | Plane |
-|-----------|-----------|-------|
-| `install_id` | `app_id` | endpoint.installed_apps |
-| `app_name` | `name` | endpoint.installed_apps |
-| `cloud_id` | `resource_id` | cloud.resources |
-| `dns_id` | `record_id` | network.dns |
-| `proxy_id` | `log_id` | network.proxy |
-| `queried_domain` | `domain` | network.dns |
-| `observed_name` | `name` | discovery.observations |
-| `vendor_hint` | `vendor` | discovery.observations |
-| `txn_id` | `transaction_id` | finance.transactions |
-| `not_after` | `expires_at` | network.certs |
-
-**Contract Tests:** `tests/test_farm_adapter_contract.py` (17 tests)
-**Real Farm Fixture:** `tests/fixtures/real_farm_snapshot.json`
-
-## Derived Classifications
-
-Shadow and Zombie are computed as **derived views** after the main pipeline using **timestamped activity signals** (not stored flags).
-
-### Activity Timestamps
-
-Activity is determined by timestamps from various planes, stored in `asset.activity_evidence`:
-- `idp_last_login_at` - Last SSO login
-- `discovery_observed_at` - When discovered
-- `cloud_observed_at` - Cloud resource observation
-- `endpoint_last_seen_at` - Endpoint agent observation
-- `network_last_seen_at` - DNS/proxy activity
-- `finance_last_transaction_at` - Last financial transaction
-- `latest_activity_at` - Max of all above (computed)
-
-### Shadow Asset
-- Finance evidence OR cloud presence OR discovery observations
-- AND no IdP match (no SSO / SCIM / service principal)
-- AND no CMDB match
-- AND has **recent activity** within window (default 30 days)
-
-*Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
-
-### Zombie Asset
-- CMDB or IdP presence (officially managed)
-- AND (**no activity timestamps** OR activity **outside window**)
-
-*Interpretation: "This is in our official systems but we have no evidence anyone is actually using it."*
-
-### Indeterminate
-- Shadow candidates with no activity timestamps → indeterminate (can't prove recent use)
-- Zombie classification treats missing timestamps as zombie (can't prove usage)
-
-### API
-`GET /api/runs/{run_id}/derived?activity_window_days=30`
-
-Returns counts, detailed lists, and **distribution diagnostic**:
-- `total_assets`, `with_idp_match`, `with_cmdb_match`
-- `with_activity_last_30_days`, `with_any_activity_timestamp`, `indeterminate_count`
-
-**Implementation:** `src/aod/pipeline/derived_classifications.py`
-**Tests:** `tests/test_shadow_zombie_timestamps.py` (9 tests)
+### Fail Loudly
+When data is bad or missing, do NOT "handle" it by pretending it's fine. Use explicit error statuses and surface the reason.
 
 ## Recent Changes
 
-- Added Nuke Prevention Check:
-  - `python scripts/nuke_check.py` - fast sanity check (~60 seconds)
-  - Verifies FARM_URL, server health, tenant/snapshot access, discovery run, status codes
-  - Determinism check: runs same snapshot twice, compares outputs
-  - Run history check: verifies both runs' data retained (no overwrites)
-  - Plain-English PASS/FAIL output with helpful failure diagnostics
-  - See README_NUKE_CHECK.md for documentation
-- Run-scoped deterministic IDs:
-  - All entity IDs (assets, findings, artifacts, drill samples) now include run_id
-  - Prevents data overwrites when re-running the same snapshot
-  - Both runs' data preserved in database for audit trail
-- Added Shadow and Zombie derived classifications:
-  - Computed on-read from asset evidence (not stored flags)
-  - New `/api/runs/{run_id}/derived` endpoint
-  - New KPI cards: Shadow Assets (amber), Zombie Assets (red)
-  - Drillable with explanations showing why each asset qualifies
-  - Help modal updated with Shadow/Zombie definitions
-- Added Help modal with plain-English guide:
-  - "? Help" button in header opens modal explaining AOD terminology
-  - Documents all 6 KPI boxes (Observations, Assets, Artifacts, Findings, Ambiguous, Rejected)
-  - Explains drill-down navigation and getting started steps
-  - Responsive grid layout for KPI explanations
-- Added full drill sets for all 6 KPI boxes:
-  - New database tables: observation_samples, ambiguous_matches, rejections
-  - Pipeline captures drill data during execution (observations capped at 2000)
-  - 3 new API endpoints: /observations, /ambiguous, /rejections (paginated)
-  - All 6 stat cards are now clickable and drillable
-- Added schema-driven drill-down architecture:
-  - DRILL_SCHEMA defines entities (assets, findings, artifacts), fields with defaults, and drill paths
-  - normalizeResponse() converts API data to safe view-models with defaults
-  - executeDrill() engine handles all drill logic with runtime-discovered paths
-  - Clickable KPI cards (Assets, Findings, Artifacts) initiate drill-down
-  - Drill panel with breadcrumb navigation and back button
-  - Zero-crash guarantee - missing fields, empty arrays handled gracefully
-  - Drill stops naturally when result set is 1 or no deeper paths available
-- Added snapshot size selector to UI:
-  - New "Snapshot Size" dropdown (All sizes, Small, Medium, Large)
-  - Size parameter passed to Farm API when listing snapshots
-  - Snapshots automatically reload when size selection changes
-- Pipeline determinism stabilization:
-  - All run identifiers (run_id, started_at) generated at API boundary
-  - Pipeline accepts run_id/started_at as required parameters
-  - All uuid4() replaced with deterministic_uuid() based on snapshot_id + content hash
-  - New determinism test verifies identical outputs across runs
-- Contract-driven Farm adapter with explicit mapping tables
-- 17 contract tests verifying all planes normalize correctly
-- Real Farm snapshot fixture for integration testing
-- Tenant dropdown auto-loads on page open
-- Updated `/api/runs/from-farm` to persist run provenance
-- Pipeline uses `COMPLETED_WITH_RESULTS` / `COMPLETED_NO_ASSETS`
-- FarmClient has `list_snapshots()` method
+- Payload Contract v2 with `payload_version`, `has_asset_summaries`, `asset_summaries_count` fingerprint fields
+- `NO_REASON_DATA` fallback ensures zero blank reason codes
+- Lists derived from summaries (single source of truth)
+- `/api/runs/resync` endpoint for manual Farm callback re-triggering
+- Domain-keyed asset aggregation with name-based promotion
+- Vendor hypothesis (non-decisionable inference)
+- Farm auto-sync with sync status tracking

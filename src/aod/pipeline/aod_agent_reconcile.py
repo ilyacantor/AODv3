@@ -406,11 +406,11 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     INVARIANT: If any entity has a resolvable registered domain, the asset_key
     MUST be that registered domain (e.g., notion.so).
     
-    Priority order (DOMAIN PROMOTION):
+    Priority order (DOMAIN PROMOTION - domain evidence ALWAYS wins over vendor inference):
     1. asset.identifiers.domains (explicit domain from evidence)
-    2. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN
-    3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN
-    4. Asset name if it looks like a domain (contains valid TLD)
+    2. Asset name if it looks like a domain (preserve actual domain-like names)
+    3. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN (only if no domain evidence)
+    4. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN (last resort)
     
     Returns the first valid registered domain, or None if not available.
     """
@@ -421,6 +421,13 @@ def _extract_registered_domain(asset: Asset) -> str | None:
                 registered = extract_registered_domain(raw_domain)
                 return registered if registered else raw_domain
     
+    name = asset.name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            registered = extract_registered_domain(name)
+            return registered if registered else name
+    
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = asset.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
@@ -429,12 +436,6 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     normalized_name = _normalize_name_for_vendor_lookup(asset.name)
     if normalized_name in VENDOR_TO_DOMAIN:
         return VENDOR_TO_DOMAIN[normalized_name]
-    
-    name = asset.name.lower().strip()
-    if "." in name:
-        parts = name.split(".")
-        if len(parts) >= 2 and len(parts[-1]) in (2, 3) and parts[-1].isalpha():
-            return name
     
     return None
 

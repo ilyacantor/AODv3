@@ -95,6 +95,8 @@ Assets are aggregated using a domain-keyed approach. If evidence contains a regi
 
 **Registered Domain Extraction (Dec 2025):** Asset keys are now normalized to their registered domain (eTLD+1) when evidence contains subdomains. For example, `images75.edge.com` → `edge.com`, `app.slack.com` → `slack.com`. This prevents KEY_NORMALIZATION_MISMATCH errors where Farm expects the registered domain but AOD was emitting the full subdomain. The `_extract_registered_domain()` function in `aod_agent_reconcile.py` now uses `extract_registered_domain()` from `vendor_inference.py` to properly extract registered domains from evidence.
 
+**Domain Evidence Priority (Dec 2025):** Domain evidence (from identifiers.domains or domain-like asset names) ALWAYS takes priority over vendor inference. This prevents vendor lookups from overriding actual domain names. For example, an asset named `slack-hq.com` with `vendor=Slack` will be keyed as `slack-hq.com`, not `slack.com`. Vendor-to-domain lookup only applies when there is NO domain evidence. This preserves typosquat domains (`s1ack.com`, `g00gle.com`) and vendor variant domains (`sfdc.io`, `slackapp.com`) as separate assets.
+
 ### Reconciliation Eligibility Modes
 
 Reconciliation eligibility is mode-based:

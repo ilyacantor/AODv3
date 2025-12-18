@@ -118,20 +118,6 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
         if domain:
             if domain in entities_by_domain:
                 existing_entity = entities_by_domain[domain]
-            else:
-                base_name = _extract_base_name(domain)
-                if canonical_name in entities_by_name:
-                    existing_entity = entities_by_name[canonical_name]
-                    del entities_by_name[canonical_name]
-                elif base_name and base_name in entities_by_name:
-                    existing_entity = entities_by_name[base_name]
-                    del entities_by_name[base_name]
-                
-                if existing_entity:
-                    existing_entity.domain = domain
-                    if not existing_entity.vendor_hypothesis:
-                        existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
-                    entities_by_domain[domain] = existing_entity
         else:
             if canonical_name in entities_by_name:
                 existing_entity = entities_by_name[canonical_name]

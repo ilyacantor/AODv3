@@ -97,6 +97,8 @@ Assets are aggregated using a domain-keyed approach. If evidence contains a regi
 
 **Domain Evidence Priority (Dec 2025):** Domain evidence (from identifiers.domains or domain-like asset names) ALWAYS takes priority over vendor inference. This prevents vendor lookups from overriding actual domain names. For example, an asset named `slack-hq.com` with `vendor=Slack` will be keyed as `slack-hq.com`, not `slack.com`. Vendor-to-domain lookup only applies when there is NO domain evidence. This preserves typosquat domains (`s1ack.com`, `g00gle.com`) and vendor variant domains (`sfdc.io`, `slackapp.com`) as separate assets.
 
+**Entity Domain Isolation (Dec 2025):** Observations with unique domains ALWAYS create separate entities. The normalize_observations stage no longer merges domain-bearing observations with existing name-based entities. This prevents variant domains (`slack-hq.com`, `slackapp.com`) from being absorbed into parent vendor entities (`slack.com`). Entities only merge if they share the exact same domain.
+
 ### Reconciliation Eligibility Modes
 
 Reconciliation eligibility is mode-based:

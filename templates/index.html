@@ -394,7 +394,11 @@
                 const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 return `Unknown ${fieldLabel}`;
             }
-            return value;
+            const friendlyLabels = {
+                'security_risk': 'Security Risks',
+                'governance_finding': 'Governance & Data Quality'
+            };
+            return friendlyLabels[value] || value;
         }
         
         function copyToClipboard(text) {
@@ -428,13 +432,14 @@
                 },
                 findings: {
                     fields: {
+                        category: { default: 'governance_finding' },
                         finding_type: { default: 'unknown' },
                         severity: { default: 'unknown' },
                         explanation: { default: 'No explanation available' },
                         asset_id: { default: null },
                         created_at: { default: null }
                     },
-                    drillPaths: ['finding_type', 'severity'],
+                    drillPaths: ['category', 'severity', 'finding_type'],
                     displayName: 'Findings'
                 },
                 artifacts: {

@@ -109,6 +109,18 @@ For detailed discovery logic documentation, see [DISCOVERY_LOGIC.md](./DISCOVERY
 
 Infrastructure domains (redis.io, postgresql.org, docker.com, kubernetes.io, etc.) are excluded from shadow/zombie classification. These represent internal infrastructure components that should not be flagged as shadow IT. The blocklist is maintained in `aod_agent_reconcile.py` as `INFRASTRUCTURE_DOMAINS`.
 
+### LLM Fringe Resolution (Dec 2025)
+
+For ambiguous assets where deterministic matching fails, an LLM-based fringe resolver provides classification assistance:
+
+- **Trigger Conditions**: asset_type unknown, governance gap (NO_CMDB AND NO_IDP), or vendor ambiguous
+- **Architecture**: Gemini-first with OpenAI fallback, 0.80 confidence threshold
+- **Fact Store**: LLM facts are persisted in `llm_facts` table by (tenant_id, entity_key) for reuse across runs
+- **INFRA_TECH Exclusion**: Assets classified as INFRA_TECH with high confidence (≥0.80) are excluded from shadow/zombie classification
+- **Explainability**: LLMMetadata on Asset includes llm_used, llm_confidence, llm_reason, llm_asset_type, llm_canonical_vendor, llm_provider, llm_model_id, fact_id, exclusion_reason, and match methods
+
+The LLM can provide CMDB/IdP matches via cmdb_ci_id/idp_object_id fields, creating an "llm_adjudicated" match method that promotes assets to governed status.
+
 ### Explain Non-Flag Endpoint
 
 A `POST /api/reconcile/explain-nonflag` endpoint allows Farm to query why specific assets are NOT flagged as shadow/zombie, providing detailed reasons and decisions.

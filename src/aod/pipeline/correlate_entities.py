@@ -8,6 +8,7 @@ from typing import Any, Optional
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
+from .derived_classifications import VENDOR_TO_DOMAIN
 
 
 class MatchStatus(str, Enum):
@@ -76,8 +77,12 @@ def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2) -> bool:
     - Names must be at least 4 chars to avoid false positives
     - One must be a prefix of the other with ≤2 extra chars, OR
     - Edit distance ≤ max_distance for similar-length names
+    - Known distinct products are blocked from fuzzy matching
     """
     if len(name1) < 4 or len(name2) < 4:
+        return False
+    
+    if (name1, name2) in KNOWN_DISTINCT_FUZZY or (name2, name1) in KNOWN_DISTINCT_FUZZY:
         return False
     
     if name1.startswith(name2) and len(name1) - len(name2) <= 2:
@@ -204,6 +209,18 @@ KNOWN_DISTINCT_PRODUCTS = {
     ("service", "servicenow"),
     ("snow", "snowflake"),
     ("snow", "servicenow"),
+}
+
+KNOWN_DISTINCT_FUZZY = {
+    ("miro", "jira"),
+    ("loom", "zoom"),
+    ("box", "fox"),
+    ("box", "cox"),
+    ("hub", "pub"),
+    ("hub", "hob"),
+    ("git", "bit"),
+    ("git", "hit"),
+    ("git", "sit"),
 }
 
 
@@ -522,6 +539,27 @@ def correlate_to_plane(
     
     canonical = entity.canonical_name
     name_matches = plane_index.by_canonical_name.get(canonical, [])
+    
+    if name_matches and use_vendor:
+        expected_vendor = None
+        if entity.domain:
+            registered_domain = extract_registered_domain(entity.domain.lower().strip()) or entity.domain.lower().strip()
+            expected_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
+        if not expected_vendor:
+            canonical_lower = entity.canonical_name.lower().strip()
+            if canonical_lower in VENDOR_TO_DOMAIN:
+                expected_vendor = canonical_lower.title()
+        if expected_vendor:
+            expected_vendor_normalized = normalize_string(expected_vendor)
+            validated_matches = []
+            for mid in name_matches:
+                record = plane_index.records.get(mid)
+                if record:
+                    record_vendor = normalize_string(str(getattr(record, 'vendor', '') or ''))
+                    if record_vendor and record_vendor == expected_vendor_normalized:
+                        validated_matches.append(mid)
+            name_matches = validated_matches
+    
     if len(name_matches) == 1:
         return PlaneMatch(
             status=MatchStatus.MATCHED,

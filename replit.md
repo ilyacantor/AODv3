@@ -82,11 +82,15 @@ Mode can be specified via the `/runs/resync` endpoint: `{"run_id": "...", "mode"
 ### CMDB Correlation
 
 CMDB correlation uses multiple matching strategies:
-1. **Canonical name matching** - Exact normalized name match
-2. **Fuzzy matching** - Levenshtein distance for typos  
-3. **Contains matching** - Substring matching with safeguards
+1. **Canonical name matching** - Exact normalized name match with vendor validation
+2. **Fuzzy matching** - Levenshtein distance for typos with KNOWN_DISTINCT_FUZZY blocklist
+3. **Contains matching** - Substring matching with KNOWN_DISTINCT_PRODUCTS blocklist
 4. **Vendor matching** - Entity vendor → CMDB vendor product index
 5. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor (e.g., trello.com → Atlassian → Trello CMDB record)
+
+**Fuzzy Matching Blocklist (Dec 2025):** KNOWN_DISTINCT_FUZZY prevents false positive fuzzy matches between distinct products with similar names (e.g., miro↔jira distance=2, loom↔zoom distance=1). These pairs are blocklisted from fuzzy matching to prevent incorrect CMDB correlations.
+
+**Vendor Validation (Dec 2025):** Canonical name matches against CMDB are validated using entity domain → DOMAIN_TO_VENDOR or entity name → VENDOR_TO_DOMAIN lookups to ensure the matched CMDB record's vendor matches the expected vendor for the entity.
 
 Domain matching is not directly available for CMDB as the data model doesn't include domain fields, but the domain-to-vendor lookup bridges this gap.
 

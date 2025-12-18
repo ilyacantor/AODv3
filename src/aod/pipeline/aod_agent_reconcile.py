@@ -241,10 +241,10 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     reasons = []
     evidence = {}
     
-    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_idp = asset.lens_coverage.idp
+    has_cmdb = asset.lens_coverage.cmdb
     has_finance = asset.lens_coverage.finance
-    has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cloud = asset.lens_coverage.cloud
     has_discovery = any(
         isinstance(ref, str) and ref.startswith("discovery:")
         for ref in asset.evidence_refs

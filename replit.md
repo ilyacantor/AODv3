@@ -69,6 +69,8 @@ AOD publishes its structured "actual" output (`shadow_actual`, `zombie_actual`, 
 
 Assets are aggregated using a domain-keyed approach. If evidence contains a registered domain, that domain becomes the `asset_key`. This ensures reconciliation accuracy by prioritizing domains from evidence, vendor lookups, and normalized names. `is_shadow`/`is_zombie` use OR semantics, and `reason_codes` are a union of all variants (with contradictory codes deduplicated - HAS_* takes precedence over NO_*).
 
+**Entity Domain Upgrade (Dec 2025):** During normalization, if an entity is first created from non-domain evidence (e.g., "Miro" from IdP) and later receives domain evidence (e.g., "miro.com" from discovery), the entity is upgraded to include the domain. The entity is re-keyed under the domain-based key, and all observations are merged. This ensures assets like miro.com and loom.com use domain-based keys even when initial evidence lacks domains.
+
 ### Reconciliation Eligibility Modes
 
 Reconciliation eligibility is mode-based:

@@ -55,6 +55,7 @@ CMDB_CI_MAPPING = {
     "environment": {"sources": ["environment"], "default": "unknown"},
     "owner": {"sources": ["owner", "owner_email"], "default": None},
     "vendor": {"sources": ["vendor"], "default": None},
+    "domain": {"sources": ["external_ref", "domain"], "default": None},
 }
 
 CLOUD_RESOURCE_MAPPING = {

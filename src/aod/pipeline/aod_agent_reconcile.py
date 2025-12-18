@@ -57,6 +57,50 @@ def _build_vendor_to_domain_map() -> dict[str, str]:
 
 VENDOR_TO_DOMAIN = _build_vendor_to_domain_map()
 
+INFRASTRUCTURE_DOMAINS = {
+    "redis.io",
+    "redis.com",
+    "postgresql.org",
+    "mysql.com",
+    "mariadb.org",
+    "docker.com",
+    "docker.io",
+    "kubernetes.io",
+    "k8s.io",
+    "nginx.org",
+    "nginx.com",
+    "apache.org",
+    "golang.org",
+    "go.dev",
+    "python.org",
+    "nodejs.org",
+    "npmjs.com",
+    "npmjs.org",
+    "pypi.org",
+    "rubygems.org",
+    "maven.org",
+    "gradle.org",
+    "jenkins.io",
+    "circleci.com",
+    "travisci.com",
+    "travis-ci.com",
+    "terraform.io",
+    "hashicorp.com",
+    "vault.hashicorp.com",
+    "consul.io",
+    "nomad.io",
+    "elastic.co",
+    "elasticsearch.org",
+    "mongodb.org",
+    "couchdb.apache.org",
+    "kafka.apache.org",
+    "rabbitmq.com",
+    "nats.io",
+    "prometheus.io",
+    "grafana.com",
+    "influxdata.com",
+}
+
 
 class ReasonCode(str, Enum):
     """Canonical reason codes for admission and classification decisions."""
@@ -177,6 +221,19 @@ def _normalize_name_for_vendor_lookup(name: str) -> str:
     return name.strip()
 
 
+def _is_infrastructure_domain(domain: str) -> bool:
+    """Check if a domain is in the infrastructure exclusion list."""
+    if not domain:
+        return False
+    domain_lower = domain.lower().strip()
+    if domain_lower in INFRASTRUCTURE_DOMAINS:
+        return True
+    for infra_domain in INFRASTRUCTURE_DOMAINS:
+        if domain_lower.endswith(f".{infra_domain}"):
+            return True
+    return False
+
+
 def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
     """
     Determine if an asset is eligible for shadow/zombie reconciliation.
@@ -186,10 +243,13 @@ def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
     - "infra" mode: Infrastructure - includes internal identifiers (elasticsearchlogs, etc)
     
     Eligibility criteria for SPRAWL mode (DOMAIN PROMOTION):
-    1. Has at least one registered domain in identifiers.domains
+    1. Has at least one registered domain in identifiers.domains (NOT infrastructure)
     2. OR has an explicit vendor (not "unknown")
-    3. OR normalized name matches a known vendor in VENDOR_TO_DOMAIN
-    4. OR has a domain-like name (contains "." with valid TLD pattern)
+    3. OR normalized name matches a known vendor in VENDOR_TO_DOMAIN (NOT infrastructure)
+    4. OR has a domain-like name (contains "." with valid TLD pattern, NOT infrastructure)
+    
+    EXCLUSION: Infrastructure domains (redis.io, postgresql.org, docker.com, etc.)
+    are excluded from sprawl mode reconciliation as they represent tooling, not SaaS.
     
     Eligibility criteria for INFRA mode:
     - All assets are eligible (including internal identifiers)
@@ -206,19 +266,31 @@ def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
+                if _is_infrastructure_domain(domain):
+                    return False
                 return True
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = asset.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            derived_domain = VENDOR_TO_DOMAIN[vendor_key]
+            if _is_infrastructure_domain(derived_domain):
+                return False
         return True
     
     normalized_name = _normalize_name_for_vendor_lookup(asset.name)
     if normalized_name in VENDOR_TO_DOMAIN:
+        derived_domain = VENDOR_TO_DOMAIN[normalized_name]
+        if _is_infrastructure_domain(derived_domain):
+            return False
         return True
     
     name = asset.name.lower()
     if "." in name and not name.startswith("."):
         parts = name.split(".")
         if len(parts) >= 2 and len(parts[-1]) >= 2:
+            if _is_infrastructure_domain(name):
+                return False
             return True
     
     return False
@@ -535,11 +607,12 @@ def emit_actual_results(
         has_discovery = "HAS_DISCOVERY" in reasons
         has_recent_activity = "RECENT_ACTIVITY" in reasons
         is_canonical = agg.get("is_canonical", False)
+        is_eligible = "NOT_RECONCILIATION_ELIGIBLE" not in reasons
         
         is_shadow = False
         is_zombie = False
         
-        if is_canonical:
+        if is_canonical and is_eligible:
             if not has_idp and not has_cmdb:
                 if (has_cloud or has_discovery) and has_recent_activity:
                     is_shadow = True

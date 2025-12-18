@@ -96,6 +96,7 @@ class CMDBConfigItem(BaseModel):
     environment: str = "unknown"
     owner: Optional[str] = None
     vendor: Optional[str] = None
+    domain: Optional[str] = None
     raw_data: Optional[dict[str, Any]] = None
 
 

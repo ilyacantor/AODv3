@@ -802,7 +802,7 @@ def correlate_entities_to_planes(
         result = CorrelationResult(entity=entity)
         
         result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True)
-        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=False, use_vendor=True)
+        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True)
         result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
         result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)
         

@@ -58,7 +58,7 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
 
 
 def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
-    """Build CMDB index: by canonical name"""
+    """Build CMDB index: by canonical name, by domain (external_ref), by vendor"""
     index = PlaneIndex()
     
     for ci in cmdb_plane.cis:
@@ -67,6 +67,10 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
+        
+        if ci.domain:
+            domain = normalize_domain(ci.domain)
+            add_to_index(index.by_domain, domain, record_id)
         
         if ci.vendor:
             vendor_key = normalize_string(ci.vendor)

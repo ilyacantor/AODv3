@@ -92,7 +92,11 @@ CMDB correlation uses multiple matching strategies:
 
 **Vendor Validation (Dec 2025):** Canonical name matches against CMDB are validated using entity domain → DOMAIN_TO_VENDOR or entity name → VENDOR_TO_DOMAIN lookups to ensure the matched CMDB record's vendor matches the expected vendor for the entity.
 
-Domain matching is not directly available for CMDB as the data model doesn't include domain fields, but the domain-to-vendor lookup bridges this gap.
+**Domain Matching via external_ref (Dec 2025):** CMDB records with `external_ref` containing URLs have their domain extracted and indexed. Correlation now uses multi-signal matching: entity name → entity domain → vendor fallback.
+
+### Infrastructure Domain Exclusion
+
+Infrastructure domains (redis.io, postgresql.org, docker.com, kubernetes.io, etc.) are excluded from shadow/zombie classification. These represent internal infrastructure components that should not be flagged as shadow IT. The blocklist is maintained in `aod_agent_reconcile.py` as `INFRASTRUCTURE_DOMAINS`.
 
 ### Explain Non-Flag Endpoint
 

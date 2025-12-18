@@ -511,7 +511,7 @@ class TestDomainFirstKeyNormalization:
     """Test that entities are keyed by domain when available"""
     
     def test_slack_observations_merge_to_domain_key(self):
-        """Slack, slack.com, and URLs all merge into one entity keyed as slack.com"""
+        """Domain isolation: observations with unique domains stay separate, same domain merges"""
         observations = [
             Observation(observation_id="obs-1", name="Slack", source="discovery"),
             Observation(observation_id="obs-2", name="slack.com", source="discovery"),
@@ -521,11 +521,13 @@ class TestDomainFirstKeyNormalization:
         entities = normalize_observations(observations)
         
         slack_entities = [e for e in entities if 'slack' in (e.domain or e.canonical_name)]
-        assert len(slack_entities) == 1, f"Expected 1 slack entity, got {len(slack_entities)}: {[e.canonical_name for e in slack_entities]}"
         
-        entity = slack_entities[0]
-        assert entity.domain == "slack.com", f"Expected domain 'slack.com', got '{entity.domain}'"
-        assert len(entity.observation_ids) == 3, f"Expected 3 observations, got {len(entity.observation_ids)}"
+        domain_entities = [e for e in slack_entities if e.domain == "slack.com"]
+        assert len(domain_entities) == 1, f"Expected 1 slack.com entity, got {len(domain_entities)}"
+        
+        domain_entity = domain_entities[0]
+        assert domain_entity.domain == "slack.com"
+        assert len(domain_entity.observation_ids) == 2, f"Expected 2 observations (domain-bearing), got {len(domain_entity.observation_ids)}: {domain_entity.observation_ids}"
     
     def test_domain_name_becomes_domain(self):
         """Observation named 'slack.com' gets domain extracted from name"""

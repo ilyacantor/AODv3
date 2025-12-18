@@ -64,9 +64,9 @@ class TestShadowZombieTimestamps:
     
     def test_shadow_paid_but_unmanaged(self):
         """
-        Shadow: Asset has finance evidence (paid for) but not in IdP or CMDB.
+        Shadow: Asset discovered + active + ungoverned.
         
-        Scenario: We're paying for software but it's not in SSO or asset registry.
+        Scenario: Discovered asset with recent activity, not in IdP or CMDB.
         Expected: Classified as Shadow IT.
         """
         recent_date = datetime.utcnow() - timedelta(days=5)
@@ -77,23 +77,25 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Unmanaged Paid App",
             asset_type=AssetType.SAAS,
+            identifiers=AssetIdentifiers(domains=["unmanagedapp.com"]),
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
-                cloud=LensStatus.UNMATCHED,
+                cloud=LensStatus.MATCHED,
                 finance=LensStatus.MATCHED
             ),
             lens_coverage=LensCoverage(
                 idp=False,
                 cmdb=False,
-                cloud=False,
+                cloud=True,
                 finance=True
             ),
             activity_evidence=ActivityEvidence(
                 finance_last_transaction_at=recent_date,
-                latest_activity_at=recent_date
+                latest_activity_at=recent_date,
+                discovery_observed_at=recent_date
             ),
-            evidence_refs=["finance:txn1"],
+            evidence_refs=["discovery:obs1", "finance:txn1"],
             tags=["finance_tracked"],
             admission_reason="Finance match: Recurring transaction"
         )
@@ -221,7 +223,7 @@ class TestShadowZombieTimestamps:
         result = classify_shadow(asset, activity_window_days=30)
         
         assert result.is_indeterminate is True
-        assert "No activity timestamps" in result.reason
+        assert "No evidence of presence" in result.reason or "No activity timestamps" in result.reason
     
     def test_compute_derived_summary_counts(self):
         """

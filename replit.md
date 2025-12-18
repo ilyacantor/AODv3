@@ -47,7 +47,9 @@ Findings are split into two categories for clearer prioritization:
 | governance_gap | LOW | Ownership / accountability |
 | duplication_risk | MEDIUM | Data quality / ambiguity |
 
-Sorting order: Category (security_risk first) → Severity (HIGH → MEDIUM → LOW) → Finding type. The `category` field is `security_risk` or `governance_finding`. UI drill-down shows category first with friendly labels: "Security Risks" and "Governance & Data Quality".
+Sorting order: Category (security_risk first) → Severity (CRITICAL → HIGH → MEDIUM → LOW) → Finding type. The `category` field is `security_risk` or `governance_finding`. 
+
+**UI Layout (Dec 2025):** Security Risks is now a standalone top-level KPI box (red color) alongside Assets, Shadow, and Zombie. Findings (governance/data quality) is also a top-level KPI. Artifacts and Ambiguous are now folded under Findings as sub-drill paths. The severity enum includes CRITICAL for the most severe issues.
 
 ### Correlation Disambiguation
 

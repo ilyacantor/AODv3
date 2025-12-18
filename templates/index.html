@@ -61,9 +61,11 @@
         .findings-list { max-height: 400px; overflow-y: auto; }
         .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
         .severity-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .severity-critical { background: rgba(220, 38, 38, 0.3); color: #FF6B6B; border: 1px solid rgba(220, 38, 38, 0.6); }
         .severity-high { background: rgba(239, 68, 68, 0.2); color: var(--red-400); border: 1px solid rgba(239, 68, 68, 0.4); }
         .severity-med { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); border: 1px solid rgba(245, 158, 11, 0.4); }
         .severity-low { background: rgba(34, 197, 94, 0.2); color: var(--green-400); border: 1px solid rgba(34, 197, 94, 0.4); }
+        .stat-value.stat-security { color: #FF6B6B; }
         .finding-type { font-size: 0.75rem; color: var(--purple-400); margin-bottom: 0.25rem; }
         .finding-explanation { color: var(--slate-400); font-size: 0.875rem; }
         .assets-table { width: 100%; border-collapse: collapse; }
@@ -304,9 +306,8 @@
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="artifacts" title="Internal objects that are NOT systems (e.g., user accounts, documents). These don't count as assets to avoid inflated counts."><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
-                    <div class="stat-card clickable" data-drill-type="findings" title="Actionable insights and conclusions derived from evidence analysis. Rule-based, deterministic, and fully explainable."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
-                    <div class="stat-card clickable" data-drill-type="ambiguous" title="Matches where multiple candidates exist and evidence was insufficient to disambiguate. Requires manual review."><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks: Identity gaps, finance gaps, and data conflicts that represent potential attack surface or exposure."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings" title="Governance and operational findings including CMDB gaps, ownership issues, and data quality concerns."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                     <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
                     <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
@@ -326,7 +327,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let normalizedData = { assets: [], findings: [], security_risks: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
@@ -430,6 +431,17 @@
                     drillPaths: ['asset_type', 'vendor', 'environment'],
                     displayName: 'Assets'
                 },
+                security_risks: {
+                    fields: {
+                        finding_type: { default: 'unknown' },
+                        severity: { default: 'unknown' },
+                        explanation: { default: 'No explanation available' },
+                        asset_id: { default: null },
+                        created_at: { default: null }
+                    },
+                    drillPaths: ['severity', 'finding_type'],
+                    displayName: 'Security Risks'
+                },
                 findings: {
                     fields: {
                         category: { default: 'governance_finding' },
@@ -439,8 +451,12 @@
                         asset_id: { default: null },
                         created_at: { default: null }
                     },
-                    drillPaths: ['category', 'severity', 'finding_type'],
-                    displayName: 'Findings'
+                    drillPaths: ['finding_type', 'severity', 'sub_view'],
+                    displayName: 'Findings',
+                    subViews: {
+                        artifacts: 'Artifacts',
+                        ambiguous: 'Ambiguous Matches'
+                    }
                 },
                 artifacts: {
                     fields: {
@@ -510,10 +526,9 @@
             },
             summaryCardMappings: {
                 statAssets: 'assets',
+                statSecurityRisks: 'security_risks',
                 statFindings: 'findings',
-                statArtifacts: 'artifacts',
                 statObservations: 'observations',
-                statAmbiguous: 'ambiguous',
                 statRejected: 'rejections',
                 statShadow: 'shadow',
                 statZombie: 'zombie'
@@ -1168,9 +1183,6 @@
                 document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
                 document.getElementById('statObservations').textContent = run.counts.observations_in;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
-                document.getElementById('statArtifacts').textContent = run.counts.artifacts_recorded;
-                document.getElementById('statFindings').textContent = run.counts.findings_generated;
-                document.getElementById('statAmbiguous').textContent = run.counts.ambiguous_matches;
                 document.getElementById('statRejected').textContent = run.counts.rejected;
             } catch (e) { console.error('Failed to load run details:', e); }
             
@@ -1218,12 +1230,25 @@
         async function loadFindings(runId) {
             try {
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
-                const { data: normalized, errors } = normalizeResponse('findings', data.findings || []);
-                normalizedData.findings = normalized;
-                if (errors.length > 0) console.warn('Findings normalization errors:', errors);
+                const allFindings = data.findings || [];
+                
+                const securityRisks = allFindings.filter(f => f.category === 'security_risk');
+                const governanceFindings = allFindings.filter(f => f.category !== 'security_risk');
+                
+                const { data: secNorm, errors: secErrs } = normalizeResponse('security_risks', securityRisks);
+                normalizedData.security_risks = secNorm;
+                if (secErrs.length > 0) console.warn('Security risks normalization errors:', secErrs);
+                
+                const { data: govNorm, errors: govErrs } = normalizeResponse('findings', governanceFindings);
+                normalizedData.findings = govNorm;
+                if (govErrs.length > 0) console.warn('Findings normalization errors:', govErrs);
+                
+                document.getElementById('statSecurityRisks').textContent = securityRisks.length;
+                document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 
                 console.error('Failed to load findings:', e);
                 normalizedData.findings = [];
+                normalizedData.security_risks = [];
             }
         }
         
@@ -1364,7 +1389,7 @@
                 </div>
                 
                 <div class="help-section">
-                    <h3 class="help-section-title">The 6 Numbers Explained</h3>
+                    <h3 class="help-section-title">The 7 Numbers Explained</h3>
                     <div class="help-kpi-grid">
                         <div class="help-kpi-item">
                             <div class="help-kpi-name">Observations</div>
@@ -1375,27 +1400,23 @@
                             <div class="help-kpi-desc">Confirmed software systems that passed quality checks. These are the real applications your organization uses.</div>
                         </div>
                         <div class="help-kpi-item">
-                            <div class="help-kpi-name">Artifacts</div>
-                            <div class="help-kpi-desc">Non-system items found during discovery - dashboards, reports, spreadsheets. Useful to track, but not software systems.</div>
+                            <div class="help-kpi-name" style="color: #FF6B6B;">Security Risks</div>
+                            <div class="help-kpi-desc">Critical issues like identity gaps (no SSO), finance gaps (shadow spend), and data conflicts. These require immediate attention.</div>
                         </div>
                         <div class="help-kpi-item">
                             <div class="help-kpi-name">Findings</div>
-                            <div class="help-kpi-desc">Issues or gaps discovered - like "this app has no owner" or "not found in your CMDB." Things that need attention.</div>
-                        </div>
-                        <div class="help-kpi-item">
-                            <div class="help-kpi-name">Ambiguous</div>
-                            <div class="help-kpi-desc">Cases where we found multiple possible matches and couldn't decide. These need a human to review and pick the right one.</div>
+                            <div class="help-kpi-desc">Governance and data quality issues - CMDB gaps, ownership gaps, and duplicate records. Important but less urgent than security risks.</div>
                         </div>
                         <div class="help-kpi-item">
                             <div class="help-kpi-name">Rejected</div>
                             <div class="help-kpi-desc">Items we saw but excluded from the catalog - didn't meet the quality bar or weren't real software systems.</div>
                         </div>
                         <div class="help-kpi-item">
-                            <div class="help-kpi-name">Shadow</div>
-                            <div class="help-kpi-desc">Unmanaged assets - software in use that isn't tracked in official systems like CMDB or Finance.</div>
+                            <div class="help-kpi-name" style="color: var(--amber-400);">Shadow</div>
+                            <div class="help-kpi-desc">Unmanaged assets - software in use that isn't tracked in official systems like CMDB or IdP.</div>
                         </div>
                         <div class="help-kpi-item">
-                            <div class="help-kpi-name">Zombie</div>
+                            <div class="help-kpi-name" style="color: var(--red-400);">Zombie</div>
                             <div class="help-kpi-desc">Inactive assets - software still in records but showing no recent usage or activity.</div>
                         </div>
                     </div>

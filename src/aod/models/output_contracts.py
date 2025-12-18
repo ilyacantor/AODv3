@@ -175,6 +175,7 @@ class Severity(str, Enum):
     LOW = "low"
     MED = "med"
     HIGH = "high"
+    CRITICAL = "critical"
 
 
 class FindingCategory(str, Enum):

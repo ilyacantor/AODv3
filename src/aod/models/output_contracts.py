@@ -177,6 +177,12 @@ class Severity(str, Enum):
     HIGH = "high"
 
 
+class FindingCategory(str, Enum):
+    """Finding category - security risks vs governance/operational findings"""
+    SECURITY_RISK = "security_risk"
+    GOVERNANCE_FINDING = "governance_finding"
+
+
 class Finding(BaseModel):
     """Explainable finding"""
     finding_id: UUID
@@ -184,6 +190,7 @@ class Finding(BaseModel):
     tenant_id: str
     run_id: str
     finding_type: FindingType
+    category: FindingCategory
     severity: Severity
     explanation: str
     evidence_refs: list[str] = Field(default_factory=list)

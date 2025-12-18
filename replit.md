@@ -88,7 +88,7 @@ CMDB correlation uses multiple matching strategies:
 4. **Vendor matching** - Entity vendor → CMDB vendor product index
 5. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor (e.g., trello.com → Atlassian → Trello CMDB record)
 
-**Fuzzy Matching Blocklist (Dec 2025):** KNOWN_DISTINCT_FUZZY prevents false positive fuzzy matches between distinct products with similar names (e.g., miro↔jira distance=2, loom↔zoom distance=1). These pairs are blocklisted from fuzzy matching to prevent incorrect CMDB correlations.
+**Fuzzy Matching Ratio Gate (Dec 2025):** Edit-distance fuzzy matching uses a relative threshold: `distance/max_len ≤ 0.20`. This prevents short-token collisions (miro↔jira at 2/4=0.50, loom↔zoom at 1/4=0.25) while preserving legitimate longer fuzzy matches where 1-2 char typos are proportionally smaller.
 
 **Vendor Validation (Dec 2025):** Canonical name matches against CMDB are validated using entity domain → DOMAIN_TO_VENDOR or entity name → VENDOR_TO_DOMAIN lookups to ensure the matched CMDB record's vendor matches the expected vendor for the entity.
 

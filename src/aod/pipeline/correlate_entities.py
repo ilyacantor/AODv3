@@ -65,7 +65,7 @@ def _levenshtein_distance(s1: str, s2: str) -> int:
     return prev_row[-1]
 
 
-def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2) -> bool:
+def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2, max_ratio: float = 0.20) -> bool:
     """
     Check if two names are a fuzzy match (typo tolerance).
     
@@ -76,13 +76,12 @@ def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2) -> bool:
     Rules:
     - Names must be at least 4 chars to avoid false positives
     - One must be a prefix of the other with ≤2 extra chars, OR
-    - Edit distance ≤ max_distance for similar-length names
-    - Known distinct products are blocked from fuzzy matching
+    - Edit distance ≤ max_distance AND distance/max_len ≤ max_ratio (0.20)
+    
+    The ratio gate prevents short-token collisions like miro↔jira (2/4=0.50)
+    and loom↔zoom (1/4=0.25) while preserving longer fuzzy matches.
     """
     if len(name1) < 4 or len(name2) < 4:
-        return False
-    
-    if (name1, name2) in KNOWN_DISTINCT_FUZZY or (name2, name1) in KNOWN_DISTINCT_FUZZY:
         return False
     
     if name1.startswith(name2) and len(name1) - len(name2) <= 2:
@@ -93,7 +92,9 @@ def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2) -> bool:
     len_diff = abs(len(name1) - len(name2))
     if len_diff <= 2:
         distance = _levenshtein_distance(name1, name2)
-        return distance <= max_distance
+        max_len = max(len(name1), len(name2))
+        ratio = distance / max_len
+        return distance <= max_distance and ratio <= max_ratio
     
     return False
 
@@ -211,17 +212,6 @@ KNOWN_DISTINCT_PRODUCTS = {
     ("snow", "servicenow"),
 }
 
-KNOWN_DISTINCT_FUZZY = {
-    ("miro", "jira"),
-    ("loom", "zoom"),
-    ("box", "fox"),
-    ("box", "cox"),
-    ("hub", "pub"),
-    ("hub", "hob"),
-    ("git", "bit"),
-    ("git", "hit"),
-    ("git", "sit"),
-}
 
 
 def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:

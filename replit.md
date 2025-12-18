@@ -29,6 +29,26 @@ AOD Fresh uses a 7-stage sequential pipeline:
 6.  `artifact_handler.py`: Identifies and records artifacts.
 7.  `findings_engine.py`: Generates deterministic findings.
 
+### Finding Categories (Dec 2025)
+
+Findings are split into two categories for clearer prioritization:
+
+**Security Risks** (actionable, risk-bearing):
+| Finding Type | Severity | Why Security Risk |
+|--------------|----------|-------------------|
+| identity_gap | HIGH | Asset bypasses IdP → no auth, no MFA, no deprovisioning |
+| finance_gap | HIGH | Paying for undiscovered system → likely shadow IT |
+| data_conflict | MEDIUM | Conflicting environment/state can mask prod exposure |
+
+**Governance/Operational Findings** (hygiene, accuracy, readiness):
+| Finding Type | Severity | Category |
+|--------------|----------|----------|
+| cmdb_gap | MEDIUM | Asset governance |
+| governance_gap | LOW | Ownership / accountability |
+| duplication_risk | MEDIUM | Data quality / ambiguity |
+
+Sorting order: Category (security_risk first) → Severity (HIGH → MEDIUM → LOW) → Finding type. The `category` field is `security_risk` or `governance_finding`. UI drill-down shows category first with friendly labels: "Security Risks" and "Governance & Data Quality".
+
 ### Correlation Disambiguation
 
 The system uses specific codes (e.g., `MULTI_ENV`, `LEGACY`, `DUPLICATE`, `PARENT_VENDOR`, `UNRESOLVED`) to resolve multiple matches. Disambiguation is evidence-driven, requiring CMDB fields to support resolution; otherwise, matches remain `AMBIGUOUS`. Prevention mechanisms include `PARENT_VENDOR` to avoid incorrect vendor matching and `KNOWN_DISTINCT_PRODUCTS` blocklist for substring false positives (e.g., "box" vs. "dropbox"). Fuzzy matching handles typos with Levenshtein distance for names ≥4 characters.

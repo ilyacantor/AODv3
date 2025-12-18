@@ -205,12 +205,29 @@
         .help-kpi-name { font-weight: 600; color: var(--cyan-400); font-size: 0.875rem; margin-bottom: 0.25rem; }
         .help-kpi-desc { color: var(--slate-400); font-size: 0.8rem; line-height: 1.4; }
         @media (max-width: 600px) { .help-kpi-grid { grid-template-columns: 1fr; } }
+        .mode-toggle { display: flex; align-items: center; gap: 0.75rem; margin-right: 1rem; }
+        .mode-label { font-size: 0.8rem; font-weight: 600; color: var(--slate-500); transition: color 0.2s ease; }
+        .mode-label.active { color: var(--cyan-400); }
+        .toggle-switch { position: relative; width: 48px; height: 24px; background: var(--slate-700); border-radius: 12px; cursor: pointer; transition: background 0.2s ease; }
+        .toggle-switch.prod { background: var(--cyan-600); }
+        .toggle-knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .toggle-switch.prod .toggle-knob { transform: translateX(24px); }
+        .mode-indicator { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
+        .mode-indicator.dev { background: rgba(148, 163, 184, 0.2); color: var(--slate-400); }
+        .mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
     </style>
 </head>
 <body>
     <header>
         <div class="logo"><div class="logo-icon">A</div><div class="logo-text">AOD <span>Fresh</span></div></div>
         <div class="header-actions">
+            <div class="mode-toggle" title="Dev mode: LLM off (deterministic only). Prod mode: LLM on (calls made as needed for fringe resolution).">
+                <span class="mode-label active" id="devLabel">Dev</span>
+                <div class="toggle-switch" id="modeToggle">
+                    <div class="toggle-knob"></div>
+                </div>
+                <span class="mode-label" id="prodLabel">Prod</span>
+            </div>
             <button class="btn-help" id="helpBtn">? Help</button>
             <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
         </div>
@@ -311,6 +328,42 @@
         let drillStack = [];
         let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
+        
+        let llmMode = 'dev';
+        
+        function initModeToggle() {
+            const toggle = document.getElementById('modeToggle');
+            const devLabel = document.getElementById('devLabel');
+            const prodLabel = document.getElementById('prodLabel');
+            
+            const saved = localStorage.getItem('aod_llm_mode');
+            if (saved === 'prod') {
+                llmMode = 'prod';
+                toggle.classList.add('prod');
+                devLabel.classList.remove('active');
+                prodLabel.classList.add('active');
+            }
+            
+            toggle.addEventListener('click', () => {
+                if (llmMode === 'dev') {
+                    llmMode = 'prod';
+                    toggle.classList.add('prod');
+                    devLabel.classList.remove('active');
+                    prodLabel.classList.add('active');
+                } else {
+                    llmMode = 'dev';
+                    toggle.classList.remove('prod');
+                    devLabel.classList.add('active');
+                    prodLabel.classList.remove('active');
+                }
+                localStorage.setItem('aod_llm_mode', llmMode);
+                console.log('LLM mode:', llmMode === 'prod' ? 'ON' : 'OFF');
+            });
+        }
+        
+        function getLlmEnabled() {
+            return llmMode === 'prod';
+        }
         
         function safeStr(value, maxLen = 200) {
             if (value === null || value === undefined) return 'N/A';
@@ -1227,7 +1280,7 @@
                 const r = await fetch('/api/runs/from-farm', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, llm_enabled: getLlmEnabled() }) 
                 });
                 
                 const result = await r.json();
@@ -1270,6 +1323,7 @@
             popDrill();
         });
         
+        initModeToggle();
         checkHealth(); 
         loadRuns();
         loadTenants();

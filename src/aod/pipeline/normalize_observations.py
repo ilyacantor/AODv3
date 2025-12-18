@@ -109,23 +109,29 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         
-        lookup_key = canonical_name
-        if domain:
-            lookup_key = f"{canonical_name}:{domain}"
+        domain_key = f"{canonical_name}:{domain}" if domain else None
+        name_only_key = canonical_name
         
-        if lookup_key in entities_by_canonical:
-            entity = entities_by_canonical[lookup_key]
-            entity.observation_ids.append(obs.observation_id)
-            if domain and not entity.domain:
-                entity.domain = domain
-                if not entity.vendor_hypothesis:
-                    entity.vendor_hypothesis = infer_vendor_from_domain(domain)
-            if hostname and not entity.hostname:
-                entity.hostname = hostname
-            if uri and not entity.uri:
-                entity.uri = uri
-            if vendor and not entity.vendor:
-                entity.vendor = vendor
+        existing_entity = None
+        if domain_key and domain_key in entities_by_canonical:
+            existing_entity = entities_by_canonical[domain_key]
+        elif name_only_key in entities_by_canonical:
+            existing_entity = entities_by_canonical[name_only_key]
+            if domain and domain_key and not existing_entity.domain:
+                del entities_by_canonical[name_only_key]
+                existing_entity.domain = domain
+                if not existing_entity.vendor_hypothesis:
+                    existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
+                entities_by_canonical[domain_key] = existing_entity
+        
+        if existing_entity:
+            existing_entity.observation_ids.append(obs.observation_id)
+            if hostname and not existing_entity.hostname:
+                existing_entity.hostname = hostname
+            if uri and not existing_entity.uri:
+                existing_entity.uri = uri
+            if vendor and not existing_entity.vendor:
+                existing_entity.vendor = vendor
         else:
             vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
             entity = CandidateEntity(
@@ -140,6 +146,7 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
                 observation_ids=[obs.observation_id],
                 source=obs.source
             )
-            entities_by_canonical[lookup_key] = entity
+            final_key = domain_key if domain_key else name_only_key
+            entities_by_canonical[final_key] = entity
     
     return sorted(entities_by_canonical.values(), key=lambda e: e.canonical_name)

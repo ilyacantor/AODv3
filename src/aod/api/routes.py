@@ -1860,3 +1860,245 @@ async def explain_nonflag(request: ExplainNonflagRequest):
         ask=request.ask,
         explanations=explanations
     )
+
+
+class AssetTraceRequest(BaseModel):
+    """Request for single-asset trace debugging"""
+    run_id: str
+    asset_key: str
+
+
+class DomainTraceStep(BaseModel):
+    """One step in domain canonicalization trace"""
+    step: str
+    input_value: str
+    output_value: Optional[str]
+    function: str
+    module: str
+
+
+class AssetTraceResponse(BaseModel):
+    """Response for single-asset trace debugging"""
+    asset_key: str
+    found_in_assets: bool
+    found_in_observations: bool
+    raw_evidence_domains: list[str]
+    canonicalization_steps: list[DomainTraceStep]
+    final_asset_key: Optional[str]
+    key_source: Optional[str]
+    asset_data: Optional[dict] = None
+    observations: list[dict] = []
+
+
+@router.post("/debug/trace-asset")
+async def trace_asset(request: AssetTraceRequest) -> AssetTraceResponse:
+    """
+    Debug endpoint: Trace a single asset through the canonicalization pipeline.
+    
+    Shows:
+    - Raw evidence domains extracted from observations
+    - Canonicalization steps for each domain
+    - Final asset key and where it was produced
+    """
+    from ..pipeline.vendor_inference import extract_registered_domain, DOMAIN_TO_VENDOR
+    from ..pipeline.aod_agent_reconcile import _extract_registered_domain, VENDOR_TO_DOMAIN, _normalize_name_for_vendor_lookup
+    
+    db = await get_db()
+    
+    asset_row = await db.fetchrow(
+        "SELECT * FROM assets WHERE run_id = $1 AND asset_id = $2",
+        request.run_id, request.asset_key
+    )
+    
+    if not asset_row:
+        asset_row = await db.fetchrow(
+            "SELECT * FROM assets WHERE run_id = $1 AND (name ILIKE $2 OR asset_id ILIKE $2)",
+            request.run_id, f"%{request.asset_key}%"
+        )
+    
+    obs_rows = await db.fetch(
+        """SELECT * FROM observation_samples 
+           WHERE run_id = $1 
+           AND (name ILIKE $2 OR domain ILIKE $2 OR observation_id ILIKE $2)
+           LIMIT 50""",
+        request.run_id, f"%{request.asset_key}%"
+    )
+    
+    raw_domains: list[str] = []
+    observations: list[dict] = []
+    
+    for obs in obs_rows:
+        obs_dict = dict(obs)
+        observations.append(obs_dict)
+        if obs_dict.get("domain"):
+            raw_domains.append(obs_dict["domain"])
+        name = obs_dict.get("name", "")
+        if name and "." in name:
+            parts = name.split(".")
+            if len(parts) >= 2 and parts[-1] in ("com", "org", "net", "io", "co", "dev", "app", "us", "so"):
+                raw_domains.append(name)
+    
+    canonicalization_steps: list[DomainTraceStep] = []
+    
+    for domain in set(raw_domains):
+        registered = extract_registered_domain(domain)
+        canonicalization_steps.append(DomainTraceStep(
+            step="extract_registered_domain",
+            input_value=domain,
+            output_value=registered,
+            function="extract_registered_domain",
+            module="vendor_inference.py"
+        ))
+        
+        if registered and registered in DOMAIN_TO_VENDOR:
+            canonicalization_steps.append(DomainTraceStep(
+                step="vendor_lookup",
+                input_value=registered,
+                output_value=DOMAIN_TO_VENDOR[registered],
+                function="DOMAIN_TO_VENDOR lookup",
+                module="vendor_inference.py"
+            ))
+    
+    final_asset_key = None
+    key_source = None
+    asset_data = None
+    
+    if asset_row:
+        asset_data = dict(asset_row)
+        name = asset_data.get("name", "")
+        identifiers = asset_data.get("identifiers", {})
+        vendor = asset_data.get("vendor")
+        
+        domains_from_identifiers = identifiers.get("domains", []) if identifiers else []
+        
+        if domains_from_identifiers:
+            domain = domains_from_identifiers[0]
+            registered = extract_registered_domain(domain)
+            final_asset_key = registered or domain
+            key_source = "identifiers.domains"
+            canonicalization_steps.append(DomainTraceStep(
+                step="asset_key_from_identifiers",
+                input_value=domain,
+                output_value=final_asset_key,
+                function="_extract_registered_domain",
+                module="aod_agent_reconcile.py"
+            ))
+        elif "." in name:
+            parts = name.split(".")
+            if len(parts) >= 2 and parts[-1] in ("com", "org", "net", "io", "co", "dev", "app", "us", "so"):
+                registered = extract_registered_domain(name)
+                final_asset_key = registered or name
+                key_source = "asset.name (domain-like)"
+                canonicalization_steps.append(DomainTraceStep(
+                    step="asset_key_from_name",
+                    input_value=name,
+                    output_value=final_asset_key,
+                    function="_extract_registered_domain",
+                    module="aod_agent_reconcile.py"
+                ))
+        elif vendor and vendor.lower() in VENDOR_TO_DOMAIN:
+            final_asset_key = VENDOR_TO_DOMAIN[vendor.lower()]
+            key_source = "vendor_to_domain_lookup"
+            canonicalization_steps.append(DomainTraceStep(
+                step="asset_key_from_vendor",
+                input_value=vendor,
+                output_value=final_asset_key,
+                function="VENDOR_TO_DOMAIN lookup",
+                module="aod_agent_reconcile.py"
+            ))
+        else:
+            normalized = _normalize_name_for_vendor_lookup(name)
+            if normalized in VENDOR_TO_DOMAIN:
+                final_asset_key = VENDOR_TO_DOMAIN[normalized]
+                key_source = "name_to_vendor_lookup"
+                canonicalization_steps.append(DomainTraceStep(
+                    step="asset_key_from_normalized_name",
+                    input_value=name,
+                    output_value=final_asset_key,
+                    function="_normalize_name_for_vendor_lookup + VENDOR_TO_DOMAIN",
+                    module="aod_agent_reconcile.py"
+                ))
+            else:
+                final_asset_key = None
+                key_source = "no_domain_available"
+    
+    return AssetTraceResponse(
+        asset_key=request.asset_key,
+        found_in_assets=bool(asset_row),
+        found_in_observations=bool(obs_rows),
+        raw_evidence_domains=list(set(raw_domains)),
+        canonicalization_steps=canonicalization_steps,
+        final_asset_key=final_asset_key,
+        key_source=key_source,
+        asset_data=asset_data,
+        observations=observations
+    )
+
+
+class TwoPathDiffRequest(BaseModel):
+    """Request for two-path diff test"""
+    domains: list[str]
+
+
+class PathDiffResult(BaseModel):
+    """Result of comparing two canonicalization paths"""
+    raw_domain: str
+    vendor_inference_result: Optional[str]
+    reconcile_result: Optional[str]
+    match: bool
+
+
+class TwoPathDiffResponse(BaseModel):
+    """Response for two-path diff test"""
+    results: list[PathDiffResult]
+    all_match: bool
+    mismatches: list[str]
+
+
+@router.post("/debug/two-path-diff")
+async def two_path_diff(request: TwoPathDiffRequest) -> TwoPathDiffResponse:
+    """
+    Debug endpoint: Compare canonicalization between vendor_inference and reconcile paths.
+    
+    Detects "two canonicalizers exist" bugs where different code paths
+    produce different keys for the same input.
+    """
+    import uuid as uuid_lib
+    from ..pipeline.vendor_inference import extract_registered_domain as vendor_extract
+    from ..pipeline.aod_agent_reconcile import _extract_registered_domain
+    from ..models.output_contracts import Asset, AssetIdentifiers, LensStatuses, LensCoverage
+    
+    results: list[PathDiffResult] = []
+    mismatches: list[str] = []
+    
+    for domain in request.domains:
+        vendor_result = vendor_extract(domain)
+        
+        asset = Asset(
+            asset_id=uuid_lib.uuid4(),
+            tenant_id="test-tenant",
+            run_id="test",
+            name=domain,
+            identifiers=AssetIdentifiers(domains=[]),
+            vendor=None,
+            lens_status=LensStatuses(),
+            lens_coverage=LensCoverage(),
+        )
+        reconcile_result = _extract_registered_domain(asset)
+        
+        is_match = vendor_result == reconcile_result
+        if not is_match:
+            mismatches.append(f"{domain}: vendor={vendor_result}, reconcile={reconcile_result}")
+        
+        results.append(PathDiffResult(
+            raw_domain=domain,
+            vendor_inference_result=vendor_result,
+            reconcile_result=reconcile_result,
+            match=is_match
+        ))
+    
+    return TwoPathDiffResponse(
+        results=results,
+        all_match=len(mismatches) == 0,
+        mismatches=mismatches
+    )

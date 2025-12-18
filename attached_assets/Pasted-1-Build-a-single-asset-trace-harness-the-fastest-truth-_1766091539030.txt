@@ -1,0 +1,81 @@
+1) Build a “single-asset trace” harness (the fastest truth tool)
+
+Pick one missed asset with KEY_NORMALIZATION_MISMATCH (e.g., micros0ft.com, z00m.us, dr0pbox.com, zoom-video.com). 
+
+reconcile_eef907ee-a84e-44e2-86…
+
+Instrument the pipeline to emit, for that asset only:
+
+Raw evidence domains (every domain extracted from discovery / finance / idp / cmdb for that asset)
+
+Canonicalization outputs for each raw domain
+
+The final admitted asset key actually used in AOD
+
+Where that key was produced (which function + module)
+
+If you can’t print it from inside the pipeline, add a debug endpoint or a one-off CLI command that loads the snapshot and runs only the extraction + canonicalization stage.
+
+Expected outcome: you’ll see exactly where promotion diverges (or where a canonical key is computed but not used).
+
+2) Create a “canonical key equivalence test” (unit test, no pipeline)
+
+This is the surgical test that catches 90% of these regressions:
+
+Test set
+
+Use a table-driven test with domains like:
+
+images75.edge.com → edge.com
+
+app.slack.com → slack.com
+
+telemetry611.cloud.net → cloud.net (or whatever registered domain you expect)
+
+identity360.cdn.com → cdn.com (or expected eTLD+1)
+
+punycode / weird / typo domains you’re simulating (dr0pbox.com, micros0ft.com, z00m.us)
+
+Your reconciliation outputs are full of “evidence exists but not normalized” on these shapes. 
+
+reconcile_3e6589ae-0d1a-4abe-9b…
+
+reconcile_eef907ee-a84e-44e2-86…
+
+Assertions (must all pass)
+
+derive_canonical_asset_key(raw_domain) == expected_registered_domain
+
+extract_registered_domain(raw_domain) == expected_registered_domain
+
+Idempotence: canonical(canonical(x)) == canonical(x)
+
+Promotion guarantee: subdomain input never returns the raw subdomain (unless extraction truly fails)
+
+This isolates “bad extraction” vs “good extraction but not applied.”
+
+3) Run a “two-path diff” test: reconcile code vs pipeline code
+
+Most of these bugs are not “domain extraction is wrong”—they’re “a different function path is used depending on mode.”
+
+So test this explicitly:
+
+Path A: the function used by the reconciliation report generator
+
+Path B: the function used by the AOD pipeline when it builds asset keys
+
+For the same list of raw domains, print:
+
+raw_domain | canonical_key(reconcile) | canonical_key(pipeline) | match?
+
+If any row differs, that’s the root cause class:
+
+“two canonicalizers exist”
+
+“imports differ”
+
+“mode flag chooses a different canonicalizer”
+
+“fallback path returns raw domain”
+
+This is exactly consistent with your earlier suspicion about _extract_registered_domain() returning the raw string. (And the JSON symptoms match that failure mode.)

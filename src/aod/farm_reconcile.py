@@ -19,7 +19,8 @@ def build_reconcile_payload(
     assets: list[Asset],
     findings: list[Finding],
     snapshot_id: str,
-    rejections: list[dict] | None = None
+    rejections: list[dict] | None = None,
+    mode: str = "sprawl"
 ) -> dict[str, Any]:
     """
     Build the reconcile payload for Farm.
@@ -33,6 +34,7 @@ def build_reconcile_payload(
         findings: List of generated findings
         snapshot_id: The source snapshot ID
         rejections: Optional list of rejected candidates
+        mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
     
     Returns:
         The reconcile payload dict ready to be sent to Farm or returned via API
@@ -41,7 +43,8 @@ def build_reconcile_payload(
         run_id=run_log.run_id,
         assets=assets,
         activity_window_days=90,
-        rejections=rejections
+        rejections=rejections,
+        mode=mode
     )
     
     high_severity_findings = [
@@ -112,7 +115,8 @@ async def reconcile_to_farm(
     findings: list[Finding],
     snapshot_id: str,
     farm_url: Optional[str] = None,
-    rejections: list[dict] | None = None
+    rejections: list[dict] | None = None,
+    mode: str = "sprawl"
 ) -> tuple[bool, Optional[str]]:
     """
     Reconcile AOD results back to Farm.
@@ -129,6 +133,7 @@ async def reconcile_to_farm(
         snapshot_id: The source snapshot ID
         farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
         rejections: Optional list of rejected candidates
+        mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
     
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -142,7 +147,8 @@ async def reconcile_to_farm(
         assets=assets,
         findings=findings,
         snapshot_id=snapshot_id,
-        rejections=rejections
+        rejections=rejections,
+        mode=mode
     )
     
     headers = {"Content-Type": "application/json"}

@@ -131,6 +131,34 @@ def _normalize_key(key: str) -> str:
     return re.sub(r'[^a-z0-9]', '', key.lower())
 
 
+def _deduplicate_reason_codes(reasons: set) -> set:
+    """
+    Deduplicate contradictory reason codes when aggregating across assets.
+    
+    When multiple assets are aggregated under one domain key, their reason codes
+    are unioned. This can result in contradictory codes like HAS_IDP + NO_IDP.
+    
+    Resolution: HAS_* takes precedence over NO_* (OR semantics - if any asset
+    has the evidence, the domain has the evidence).
+    """
+    contradictions = [
+        ("HAS_IDP", "NO_IDP"),
+        ("HAS_CMDB", "NO_CMDB"),
+        ("HAS_FINANCE", "NO_FINANCE"),
+        ("HAS_CLOUD", "NO_CLOUD"),
+        ("HAS_DISCOVERY", "NO_DISCOVERY"),
+        ("RECENT_ACTIVITY", "STALE_ACTIVITY"),
+        ("DISCOVERY_SOURCE_COUNT_GE_2", "DISCOVERY_SOURCE_COUNT_LT_2"),
+    ]
+    
+    result = set(reasons)
+    for has_code, no_code in contradictions:
+        if has_code in result and no_code in result:
+            result.discard(no_code)
+    
+    return result
+
+
 def _normalize_name_for_vendor_lookup(name: str) -> str:
     """
     Normalize asset name for vendor lookup by stripping common suffixes.
@@ -149,26 +177,32 @@ def _normalize_name_for_vendor_lookup(name: str) -> str:
     return name.strip()
 
 
-def is_reconciliation_eligible(asset: Asset) -> bool:
+def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
     """
     Determine if an asset is eligible for shadow/zombie reconciliation.
     
-    Only assets that represent external services (registered domains, known SaaS)
-    should be classified. Internal identifiers like "customer", "elasticsearchlogs"
-    should be excluded from shadow/zombie classification to avoid false positives.
+    Mode-based eligibility:
+    - "sprawl" mode: SaaS discovery - only external services (domains, known SaaS)
+    - "infra" mode: Infrastructure - includes internal identifiers (elasticsearchlogs, etc)
     
-    Eligibility criteria (DOMAIN PROMOTION):
+    Eligibility criteria for SPRAWL mode (DOMAIN PROMOTION):
     1. Has at least one registered domain in identifiers.domains
     2. OR has an explicit vendor (not "unknown")
     3. OR normalized name matches a known vendor in VENDOR_TO_DOMAIN
     4. OR has a domain-like name (contains "." with valid TLD pattern)
     
+    Eligibility criteria for INFRA mode:
+    - All assets are eligible (including internal identifiers)
+    
     NOTE: vendor_hypothesis is NOT used here as it is NON-DECISIONABLE metadata.
     Per invariant: vendor_hypothesis MUST NOT be referenced by admission, classification,
     findings, policy, scoring, or automation logic.
     
-    Internal identifiers are excluded by failing all criteria above.
+    Internal identifiers are excluded in sprawl mode by failing all criteria above.
     """
+    if mode == "infra":
+        return True
+    
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
@@ -323,7 +357,7 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     return None
 
 
-def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActualResult:
+def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "sprawl") -> AssetActualResult:
     """
     Produce the actual classification result for an asset.
     
@@ -335,10 +369,15 @@ def classify_actual(asset: Asset, activity_window_days: int = 90) -> AssetActual
     
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
+    
+    Args:
+        asset: The asset to classify
+        activity_window_days: Activity window for classification
+        mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
     """
     reasons, evidence = compute_asset_reasons(asset, activity_window_days)
     
-    eligible = is_reconciliation_eligible(asset)
+    eligible = is_reconciliation_eligible(asset, mode=mode)
     evidence["reconciliation_eligible"] = eligible
     
     if not eligible:
@@ -433,7 +472,8 @@ def emit_actual_results(
     run_id: str,
     assets: list[Asset],
     activity_window_days: int = 90,
-    rejections: list[dict] | None = None
+    rejections: list[dict] | None = None,
+    mode: str = "sprawl"
 ) -> ActualResultsOutput:
     """
     Emit AOD's actual results for a run.
@@ -456,6 +496,7 @@ def emit_actual_results(
         assets: List of admitted assets from AOD
         activity_window_days: Activity window for classification
         rejections: Optional list of rejected candidates with their metadata
+        mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
     
     Returns:
         ActualResultsOutput with all actual classifications and reason codes
@@ -463,7 +504,7 @@ def emit_actual_results(
     domain_aggregates: dict[str, dict] = {}
     
     for asset in assets:
-        result = classify_actual(asset, activity_window_days)
+        result = classify_actual(asset, activity_window_days, mode=mode)
         key = result.asset_key
         
         if key not in domain_aggregates:
@@ -483,6 +524,10 @@ def emit_actual_results(
     
     for key, agg in domain_aggregates.items():
         reasons = agg["reasons"]
+        
+        reasons = _deduplicate_reason_codes(reasons)
+        agg["reasons"] = reasons
+        
         has_idp = "HAS_IDP" in reasons
         has_cmdb = "HAS_CMDB" in reasons
         has_finance = "HAS_FINANCE" in reasons

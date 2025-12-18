@@ -330,6 +330,7 @@ async def create_run_from_farm(request: FarmRunRequest):
 class ResyncRequest(BaseModel):
     """Request for re-syncing a run to Farm"""
     run_id: str
+    mode: str = "sprawl"
 
 
 class ResyncResponse(BaseModel):
@@ -370,13 +371,16 @@ async def resync_run_to_farm(request: ResyncRequest):
     findings = await db.get_findings_by_run(request.run_id)
     rejections, _ = await db.get_rejections_by_run(request.run_id, limit=1000)
     
+    mode = request.mode or "sprawl"
+    
     success, error = await reconcile_to_farm(
         run_log=run,
         assets=assets,
         findings=findings,
         snapshot_id=snapshot_id,
         farm_url=farm_url,
-        rejections=rejections
+        rejections=rejections,
+        mode=mode
     )
     
     if success:
@@ -393,7 +397,8 @@ async def resync_run_to_farm(request: ResyncRequest):
         run_id=request.run_id,
         assets=assets,
         activity_window_days=90,
-        rejections=rejections
+        rejections=rejections,
+        mode=mode
     )
     
     return ResyncResponse(

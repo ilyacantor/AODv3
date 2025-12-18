@@ -171,12 +171,12 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     """
     Determine if an asset is a Shadow Asset.
     
-    Shadow = has evidence of existence (finance or cloud)
+    Shadow = has evidence of existence (cloud or discovery)
              but is NOT in identity systems and NOT in CMDB
              AND has recent activity within the activity window
     
-    Note: Discovery observations are NOT considered for shadow classification
-    as they don't represent real-world proof of usage.
+    POLICY (Dec 2025): Finance is NOT a trigger for shadow classification.
+    Shadow depends only on discovery presence + activity recency + governance status.
     
     Interpretation: "We know this software is used, but it's not being
     managed through official channels."
@@ -191,7 +191,6 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
-    has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
     has_discovery = asset.lens_coverage.discovery
     

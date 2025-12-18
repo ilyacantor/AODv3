@@ -67,7 +67,17 @@ AOD publishes its structured "actual" output (`shadow_actual`, `zombie_actual`, 
 
 ### Domain-Keyed Asset Aggregation
 
-Assets are aggregated using a domain-keyed approach. If evidence contains a registered domain, that domain becomes the `asset_key`. This ensures reconciliation accuracy by prioritizing domains from evidence, vendor lookups, and normalized names. `is_shadow`/`is_zombie` use OR semantics, and `reason_codes` are a union of all variants.
+Assets are aggregated using a domain-keyed approach. If evidence contains a registered domain, that domain becomes the `asset_key`. This ensures reconciliation accuracy by prioritizing domains from evidence, vendor lookups, and normalized names. `is_shadow`/`is_zombie` use OR semantics, and `reason_codes` are a union of all variants (with contradictory codes deduplicated - HAS_* takes precedence over NO_*).
+
+### Reconciliation Eligibility Modes
+
+Reconciliation eligibility is mode-based:
+- **Sprawl mode** (default): Only external services (domains, known SaaS) are eligible for shadow/zombie classification. Internal identifiers (elasticsearchlogs, postgresmain) are excluded to prevent false positives.
+- **Infra mode**: All assets are eligible, including internal identifiers. Use for infrastructure discovery reconciliation.
+
+### CMDB Correlation
+
+CMDB correlation uses canonical name matching and fuzzy matching. Domain matching is not available for CMDB as the data model doesn't include domain fields. Exact identifiers (canonical name) are checked before fuzzy logic.
 
 ### Explain Non-Flag Endpoint
 

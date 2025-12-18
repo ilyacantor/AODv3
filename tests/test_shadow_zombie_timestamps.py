@@ -243,6 +243,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Zombie App",
             asset_type=AssetType.SAAS,
+            identifiers=AssetIdentifiers(domains=["zombieapp.com"]),
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -265,18 +266,20 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Shadow App",
             asset_type=AssetType.SAAS,
+            identifiers=AssetIdentifiers(domains=["shadowapp.com"]),
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
-                cloud=LensStatus.UNMATCHED,
+                cloud=LensStatus.MATCHED,
                 finance=LensStatus.MATCHED
             ),
-            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=False, finance=True),
+            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=True, finance=True),
             activity_evidence=ActivityEvidence(
                 finance_last_transaction_at=recent_date,
-                latest_activity_at=recent_date
+                latest_activity_at=recent_date,
+                discovery_observed_at=recent_date
             ),
-            evidence_refs=["finance:txn1"],
+            evidence_refs=["discovery:obs1", "finance:txn1"],
             tags=["finance_tracked"],
             admission_reason="Finance match: Recurring transaction"
         )
@@ -308,10 +311,10 @@ class TestShadowZombieTimestamps:
         assert summary.indeterminate_count == 1
         
         assert len(summary.zombie_assets) == 1
-        assert summary.zombie_assets[0]["name"] == "Zombie App"
+        assert summary.zombie_assets[0]["name"] == "zombieapp.com"
         
         assert len(summary.shadow_assets) == 1
-        assert summary.shadow_assets[0]["name"] == "Shadow App"
+        assert summary.shadow_assets[0]["name"] == "shadowapp.com"
         
         assert summary.distribution.total_assets == 3
         assert summary.distribution.with_idp_match == 1

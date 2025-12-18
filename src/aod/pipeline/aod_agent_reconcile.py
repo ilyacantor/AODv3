@@ -31,7 +31,7 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from ..models.output_contracts import Asset, LensStatus
-from .vendor_inference import DOMAIN_TO_VENDOR
+from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 
 
 def _build_vendor_to_domain_map() -> dict[str, str]:
@@ -417,7 +417,9 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
-                return domain.lower().strip()
+                raw_domain = domain.lower().strip()
+                registered = extract_registered_domain(raw_domain)
+                return registered if registered else raw_domain
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = asset.vendor.lower().strip()

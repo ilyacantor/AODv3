@@ -93,6 +93,8 @@ Assets are aggregated using a domain-keyed approach. If evidence contains a regi
 
 **Domain-First Key Normalization (Dec 2025):** Entities are keyed by their domain when available, not by name. This ensures proper aggregation of observations referring to the same service. If an observation name looks like a domain (e.g., "slack.com"), the domain is extracted from the name. If an entity is first created from non-domain evidence (e.g., "Slack" from IdP) and later receives domain evidence (e.g., "slack.com" from discovery), the entity is upgraded and re-keyed under the domain-based key with all observations merged. Base name matching allows "slack" to merge with "slack.com" when domain evidence arrives.
 
+**Registered Domain Extraction (Dec 2025):** Asset keys are now normalized to their registered domain (eTLD+1) when evidence contains subdomains. For example, `images75.edge.com` → `edge.com`, `app.slack.com` → `slack.com`. This prevents KEY_NORMALIZATION_MISMATCH errors where Farm expects the registered domain but AOD was emitting the full subdomain. The `_extract_registered_domain()` function in `aod_agent_reconcile.py` now uses `extract_registered_domain()` from `vendor_inference.py` to properly extract registered domains from evidence.
+
 ### Reconciliation Eligibility Modes
 
 Reconciliation eligibility is mode-based:

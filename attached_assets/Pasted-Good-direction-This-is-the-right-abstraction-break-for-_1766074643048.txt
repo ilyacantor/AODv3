@@ -1,0 +1,173 @@
+Good direction. This is the **right abstraction break** for AOD.
+
+Below is a **clean, implementation-ready refinement** that separates **Security Risks** from **Operational / Governance Findings**, without changing your core engine logic.
+
+---
+
+## 1. New Top-Level Split in AOD / Findings
+
+### A. **Security Risks** (actionable, risk-bearing)
+
+These imply **exposure**, **attack surface**, or **control failure**.
+
+| Risk Type         | Severity | Why it’s a Security Risk                                 |
+| ----------------- | -------- | -------------------------------------------------------- |
+| **identity_gap**  | HIGH     | Asset bypasses IdP → no auth, no MFA, no deprovisioning  |
+| **finance_gap**   | HIGH     | Paying for something undiscovered → likely shadow system |
+| **data_conflict** | MEDIUM   | Conflicting environment/state can mask prod exposure     |
+
+👉 These should roll up into:
+
+* **Security Risk Count**
+* **Risk Heatmap**
+* **CISO-facing views**
+* Optional future **risk scoring**
+
+---
+
+### B. **Operational / Governance Findings** (hygiene, accuracy, readiness)
+
+These affect **trust**, **manageability**, and **AI-readiness**, not immediate risk.
+
+| Finding Type         | Severity | Category                   |
+| -------------------- | -------- | -------------------------- |
+| **cmdb_gap**         | MEDIUM   | Asset governance           |
+| **governance_gap**   | LOW      | Ownership / accountability |
+| **duplication_risk** | MEDIUM   | Data quality / ambiguity   |
+
+👉 These belong in:
+
+* Catalog quality
+* Readiness scoring
+* HITL review queues
+* “Fix the system of record” workflows
+
+---
+
+## 2. Canonical Finding Model (do this once)
+
+Add **one field**, don’t fork logic:
+
+```json
+{
+  "finding_id": "...",
+  "asset_id": "...",
+  "finding_type": "identity_gap",
+  "category": "security_risk",   // ← NEW (enum)
+  "severity": "HIGH",
+  "trigger_planes": ["idp", "cmdb"],
+  "evidence": {...},
+  "explanation": "Asset exists in Cloud and CMDB but has no IdP integration"
+}
+```
+
+**category enum**
+
+* `security_risk`
+* `governance_finding`
+
+This preserves:
+
+* Your existing rules
+* Sorting
+* Backward compatibility
+
+---
+
+## 3. Rule-to-Category Mapping (explicit, no ML)
+
+```python
+SECURITY_RISKS = {
+    "identity_gap",
+    "finance_gap",
+    "data_conflict",
+}
+
+GOVERNANCE_FINDINGS = {
+    "cmdb_gap",
+    "governance_gap",
+    "duplication_risk",
+}
+```
+
+This is **not learning**, not heuristic drift, not probabilistic.
+
+---
+
+## 4. How the Engine Runs (unchanged, just tagged)
+
+1. **Admission succeeds**
+2. Correlation engine produces match states per plane
+3. Each rule evaluates independently
+4. When a rule fires:
+
+   * Emit a finding
+   * Attach `category`
+5. Output stream supports:
+
+   * `?category=security_risk`
+   * `?category=governance_finding`
+
+No new branching logic required.
+
+---
+
+## 5. Sorting & Presentation (important nuance)
+
+### Default sort (unchanged, but scoped):
+
+1. **Category**: `security_risk` first
+2. **Severity**: HIGH → MEDIUM → LOW
+3. **Finding type**
+4. **Asset**
+
+This ensures:
+
+* Security issues never get buried under hygiene noise
+* Exec views are clean
+* Analysts still see everything
+
+---
+
+## 6. UI / UX Implications (AOD Control Center)
+
+Minimal but powerful changes:
+
+* Two tabs:
+
+  * **Security Risks**
+  * **Governance & Data Quality**
+* Same table component
+* Same filters
+* Same export
+* Different mental model
+
+Later:
+
+* Security Risks → alerting, tickets, exec reports
+* Governance → backlog, cleanup, automation
+
+---
+
+## 7. Why this matters (architecturally)
+
+* Prevents **“everything is a risk” dilution**
+* Makes AOD credible to Security **and** Ops
+* Enables future:
+
+  * Risk scoring
+  * SLA-based remediation
+  * AI-readiness metrics
+* Aligns with your principle:
+
+  > *Definitions are breached or not. Then we count breaches.*
+
+---
+
+If you want next steps, the **logical follow-ons** are:
+
+1. Risk roll-up per asset (count + max severity)
+2. Tenant-level risk posture
+3. Explicit “blocking vs non-blocking” thresholds
+
+But the above spec is **complete and shippable** as-is.

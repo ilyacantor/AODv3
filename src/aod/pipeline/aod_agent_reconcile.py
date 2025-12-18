@@ -92,6 +92,7 @@ INFRASTRUCTURE_DOMAINS = {
     "elastic.co",
     "elasticsearch.org",
     "mongodb.org",
+    "mongodb.com",
     "couchdb.apache.org",
     "kafka.apache.org",
     "rabbitmq.com",
@@ -99,6 +100,10 @@ INFRASTRUCTURE_DOMAINS = {
     "prometheus.io",
     "grafana.com",
     "influxdata.com",
+    "rust-lang.org",
+    "ruby-lang.org",
+    "linux.org",
+    "gnu.org",
 }
 
 

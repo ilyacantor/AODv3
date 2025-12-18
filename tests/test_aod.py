@@ -507,5 +507,70 @@ class TestPipelineDeterminism:
             assert art1.artifact_type == art2.artifact_type, f"Artifact type mismatch"
 
 
+class TestDomainFirstKeyNormalization:
+    """Test that entities are keyed by domain when available"""
+    
+    def test_slack_observations_merge_to_domain_key(self):
+        """Slack, slack.com, and URLs all merge into one entity keyed as slack.com"""
+        observations = [
+            Observation(observation_id="obs-1", name="Slack", source="discovery"),
+            Observation(observation_id="obs-2", name="slack.com", source="discovery"),
+            Observation(observation_id="obs-3", name="Slack App", uri="https://slack.com/app", source="discovery"),
+        ]
+        
+        entities = normalize_observations(observations)
+        
+        slack_entities = [e for e in entities if 'slack' in (e.domain or e.canonical_name)]
+        assert len(slack_entities) == 1, f"Expected 1 slack entity, got {len(slack_entities)}: {[e.canonical_name for e in slack_entities]}"
+        
+        entity = slack_entities[0]
+        assert entity.domain == "slack.com", f"Expected domain 'slack.com', got '{entity.domain}'"
+        assert len(entity.observation_ids) == 3, f"Expected 3 observations, got {len(entity.observation_ids)}"
+    
+    def test_domain_name_becomes_domain(self):
+        """Observation named 'slack.com' gets domain extracted from name"""
+        observations = [
+            Observation(observation_id="obs-1", name="slack.com", source="discovery"),
+        ]
+        
+        entities = normalize_observations(observations)
+        
+        assert len(entities) == 1
+        assert entities[0].domain == "slack.com"
+
+
+class TestInfrastructureExclusion:
+    """Test that infrastructure domains are excluded from shadow classification"""
+    
+    def test_mongodb_in_exclusion_list(self):
+        """mongodb.com is in the infrastructure exclusion list"""
+        from aod.pipeline.aod_agent_reconcile import INFRASTRUCTURE_DOMAINS
+        
+        assert "mongodb.com" in INFRASTRUCTURE_DOMAINS, "mongodb.com should be in INFRASTRUCTURE_DOMAINS"
+        assert "mongodb.org" in INFRASTRUCTURE_DOMAINS, "mongodb.org should be in INFRASTRUCTURE_DOMAINS"
+    
+    def test_all_required_domains_in_exclusion_list(self):
+        """All required infrastructure domains are in the exclusion list"""
+        from aod.pipeline.aod_agent_reconcile import INFRASTRUCTURE_DOMAINS
+        
+        required = [
+            "postgresql.org", "mysql.com", "apache.org", "redis.io", "redis.com",
+            "mongodb.com", "docker.com", "kubernetes.io", "nginx.org", "python.org",
+            "nodejs.org", "golang.org", "rust-lang.org", "ruby-lang.org", "linux.org",
+            "gnu.org", "elastic.co", "kafka.apache.org"
+        ]
+        
+        for domain in required:
+            assert domain in INFRASTRUCTURE_DOMAINS, f"{domain} should be in INFRASTRUCTURE_DOMAINS"
+    
+    def test_mongodb_excluded_from_shadow(self):
+        """mongodb.com asset is not classified as shadow via _is_infrastructure_domain"""
+        from aod.pipeline.aod_agent_reconcile import _is_infrastructure_domain
+        
+        assert _is_infrastructure_domain("mongodb.com") is True, "mongodb.com should be infrastructure"
+        assert _is_infrastructure_domain("mongodb.org") is True, "mongodb.org should be infrastructure"
+        assert _is_infrastructure_domain("slack.com") is False, "slack.com should not be infrastructure"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

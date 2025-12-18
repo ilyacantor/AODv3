@@ -86,6 +86,7 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
     - Derive candidate "system entities" from raw observations
     - Maintain provenance (observation IDs)
     - Merge observations that represent the same entity
+    - Domain-first keying: if entity has domain, use domain as canonical key
     
     Args:
         observations: List of raw observations
@@ -93,7 +94,8 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
     Returns:
         List of candidate entities with normalized identifiers
     """
-    entities_by_canonical: dict[str, CandidateEntity] = {}
+    entities_by_domain: dict[str, CandidateEntity] = {}
+    entities_by_name: dict[str, CandidateEntity] = {}
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
         canonical_name = derive_canonical_name(obs)
@@ -104,25 +106,35 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
         domain = normalize_domain(obs.domain) if obs.domain else None
         if not domain and obs.uri:
             domain = extract_domain_from_uri(obs.uri)
+        if not domain and _looks_like_domain(obs.name.lower().strip()):
+            domain = normalize_domain(obs.name.lower().strip())
         
         hostname = obs.hostname.lower().strip() if obs.hostname else None
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         
-        domain_key = f"{canonical_name}:{domain}" if domain else None
-        name_only_key = canonical_name
-        
         existing_entity = None
-        if domain_key and domain_key in entities_by_canonical:
-            existing_entity = entities_by_canonical[domain_key]
-        elif name_only_key in entities_by_canonical:
-            existing_entity = entities_by_canonical[name_only_key]
-            if domain and domain_key and not existing_entity.domain:
-                del entities_by_canonical[name_only_key]
-                existing_entity.domain = domain
-                if not existing_entity.vendor_hypothesis:
-                    existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
-                entities_by_canonical[domain_key] = existing_entity
+        
+        if domain:
+            if domain in entities_by_domain:
+                existing_entity = entities_by_domain[domain]
+            else:
+                base_name = _extract_base_name(domain)
+                if canonical_name in entities_by_name:
+                    existing_entity = entities_by_name[canonical_name]
+                    del entities_by_name[canonical_name]
+                elif base_name and base_name in entities_by_name:
+                    existing_entity = entities_by_name[base_name]
+                    del entities_by_name[base_name]
+                
+                if existing_entity:
+                    existing_entity.domain = domain
+                    if not existing_entity.vendor_hypothesis:
+                        existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
+                    entities_by_domain[domain] = existing_entity
+        else:
+            if canonical_name in entities_by_name:
+                existing_entity = entities_by_name[canonical_name]
         
         if existing_entity:
             existing_entity.observation_ids.append(obs.observation_id)
@@ -146,7 +158,32 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
                 observation_ids=[obs.observation_id],
                 source=obs.source
             )
-            final_key = domain_key if domain_key else name_only_key
-            entities_by_canonical[final_key] = entity
+            if domain:
+                entities_by_domain[domain] = entity
+            else:
+                entities_by_name[canonical_name] = entity
     
-    return sorted(entities_by_canonical.values(), key=lambda e: e.canonical_name)
+    all_entities = list(entities_by_domain.values()) + list(entities_by_name.values())
+    return sorted(all_entities, key=lambda e: e.domain or e.canonical_name)
+
+
+def _looks_like_domain(name: str) -> bool:
+    """Check if a canonical name looks like a domain (e.g., 'slack.com')"""
+    if not name:
+        return False
+    parts = name.split('.')
+    if len(parts) >= 2:
+        tld = parts[-1]
+        if tld in ('com', 'org', 'net', 'io', 'co', 'dev', 'app', 'us', 'cloud'):
+            return True
+    return False
+
+
+def _extract_base_name(domain: str) -> Optional[str]:
+    """Extract base name from domain (e.g., 'slack.com' -> 'slack')"""
+    if not domain:
+        return None
+    parts = domain.split('.')
+    if len(parts) >= 2:
+        return parts[0]
+    return None

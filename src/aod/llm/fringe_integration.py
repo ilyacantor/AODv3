@@ -8,7 +8,6 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from .client import GeminiClient, OpenAIClient
-from .config import is_llm_enabled, get_llm_mode, LLMMode
 from .fringe_resolver import resolve_fringe, FringeResolution, FringeInput, CONFIDENCE_THRESHOLD
 
 logger = logging.getLogger(__name__)
@@ -97,29 +96,22 @@ async def apply_fringe_resolution(
     db: Any,
     cmdb_candidates: Optional[list[dict]] = None,
     idp_candidates: Optional[list[dict]] = None,
-    enable_llm: Optional[bool] = None,
+    enable_llm: bool = True,
 ) -> tuple[Any, LLMExplainability]:
     """
     Apply fringe resolution to a correlation result.
     
     1. Check if fringe resolution is needed
     2. Check fact store for cached fact
-    3. If no cached fact and LLM enabled (prod mode), call LLM
+    3. If no cached fact and LLM enabled, call LLM
     4. Persist new fact
     5. Apply fact to correlation result
-    
-    LLM Mode (set via LLM_MODE env var):
-    - "dev": No LLM calls, use cached facts only
-    - "prod": Full LLM calls enabled
     
     Returns: (updated_correlation_result, explainability)
     """
     from ..pipeline.correlate_entities import MatchStatus, PlaneMatch
     
     explainability = LLMExplainability()
-    
-    llm_mode = get_llm_mode()
-    llm_enabled = enable_llm if enable_llm is not None else is_llm_enabled()
     
     entity = correlation_result.entity
     cmdb_matched = correlation_result.cmdb.status == MatchStatus.MATCHED
@@ -138,7 +130,7 @@ async def apply_fringe_resolution(
     if not should_trigger:
         return correlation_result, explainability
     
-    logger.debug(f"Fringe triggered for {entity_key}: {trigger_reason} (mode={llm_mode.value})")
+    logger.debug(f"Fringe triggered for {entity_key}: {trigger_reason}")
     
     existing_fact = await db.get_llm_fact(tenant_id, entity_key)
     
@@ -148,8 +140,7 @@ async def apply_fringe_resolution(
             correlation_result, existing_fact, explainability, PlaneMatch, MatchStatus
         )
     
-    if not llm_enabled:
-        logger.debug(f"LLM disabled (mode={llm_mode.value}), skipping fringe resolution for {entity_key}")
+    if not enable_llm:
         return correlation_result, explainability
     
     gemini_client = None

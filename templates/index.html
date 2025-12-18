@@ -205,26 +205,12 @@
         .help-kpi-name { font-weight: 600; color: var(--cyan-400); font-size: 0.875rem; margin-bottom: 0.25rem; }
         .help-kpi-desc { color: var(--slate-400); font-size: 0.8rem; line-height: 1.4; }
         @media (max-width: 600px) { .help-kpi-grid { grid-template-columns: 1fr; } }
-        .llm-toggle { display: flex; align-items: center; gap: 0.5rem; }
-        .llm-toggle-label { font-size: 0.75rem; color: var(--slate-400); }
-        .llm-toggle-switch { position: relative; width: 48px; height: 24px; background: var(--slate-700); border-radius: 12px; cursor: pointer; transition: background 0.2s ease; }
-        .llm-toggle-switch.enabled { background: var(--cyan-600); }
-        .llm-toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s ease; }
-        .llm-toggle-switch.enabled::after { transform: translateX(24px); }
-        .llm-toggle-mode { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
-        .llm-toggle-mode.dev { background: rgba(100, 116, 139, 0.3); color: var(--slate-400); }
-        .llm-toggle-mode.prod { background: rgba(34, 197, 94, 0.2); color: var(--green-400); }
     </style>
 </head>
 <body>
     <header>
         <div class="logo"><div class="logo-icon">A</div><div class="logo-text">AOD <span>Fresh</span></div></div>
         <div class="header-actions">
-            <div class="llm-toggle" title="Toggle LLM mode: Dev (cached facts only) or Prod (live LLM calls)">
-                <span class="llm-toggle-label">LLM</span>
-                <div class="llm-toggle-switch" id="llmToggle"></div>
-                <span class="llm-toggle-mode dev" id="llmModeLabel">DEV</span>
-            </div>
             <button class="btn-help" id="helpBtn">? Help</button>
             <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
         </div>
@@ -972,52 +958,6 @@
             } catch { document.getElementById('healthDot').classList.add('error'); document.getElementById('healthText').textContent = 'Offline'; }
         }
         
-        async function loadLLMMode() {
-            try {
-                const r = await fetch('/api/config/llm-mode');
-                if (r.ok) {
-                    const data = await r.json();
-                    updateLLMToggleUI(data.mode, data.enabled);
-                }
-            } catch (e) {
-                console.error('Failed to load LLM mode:', e);
-            }
-        }
-        
-        function updateLLMToggleUI(mode, enabled) {
-            const toggle = document.getElementById('llmToggle');
-            const label = document.getElementById('llmModeLabel');
-            if (enabled) {
-                toggle.classList.add('enabled');
-                label.textContent = 'PROD';
-                label.className = 'llm-toggle-mode prod';
-            } else {
-                toggle.classList.remove('enabled');
-                label.textContent = 'DEV';
-                label.className = 'llm-toggle-mode dev';
-            }
-        }
-        
-        async function toggleLLMMode() {
-            const toggle = document.getElementById('llmToggle');
-            const isCurrentlyEnabled = toggle.classList.contains('enabled');
-            const newMode = isCurrentlyEnabled ? 'dev' : 'prod';
-            
-            try {
-                const r = await fetch('/api/config/llm-mode', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode: newMode })
-                });
-                if (r.ok) {
-                    const data = await r.json();
-                    updateLLMToggleUI(data.mode, data.enabled);
-                }
-            } catch (e) {
-                console.error('Failed to toggle LLM mode:', e);
-            }
-        }
-        
         async function loadTenants() {
             const select = document.getElementById('tenantSelect');
             const msg = document.getElementById('fetchMessage');
@@ -1333,10 +1273,7 @@
         checkHealth(); 
         loadRuns();
         loadTenants();
-        loadLLMMode();
         setInterval(checkHealth, 30000);
-        
-        document.getElementById('llmToggle').addEventListener('click', toggleLLMMode);
         
         const helpBtn = document.getElementById('helpBtn');
         const helpModal = document.getElementById('helpModal');

@@ -115,10 +115,6 @@ For ambiguous assets where deterministic matching fails, an LLM-based fringe res
 
 - **Trigger Conditions**: asset_type unknown, governance gap (NO_CMDB AND NO_IDP), or vendor ambiguous
 - **Architecture**: Gemini-first with OpenAI fallback, 0.80 confidence threshold
-- **Dev/Prod Mode**: Control LLM calls via UI toggle (in header) or `LLM_MODE` env var:
-  - `dev` (default): No LLM API calls, uses cached facts only
-  - `prod`: Full LLM calls enabled when API keys present
-  - UI toggle overrides env var at runtime
 - **Fact Store**: LLM facts are persisted in `llm_facts` table by (tenant_id, entity_key) for reuse across runs
 - **INFRA_TECH Exclusion**: Assets classified as INFRA_TECH with high confidence (≥0.80) are excluded from shadow/zombie classification
 - **Explainability**: LLMMetadata on Asset includes llm_used, llm_confidence, llm_reason, llm_asset_type, llm_canonical_vendor, llm_provider, llm_model_id, fact_id, exclusion_reason, and match methods

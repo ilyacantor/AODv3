@@ -22,7 +22,6 @@ import re
 from ..models.output_contracts import RunLog, RunCounts, Asset, Finding, RunStatus, SyncStatus
 from ..farm_client import FarmClient, FarmListResult, validate_schema_version
 from ..farm_reconcile import reconcile_to_farm
-from ..llm.config import LLMMode, get_llm_mode, set_llm_mode, is_llm_enabled
 
 
 router = APIRouter(prefix="/api")
@@ -1860,37 +1859,3 @@ async def explain_nonflag(request: ExplainNonflagRequest):
         ask=request.ask,
         explanations=explanations
     )
-
-
-class LLMConfigResponse(BaseModel):
-    """LLM configuration response"""
-    mode: str
-    enabled: bool
-
-
-class LLMConfigRequest(BaseModel):
-    """LLM configuration update request"""
-    mode: str
-
-
-@router.get("/config/llm-mode")
-async def get_llm_config() -> LLMConfigResponse:
-    """Get current LLM mode configuration"""
-    mode = get_llm_mode()
-    return LLMConfigResponse(mode=mode.value, enabled=is_llm_enabled())
-
-
-@router.put("/config/llm-mode")
-async def set_llm_config(request: LLMConfigRequest) -> LLMConfigResponse:
-    """Set LLM mode configuration"""
-    mode_str = request.mode.lower().strip()
-    
-    if mode_str in ("prod", "production"):
-        set_llm_mode(LLMMode.PROD)
-    elif mode_str in ("dev", "development"):
-        set_llm_mode(LLMMode.DEV)
-    else:
-        raise HTTPException(status_code=400, detail=f"Invalid mode: {request.mode}. Use 'dev' or 'prod'.")
-    
-    mode = get_llm_mode()
-    return LLMConfigResponse(mode=mode.value, enabled=is_llm_enabled())

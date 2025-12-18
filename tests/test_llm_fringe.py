@@ -1,5 +1,6 @@
 """Tests for LLM fringe resolution with stubbed clients"""
 
+import os
 import pytest
 import sys
 sys.path.insert(0, 'src')
@@ -8,6 +9,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 
 from aod.llm.client import LLMClient, LLMResponse
+from aod.llm.config import LLMMode, get_llm_mode, is_llm_enabled
 from aod.llm.fringe_resolver import (
     resolve_fringe, FringeInput, FringeResolution,
     build_fringe_prompt, CONFIDENCE_THRESHOLD, FRINGE_SCHEMA
@@ -433,3 +435,76 @@ class TestLLMMetadataOnAsset:
         assert data["llm_metadata"]["llm_used"] is True
         assert data["llm_metadata"]["llm_confidence"] == 0.85
         assert data["llm_metadata"]["llm_reason"] == "Test reason"
+
+
+class TestLLMDevProdMode:
+    """Test dev/prod mode switch for LLM calls"""
+    
+    def test_default_mode_is_dev(self):
+        original = os.environ.get("LLM_MODE")
+        try:
+            if "LLM_MODE" in os.environ:
+                del os.environ["LLM_MODE"]
+            
+            mode = get_llm_mode()
+            assert mode == LLMMode.DEV
+            assert is_llm_enabled() is False
+        finally:
+            if original is not None:
+                os.environ["LLM_MODE"] = original
+    
+    def test_dev_mode_disables_llm(self):
+        original = os.environ.get("LLM_MODE")
+        try:
+            os.environ["LLM_MODE"] = "dev"
+            
+            mode = get_llm_mode()
+            assert mode == LLMMode.DEV
+            assert is_llm_enabled() is False
+        finally:
+            if original is not None:
+                os.environ["LLM_MODE"] = original
+            elif "LLM_MODE" in os.environ:
+                del os.environ["LLM_MODE"]
+    
+    def test_prod_mode_enables_llm(self):
+        original = os.environ.get("LLM_MODE")
+        try:
+            os.environ["LLM_MODE"] = "prod"
+            
+            mode = get_llm_mode()
+            assert mode == LLMMode.PROD
+            assert is_llm_enabled() is True
+        finally:
+            if original is not None:
+                os.environ["LLM_MODE"] = original
+            elif "LLM_MODE" in os.environ:
+                del os.environ["LLM_MODE"]
+    
+    def test_production_alias_enables_llm(self):
+        original = os.environ.get("LLM_MODE")
+        try:
+            os.environ["LLM_MODE"] = "production"
+            
+            mode = get_llm_mode()
+            assert mode == LLMMode.PROD
+            assert is_llm_enabled() is True
+        finally:
+            if original is not None:
+                os.environ["LLM_MODE"] = original
+            elif "LLM_MODE" in os.environ:
+                del os.environ["LLM_MODE"]
+    
+    def test_development_alias_disables_llm(self):
+        original = os.environ.get("LLM_MODE")
+        try:
+            os.environ["LLM_MODE"] = "development"
+            
+            mode = get_llm_mode()
+            assert mode == LLMMode.DEV
+            assert is_llm_enabled() is False
+        finally:
+            if original is not None:
+                os.environ["LLM_MODE"] = original
+            elif "LLM_MODE" in os.environ:
+                del os.environ["LLM_MODE"]

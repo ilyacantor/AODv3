@@ -69,7 +69,7 @@ AOD publishes its structured "actual" output (`shadow_actual`, `zombie_actual`, 
 
 Assets are aggregated using a domain-keyed approach. If evidence contains a registered domain, that domain becomes the `asset_key`. This ensures reconciliation accuracy by prioritizing domains from evidence, vendor lookups, and normalized names. `is_shadow`/`is_zombie` use OR semantics, and `reason_codes` are a union of all variants (with contradictory codes deduplicated - HAS_* takes precedence over NO_*).
 
-**Entity Domain Upgrade (Dec 2025):** During normalization, if an entity is first created from non-domain evidence (e.g., "Miro" from IdP) and later receives domain evidence (e.g., "miro.com" from discovery), the entity is upgraded to include the domain. The entity is re-keyed under the domain-based key, and all observations are merged. This ensures assets like miro.com and loom.com use domain-based keys even when initial evidence lacks domains.
+**Domain-First Key Normalization (Dec 2025):** Entities are keyed by their domain when available, not by name. This ensures proper aggregation of observations referring to the same service. If an observation name looks like a domain (e.g., "slack.com"), the domain is extracted from the name. If an entity is first created from non-domain evidence (e.g., "Slack" from IdP) and later receives domain evidence (e.g., "slack.com" from discovery), the entity is upgraded and re-keyed under the domain-based key with all observations merged. Base name matching allows "slack" to merge with "slack.com" when domain evidence arrives.
 
 ### Reconciliation Eligibility Modes
 
@@ -81,12 +81,17 @@ Mode can be specified via the `/runs/resync` endpoint: `{"run_id": "...", "mode"
 
 ### CMDB Correlation
 
-CMDB correlation uses multiple matching strategies:
-1. **Canonical name matching** - Exact normalized name match with vendor validation
-2. **Fuzzy matching** - Levenshtein distance for typos with KNOWN_DISTINCT_FUZZY blocklist
-3. **Contains matching** - Substring matching with KNOWN_DISTINCT_PRODUCTS blocklist
-4. **Vendor matching** - Entity vendor → CMDB vendor product index
-5. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor (e.g., trello.com → Atlassian → Trello CMDB record)
+CMDB correlation uses multiple matching strategies (in order):
+1. **Domain matching** - Direct domain lookup in CMDB
+2. **Canonical name matching** - Exact normalized name match with vendor validation
+3. **Fuzzy matching** - Levenshtein distance for typos (ratio ≤ 0.20)
+4. **Contains matching** - Substring matching with KNOWN_DISTINCT_PRODUCTS blocklist
+5. **Name contains domain token** - CI name contains domain base token (≥6 chars)
+6. **Vendor matching** - Entity vendor → CMDB vendor product index
+7. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor
+8. **Vendor fallback** - Vendor-only match (loose governance)
+
+**Name Contains Domain Token (Dec 2025):** Extracts base token from entity domain (e.g., `pagerduty.com` → `pagerduty`, `service-now.com` → `servicenow`) and matches if any CI name contains that token. Token must be ≥6 characters to prevent short-token false positives. Match method: `name_contains_domain_token`.
 
 **Fuzzy Matching Ratio Gate (Dec 2025):** Edit-distance fuzzy matching uses a relative threshold: `distance/max_len ≤ 0.20`. This prevents short-token collisions (miro↔jira at 2/4=0.50, loom↔zoom at 1/4=0.25) while preserving legitimate longer fuzzy matches where 1-2 char typos are proportionally smaller.
 
@@ -97,6 +102,8 @@ CMDB correlation uses multiple matching strategies:
 **Vendor Fallback Matching (Dec 2025):** When name and domain matching fail, vendor fallback allows matching based on vendor alone. If `normalize(entity.vendor) == normalize(CI.vendor)`, the asset is considered governed (HAS_CMDB=True). This applies to both CMDB and IdP correlation.
 
 **Governance Reason Codes (Dec 2025):** HAS_CMDB and HAS_IDP are now based on lens_status (raw matching) rather than lens_coverage (admission criteria). This ensures that any CMDB or IdP match counts as "governed" regardless of whether admission criteria like ci_type/lifecycle or has_sso/has_scim are met.
+
+For detailed discovery logic documentation, see [DISCOVERY_LOGIC.md](./DISCOVERY_LOGIC.md).
 
 ### Infrastructure Domain Exclusion
 

@@ -94,6 +94,26 @@ class VendorHypothesis(BaseModel):
     basis: str = Field(description="How this was inferred: domain, pattern, etc.")
 
 
+class LLMMetadata(BaseModel):
+    """
+    LLM explainability metadata for an asset.
+    
+    First-class facts from LLM fringe resolution.
+    When llm_used is True, the LLM was called to resolve ambiguous/missing data.
+    """
+    llm_used: bool = False
+    llm_confidence: float = 0.0
+    llm_reason: str = ""
+    llm_asset_type: Optional[str] = None
+    llm_canonical_vendor: Optional[str] = None
+    llm_provider: Optional[str] = None
+    llm_model_id: Optional[str] = None
+    fact_id: Optional[str] = None
+    exclusion_reason: Optional[str] = None
+    cmdb_match_method: Optional[str] = None
+    idp_match_method: Optional[str] = None
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
@@ -111,6 +131,7 @@ class Asset(BaseModel):
     activity_evidence: ActivityEvidence = Field(default_factory=ActivityEvidence)
     tags: list[str] = Field(default_factory=list)
     admission_reason: str = ""
+    llm_metadata: Optional[LLMMetadata] = None
     created_at: datetime = Field(default_factory=now_pst)
 
 

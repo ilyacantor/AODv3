@@ -75,6 +75,8 @@ Reconciliation eligibility is mode-based:
 - **Sprawl mode** (default): Only external services (domains, known SaaS) are eligible for shadow/zombie classification. Internal identifiers (elasticsearchlogs, postgresmain) are excluded to prevent false positives.
 - **Infra mode**: All assets are eligible, including internal identifiers. Use for infrastructure discovery reconciliation.
 
+Mode can be specified via the `/runs/resync` endpoint: `{"run_id": "...", "mode": "infra"}`. Initial run creation uses sprawl mode by default.
+
 ### CMDB Correlation
 
 CMDB correlation uses canonical name matching and fuzzy matching. Domain matching is not available for CMDB as the data model doesn't include domain fields. Exact identifiers (canonical name) are checked before fuzzy logic.

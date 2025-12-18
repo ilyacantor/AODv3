@@ -1,0 +1,100 @@
+**Replit Prompt (copy/paste)**
+
+You are working in **AOD**. Objective: fix **governance matching false positives** (Farm says governed; AOD says NO_CMDB / NO_IDP). Do **not** change “shadow policy” or discovery admission. This is strictly **matching** + **explainability**.
+
+### Context (must reproduce)
+
+Snapshot: **ApexEdge-WDFO**
+False positives (6): `github.com`, `microsoft.com`, `atlassian.net`, `okta.com`, `trello.com`, `google.com`
+
+Farm vs AOD gaps:
+
+* CMDB-only gap: `github.com`, `microsoft.com`, `okta.com`, `trello.com` → **missing vendor fallback / domain extraction**
+* IdP+CMDB gap: `atlassian.net`, `google.com` → **missing IdP + CMDB multi-signal matching**
+
+### Required behavior (match contract)
+
+Implement **ordered matching** for CMDB and IdP, and persist explainability.
+
+#### CMDB matching (ordered; first hit wins)
+
+1. **Exact name**
+
+* `normalize(CI.name) == normalize(asset.domain)`
+
+2. **Domain from external_ref**
+
+* `parse_domain(CI.external_ref) == normalized_asset_domain`
+
+3. **Vendor fallback (critical)**
+
+* `normalize(asset.vendor_hint) == normalize(CI.vendor)`
+
+If any hit → `HAS_CMDB = True`
+
+#### IdP matching (ordered; first hit wins)
+
+1. `normalize(IdP.name) == normalize(asset.domain)`
+2. `parse_domain(IdP.external_ref) == normalized_asset_domain`
+3. `normalize(asset.vendor_hint) == normalize(IdP.vendor)` (or equivalent vendor field if present)
+
+If any hit → `HAS_IDP = True`
+
+#### Multi-signal governance resolution
+
+After computing matches:
+
+* If `HAS_CMDB OR HAS_IDP` then asset is **governed**. Do **not** require both.
+
+### Domain normalization requirements
+
+Implement a shared helper used everywhere:
+
+* Lowercase
+* Strip scheme (`https://`), paths, query strings, ports
+* Remove leading `www.`
+* Keep registrable domain when appropriate for comparisons (ok to use a simple rule; do not add heavy deps unless already present)
+
+Implement `parse_domain(text)` that extracts the first domain-like token from:
+
+* URLs
+* email-like refs
+* free text containing a domain
+
+### Explainability (must add)
+
+Persist or return on the asset profile:
+
+* `cmdb_match_method: exact_name | external_ref_domain | vendor_fallback | none`
+* `cmdb_match_key: <value that matched>`
+* `idp_match_method: exact_name | external_ref_domain | vendor_fallback | none`
+* `idp_match_key: <value that matched>`
+
+Also include (for debugging):
+
+* `normalized_asset_domain`
+* `asset_vendor_hint_normalized`
+
+### Tests / regression
+
+Add regression tests (or snapshot-level assertions) verifying these 6 assets now show:
+
+* `github.com`: `HAS_CMDB` true (vendor fallback to Microsoft/GitHub CI)
+* `microsoft.com`: `HAS_CMDB` true
+* `okta.com`: `HAS_CMDB` true
+* `trello.com`: `HAS_CMDB` true (vendor fallback Atlassian)
+* `atlassian.net`: `HAS_CMDB` or `HAS_IDP` true (ideally both)
+* `google.com`: `HAS_CMDB` or `HAS_IDP` true (ideally both)
+
+### Guardrails
+
+* Do not introduce fuzzy string matching for short strings.
+* Do not relax governance by “always true” fallbacks.
+* Keep performance reasonable (index CIs/IdPs by normalized keys to avoid O(N*M) where possible).
+* Make smallest possible code diff; no refactors unrelated to matching.
+
+Deliverables:
+
+1. Code changes implementing matching + explainability
+2. Tests proving the 6 FPs are fixed
+3. Brief note in output: what files changed and why

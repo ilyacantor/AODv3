@@ -106,6 +106,7 @@ class PlaneMatch:
     matched_ids: list[str] = field(default_factory=list)
     matched_records: list[Any] = field(default_factory=list)
     match_method: Optional[str] = None
+    match_key: Optional[str] = None
     ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
     disambiguation_detail: Optional[str] = None
 
@@ -469,6 +470,7 @@ def correlate_to_plane(
                 matched_ids=domain_matches,
                 matched_records=[plane_index.records.get(mid) for mid in domain_matches],
                 match_method="domain",
+                match_key=entity.domain,
                 ambiguity_code=AmbiguityCode.NONE
             )
         elif len(domain_matches) > 1:
@@ -481,6 +483,7 @@ def correlate_to_plane(
                     matched_ids=resolved,
                     matched_records=[plane_index.records.get(resolved[0])],
                     match_method="domain",
+                    match_key=entity.domain,
                     ambiguity_code=code,
                     disambiguation_detail=detail
                 )
@@ -490,6 +493,7 @@ def correlate_to_plane(
                 matched_ids=domain_matches,
                 matched_records=records,
                 match_method="domain",
+                match_key=entity.domain,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -502,6 +506,7 @@ def correlate_to_plane(
                 matched_ids=uri_matches,
                 matched_records=[plane_index.records.get(mid) for mid in uri_matches],
                 match_method="uri",
+                match_key=entity.uri,
                 ambiguity_code=AmbiguityCode.NONE
             )
         elif len(uri_matches) > 1:
@@ -514,6 +519,7 @@ def correlate_to_plane(
                     matched_ids=resolved,
                     matched_records=[plane_index.records.get(resolved[0])],
                     match_method="uri",
+                    match_key=entity.uri,
                     ambiguity_code=code,
                     disambiguation_detail=detail
                 )
@@ -523,6 +529,7 @@ def correlate_to_plane(
                 matched_ids=uri_matches,
                 matched_records=records,
                 match_method="uri",
+                match_key=entity.uri,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -556,6 +563,7 @@ def correlate_to_plane(
             matched_ids=name_matches,
             matched_records=[plane_index.records.get(mid) for mid in name_matches],
             match_method="canonical_name",
+            match_key=canonical,
             ambiguity_code=AmbiguityCode.NONE
         )
     elif len(name_matches) > 1:
@@ -568,6 +576,7 @@ def correlate_to_plane(
                 matched_ids=resolved,
                 matched_records=[plane_index.records.get(resolved[0])],
                 match_method="canonical_name",
+                match_key=canonical,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -577,6 +586,7 @@ def correlate_to_plane(
             matched_ids=name_matches,
             matched_records=records,
             match_method="canonical_name",
+            match_key=canonical,
             ambiguity_code=code,
             disambiguation_detail=detail
         )
@@ -594,6 +604,7 @@ def correlate_to_plane(
             matched_ids=fuzzy_matches,
             matched_records=[plane_index.records.get(mid) for mid in fuzzy_matches],
             match_method="fuzzy",
+            match_key=canonical,
             ambiguity_code=AmbiguityCode.NONE
         )
     elif len(fuzzy_matches) > 1:
@@ -606,6 +617,7 @@ def correlate_to_plane(
                 matched_ids=resolved,
                 matched_records=[plane_index.records.get(resolved[0])],
                 match_method="fuzzy",
+                match_key=canonical,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -615,6 +627,7 @@ def correlate_to_plane(
             matched_ids=fuzzy_matches,
             matched_records=records,
             match_method="fuzzy",
+            match_key=canonical,
             ambiguity_code=code,
             disambiguation_detail=detail
         )
@@ -632,6 +645,7 @@ def correlate_to_plane(
             matched_ids=contains_matches,
             matched_records=[plane_index.records.get(mid) for mid in contains_matches],
             match_method="contains",
+            match_key=canonical,
             ambiguity_code=AmbiguityCode.NONE
         )
     elif len(contains_matches) > 1:
@@ -644,6 +658,7 @@ def correlate_to_plane(
                 matched_ids=resolved,
                 matched_records=[plane_index.records.get(resolved[0])],
                 match_method="contains",
+                match_key=canonical,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -653,6 +668,7 @@ def correlate_to_plane(
             matched_ids=contains_matches,
             matched_records=records,
             match_method="contains",
+            match_key=canonical,
             ambiguity_code=code,
             disambiguation_detail=detail
         )
@@ -672,30 +688,12 @@ def correlate_to_plane(
                     matched_ids=vendor_matches,
                     matched_records=[matched_record],
                     match_method="vendor",
+                    match_key=entity.vendor,
                     ambiguity_code=AmbiguityCode.NONE
-                )
-            else:
-                return PlaneMatch(
-                    status=MatchStatus.UNMATCHED,
-                    matched_ids=[],
-                    matched_records=[],
-                    match_method="vendor",
-                    ambiguity_code=AmbiguityCode.PARENT_VENDOR,
-                    disambiguation_detail=f"Vendor-only match rejected: {entity.original_name} matched vendor {entity.vendor} but product name '{matched_name}' differs"
                 )
         elif len(vendor_matches) > 1:
             records = [plane_index.records.get(mid) for mid in vendor_matches]
             code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor")
-            
-            if code == AmbiguityCode.PARENT_VENDOR:
-                return PlaneMatch(
-                    status=MatchStatus.UNMATCHED,
-                    matched_ids=[],
-                    matched_records=[],
-                    match_method="vendor",
-                    ambiguity_code=AmbiguityCode.PARENT_VENDOR,
-                    disambiguation_detail=detail
-                )
             
             if resolved and len(resolved) == 1:
                 return PlaneMatch(
@@ -703,6 +701,7 @@ def correlate_to_plane(
                     matched_ids=resolved,
                     matched_records=[plane_index.records.get(resolved[0])],
                     match_method="vendor",
+                    match_key=entity.vendor,
                     ambiguity_code=code,
                     disambiguation_detail=detail
                 )
@@ -712,6 +711,7 @@ def correlate_to_plane(
                 matched_ids=vendor_matches,
                 matched_records=records,
                 match_method="vendor",
+                match_key=entity.vendor,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -745,6 +745,7 @@ def correlate_to_plane(
                         matched_ids=matching_ids,
                         matched_records=matching_records,
                         match_method="domain_vendor",
+                        match_key=domain_vendor,
                         ambiguity_code=AmbiguityCode.NONE
                     )
                 elif len(matching_ids) > 1:
@@ -755,6 +756,7 @@ def correlate_to_plane(
                             matched_ids=resolved,
                             matched_records=[plane_index.records.get(resolved[0])],
                             match_method="domain_vendor",
+                            match_key=domain_vendor,
                             ambiguity_code=code,
                             disambiguation_detail=detail
                         )
@@ -763,9 +765,65 @@ def correlate_to_plane(
                         matched_ids=matching_ids,
                         matched_records=matching_records,
                         match_method="domain_vendor",
+                        match_key=domain_vendor,
                         ambiguity_code=code,
                         disambiguation_detail=detail
                     )
+    
+    if use_vendor and entity.vendor and plane_index.by_vendor_product:
+        entity_vendor_key = normalize_string(entity.vendor)
+        vendor_matches = plane_index.by_vendor_product.get(entity_vendor_key, [])
+        
+        if len(vendor_matches) >= 1:
+            exact_in_vendor = []
+            for mid in vendor_matches:
+                record = plane_index.records.get(mid)
+                if record and normalize_string(_get_record_name(record)) == entity.canonical_name:
+                    exact_in_vendor.append(mid)
+            
+            if len(exact_in_vendor) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=exact_in_vendor,
+                    matched_records=[plane_index.records.get(exact_in_vendor[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            
+            if len(vendor_matches) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=vendor_matches,
+                    matched_records=[plane_index.records.get(vendor_matches[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            
+            records = [plane_index.records.get(mid) for mid in vendor_matches]
+            code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor_fallback")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=[vendor_matches[0]],
+                matched_records=[plane_index.records.get(vendor_matches[0])],
+                match_method="vendor_fallback",
+                match_key=entity.vendor,
+                ambiguity_code=AmbiguityCode.PARENT_VENDOR,
+                disambiguation_detail=f"Vendor-only match: {entity.vendor}"
+            )
     
     return PlaneMatch(status=MatchStatus.UNMATCHED)
 
@@ -801,7 +859,7 @@ def correlate_entities_to_planes(
     for entity in sorted(entities, key=lambda e: e.entity_id):
         result = CorrelationResult(entity=entity)
         
-        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True)
+        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True)
         result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True)
         result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
         result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)

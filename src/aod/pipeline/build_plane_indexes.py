@@ -40,7 +40,7 @@ def add_to_index(index: dict[str, list[str]], key: str, record_id: str):
 
 
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
-    """Build IdP index: by domain, by canonical name"""
+    """Build IdP index: by domain, by canonical name, by vendor (if present)"""
     index = PlaneIndex()
     
     for obj in idp_plane.objects:
@@ -53,6 +53,11 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         if obj.domain:
             domain = normalize_domain(obj.domain)
             add_to_index(index.by_domain, domain, record_id)
+        
+        vendor = getattr(obj, 'vendor', None) or (obj.raw_data.get('vendor') if obj.raw_data else None)
+        if vendor:
+            vendor_key = normalize_string(vendor)
+            add_to_index(index.by_vendor_product, vendor_key, record_id)
     
     return index
 

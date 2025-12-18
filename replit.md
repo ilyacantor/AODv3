@@ -94,6 +94,10 @@ CMDB correlation uses multiple matching strategies:
 
 **Domain Matching via external_ref (Dec 2025):** CMDB records with `external_ref` containing URLs have their domain extracted and indexed. Correlation now uses multi-signal matching: entity name → entity domain → vendor fallback.
 
+**Vendor Fallback Matching (Dec 2025):** When name and domain matching fail, vendor fallback allows matching based on vendor alone. If `normalize(entity.vendor) == normalize(CI.vendor)`, the asset is considered governed (HAS_CMDB=True). This applies to both CMDB and IdP correlation.
+
+**Governance Reason Codes (Dec 2025):** HAS_CMDB and HAS_IDP are now based on lens_status (raw matching) rather than lens_coverage (admission criteria). This ensures that any CMDB or IdP match counts as "governed" regardless of whether admission criteria like ci_type/lifecycle or has_sso/has_scim are met.
+
 ### Infrastructure Domain Exclusion
 
 Infrastructure domains (redis.io, postgresql.org, docker.com, kubernetes.io, etc.) are excluded from shadow/zombie classification. These represent internal infrastructure components that should not be flagged as shadow IT. The blocklist is maintained in `aod_agent_reconcile.py` as `INFRASTRUCTURE_DOMAINS`.

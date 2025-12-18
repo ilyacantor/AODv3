@@ -300,12 +300,15 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     """
     Compute the canonical reason codes for an asset's current state.
     
-    IMPORTANT: HAS_* codes mean ACTIONABLE PRESENCE (evidence that passed policy checks).
+    IMPORTANT: HAS_CMDB/HAS_IDP codes mean GOVERNANCE PRESENCE (matching, not admission).
+    - HAS_CMDB = CMDB match exists (regardless of ci_type/lifecycle admission criteria)
+    - HAS_IDP = IdP match exists (regardless of has_sso/has_scim admission criteria)
     - HAS_FINANCE = finance evidence with RECURRING spend (one-time purchases excluded)
     - HAS_DISCOVERY = discovery observations exist (even if stale)
     
-    Uses lens_coverage (admission result) not lens_status (raw correlation) to ensure
-    policy filters like recurring spend are respected.
+    Uses lens_status (raw matching) for CMDB/IDP governance to ensure any match
+    counts as governed, regardless of whether admission criteria are met.
+    Uses lens_coverage for finance/cloud to respect policy filters.
     
     Returns:
         Tuple of (reasons list, evidence summary dict)
@@ -313,8 +316,8 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     reasons = []
     evidence = {}
     
-    has_idp = asset.lens_coverage.idp
-    has_cmdb = asset.lens_coverage.cmdb
+    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
     has_discovery = any(

@@ -544,6 +544,7 @@ async def get_findings(run_id: str):
                 "finding_id": str(f.finding_id),
                 "asset_id": str(f.asset_id) if f.asset_id else None,
                 "finding_type": f.finding_type.value,
+                "category": f.category.value,
                 "severity": f.severity.value,
                 "explanation": f.explanation,
                 "evidence_refs": f.evidence_refs,

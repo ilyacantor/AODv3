@@ -3,11 +3,32 @@
 from typing import Optional
 
 from ..models.output_contracts import (
-    Asset, Finding, FindingType, Severity, LensStatus
+    Asset, Finding, FindingType, FindingCategory, Severity, LensStatus
 )
+
+SECURITY_RISKS = {
+    FindingType.IDENTITY_GAP,
+    FindingType.FINANCE_GAP,
+    FindingType.DATA_CONFLICT,
+}
+
+GOVERNANCE_FINDINGS = {
+    FindingType.CMDB_GAP,
+    FindingType.GOVERNANCE_GAP,
+    FindingType.DUPLICATION_RISK,
+}
+
+
 from .correlate_entities import CorrelationResult, MatchStatus
 from .build_plane_indexes import PlaneIndexes
 from .deterministic_ids import deterministic_uuid
+
+
+def get_category(finding_type: FindingType) -> FindingCategory:
+    """Map finding type to category"""
+    if finding_type in SECURITY_RISKS:
+        return FindingCategory.SECURITY_RISK
+    return FindingCategory.GOVERNANCE_FINDING
 
 
 def generate_identity_gap_finding(
@@ -41,6 +62,7 @@ def generate_identity_gap_finding(
         tenant_id=tenant_id,
         run_id=run_id,
         finding_type=FindingType.IDENTITY_GAP,
+        category=get_category(FindingType.IDENTITY_GAP),
         severity=Severity.HIGH,
         explanation=f"Asset '{asset.name}' admitted via {', '.join(admitted_via)} but has no identity provider integration (no SSO/SCIM)",
         evidence_refs=asset.evidence_refs
@@ -76,6 +98,7 @@ def generate_cmdb_gap_finding(
         tenant_id=tenant_id,
         run_id=run_id,
         finding_type=FindingType.CMDB_GAP,
+        category=get_category(FindingType.CMDB_GAP),
         severity=Severity.MED,
         explanation=f"Asset '{asset.name}' admitted via {', '.join(admitted_via)} but not registered in CMDB",
         evidence_refs=asset.evidence_refs
@@ -116,6 +139,7 @@ def generate_governance_gap_finding(
         tenant_id=tenant_id,
         run_id=run_id,
         finding_type=FindingType.GOVERNANCE_GAP,
+        category=get_category(FindingType.GOVERNANCE_GAP),
         severity=Severity.LOW,
         explanation=f"Asset '{asset.name}' has no designated owner in CMDB or IdP records",
         evidence_refs=asset.evidence_refs
@@ -153,6 +177,7 @@ def generate_duplication_risk_finding(
         tenant_id=tenant_id,
         run_id=run_id,
         finding_type=FindingType.DUPLICATION_RISK,
+        category=get_category(FindingType.DUPLICATION_RISK),
         severity=Severity.MED,
         explanation=f"Asset '{asset.name}' has ambiguous matches in: {', '.join(ambiguous_planes)}. Manual review recommended.",
         evidence_refs=asset.evidence_refs
@@ -194,6 +219,7 @@ def generate_data_conflict_finding(
         tenant_id=tenant_id,
         run_id=run_id,
         finding_type=FindingType.DATA_CONFLICT,
+        category=get_category(FindingType.DATA_CONFLICT),
         severity=Severity.MED,
         explanation=f"Asset '{asset.name}' has conflicting environment data: {', '.join(environments_found)}",
         evidence_refs=asset.evidence_refs
@@ -232,6 +258,7 @@ def generate_finance_gap_findings(
                 tenant_id=tenant_id,
                 run_id=run_id,
                 finding_type=FindingType.FINANCE_GAP,
+                category=get_category(FindingType.FINANCE_GAP),
                 severity=Severity.HIGH,
                 explanation=f"Finance record '{product_name}' ({record_id}) has no corresponding asset in catalog. Possible undiscovered system.",
                 evidence_refs=[record_id]
@@ -306,6 +333,7 @@ def generate_findings(
     findings.extend(finance_gaps)
     
     findings.sort(key=lambda f: (
+        {"security_risk": 0, "governance_finding": 1}.get(f.category.value, 2),
         {"high": 0, "med": 1, "low": 2}.get(f.severity.value, 3),
         f.finding_type.value,
         str(f.asset_id) if f.asset_id else "",

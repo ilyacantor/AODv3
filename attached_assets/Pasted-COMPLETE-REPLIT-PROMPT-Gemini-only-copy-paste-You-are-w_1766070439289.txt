@@ -1,0 +1,123 @@
+COMPLETE REPLIT PROMPT (Gemini only, copy/paste)
+You are working in AOD Fresh. Objective: add LLM-based fringe resolution (using Gemini) so AOD stops missing CMDB/IdP matches and can resolve unknown asset type (infra vs SaaS) without hardcoded domain exclusion lists. LLM outputs are first-class facts (treated as truth once written).
+Do not change the core pipeline stages, admission criteria, or the shadow/zombie formulas. This change is strictly Stage 4 correlation fallback + persisted facts + explainability.
+
+LLMs
+Gemini API keys already exist in env. Use Gemini for all LLM calls in this feature.
+Create a single client wrapper GeminiClient (or equivalent) and route all fringe calls through it.
+Must support: generate_json(prompt) -> dict
+Must validate strict JSON schema (reject non-JSON / extra keys)
+Add a LLMClient wrapper with two implementations:
+GeminiClient (primary)
+
+
+OpenAIClient (fallback)
+
+
+resolve_fringe() calls Gemini, catches only transient errors, then calls OpenAI. Persist llm_provider + llm_model_id with the fact.
+
+What to build
+A) Add “Fringe Resolver” as a fallback in Stage 4
+Implement one Gemini-backed function:
+resolve_fringe(entity, cmdb_candidates, idp_candidates) -> resolution_json
+Run deterministic correlation first (unchanged). Then call Gemini only when deterministic logic can’t confidently resolve:
+Unknown asset type
+Unknown vendor / vendor vs product vs brand
+CMDB/IdP matching missing when entity is about to drive findings (shadow/governance gap)
+
+Inputs and Outputs
+Gemini input (small, no raw logs)
+Send only:
+entity_key (domain-first if available)
+domain (normalized)
+canonical_name
+observed_names (top 5)
+vendor_hint (if any)
+sources (set: browser_extension, casb, sso_logs, proxy, api_gateway, custom_agent)
+recent_activity (bool)
+cmdb_candidates (top 10 from index: ci_id, name, ci_type, lifecycle, owner, vendor, external_ref)
+idp_candidates (top 10: id, name, vendor, external_ref, has_sso, has_scim)
+Gemini output (strict JSON; exact keys only)
+Return exactly:
+asset_type: SAAS_APP | INFRA_TECH | UMBRELLA_WEB | OSS_PROJECT | UNKNOWN
+entity_role: VENDOR | PRODUCT | BRAND | UNKNOWN
+canonical_vendor: string or null
+canonical_product: string or null
+cmdb_ci_id: string or null
+idp_object_id: string or null
+confidence: number 0..1
+reason: one sentence
+Acceptance rule: apply only if confidence >= 0.80. Otherwise record LLM_INCONCLUSIVE and do nothing.
+
+Where it plugs in (must follow current logic)
+1) Domain-first keying stays canonical
+Do not change existing “domain-first key normalization” behavior. If entity has a domain, its canonical key must be that normalized domain.
+2) Deterministic correlation runs first (unchanged)
+Keep existing CMDB/IdP correlation passes and disambiguation rules as-is.
+3) Trigger Gemini only for fringe
+Call Gemini only if ANY is true:
+asset_type is missing/UNKNOWN after deterministic passes
+NO_CMDB and NO_IDP AND entity is about to affect findings (shadow/governance gap)
+vendor is missing/ambiguous (vendor/product/brand confusion)
+No other triggers.
+
+First-class facts (persistence + reuse)
+Create/extend a persistent fact store
+Store by entity_key (domain if present). Table or existing metadata store is fine, but must persist across runs.
+Fields:
+entity_key
+asset_type
+entity_role
+canonical_vendor
+canonical_product
+cmdb_ci_id
+idp_object_id
+confidence
+reason
+model_id (Gemini model name/version string you use)
+created_at
+First-class fact rule: if a fact exists for entity_key, use it as truth on future runs and do not call Gemini again (unless model_id changes).
+Apply facts
+If fact has cmdb_ci_id → treat as CMDB match (HAS_CMDB = true, method=llm_adjudicated)
+If fact has idp_object_id → treat as IdP match (HAS_IDP = true, method=llm_adjudicated)
+If fact has canonical_vendor → set entity vendor to that canonical vendor (improves vendor fallback)
+If fact says asset_type == INFRA_TECH with confidence ≥ 0.80 → exclude from shadow/zombie and from sprawl candidates
+Important: do not delete existing infra domain exclusions in this change. Just ensure the new type-based exclusion works even when the domain isn’t listed.
+
+Explainability (required)
+Expose on entity/debug output:
+llm_used (bool)
+llm_confidence
+llm_reason
+llm_asset_type
+llm_canonical_vendor
+cmdb_match_method / idp_match_method supports value llm_adjudicated
+If excluded by type: exclusion_reason = asset_type_infra_tech
+Must show up in the reconciliation output.
+
+Cost/latency controls
+Cache via fact store (entity_key + model_id)
+Never call Gemini twice for the same entity in a single run
+Add short timeouts + retry once (only) on transient failures
+
+Tests (must add; stub Gemini)
+Use a stubbed Gemini client returning deterministic JSON.
+Unknown asset type → INFRA_TECH exclusion
+Example: elasticsearch.com (or equivalent)
+Stub Gemini returns INFRA_TECH, confidence 0.9
+Assert: not SHADOW, excluded from candidates, explainability fields set
+CMDB match adjudication
+Example: pagerduty.com with CI name PagerDuty (Legacy) where deterministic match fails
+Stub Gemini returns cmdb_ci_id, confidence 0.9
+Assert: HAS_CMDB = true, not SHADOW, match_method=llm_adjudicated
+Facts reused
+Run correlation twice
+Assert: second run reads fact store and does not call Gemini
+
+Deliverables
+Minimal code diff implementing: Gemini client + fringe resolver + fact store + explainability
+Tests above
+Short note listing files changed and why
+
+If you want the Gemini model pinned: pick the repo’s existing default Gemini model constant (whatever is already used elsewhere) and reuse it here—don’t introduce multiple model choices.
+

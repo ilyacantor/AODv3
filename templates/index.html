@@ -157,6 +157,8 @@
         .header-actions { display: flex; align-items: center; gap: 1rem; }
         .btn-help { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem; }
         .btn-help:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
+        .btn-refresh { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; }
+        .btn-refresh:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
         .item-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--slate-700); }
         .item-detail-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
         .item-detail-meta { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
@@ -251,6 +253,7 @@
                 </div>
                 <span class="mode-label" id="prodLabel">Prod</span>
             </div>
+            <button class="btn-refresh" id="refreshBtn" title="Refresh page">↻ Refresh</button>
             <button class="btn-help" id="helpBtn">? Help</button>
             <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
         </div>
@@ -1626,6 +1629,11 @@
         loadRuns();
         loadTenants();
         setInterval(checkHealth, 30000);
+        
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => window.location.reload());
+        }
         
         const helpBtn = document.getElementById('helpBtn');
         const helpModal = document.getElementById('helpModal');

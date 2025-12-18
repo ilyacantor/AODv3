@@ -217,6 +217,27 @@
         .mode-indicator { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
         .mode-indicator.dev { background: rgba(148, 163, 184, 0.2); color: var(--slate-400); }
         .mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .main-tabs { display: flex; background: var(--gray-900); border-bottom: 1px solid var(--gray-700); padding: 0 2rem; }
+        .main-tab { padding: 1rem 1.5rem; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+        .main-tab:hover { color: white; background: rgba(30, 41, 59, 0.3); }
+        .main-tab.active { color: var(--cyan-400); border-bottom-color: var(--cyan-400); background: rgba(6, 182, 212, 0.1); }
+        .main-tab-content { display: none; }
+        .main-tab-content.active { display: block; }
+        .test-card { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; transition: all 0.2s ease; }
+        .test-card:hover { border-color: var(--cyan-600); }
+        .test-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
+        .test-card-title { font-weight: 600; color: white; font-size: 1rem; }
+        .test-card-desc { color: var(--slate-400); font-size: 0.875rem; line-height: 1.5; margin-bottom: 1rem; }
+        .test-card-meta { display: flex; gap: 1rem; font-size: 0.8rem; color: var(--slate-500); margin-bottom: 1rem; }
+        .test-count { color: var(--purple-400); }
+        .test-result { margin-top: 1rem; padding: 1rem; border-radius: 8px; font-size: 0.875rem; }
+        .test-result.success { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); color: var(--green-400); }
+        .test-result.failure { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--red-400); }
+        .test-result.running { background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.4); color: var(--cyan-400); }
+        .test-result pre { white-space: pre-wrap; font-family: 'Fira Code', monospace; font-size: 0.8rem; margin-top: 0.5rem; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1rem; }
+        .debug-input { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .debug-input .form-input { flex: 1; }
     </style>
 </head>
 <body>
@@ -234,6 +255,11 @@
             <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
         </div>
     </header>
+    <nav class="main-tabs">
+        <button class="main-tab active" data-tab="discovery">Discovery</button>
+        <button class="main-tab" data-tab="test">Test</button>
+    </nav>
+    <div id="discoveryTabContent" class="main-tab-content active">
     <main class="container">
         <div class="section-row">
         <div class="section compact">
@@ -324,6 +350,89 @@
             </div>
         </div>
     </main>
+    </div>
+    
+    <div id="testTabContent" class="main-tab-content">
+        <main class="container">
+            <div class="section">
+                <h2 class="section-title">Test Suite</h2>
+                <p class="config-note">Run tests to validate domain canonicalization and pipeline behavior</p>
+                
+                <div class="test-grid">
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">Canonical Key Equivalence Tests</div>
+                            <button class="btn btn-primary" id="runCanonicalTests">Run Tests</button>
+                        </div>
+                        <div class="test-card-desc">
+                            32 unit tests validating domain extraction, subdomain normalization, 
+                            typosquat preservation, and two-path equivalence between modules.
+                        </div>
+                        <div class="test-card-meta">
+                            <span class="test-count">32 tests</span>
+                            <span>tests/test_canonical_key_equivalence.py</span>
+                        </div>
+                        <div id="canonicalTestResult" class="test-result hidden"></div>
+                    </div>
+                    
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">All AOD Tests</div>
+                            <button class="btn btn-secondary" id="runAllTests">Run All</button>
+                        </div>
+                        <div class="test-card-desc">
+                            Run the complete test suite including farm reconcile, shadow/zombie, 
+                            run-scoped IDs, and integration tests.
+                        </div>
+                        <div class="test-card-meta">
+                            <span class="test-count">Full suite</span>
+                            <span>tests/</span>
+                        </div>
+                        <div id="allTestResult" class="test-result hidden"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2 class="section-title">Debug Tools</h2>
+                <p class="config-note">Trace asset canonicalization and compare code paths</p>
+                
+                <div class="test-grid">
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">Asset Trace</div>
+                        </div>
+                        <div class="test-card-desc">
+                            Trace a single asset through the canonicalization pipeline to debug 
+                            KEY_NORMALIZATION_MISMATCH errors.
+                        </div>
+                        <div class="debug-input">
+                            <input type="text" class="form-input" id="traceRunId" placeholder="Run ID">
+                            <input type="text" class="form-input" id="traceAssetKey" placeholder="Asset key (e.g., dr0pbox.com)">
+                            <button class="btn btn-primary" id="runAssetTrace">Trace</button>
+                        </div>
+                        <div id="assetTraceResult" class="test-result hidden"></div>
+                    </div>
+                    
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">Two-Path Diff</div>
+                        </div>
+                        <div class="test-card-desc">
+                            Compare canonicalization between vendor_inference and reconcile paths 
+                            to detect divergence bugs.
+                        </div>
+                        <div class="debug-input">
+                            <input type="text" class="form-input" id="diffDomains" placeholder="Domains (comma-separated, e.g., s1ack.com, g00gle.com)">
+                            <button class="btn btn-primary" id="runTwoPathDiff">Compare</button>
+                        </div>
+                        <div id="twoPathDiffResult" class="test-result hidden"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
@@ -364,6 +473,163 @@
         
         function getLlmEnabled() {
             return llmMode === 'prod';
+        }
+        
+        function initMainTabs() {
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const targetTab = tab.dataset.tab;
+                    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(targetTab + 'TabContent').classList.add('active');
+                });
+            });
+        }
+        
+        function initTestTab() {
+            document.getElementById('runCanonicalTests').addEventListener('click', async () => {
+                const resultDiv = document.getElementById('canonicalTestResult');
+                resultDiv.className = 'test-result running';
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = '<div class="spinner"></div> Running 32 tests...';
+                
+                try {
+                    const response = await fetch('/api/run-tests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ test_path: 'tests/test_canonical_key_equivalence.py' })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.passed) {
+                        resultDiv.className = 'test-result success';
+                        resultDiv.innerHTML = `<strong>All ${data.total} tests passed</strong><pre>${data.summary || ''}</pre>`;
+                    } else {
+                        resultDiv.className = 'test-result failure';
+                        resultDiv.innerHTML = `<strong>${data.passed_count}/${data.total} passed, ${data.failed_count} failed</strong><pre>${data.output || data.error || ''}</pre>`;
+                    }
+                } catch (err) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                }
+            });
+            
+            document.getElementById('runAllTests').addEventListener('click', async () => {
+                const resultDiv = document.getElementById('allTestResult');
+                resultDiv.className = 'test-result running';
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = '<div class="spinner"></div> Running full test suite...';
+                
+                try {
+                    const response = await fetch('/api/run-tests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ test_path: 'tests/' })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.passed) {
+                        resultDiv.className = 'test-result success';
+                        resultDiv.innerHTML = `<strong>All ${data.total} tests passed</strong><pre>${data.summary || ''}</pre>`;
+                    } else {
+                        resultDiv.className = 'test-result failure';
+                        resultDiv.innerHTML = `<strong>${data.passed_count}/${data.total} passed, ${data.failed_count} failed</strong><pre>${data.output || data.error || ''}</pre>`;
+                    }
+                } catch (err) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                }
+            });
+            
+            document.getElementById('runAssetTrace').addEventListener('click', async () => {
+                const runId = document.getElementById('traceRunId').value.trim();
+                const assetKey = document.getElementById('traceAssetKey').value.trim();
+                const resultDiv = document.getElementById('assetTraceResult');
+                
+                if (!runId || !assetKey) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.classList.remove('hidden');
+                    resultDiv.innerHTML = 'Please enter both Run ID and Asset Key';
+                    return;
+                }
+                
+                resultDiv.className = 'test-result running';
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = '<div class="spinner"></div> Tracing asset...';
+                
+                try {
+                    const response = await fetch('/api/debug/trace-asset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ run_id: runId, asset_key: assetKey })
+                    });
+                    const data = await response.json();
+                    
+                    resultDiv.className = data.found_in_assets ? 'test-result success' : 'test-result failure';
+                    let html = `<strong>Asset Key:</strong> ${data.asset_key}<br>`;
+                    html += `<strong>Found in Assets:</strong> ${data.found_in_assets}<br>`;
+                    html += `<strong>Found in Observations:</strong> ${data.found_in_observations}<br>`;
+                    html += `<strong>Final Key:</strong> ${data.final_asset_key || 'N/A'}<br>`;
+                    html += `<strong>Key Source:</strong> ${data.key_source || 'N/A'}<br>`;
+                    html += `<strong>Raw Domains:</strong> ${data.raw_evidence_domains.join(', ') || 'None'}<br>`;
+                    if (data.canonicalization_steps.length > 0) {
+                        html += `<br><strong>Canonicalization Steps:</strong><pre>`;
+                        data.canonicalization_steps.forEach(step => {
+                            html += `${step.step}: ${step.input_value} → ${step.output_value} [${step.function}]\n`;
+                        });
+                        html += `</pre>`;
+                    }
+                    resultDiv.innerHTML = html;
+                } catch (err) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                }
+            });
+            
+            document.getElementById('runTwoPathDiff').addEventListener('click', async () => {
+                const domainsInput = document.getElementById('diffDomains').value.trim();
+                const resultDiv = document.getElementById('twoPathDiffResult');
+                
+                if (!domainsInput) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.classList.remove('hidden');
+                    resultDiv.innerHTML = 'Please enter at least one domain';
+                    return;
+                }
+                
+                const domains = domainsInput.split(',').map(d => d.trim()).filter(d => d);
+                
+                resultDiv.className = 'test-result running';
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = '<div class="spinner"></div> Comparing paths...';
+                
+                try {
+                    const response = await fetch('/api/debug/two-path-diff', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ domains })
+                    });
+                    const data = await response.json();
+                    
+                    resultDiv.className = data.all_match ? 'test-result success' : 'test-result failure';
+                    let html = `<strong>All Match:</strong> ${data.all_match ? 'Yes' : 'No'}<br><br>`;
+                    html += `<table style="width:100%;font-size:0.8rem;"><tr><th>Domain</th><th>Vendor Path</th><th>Reconcile Path</th><th>Match</th></tr>`;
+                    data.results.forEach(r => {
+                        const matchIcon = r.match ? '✓' : '✗';
+                        const rowStyle = r.match ? '' : 'color:var(--red-400);';
+                        html += `<tr style="${rowStyle}"><td>${r.raw_domain}</td><td>${r.vendor_inference_result || 'null'}</td><td>${r.reconcile_result || 'null'}</td><td>${matchIcon}</td></tr>`;
+                    });
+                    html += '</table>';
+                    if (data.mismatches.length > 0) {
+                        html += `<br><strong>Mismatches:</strong><pre>${data.mismatches.join('\n')}</pre>`;
+                    }
+                    resultDiv.innerHTML = html;
+                } catch (err) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                }
+            });
         }
         
         function safeStr(value, maxLen = 200) {
@@ -1354,6 +1620,8 @@
         });
         
         initModeToggle();
+        initMainTabs();
+        initTestTab();
         checkHealth(); 
         loadRuns();
         loadTenants();

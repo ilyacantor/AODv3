@@ -351,6 +351,20 @@ class Database:
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
                     activity_evidence, tags, admission_reason, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    run_id = EXCLUDED.run_id,
+                    asset_type = EXCLUDED.asset_type,
+                    identifiers = EXCLUDED.identifiers,
+                    vendor = EXCLUDED.vendor,
+                    vendor_hypothesis = EXCLUDED.vendor_hypothesis,
+                    environment = EXCLUDED.environment,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    lens_status = EXCLUDED.lens_status,
+                    lens_coverage = EXCLUDED.lens_coverage,
+                    activity_evidence = EXCLUDED.activity_evidence,
+                    tags = EXCLUDED.tags,
+                    admission_reason = EXCLUDED.admission_reason,
+                    created_at = EXCLUDED.created_at
                 """,
                 str(asset.asset_id),
                 asset.tenant_id,
@@ -745,6 +759,20 @@ class Database:
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
                     activity_evidence, tags, admission_reason, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    run_id = EXCLUDED.run_id,
+                    asset_type = EXCLUDED.asset_type,
+                    identifiers = EXCLUDED.identifiers,
+                    vendor = EXCLUDED.vendor,
+                    vendor_hypothesis = EXCLUDED.vendor_hypothesis,
+                    environment = EXCLUDED.environment,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    lens_status = EXCLUDED.lens_status,
+                    lens_coverage = EXCLUDED.lens_coverage,
+                    activity_evidence = EXCLUDED.activity_evidence,
+                    tags = EXCLUDED.tags,
+                    admission_reason = EXCLUDED.admission_reason,
+                    created_at = EXCLUDED.created_at
                 """,
                 rows
             )
@@ -775,6 +803,14 @@ class Database:
                     finding_id, asset_id, tenant_id, run_id, finding_type,
                     category, severity, explanation, evidence_refs, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (finding_id) DO UPDATE SET
+                    asset_id = EXCLUDED.asset_id,
+                    finding_type = EXCLUDED.finding_type,
+                    category = EXCLUDED.category,
+                    severity = EXCLUDED.severity,
+                    explanation = EXCLUDED.explanation,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    created_at = EXCLUDED.created_at
                 """,
                 rows
             )
@@ -804,6 +840,13 @@ class Database:
                     artifact_id, tenant_id, run_id, parent_asset_id, name,
                     artifact_type, source, evidence_ref, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT (artifact_id) DO UPDATE SET
+                    parent_asset_id = EXCLUDED.parent_asset_id,
+                    name = EXCLUDED.name,
+                    artifact_type = EXCLUDED.artifact_type,
+                    source = EXCLUDED.source,
+                    evidence_ref = EXCLUDED.evidence_ref,
+                    created_at = EXCLUDED.created_at
                 """,
                 rows
             )

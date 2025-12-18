@@ -178,6 +178,9 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     POLICY (Dec 2025): Finance is NOT a trigger for shadow classification.
     Shadow depends only on discovery presence + activity recency + governance status.
     
+    POLICY (Dec 2025): INFRA_TECH exclusion via LLM.
+    If LLM classified asset as INFRA_TECH with high confidence, exclude from shadow.
+    
     Interpretation: "We know this software is used, but it's not being
     managed through official channels."
     
@@ -188,6 +191,15 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
+    if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
+            evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
@@ -311,10 +323,22 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
     If no activity timestamps exist, the asset is classified as zombie
     (we cannot prove it's being used).
     
+    POLICY (Dec 2025): INFRA_TECH exclusion via LLM.
+    If LLM classified asset as INFRA_TECH with high confidence, exclude from zombie.
+    
     Args:
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
+    if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
+            evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     

@@ -8,7 +8,7 @@ from uuid import uuid4
 from src.aod.farm_reconcile import reconcile_to_farm
 from src.aod.models.output_contracts import (
     RunLog, RunStatus, RunCounts, SyncStatus,
-    Asset, AssetType, Environment, Finding, FindingType, Severity,
+    Asset, AssetType, Environment, Finding, FindingType, FindingCategory, Severity,
     LensStatuses, LensCoverage, AssetIdentifiers, ActivityEvidence
 )
 
@@ -56,6 +56,7 @@ def sample_findings():
             tenant_id="tenant1",
             run_id="run_test123",
             finding_type=FindingType.GOVERNANCE_GAP,
+            category=FindingCategory.GOVERNANCE_FINDING,
             severity=Severity.HIGH,
             explanation="Asset lacks governance controls"
         )

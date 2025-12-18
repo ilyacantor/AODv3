@@ -10,7 +10,7 @@ from uuid import UUID
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
-    AssetIdentifiers, ActivityEvidence, FindingType, Severity, ArtifactType,
+    AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
     VendorHypothesis
 )
 
@@ -124,6 +124,11 @@ class Database:
             except Exception:
                 pass
             
+            try:
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'")
+            except Exception:
+                pass
+            
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
                     artifact_id TEXT PRIMARY KEY,
@@ -147,6 +152,7 @@ class Database:
                     tenant_id TEXT NOT NULL,
                     run_id TEXT NOT NULL,
                     finding_type TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'governance_finding',
                     severity TEXT NOT NULL,
                     explanation TEXT NOT NULL,
                     evidence_refs TEXT NOT NULL DEFAULT '[]',
@@ -461,14 +467,15 @@ class Database:
                 """
                 INSERT INTO findings (
                     finding_id, asset_id, tenant_id, run_id, finding_type,
-                    severity, explanation, evidence_refs, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    category, severity, explanation, evidence_refs, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 str(finding.finding_id),
                 str(finding.asset_id) if finding.asset_id else None,
                 finding.tenant_id,
                 finding.run_id,
                 finding.finding_type.value,
+                finding.category.value,
                 finding.severity.value,
                 finding.explanation,
                 json.dumps(finding.evidence_refs),
@@ -493,6 +500,7 @@ class Database:
                 tenant_id=row["tenant_id"],
                 run_id=row["run_id"],
                 finding_type=FindingType(row["finding_type"]),
+                category=FindingCategory(row["category"]) if row.get("category") else FindingCategory.GOVERNANCE_FINDING,
                 severity=Severity(row["severity"]),
                 explanation=row["explanation"],
                 evidence_refs=json.loads(row["evidence_refs"]),
@@ -754,6 +762,7 @@ class Database:
                 f.tenant_id,
                 f.run_id,
                 f.finding_type.value,
+                f.category.value,
                 f.severity.value,
                 f.explanation,
                 json.dumps(f.evidence_refs),
@@ -764,8 +773,8 @@ class Database:
                 """
                 INSERT INTO findings (
                     finding_id, asset_id, tenant_id, run_id, finding_type,
-                    severity, explanation, evidence_refs, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    category, severity, explanation, evidence_refs, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 rows
             )

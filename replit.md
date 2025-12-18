@@ -2,7 +2,7 @@
 
 ## Overview
 
-AOD Fresh is the discovery module of AutonomOS, an enterprise operating system. It ingests raw enterprise evidence and produces an Asset Catalog (systems only), a Run Log (audit trail), and Explainable Findings (rule-based, no ML/anomaly scores). The system is designed to be deterministic, evidence-only, and fully explainable, rejecting pre-adjudicated labels. Its core purpose is to accurately identify and classify enterprise assets based on observed evidence, contributing to a clear and auditable view of an organization's digital footprint.
+AOD Fresh is the discovery module of AutonomOS, an enterprise operating system. Its primary purpose is to ingest raw enterprise evidence and generate an Asset Catalog, a Run Log (audit trail), and Explainable Findings. The system is designed to be deterministic, evidence-only, and fully explainable, focusing on accurately identifying and classifying enterprise assets based on observed evidence without relying on pre-adjudicated labels or machine learning. It aims to provide a clear and auditable view of an organization's digital footprint.
 
 ## User Preferences
 
@@ -12,140 +12,75 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Design Principles
 
-- **No Ground Truth Ingestion**: Rejects banned fields (e.g., `is_shadow_it`) to ensure evidence-only processing.
-- **No ML/Anomaly Scores**: Relies solely on deterministic rules and explainable correlation.
-- **Deterministic**: Guarantees identical outputs for identical inputs with stable ordering.
-- **Evidence-Only Decisions**: All admissions and findings are derived exclusively from raw evidence.
-- **Assets vs. Artifacts**: Distinguishes systems (assets) from internal objects (artifacts) to prevent inflated asset counts.
+AOD Fresh adheres to principles of no ground truth ingestion, no ML/anomaly scores, determinism, evidence-only decisions, and a clear distinction between assets and artifacts.
 
 ### Pipeline Architecture
 
-AOD Fresh uses a 7-stage sequential pipeline:
-1.  `validate_snapshot.py`: Schema validation and banned field rejection.
-2.  `normalize_observations.py`: Normalizes data and derives candidate entities.
-3.  `build_plane_indexes.py`: Creates indexes for efficient correlation.
-4.  `correlate_entities.py`: Performs five-pass correlation with disambiguation.
-5.  `admission.py`: Applies criteria to determine assets.
-6.  `artifact_handler.py`: Identifies and records artifacts.
-7.  `findings_engine.py`: Generates deterministic findings.
+The system utilizes a 7-stage sequential pipeline: `validate_snapshot`, `normalize_observations`, `build_plane_indexes`, `correlate_entities`, `admission`, `artifact_handler`, and `findings_engine`.
 
-### Finding Categories (Dec 2025)
+### Finding Categories
 
-Findings are split into two categories for clearer prioritization:
+Findings are categorized into "Security Risks" (actionable, risk-bearing) and "Governance/Operational Findings" (hygiene, accuracy, readiness), with defined severities and a specific sorting order. UI elements reflect this, featuring Security Risks and Findings as top-level KPIs.
 
-**Security Risks** (actionable, risk-bearing):
-| Finding Type | Severity | Why Security Risk |
-|--------------|----------|-------------------|
-| identity_gap | HIGH | Asset bypasses IdP → no auth, no MFA, no deprovisioning |
-| finance_gap | HIGH | Paying for undiscovered system → likely shadow IT |
-| data_conflict | MEDIUM | Conflicting environment/state can mask prod exposure |
+### Correlation and Disambiguation
 
-**Governance/Operational Findings** (hygiene, accuracy, readiness):
-| Finding Type | Severity | Category |
-|--------------|----------|----------|
-| cmdb_gap | MEDIUM | Asset governance |
-| governance_gap | LOW | Ownership / accountability |
-| duplication_risk | MEDIUM | Data quality / ambiguity |
-
-Sorting order: Category (security_risk first) → Severity (CRITICAL → HIGH → MEDIUM → LOW) → Finding type. The `category` field is `security_risk` or `governance_finding`. 
-
-**UI Layout (Dec 2025):** Security Risks is now a standalone top-level KPI box (red color) alongside Assets, Shadow, and Zombie. Findings (governance/data quality) is also a top-level KPI. Artifacts and Ambiguous are now folded under Findings as sub-drill paths. The severity enum includes CRITICAL for the most severe issues.
-
-### Correlation Disambiguation
-
-The system uses specific codes (e.g., `MULTI_ENV`, `LEGACY`, `DUPLICATE`, `PARENT_VENDOR`, `UNRESOLVED`) to resolve multiple matches. Disambiguation is evidence-driven, requiring CMDB fields to support resolution; otherwise, matches remain `AMBIGUOUS`. Prevention mechanisms include `PARENT_VENDOR` to avoid incorrect vendor matching and `KNOWN_DISTINCT_PRODUCTS` blocklist for substring false positives (e.g., "box" vs. "dropbox"). Fuzzy matching handles typos with Levenshtein distance for names ≥4 characters.
+Correlation uses a five-pass process with evidence-driven disambiguation codes (`MULTI_ENV`, `LEGACY`, `DUPLICATE`, `PARENT_VENDOR`, `UNRESOLVED`) and fuzzy matching with Levenshtein distance for typos. A `KNOWN_DISTINCT_PRODUCTS` blocklist prevents false positives.
 
 ### Data Planes
 
-Evidence is sourced from 7 planes: Discovery, IdP, CMDB, Cloud, Endpoint, Network, and Finance.
+Evidence is sourced from 7 distinct planes: Discovery, IdP, CMDB, Cloud, Endpoint, Network, and Finance.
 
 ### Derived Classifications
 
-Shadow and Zombie classifications are derived post-pipeline:
--   **Shadow Asset**: Discovered + Active + Ungoverned (has discovery/cloud evidence, recent activity within 90 days, but NO IdP or CMDB presence).
--   **Zombie Asset**: Has IdP/CMDB presence but no recent activity (90-day window).
+**Shadow Asset** and **Zombie Asset** classifications are derived post-pipeline based on discovery presence, activity recency (90-day window), and governance status. Finance evidence acts as context but does not influence shadow classification directly.
 
-**Shadow Policy (Dec 2025):** Finance is NOT a trigger or gate for shadow classification. Shadow depends ONLY on discovery presence + activity recency + governance status. Finance evidence is retained as context/annotation only (reason codes like `HAS_FINANCE`/`NO_FINANCE` for priority/scoring), but never affects the shadow True/False decision.
+### Vendor Hypothesis
 
-### Vendor Hypothesis (Inference Layer)
-
-An inference layer generates a `vendor_hypothesis` (max 0.9 confidence) from domain patterns for discovery-only assets, based on curated domain-to-vendor mappings. This hypothesis is non-decisionable metadata and does not affect admission, classification, findings, or policy logic.
+An inference layer provides a `vendor_hypothesis` (max 0.9 confidence) for discovery-only assets, based on curated domain-to-vendor mappings. This is non-decisionable metadata.
 
 ### API Structure
 
-A FastAPI application exposes endpoints for triggering runs (`/api/runs/from-farm`), retrieving run details, assets, and findings, and debug/reconciliation endpoints.
+A FastAPI application exposes endpoints for triggering runs, retrieving run details, assets, and findings, and debug/reconciliation.
 
 ### Finance Admission Policy
 
-Finance evidence requires **recurring spend** to qualify for admission:
-- Contracts must have `is_recurring=true` and `amount > 0`
-- Transactions must have `is_recurring=true` and `amount > 0`
-
-One-time purchases and expense reimbursements are not actionable shadow IT and are excluded from finance-based admission.
+Finance evidence requires recurring spend (`is_recurring=true` and `amount > 0`) to qualify for admission, excluding one-time purchases.
 
 ### AOD Actual Results Emitter
 
-AOD publishes its structured "actual" output (`shadow_actual`, `zombie_actual`, `admission_actual`, `actual_reason_codes`) to Farm for reconciliation. AOD outputs canonical reason codes (e.g., `HAS_IDP`, `NO_CMDB`) for all assets, ensuring no blank reason codes.
+AOD publishes structured outputs (`shadow_actual`, `zombie_actual`, `admission_actual`, `actual_reason_codes`) to Farm, providing canonical reason codes for all assets.
 
-### Domain-Keyed Asset Aggregation
+### Domain-Keyed Asset Aggregation and Normalization
 
-Assets are aggregated using a domain-keyed approach. If evidence contains a registered domain, that domain becomes the `asset_key`. This ensures reconciliation accuracy by prioritizing domains from evidence, vendor lookups, and normalized names. `is_shadow`/`is_zombie` use OR semantics, and `reason_codes` are a union of all variants (with contradictory codes deduplicated - HAS_* takes precedence over NO_*).
+Assets are aggregated using a domain-keyed approach, prioritizing domains from evidence. A centralized `domain_normalization.py` module, leveraging the Public Suffix List, handles canonical domain extraction (eTLD+1) for keying and reconciliation.
 
-**Domain-First Key Normalization (Dec 2025):** Entities are keyed by their domain when available, not by name. This ensures proper aggregation of observations referring to the same service. If an observation name looks like a domain (e.g., "slack.com"), the domain is extracted from the name. If an entity is first created from non-domain evidence (e.g., "Slack" from IdP) and later receives domain evidence (e.g., "slack.com" from discovery), the entity is upgraded and re-keyed under the domain-based key with all observations merged. Base name matching allows "slack" to merge with "slack.com" when domain evidence arrives.
+### Finance Domain-First Linking
+
+Finance correlation prioritizes domain matching, followed by canonical name match, and then vendor-product match as a fallback. Reason codes differentiate linking confidence (`HAS_FINANCE_DOMAIN_LINKED`, `HAS_FINANCE_VENDOR_ONLY`, `HAS_FINANCE`).
+
+### Activity Recency Determinism
+
+Activity recency is computed deterministically, prioritizing timestamps from IdP, Discovery, Cloud, and Finance to determine `latest_activity_at` for `RECENT_ACTIVITY` (within 90 days) or `STALE_ACTIVITY`. Zombie status reasons include the timestamp source (e.g., "from idp_last_login", "from discovery_observed") for full traceability. Debug logs emit `ZOMBIE_DIAGNOSTIC` entries for each classification.
 
 ### Reconciliation Eligibility Modes
 
-Reconciliation eligibility is mode-based:
-- **Sprawl mode** (default): Only external services (domains, known SaaS) are eligible for shadow/zombie classification. Internal identifiers (elasticsearchlogs, postgresmain) are excluded to prevent false positives.
-- **Infra mode**: All assets are eligible, including internal identifiers. Use for infrastructure discovery reconciliation.
-
-Mode can be specified via the `/runs/resync` endpoint: `{"run_id": "...", "mode": "infra"}`. Initial run creation uses sprawl mode by default.
+The system supports "Sprawl mode" (default, external services only) and "Infra mode" (all assets, including internal identifiers) for reconciliation eligibility.
 
 ### CMDB Correlation
 
-CMDB correlation uses multiple matching strategies (in order):
-1. **Domain matching** - Direct domain lookup in CMDB
-2. **Canonical name matching** - Exact normalized name match with vendor validation
-3. **Fuzzy matching** - Levenshtein distance for typos (ratio ≤ 0.20)
-4. **Contains matching** - Substring matching with KNOWN_DISTINCT_PRODUCTS blocklist
-5. **Name contains domain token** - CI name contains domain base token (≥6 chars)
-6. **Vendor matching** - Entity vendor → CMDB vendor product index
-7. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor
-8. **Vendor fallback** - Vendor-only match (loose governance)
-
-**Name Contains Domain Token (Dec 2025):** Extracts base token from entity domain (e.g., `pagerduty.com` → `pagerduty`, `service-now.com` → `servicenow`) and matches if any CI name contains that token. Token must be ≥6 characters to prevent short-token false positives. Match method: `name_contains_domain_token`.
-
-**Fuzzy Matching Ratio Gate (Dec 2025):** Edit-distance fuzzy matching uses a relative threshold: `distance/max_len ≤ 0.20`. This prevents short-token collisions (miro↔jira at 2/4=0.50, loom↔zoom at 1/4=0.25) while preserving legitimate longer fuzzy matches where 1-2 char typos are proportionally smaller.
-
-**Vendor Validation (Dec 2025):** Canonical name matches against CMDB are validated using entity domain → DOMAIN_TO_VENDOR or entity name → VENDOR_TO_DOMAIN lookups to ensure the matched CMDB record's vendor matches the expected vendor for the entity.
-
-**Domain Matching via external_ref (Dec 2025):** CMDB records with `external_ref` containing URLs have their domain extracted and indexed. Correlation now uses multi-signal matching: entity name → entity domain → vendor fallback.
-
-**Vendor Fallback Matching (Dec 2025):** When name and domain matching fail, vendor fallback allows matching based on vendor alone. If `normalize(entity.vendor) == normalize(CI.vendor)`, the asset is considered governed (HAS_CMDB=True). This applies to both CMDB and IdP correlation.
-
-**Governance Reason Codes (Dec 2025):** HAS_CMDB and HAS_IDP are now based on lens_status (raw matching) rather than lens_coverage (admission criteria). This ensures that any CMDB or IdP match counts as "governed" regardless of whether admission criteria like ci_type/lifecycle or has_sso/has_scim are met.
-
-For detailed discovery logic documentation, see [DISCOVERY_LOGIC.md](./DISCOVERY_LOGIC.md).
+CMDB correlation uses multiple strategies: domain matching, canonical name matching with vendor validation, fuzzy matching (relative threshold `distance/max_len ≤ 0.20`), contains matching, name contains domain token (≥6 chars), and vendor-based matching (vendor, domain-to-vendor, vendor fallback). Governance reason codes (`HAS_CMDB`, `HAS_IDP`) are based on lens_status.
 
 ### Infrastructure Domain Exclusion
 
-Infrastructure domains (redis.io, postgresql.org, docker.com, kubernetes.io, etc.) are excluded from shadow/zombie classification. These represent internal infrastructure components that should not be flagged as shadow IT. The blocklist is maintained in `aod_agent_reconcile.py` as `INFRASTRUCTURE_DOMAINS`.
+A blocklist of `INFRASTRUCTURE_DOMAINS` prevents internal infrastructure components from being flagged as shadow/zombie.
 
-### LLM Fringe Resolution (Dec 2025)
+### LLM Fringe Resolution
 
-For ambiguous assets where deterministic matching fails, an LLM-based fringe resolver provides classification assistance:
-
-- **Trigger Conditions**: asset_type unknown, governance gap (NO_CMDB AND NO_IDP), or vendor ambiguous
-- **Architecture**: Gemini-first with OpenAI fallback, 0.80 confidence threshold
-- **Fact Store**: LLM facts are persisted in `llm_facts` table by (tenant_id, entity_key) for reuse across runs
-- **INFRA_TECH Exclusion**: Assets classified as INFRA_TECH with high confidence (≥0.80) are excluded from shadow/zombie classification
-- **Explainability**: LLMMetadata on Asset includes llm_used, llm_confidence, llm_reason, llm_asset_type, llm_canonical_vendor, llm_provider, llm_model_id, fact_id, exclusion_reason, and match methods
-
-The LLM can provide CMDB/IdP matches via cmdb_ci_id/idp_object_id fields, creating an "llm_adjudicated" match method that promotes assets to governed status.
+An LLM-based fringe resolver (Gemini-first, OpenAI fallback, 0.80 confidence) assists with ambiguous assets (unknown asset_type, governance gap, ambiguous vendor). LLM facts are persisted, and high-confidence INFRA_TECH classifications are excluded from shadow/zombie. LLM-adjudicated matches can promote assets to governed status.
 
 ### Explain Non-Flag Endpoint
 
-A `POST /api/reconcile/explain-nonflag` endpoint allows Farm to query why specific assets are NOT flagged as shadow/zombie, providing detailed reasons and decisions.
+A dedicated endpoint `/api/reconcile/explain-nonflag` provides detailed reasons why assets are not flagged as shadow/zombie.
 
 ### Run Status Semantics
 
@@ -153,17 +88,17 @@ Runs return explicit statuses: `UPSTREAM_ERROR`, `INVALID_SNAPSHOT`, `INVALID_IN
 
 ### Database Design
 
-PostgreSQL is used for persistence, configured via `SUPABASE_DB_URL` or `DATABASE_URL`. It includes tables for `runs`, `assets`, `findings`, `artifacts`, `observation_samples`, `ambiguous_matches`, and `rejections`. IDs are deterministic and run-scoped.
+PostgreSQL is used for persistence, storing `runs`, `assets`, `findings`, `artifacts`, `observation_samples`, `ambiguous_matches`, and `rejections`.
 
 ### Frontend
 
-A single-page application using AutonomOS color palette and Quicksand font, providing a dropdown snapshot picker and drillable KPI cards.
+A single-page application built with AutonomOS color palette and Quicksand font, offering snapshot selection and drillable KPI cards.
 
 ## External Dependencies
 
--   **AOS Farm**: Upstream evidence source, providing snapshots via HTTP (`FARM_URL`) and receiving reconciliation results. AOD uses `farm_adapter.py` to normalize Farm's schema.
--   **FastAPI**: Python web framework for API development.
+-   **AOS Farm**: Upstream evidence source via HTTP and recipient of reconciliation results.
+-   **FastAPI**: Python web framework for API.
 -   **Pydantic v2**: Data validation and serialization.
--   **asyncpg**: Asynchronous PostgreSQL database driver.
--   **httpx**: Asynchronous HTTP client for Farm communication.
--   **PostgreSQL**: Primary database for persistence.
+-   **asyncpg**: Asynchronous PostgreSQL driver.
+-   **httpx**: Asynchronous HTTP client.
+-   **PostgreSQL**: Primary database.

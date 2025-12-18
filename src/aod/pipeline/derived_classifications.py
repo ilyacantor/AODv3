@@ -275,6 +275,10 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
     If there are NO timestamps at all, that still counts as "no timestamps within window"
     
+    DETERMINISM INVARIANT: Same input always produces same output.
+    Activity recency is computed from latest_activity_at which is the max of all
+    available timestamps (IdP > Discovery > Cloud > Finance priority).
+    
     Args:
         asset: The asset to check
         window_days: Activity window in days (default 90)
@@ -282,7 +286,10 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Returns:
         Tuple of (is_zombie, is_indeterminate, reason)
     """
+    import logging
     from datetime import timedelta
+    
+    logger = logging.getLogger(__name__)
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
@@ -298,15 +305,53 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     
     latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     
+    timestamp_source = _identify_timestamp_source(asset)
+    
     if latest is None:
+        logger.debug(f"ZOMBIE_DIAGNOSTIC: {asset.name} - NO TIMESTAMPS - zombie=True")
         return True, False, f"Zombie: In {', '.join(official_sources)} with no activity timestamps"
     
     cutoff = _utc_now() - timedelta(days=window_days)
     
     if latest < cutoff:
-        return True, False, f"Zombie: In {', '.join(official_sources)} with stale activity ({latest.isoformat()})"
+        logger.debug(f"ZOMBIE_DIAGNOSTIC: {asset.name} - STALE ({latest.isoformat()}) from {timestamp_source} - zombie=True")
+        return True, False, f"Zombie: In {', '.join(official_sources)} with stale activity ({latest.isoformat()}) from {timestamp_source}"
     
-    return False, False, f"Not zombie: Recent activity at {latest.isoformat()}"
+    logger.debug(f"ZOMBIE_DIAGNOSTIC: {asset.name} - RECENT ({latest.isoformat()}) from {timestamp_source} - zombie=False")
+    return False, False, f"Not zombie: Recent activity at {latest.isoformat()} from {timestamp_source}"
+
+
+def _identify_timestamp_source(asset: Asset) -> str:
+    """
+    Identify which plane/source contributed the latest_activity_at timestamp.
+    
+    Priority order matches extract_activity_timestamps:
+    1. IdP last_login_at
+    2. Discovery observed_at
+    3. Cloud observed_at
+    4. Finance last_transaction_at
+    
+    Returns the name of the source that matches latest_activity_at.
+    """
+    latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    if latest is None:
+        return "none"
+    
+    idp = _ensure_utc_aware(asset.activity_evidence.idp_last_login_at)
+    discovery = _ensure_utc_aware(asset.activity_evidence.discovery_observed_at)
+    cloud = _ensure_utc_aware(asset.activity_evidence.cloud_observed_at)
+    finance = _ensure_utc_aware(asset.activity_evidence.finance_last_transaction_at)
+    
+    if idp and abs((latest - idp).total_seconds()) < 1:
+        return "idp_last_login"
+    if discovery and abs((latest - discovery).total_seconds()) < 1:
+        return "discovery_observed"
+    if cloud and abs((latest - cloud).total_seconds()) < 1:
+        return "cloud_observed"
+    if finance and abs((latest - finance).total_seconds()) < 1:
+        return "finance_transaction"
+    
+    return "unknown"
 
 
 def classify_zombie(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:

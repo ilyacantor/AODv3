@@ -6,6 +6,11 @@ from typing import Optional
 
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult
+from .domain_normalization import (
+    normalize_hostname,
+    derive_canonical_asset_key,
+    looks_like_domain as canonical_looks_like_domain,
+)
 
 
 @dataclass
@@ -82,11 +87,14 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
     """
     Normalize observations and derive candidate system entities.
     
-    - Normalize names/domains/hostnames
+    - Normalize names/domains/hostnames using canonical functions
     - Derive candidate "system entities" from raw observations
     - Maintain provenance (observation IDs)
     - Merge observations that represent the same entity
-    - Domain-first keying: if entity has domain, use domain as canonical key
+    - Domain-first keying: use eTLD+1 (registered domain) as canonical key
+    
+    INVARIANT: If any observation has a resolvable domain, the entity key
+    MUST be the eTLD+1 (e.g., app.slack.com -> slack.com)
     
     Args:
         observations: List of raw observations
@@ -103,13 +111,19 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
         if not canonical_name:
             continue
         
-        domain = normalize_domain(obs.domain) if obs.domain else None
-        if not domain and obs.uri:
-            domain = extract_domain_from_uri(obs.uri)
-        if not domain and _looks_like_domain(obs.name.lower().strip()):
-            domain = normalize_domain(obs.name.lower().strip())
+        raw_domain = None
+        if obs.domain:
+            raw_domain = obs.domain
+        elif obs.uri:
+            raw_domain = normalize_hostname(obs.uri)
+        elif obs.hostname:
+            raw_domain = normalize_hostname(obs.hostname)
+        elif canonical_looks_like_domain(obs.name.lower().strip()):
+            raw_domain = obs.name.lower().strip()
         
-        hostname = obs.hostname.lower().strip() if obs.hostname else None
+        domain = derive_canonical_asset_key(raw_domain) if raw_domain else None
+        
+        hostname = normalize_hostname(obs.hostname) if obs.hostname else None
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         

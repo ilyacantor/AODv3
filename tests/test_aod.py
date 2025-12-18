@@ -572,5 +572,66 @@ class TestInfrastructureExclusion:
         assert _is_infrastructure_domain("slack.com") is False, "slack.com should not be infrastructure"
 
 
+class TestPagerDutyCMDBMatching:
+    """Test that pagerduty.com matches CMDB via name_contains_domain_token"""
+    
+    def test_pagerduty_matches_legacy_ci(self):
+        """pagerduty.com matches CI named 'PagerDuty (Legacy)' via domain token matching"""
+        from aod.pipeline.correlate_entities import correlate_to_plane, MatchStatus
+        from aod.pipeline.build_plane_indexes import PlaneIndex, add_to_index
+        from aod.pipeline.normalize_observations import CandidateEntity, normalize_string
+        
+        entity = CandidateEntity(
+            entity_id="entity:pagerduty",
+            canonical_name="pagerduty",
+            original_name="PagerDuty",
+            domain="pagerduty.com",
+            observation_ids=["obs-1"]
+        )
+        
+        plane_index = PlaneIndex()
+        plane_index.records["CI-PD-001"] = type('CI', (), {'name': 'PagerDuty (Legacy)', 'vendor': None})()
+        add_to_index(plane_index.by_canonical_name, normalize_string("PagerDuty (Legacy)"), "CI-PD-001")
+        
+        result = correlate_to_plane(entity, plane_index, use_domain=True, use_vendor=True)
+        
+        assert result.status == MatchStatus.MATCHED, f"Expected MATCHED, got {result.status}"
+        assert result.match_method == "name_contains_domain_token", f"Expected name_contains_domain_token, got {result.match_method}"
+        assert "CI-PD-001" in result.matched_ids, f"Expected CI-PD-001 in matched_ids"
+    
+    def test_domain_token_requires_min_length(self):
+        """Domain tokens shorter than 6 chars don't trigger matching"""
+        from aod.pipeline.correlate_entities import _extract_domain_base_token
+        
+        assert _extract_domain_base_token("pagerduty.com") == "pagerduty"
+        assert len("pagerduty") >= 6
+        
+        assert _extract_domain_base_token("box.com") == "box"
+        assert len("box") < 6
+    
+    def test_hyphenated_domain_token_normalized(self):
+        """Hyphenated domains like service-now.com are normalized for matching"""
+        from aod.pipeline.correlate_entities import correlate_to_plane, MatchStatus
+        from aod.pipeline.build_plane_indexes import PlaneIndex, add_to_index
+        from aod.pipeline.normalize_observations import CandidateEntity, normalize_string
+        
+        entity = CandidateEntity(
+            entity_id="entity:servicenow",
+            canonical_name="servicenow",
+            original_name="ServiceNow",
+            domain="service-now.com",
+            observation_ids=["obs-1"]
+        )
+        
+        plane_index = PlaneIndex()
+        plane_index.records["CI-SN-001"] = type('CI', (), {'name': 'ServiceNow ITSM', 'vendor': None})()
+        add_to_index(plane_index.by_canonical_name, normalize_string("ServiceNow ITSM"), "CI-SN-001")
+        
+        result = correlate_to_plane(entity, plane_index, use_domain=True, use_vendor=True)
+        
+        assert result.status == MatchStatus.MATCHED, f"Expected MATCHED, got {result.status}"
+        assert result.match_method == "name_contains_domain_token", f"Expected name_contains_domain_token, got {result.match_method}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

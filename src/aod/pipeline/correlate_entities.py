@@ -169,6 +169,20 @@ def _get_record_vendor(record: Any) -> str:
     return getattr(record, "vendor", "") or ""
 
 
+def _extract_domain_base_token(domain: str) -> str:
+    """Extract base token from domain (e.g., 'pagerduty.com' -> 'pagerduty', 'service-now.com' -> 'servicenow')."""
+    if not domain:
+        return ""
+    normalized = domain.lower().strip()
+    normalized = normalized.removeprefix("www.")
+    parts = normalized.split(".")
+    if parts:
+        token = parts[0]
+        token = token.replace("-", "").replace("_", "")
+        return token
+    return ""
+
+
 KNOWN_DISTINCT_PRODUCTS = {
     ("box", "dropbox"),
     ("hub", "github"),
@@ -672,6 +686,51 @@ def correlate_to_plane(
             ambiguity_code=code,
             disambiguation_detail=detail
         )
+    
+    if entity.domain and plane_index.by_canonical_name:
+        raw_domain_token = _extract_domain_base_token(entity.domain)
+        domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
+        if domain_token and len(domain_token) >= 6:
+            token_matches: list[str] = []
+            for indexed_name, record_ids in plane_index.by_canonical_name.items():
+                if domain_token in indexed_name:
+                    token_matches.extend(record_ids)
+            
+            token_matches = list(set(token_matches))
+            
+            if len(token_matches) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=token_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in token_matches],
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(token_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in token_matches]
+                code, detail, resolved = disambiguate_matches(entity, token_matches, records, "name_contains_domain_token")
+                
+                if resolved and len(resolved) == 1:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="name_contains_domain_token",
+                        match_key=domain_token,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+                
+                return PlaneMatch(
+                    status=MatchStatus.AMBIGUOUS,
+                    matched_ids=token_matches,
+                    matched_records=records,
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
     
     if entity.vendor and plane_index.by_vendor_product:
         vendor_key = normalize_string(entity.vendor)

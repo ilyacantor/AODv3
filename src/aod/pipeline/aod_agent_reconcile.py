@@ -32,7 +32,6 @@ from datetime import datetime, timedelta, timezone
 
 from ..models.output_contracts import Asset, LensStatus
 from .vendor_inference import DOMAIN_TO_VENDOR
-from .domain_normalization import derive_canonical_asset_key, looks_like_domain
 
 
 def _build_vendor_to_domain_map() -> dict[str, str]:
@@ -113,8 +112,6 @@ class ReasonCode(str, Enum):
     HAS_IDP = "HAS_IDP"
     HAS_CMDB = "HAS_CMDB"
     HAS_FINANCE = "HAS_FINANCE"
-    HAS_FINANCE_DOMAIN_LINKED = "HAS_FINANCE_DOMAIN_LINKED"
-    HAS_FINANCE_VENDOR_ONLY = "HAS_FINANCE_VENDOR_ONLY"
     HAS_CLOUD = "HAS_CLOUD"
     HAS_DISCOVERY = "HAS_DISCOVERY"
     NO_IDP = "NO_IDP"
@@ -404,28 +401,23 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
 
 def _extract_registered_domain(asset: Asset) -> str | None:
     """
-    Extract the registered domain (eTLD+1) from asset identifiers or vendor.
+    Extract the registered domain from asset identifiers or vendor.
     
     INVARIANT: If any entity has a resolvable registered domain, the asset_key
     MUST be that registered domain (e.g., notion.so).
     
-    Uses canonical domain normalization with Public Suffix List for accurate
-    eTLD+1 extraction.
-    
     Priority order (DOMAIN PROMOTION):
-    1. asset.identifiers.domains (explicit domain from evidence) -> eTLD+1
+    1. asset.identifiers.domains (explicit domain from evidence)
     2. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN
     3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN
-    4. Asset name if it looks like a domain -> eTLD+1
+    4. Asset name if it looks like a domain (contains valid TLD)
     
-    Returns the canonical asset key (registered domain), or None if not available.
+    Returns the first valid registered domain, or None if not available.
     """
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
-                canonical = derive_canonical_asset_key(domain)
-                if canonical:
-                    return canonical
+                return domain.lower().strip()
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = asset.vendor.lower().strip()
@@ -437,10 +429,10 @@ def _extract_registered_domain(asset: Asset) -> str | None:
         return VENDOR_TO_DOMAIN[normalized_name]
     
     name = asset.name.lower().strip()
-    if looks_like_domain(name):
-        canonical = derive_canonical_asset_key(name)
-        if canonical:
-            return canonical
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3) and parts[-1].isalpha():
+            return name
     
     return None
 

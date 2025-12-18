@@ -7,9 +7,8 @@ from typing import Any, Optional
 
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
-from .vendor_inference import DOMAIN_TO_VENDOR
+from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .derived_classifications import VENDOR_TO_DOMAIN
-from .domain_normalization import derive_canonical_asset_key
 
 
 class MatchStatus(str, Enum):
@@ -555,7 +554,7 @@ def correlate_to_plane(
     if name_matches and use_vendor:
         expected_vendor = None
         if entity.domain:
-            registered_domain = derive_canonical_asset_key(entity.domain) or entity.domain.lower().strip()
+            registered_domain = extract_registered_domain(entity.domain.lower().strip()) or entity.domain.lower().strip()
             expected_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
         if not expected_vendor:
             canonical_lower = entity.canonical_name.lower().strip()
@@ -777,8 +776,11 @@ def correlate_to_plane(
             )
     
     if use_vendor and entity.domain and plane_index.by_vendor_product:
-        registered_domain = derive_canonical_asset_key(entity.domain) or entity.domain.lower().strip()
+        normalized_domain = entity.domain.lower().strip()
+        registered_domain = extract_registered_domain(normalized_domain) or normalized_domain
         domain_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
+        if not domain_vendor and registered_domain != normalized_domain:
+            domain_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
         if domain_vendor:
             vendor_key = normalize_string(domain_vendor)
             vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
@@ -919,7 +921,7 @@ def correlate_entities_to_planes(
         result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True)
         result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True)
         result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
-        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=True)
+        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)
         
         results.append(result)
     

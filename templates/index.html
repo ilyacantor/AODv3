@@ -277,12 +277,6 @@
         
         <div class="section hidden" id="resultsSection">
             <h2 class="section-title">Results</h2>
-            <div class="tabs">
-                <button class="tab active" data-tab="summary">Summary</button>
-                <button class="tab" data-tab="assets">Assets</button>
-                <button class="tab" data-tab="findings">Findings</button>
-                <button class="tab" data-tab="diagnostics">Diagnostics</button>
-            </div>
             <div id="summaryTab" class="tab-content">
                 <div id="runDescriptors" class="run-descriptors">
                     <div class="run-desc-item"><span class="run-desc-label">Run ID:</span><span class="run-desc-value" id="descRunId">-</span></div>
@@ -291,14 +285,14 @@
                     <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
                 </div>
                 <div id="summaryStats" class="stats-grid">
-                    <div class="stat-card clickable" data-drill-type="observations"><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
-                    <div class="stat-card clickable" data-drill-type="assets"><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="artifacts"><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
-                    <div class="stat-card clickable" data-drill-type="findings"><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
-                    <div class="stat-card clickable" data-drill-type="ambiguous"><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
-                    <div class="stat-card clickable" data-drill-type="rejections"><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
-                    <div class="stat-card clickable" data-drill-type="shadow"><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
-                    <div class="stat-card clickable" data-drill-type="zombie"><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
+                    <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
+                    <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
+                    <div class="stat-card clickable" data-drill-type="artifacts" title="Internal objects that are NOT systems (e.g., user accounts, documents). These don't count as assets to avoid inflated counts."><div class="stat-value" id="statArtifacts">-</div><div class="stat-label">Artifacts</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings" title="Actionable insights and conclusions derived from evidence analysis. Rule-based, deterministic, and fully explainable."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card clickable" data-drill-type="ambiguous" title="Matches where multiple candidates exist and evidence was insufficient to disambiguate. Requires manual review."><div class="stat-value" id="statAmbiguous">-</div><div class="stat-label">Ambiguous</div></div>
+                    <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
+                    <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
+                    <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
@@ -308,67 +302,6 @@
                     <div class="breadcrumb" id="drillBreadcrumb"></div>
                     <div id="drillError" class="drill-error hidden"></div>
                     <div id="drillContent"></div>
-                </div>
-            </div>
-            <div id="assetsTab" class="tab-content hidden">
-                <div id="assetsLoading" class="loading hidden"><div class="spinner"></div>Loading assets...</div>
-                <div class="table-container">
-                    <table class="assets-table"><thead><tr><th>Name</th><th>Type</th><th>Vendor</th><th>Environment</th><th>Lens Coverage</th></tr></thead><tbody id="assetsBody"></tbody></table>
-                </div>
-                <button class="btn btn-secondary download-btn" id="downloadCatalog">Download Catalog JSON</button>
-            </div>
-            <div id="findingsTab" class="tab-content hidden">
-                <div id="findingsLoading" class="loading hidden"><div class="spinner"></div>Loading findings...</div>
-                <div class="findings-list" id="findingsList"></div>
-            </div>
-            <div id="diagnosticsTab" class="tab-content hidden">
-                <div class="diagnostics-header">
-                    <h3 style="color: var(--purple-400); margin-bottom: 1rem;">AOD Actual Results</h3>
-                    <p style="color: var(--slate-400); font-size: 0.875rem; margin-bottom: 1rem;">
-                        AOD's structured actual output for this run. <strong style="color: var(--cyan-400);">Farm owns reconciliation UI</strong> - it has expected data and computes diffs/RCA.
-                    </p>
-                    <div style="background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; border-left: 3px solid var(--purple-400);">
-                        <div style="font-size: 0.8rem; color: var(--slate-400);">
-                            <strong style="color: var(--purple-400);">Data Flow:</strong><br>
-                            AOD emits: shadow_actual, zombie_actual, admission_actual, actual_reason_codes<br>
-                            Farm has: shadow_expected, zombie_expected, expected_reason_codes<br>
-                            Farm computes: extra, missed, rca_code per mismatch
-                        </div>
-                    </div>
-                </div>
-                <button class="btn btn-primary" id="runReconciliation" style="margin-bottom: 1.5rem;">Load Actual Results</button>
-                <div id="reconcileLoading" class="loading hidden"><div class="spinner"></div>Loading actual results...</div>
-                <div id="reconcileError" class="error-message hidden"></div>
-                <div id="reconcileResults" class="hidden">
-                    <div class="stats-grid" style="margin-bottom: 1.5rem;">
-                        <div class="stat-card"><div class="stat-value" id="rcTotalAssets">-</div><div class="stat-label">Total Assets</div></div>
-                        <div class="stat-card"><div class="stat-value stat-shadow" id="rcShadowActual">-</div><div class="stat-label">Shadow (Actual)</div></div>
-                        <div class="stat-card"><div class="stat-value stat-zombie" id="rcZombieActual">-</div><div class="stat-label">Zombie (Actual)</div></div>
-                        <div class="stat-card"><div class="stat-value" id="rcAdmitted" style="color: var(--green-400);">-</div><div class="stat-label">Admitted</div></div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
-                        <div>
-                            <h4 style="color: var(--amber-400); margin-bottom: 0.75rem;">Shadow Assets (Actual)</h4>
-                            <div id="rcShadowList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
-                        </div>
-                        <div>
-                            <h4 style="color: var(--red-400); margin-bottom: 0.75rem;">Zombie Assets (Actual)</h4>
-                            <div id="rcZombieList" class="findings-list" style="max-height: 250px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
-                        </div>
-                    </div>
-                    <div id="rcAssetDetailsSection" style="margin-top: 1.5rem;">
-                        <h4 style="color: var(--cyan-400); margin-bottom: 0.75rem;">Asset Reason Codes (for Farm reconciliation)</h4>
-                        <div id="rcAssetDetailsList" class="findings-list" style="max-height: 400px; background: var(--slate-800); border-radius: 8px; padding: 1rem; overflow-y: auto;"></div>
-                    </div>
-                    <div class="collapsible" style="margin-top: 1.5rem;">
-                        <div class="collapsible-header" id="rcRawToggle">
-                            <span class="collapsible-icon" id="rcRawIcon">&#9654;</span>
-                            <span>Raw Actual Results Response</span>
-                        </div>
-                        <div class="collapsible-content hidden" id="rcRawContent">
-                            <pre id="rcRawJson" style="background: var(--slate-900); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.75rem; max-height: 400px; overflow-y: auto;"></pre>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1213,41 +1146,27 @@
         }
         
         async function loadAssets(runId) {
-            const loading = document.getElementById('assetsLoading'), body = document.getElementById('assetsBody');
-            loading.classList.remove('hidden');
             try {
                 const r = await fetch(`/api/catalog?run_id=${runId}`); catalogData = await r.json();
                 const { data: normalized, errors } = normalizeResponse('assets', catalogData.assets || []);
                 normalizedData.assets = normalized;
                 if (errors.length > 0) console.warn('Asset normalization errors:', errors);
-                
-                if (normalized.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No assets discovered</td></tr>'; }
-                else { body.innerHTML = normalized.map(a => `<tr><td>${a.name}</td><td><span class="asset-type-badge">${a.asset_type}</span></td><td>${a.vendor || '-'}</td><td>${a.environment}</td><td><div class="lens-indicators" title="IdP | CMDB | Cloud | Finance"><div class="lens-dot lens-${a.lens_status?.idp || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cmdb || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.cloud || 'unmatched'}"></div><div class="lens-dot lens-${a.lens_status?.finance || 'unmatched'}"></div></div></td></tr>`).join(''); }
             } catch (e) { 
                 console.error('Failed to load assets:', e);
                 normalizedData.assets = [];
-                body.innerHTML = '<tr><td colspan="5" class="error-message">Failed to load assets</td></tr>'; 
             }
-            finally { loading.classList.add('hidden'); }
         }
         
         async function loadFindings(runId) {
-            const loading = document.getElementById('findingsLoading'), list = document.getElementById('findingsList');
-            loading.classList.remove('hidden');
             try {
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
                 const { data: normalized, errors } = normalizeResponse('findings', data.findings || []);
                 normalizedData.findings = normalized;
                 if (errors.length > 0) console.warn('Findings normalization errors:', errors);
-                
-                if (normalized.length === 0) { list.innerHTML = '<div class="empty-state">No findings generated</div>'; }
-                else { list.innerHTML = normalized.map(f => `<div class="finding-item"><span class="severity-badge severity-${f.severity}">${f.severity}</span><div><div class="finding-type">${(f.finding_type || 'unknown').replace('_', ' ').toUpperCase()}</div><div class="finding-explanation">${f.explanation}</div></div></div>`).join(''); }
             } catch (e) { 
                 console.error('Failed to load findings:', e);
                 normalizedData.findings = [];
-                list.innerHTML = '<div class="error-message">Failed to load findings</div>'; 
             }
-            finally { loading.classList.add('hidden'); }
         }
         
         async function loadArtifacts(runId) {
@@ -1337,23 +1256,6 @@
             }
         });
         
-        document.getElementById('downloadCatalog').addEventListener('click', () => { 
-            if (!catalogData) return; 
-            const blob = new Blob([JSON.stringify(catalogData, null, 2)], { type: 'application/json' }); 
-            const url = URL.createObjectURL(blob); 
-            const a = document.createElement('a'); 
-            a.href = url; 
-            a.download = `catalog-${currentRunId}.json`; 
-            a.click(); 
-            URL.revokeObjectURL(url); 
-        });
-        
-        document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => { 
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); 
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden')); 
-            tab.classList.add('active'); 
-            document.getElementById(`${tab.dataset.tab}Tab`).classList.remove('hidden'); 
-        }));
         
         document.querySelectorAll('.stat-card.clickable').forEach(card => {
             card.addEventListener('click', () => {
@@ -1388,117 +1290,6 @@
             });
         }
         
-        // Diagnostics tab - AOD Actual Results (pure emitter - Farm owns reconciliation)
-        const rcRawToggle = document.getElementById('rcRawToggle');
-        const rcRawIcon = document.getElementById('rcRawIcon');
-        const rcRawContent = document.getElementById('rcRawContent');
-        if (rcRawToggle) {
-            rcRawToggle.addEventListener('click', () => {
-                rcRawContent.classList.toggle('hidden');
-                rcRawIcon.classList.toggle('open');
-            });
-        }
-        
-        document.getElementById('runReconciliation').addEventListener('click', async () => {
-            if (!currentRunId) {
-                document.getElementById('reconcileError').textContent = 'No run selected. Please select a run first.';
-                document.getElementById('reconcileError').classList.remove('hidden');
-                return;
-            }
-            
-            document.getElementById('reconcileLoading').classList.remove('hidden');
-            document.getElementById('reconcileResults').classList.add('hidden');
-            document.getElementById('reconcileError').classList.add('hidden');
-            
-            try {
-                const response = await fetch('/api/debug/aod-agent-reconcile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        run_id: currentRunId,
-                        activity_window_days: 90
-                    })
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || `HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                renderActualResults(data);
-                
-            } catch (error) {
-                document.getElementById('reconcileError').textContent = `Failed to load actual results: ${error.message}`;
-                document.getElementById('reconcileError').classList.remove('hidden');
-            } finally {
-                document.getElementById('reconcileLoading').classList.add('hidden');
-            }
-        });
-        
-        function renderActualResults(data) {
-            document.getElementById('rcTotalAssets').textContent = data.summary.total_assets || 0;
-            document.getElementById('rcShadowActual').textContent = data.summary.shadow_actual_count || 0;
-            document.getElementById('rcZombieActual').textContent = data.summary.zombie_actual_count || 0;
-            document.getElementById('rcAdmitted').textContent = data.summary.admitted_count || 0;
-            
-            // Render shadow list
-            const shadowList = document.getElementById('rcShadowList');
-            if (data.shadow_actual.length === 0) {
-                shadowList.innerHTML = '<div style="color: var(--slate-500);">No shadow assets detected</div>';
-            } else {
-                shadowList.innerHTML = data.shadow_actual.map(key => {
-                    const details = data.asset_details[key] || {};
-                    return `<div style="padding: 0.25rem 0; color: var(--amber-400);">${escapeHtml(details.name || key)}</div>`;
-                }).join('');
-            }
-            
-            // Render zombie list
-            const zombieList = document.getElementById('rcZombieList');
-            if (data.zombie_actual.length === 0) {
-                zombieList.innerHTML = '<div style="color: var(--slate-500);">No zombie assets detected</div>';
-            } else {
-                zombieList.innerHTML = data.zombie_actual.map(key => {
-                    const details = data.asset_details[key] || {};
-                    return `<div style="padding: 0.25rem 0; color: var(--red-400);">${escapeHtml(details.name || key)}</div>`;
-                }).join('');
-            }
-            
-            // Render asset details with reason codes (for Farm reconciliation)
-            const detailsList = document.getElementById('rcAssetDetailsList');
-            const assetKeys = Object.keys(data.actual_reasons || {});
-            if (assetKeys.length === 0) {
-                detailsList.innerHTML = '<div style="color: var(--slate-500);">No asset reason codes</div>';
-            } else {
-                detailsList.innerHTML = assetKeys.slice(0, 50).map(key => {
-                    const reasons = data.actual_reasons[key] || [];
-                    const details = data.asset_details[key] || {};
-                    const badges = [];
-                    if (details.is_shadow) badges.push('<span class="severity-badge severity-med">SHADOW</span>');
-                    if (details.is_zombie) badges.push('<span class="severity-badge severity-high">ZOMBIE</span>');
-                    
-                    return `
-                        <div class="finding-item" style="flex-direction: column; gap: 0.5rem;">
-                            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                                <span style="font-weight: 600; color: white;">${escapeHtml(details.name || key)}</span>
-                                ${badges.join('')}
-                            </div>
-                            <div style="font-size: 0.75rem; color: var(--slate-400); display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                                ${reasons.map(r => `<span style="background: var(--slate-700); padding: 0.125rem 0.375rem; border-radius: 4px;">${escapeHtml(r)}</span>`).join('')}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-                if (assetKeys.length > 50) {
-                    detailsList.innerHTML += `<div style="color: var(--slate-500); padding: 0.5rem 0;">...and ${assetKeys.length - 50} more assets</div>`;
-                }
-            }
-            
-            // Render raw JSON
-            document.getElementById('rcRawJson').textContent = JSON.stringify(data, null, 2);
-            
-            document.getElementById('reconcileResults').classList.remove('hidden');
-        }
     </script>
     
     <div class="modal-overlay" id="helpModal">

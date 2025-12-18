@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
+from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 
 
 class MatchStatus(str, Enum):
@@ -425,7 +426,8 @@ def correlate_to_plane(
     entity: CandidateEntity,
     plane_index: PlaneIndex,
     use_domain: bool = True,
-    use_uri: bool = False
+    use_uri: bool = False,
+    use_vendor: bool = False
 ) -> PlaneMatch:
     """
     Correlate an entity to a plane using multi-pass matching with disambiguation.
@@ -434,12 +436,20 @@ def correlate_to_plane(
     Pass 2: Exact canonical normalized name match
     Pass 3: Unique contains match (strict; if >1 candidate → try disambiguate)
     Pass 4: Vendor match (last resort, PARENT_VENDOR if multiple)
+    Pass 5: Domain-to-vendor match (for CMDB - use domain to find vendor, then match)
     
     When multiple matches occur, disambiguation logic attempts to resolve:
     - MULTI_ENV: Same app in different environments → pick prod
     - LEGACY: Current + deprecated → pick current
     - DUPLICATE: True duplicates → pick first
     - PARENT_VENDOR: Vendor-only match → treat as UNMATCHED
+    
+    Args:
+        entity: The candidate entity to correlate
+        plane_index: The index to search
+        use_domain: Enable domain-based matching
+        use_uri: Enable URI-based matching
+        use_vendor: Enable domain-to-vendor lookup for matching (useful for CMDB)
     
     Returns matched/ambiguous/unmatched plus evidence refs.
     """
@@ -678,6 +688,57 @@ def correlate_to_plane(
                 disambiguation_detail=detail
             )
     
+    if use_vendor and entity.domain and plane_index.by_vendor_product:
+        normalized_domain = entity.domain.lower().strip()
+        registered_domain = extract_registered_domain(normalized_domain) or normalized_domain
+        domain_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
+        if not domain_vendor and registered_domain != normalized_domain:
+            domain_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
+        if domain_vendor:
+            vendor_key = normalize_string(domain_vendor)
+            vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
+            
+            if len(vendor_matches) >= 1:
+                records = [plane_index.records.get(mid) for mid in vendor_matches]
+                matching_ids = []
+                matching_records = []
+                
+                for idx, record in enumerate(records):
+                    if record:
+                        record_name = normalize_string(_get_record_name(record))
+                        entity_name = entity.canonical_name
+                        if record_name == entity_name or record_name in entity_name or entity_name in record_name:
+                            matching_ids.append(vendor_matches[idx])
+                            matching_records.append(record)
+                
+                if len(matching_ids) == 1:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=matching_ids,
+                        matched_records=matching_records,
+                        match_method="domain_vendor",
+                        ambiguity_code=AmbiguityCode.NONE
+                    )
+                elif len(matching_ids) > 1:
+                    code, detail, resolved = disambiguate_matches(entity, matching_ids, matching_records, "domain_vendor")
+                    if resolved and len(resolved) == 1:
+                        return PlaneMatch(
+                            status=MatchStatus.MATCHED,
+                            matched_ids=resolved,
+                            matched_records=[plane_index.records.get(resolved[0])],
+                            match_method="domain_vendor",
+                            ambiguity_code=code,
+                            disambiguation_detail=detail
+                        )
+                    return PlaneMatch(
+                        status=MatchStatus.AMBIGUOUS,
+                        matched_ids=matching_ids,
+                        matched_records=matching_records,
+                        match_method="domain_vendor",
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+    
     return PlaneMatch(status=MatchStatus.UNMATCHED)
 
 
@@ -713,7 +774,7 @@ def correlate_entities_to_planes(
         result = CorrelationResult(entity=entity)
         
         result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True)
-        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=False)
+        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=False, use_vendor=True)
         result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
         result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)
         

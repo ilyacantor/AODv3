@@ -79,7 +79,14 @@ Mode can be specified via the `/runs/resync` endpoint: `{"run_id": "...", "mode"
 
 ### CMDB Correlation
 
-CMDB correlation uses canonical name matching and fuzzy matching. Domain matching is not available for CMDB as the data model doesn't include domain fields. Exact identifiers (canonical name) are checked before fuzzy logic.
+CMDB correlation uses multiple matching strategies:
+1. **Canonical name matching** - Exact normalized name match
+2. **Fuzzy matching** - Levenshtein distance for typos  
+3. **Contains matching** - Substring matching with safeguards
+4. **Vendor matching** - Entity vendor → CMDB vendor product index
+5. **Domain-to-vendor matching** - Entity domain → DOMAIN_TO_VENDOR → CMDB vendor (e.g., trello.com → Atlassian → Trello CMDB record)
+
+Domain matching is not directly available for CMDB as the data model doesn't include domain fields, but the domain-to-vendor lookup bridges this gap.
 
 ### Explain Non-Flag Endpoint
 

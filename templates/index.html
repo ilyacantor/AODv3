@@ -687,6 +687,7 @@
                 assets: {
                     fields: {
                         name: { default: 'unknown' },
+                        asset_id: { default: null },
                         asset_type: { default: 'unknown' },
                         vendor: { default: 'unknown' },
                         vendor_hypothesis: { default: null },
@@ -769,6 +770,7 @@
                 shadow: {
                     fields: {
                         name: { default: 'unknown' },
+                        asset_id: { default: null },
                         vendor: { default: 'unknown' },
                         vendor_hypothesis: { default: null },
                         asset_type: { default: 'unknown' },
@@ -782,6 +784,7 @@
                 zombie: {
                     fields: {
                         name: { default: 'unknown' },
+                        asset_id: { default: null },
                         vendor: { default: 'unknown' },
                         vendor_hypothesis: { default: null },
                         asset_type: { default: 'unknown' },
@@ -1027,7 +1030,7 @@
             const plane = item.plane || item.source_lens || item.source || null;
             const itemType = item.asset_type || item.artifact_type || item.finding_type || item.reason_code || null;
             
-            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'severity', 'reason', 'reason_detail', 'explanation'];
+            const keyFactFields = ['asset_id', 'vendor', 'product', 'domain', 'environment', 'severity', 'reason', 'reason_detail', 'explanation'];
             const keyFacts = [];
             keyFactFields.forEach(field => {
                 if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {

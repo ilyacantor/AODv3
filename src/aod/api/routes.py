@@ -495,7 +495,7 @@ async def get_run(run_id: str):
 @router.delete("/runs/by-status/{status}")
 async def delete_runs_by_status(status: str):
     """Delete all runs with a specific status (e.g., completed_no_assets)"""
-    valid_statuses = ["completed_no_assets", "failed", "upstream_error", "invalid_snapshot", "invalid_input_contract"]
+    valid_statuses = ["completed_no_assets", "completed_with_results", "completed", "failed", "upstream_error", "invalid_snapshot", "invalid_input_contract"]
     if status not in valid_statuses:
         raise HTTPException(
             status_code=400, 

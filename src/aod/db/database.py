@@ -355,11 +355,11 @@ class Database:
             run_id_list = [r["run_id"] for r in run_ids]
             
             await conn.execute(
-                "DELETE FROM assets WHERE run_id = ANY($1)",
+                "DELETE FROM findings WHERE run_id = ANY($1)",
                 run_id_list
             )
             await conn.execute(
-                "DELETE FROM findings WHERE run_id = ANY($1)",
+                "DELETE FROM assets WHERE run_id = ANY($1)",
                 run_id_list
             )
             await conn.execute(

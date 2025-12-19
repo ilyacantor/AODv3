@@ -492,6 +492,21 @@ async def get_run(run_id: str):
     )
 
 
+@router.delete("/runs/by-status/{status}")
+async def delete_runs_by_status(status: str):
+    """Delete all runs with a specific status (e.g., completed_no_assets)"""
+    valid_statuses = ["completed_no_assets", "failed", "upstream_error", "invalid_snapshot", "invalid_input_contract"]
+    if status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete runs with status '{status}'. Allowed: {valid_statuses}"
+        )
+    
+    db = await get_db()
+    count = await db.delete_runs_by_status(status)
+    return {"deleted": count, "status": status}
+
+
 @router.get("/catalog", response_model=CatalogResponse)
 async def get_catalog(run_id: str):
     """Get assets for a run"""

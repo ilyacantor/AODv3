@@ -399,6 +399,46 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     return reasons, evidence
 
 
+def _extract_raw_domain(asset: Asset) -> str | None:
+    """
+    Extract the raw domain from asset identifiers, preserving subdomains.
+    
+    Unlike _extract_registered_domain, this preserves the full subdomain
+    so that login498.edge.com stays as login498.edge.com, not edge.com.
+    
+    This ensures each subdomain is treated as a separate asset key for
+    shadow/zombie classification, matching Farm's host-level granularity.
+    
+    Priority order:
+    1. asset.identifiers.domains (explicit domain from evidence) - preserved as-is
+    2. Asset name if it looks like a domain - preserved as-is
+    3. Vendor lookup - returns canonical vendor domain
+    
+    Returns the raw domain with subdomains preserved, or None if not available.
+    """
+    if asset.identifiers and asset.identifiers.domains:
+        for domain in asset.identifiers.domains:
+            if domain and "." in domain:
+                return domain.lower().strip()
+    
+    name = asset.name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            return name
+    
+    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = asset.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            return VENDOR_TO_DOMAIN[vendor_key]
+    
+    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
+    if normalized_name in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_name]
+    
+    return None
+
+
 def _extract_registered_domain(asset: Asset) -> str | None:
     """
     Extract the registered domain from asset identifiers or vendor.
@@ -485,10 +525,12 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
             if not has_recent_activity:
                 is_zombie = True
     
-    registered_domain = _extract_registered_domain(asset)
-    if registered_domain:
-        asset_key = registered_domain
-        evidence["key_source"] = "registered_domain"
+    raw_domain = _extract_raw_domain(asset)
+    if raw_domain:
+        asset_key = raw_domain
+        registered = extract_registered_domain(raw_domain)
+        evidence["key_source"] = "domain"
+        evidence["registered_domain"] = registered
         evidence["name_variant"] = asset.name
     else:
         asset_key = _normalize_key(asset.name)
@@ -568,11 +610,12 @@ def emit_actual_results(
     This ensures Farm reconciliation always has aod_reason_codes for every
     asset it asks about.
     
-    DOMAIN-LEVEL AGGREGATION: Multiple assets sharing the same registered domain
-    are aggregated under one domain key with:
-    - is_shadow/is_zombie: OR semantics (if any variant is shadow, domain is shadow)
-    - reason_codes: union of all variant reason codes
-    - aliases: list of all source asset names/IDs
+    HOST-LEVEL CLASSIFICATION: Each asset is classified individually based on
+    its OWN evidence. Keys preserve subdomains (login498.edge.com stays separate
+    from admin.edge.com) to match Farm's host-level granularity.
+    
+    Shadow/zombie status is determined per-asset in classify_actual(), not
+    by aggregating governance across sibling hosts.
     
     Args:
         run_id: The run ID
@@ -584,56 +627,35 @@ def emit_actual_results(
     Returns:
         ActualResultsOutput with all actual classifications and reason codes
     """
-    domain_aggregates: dict[str, dict] = {}
+    asset_results: dict[str, dict] = {}
     
     for asset in assets:
         result = classify_actual(asset, activity_window_days, mode=mode)
         key = result.asset_key
         
-        if key not in domain_aggregates:
-            domain_aggregates[key] = {
+        if key not in asset_results:
+            asset_results[key] = {
                 "admission": result.admission,
                 "reasons": set(r.value for r in result.reasons),
                 "asset_ids": [result.asset_id],
                 "names": [result.name],
                 "evidence_summary": result.evidence_summary,
-                "is_canonical": result.evidence_summary.get("key_source") == "registered_domain"
+                "is_shadow": result.is_shadow,
+                "is_zombie": result.is_zombie,
+                "is_canonical": result.evidence_summary.get("key_source") == "domain"
             }
         else:
-            agg = domain_aggregates[key]
+            agg = asset_results[key]
             agg["reasons"].update(r.value for r in result.reasons)
             agg["asset_ids"].append(result.asset_id)
             agg["names"].append(result.name)
+            agg["is_shadow"] = agg["is_shadow"] or result.is_shadow
+            agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
     
-    for key, agg in domain_aggregates.items():
+    for key, agg in asset_results.items():
         reasons = agg["reasons"]
-        
         reasons = _deduplicate_reason_codes(reasons)
         agg["reasons"] = reasons
-        
-        has_idp = "HAS_IDP" in reasons
-        has_cmdb = "HAS_CMDB" in reasons
-        has_finance = "HAS_FINANCE" in reasons
-        has_cloud = "HAS_CLOUD" in reasons
-        has_discovery = "HAS_DISCOVERY" in reasons
-        has_recent_activity = "RECENT_ACTIVITY" in reasons
-        is_canonical = agg.get("is_canonical", False)
-        is_eligible = "NOT_RECONCILIATION_ELIGIBLE" not in reasons
-        
-        is_shadow = False
-        is_zombie = False
-        
-        if is_canonical and is_eligible:
-            if not has_idp and not has_cmdb:
-                if (has_cloud or has_discovery) and has_recent_activity:
-                    is_shadow = True
-            
-            if has_idp or has_cmdb:
-                if not has_recent_activity:
-                    is_zombie = True
-        
-        agg["is_shadow"] = is_shadow
-        agg["is_zombie"] = is_zombie
     
     shadow_actual = []
     zombie_actual = []
@@ -641,7 +663,7 @@ def emit_actual_results(
     actual_reasons = {}
     asset_details = {}
     
-    for key, agg in domain_aggregates.items():
+    for key, agg in asset_results.items():
         admission_actual[key] = agg["admission"]
         actual_reasons[key] = sorted(list(agg["reasons"]))
         
@@ -665,9 +687,10 @@ def emit_actual_results(
     
     if rejections:
         for rej in rejections:
-            entity_key = _normalize_key(rej.get("entity_name", "") or rej.get("entity_key", ""))
-            if not entity_key or entity_key in admission_actual:
+            raw_key = (rej.get("entity_name", "") or rej.get("entity_key", "")).lower().strip()
+            if not raw_key or raw_key in admission_actual:
                 continue
+            entity_key = raw_key
             
             reasons = _compute_rejection_reasons(rej)
             
@@ -691,7 +714,7 @@ def emit_actual_results(
     summary = {
         "total_assets": len(assets),
         "total_candidates": len(assets) + (len(rejections) if rejections else 0),
-        "domain_keys": len(domain_aggregates),
+        "asset_keys": len(asset_results),
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
         "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),

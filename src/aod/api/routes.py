@@ -37,6 +37,7 @@ class FarmRunRequest(BaseModel):
     tenant_id: str
     farm_base_url: str | None = None
     snapshot_id: str
+    llm_enabled: bool = False
 
 
 class RunResponse(BaseModel):
@@ -284,7 +285,7 @@ async def create_run_from_farm(request: FarmRunRequest):
     }
     
     db = await get_db()
-    result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
+    result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance, enable_llm=request.llm_enabled)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:

@@ -20,6 +20,10 @@ from .admission import apply_admission_criteria, AdmissionResult
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
+from ..llm.fringe_integration import apply_fringe_resolution
+
+import logging
+logger = logging.getLogger(__name__)
 
 MAX_OBSERVATION_SAMPLES = 2000
 
@@ -40,7 +44,8 @@ async def execute_pipeline(
     db: Database,
     run_id: str,
     started_at: datetime,
-    provenance: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None,
+    enable_llm: bool = False
 ) -> PipelineResult:
     """
     Execute the full AOD discovery pipeline.
@@ -185,6 +190,33 @@ async def execute_pipeline(
                     ))
         await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
+        
+        if enable_llm:
+            logger.info(f"LLM fringe resolution enabled - processing {len(correlations)} entities")
+            fringe_processed = 0
+            fringe_resolved = 0
+            updated_correlations = []
+            
+            for correlation in correlations:
+                entity_key = correlation.entity.entity_id
+                updated_correlation, explainability = await apply_fringe_resolution(
+                    entity_key=entity_key,
+                    tenant_id=tenant_id,
+                    correlation_result=correlation,
+                    db=db,
+                    cmdb_candidates=None,
+                    idp_candidates=None,
+                    enable_llm=True,
+                )
+                updated_correlations.append(updated_correlation)
+                
+                if explainability.llm_used:
+                    fringe_processed += 1
+                    if explainability.fact_id:
+                        fringe_resolved += 1
+            
+            correlations = updated_correlations
+            logger.info(f"LLM fringe resolution: {fringe_processed} processed, {fringe_resolved} resolved")
         
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
         run_log.counts.artifacts_recorded = len(artifacts)

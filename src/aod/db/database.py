@@ -339,54 +339,6 @@ class Database:
             ))
         return runs
     
-    async def delete_runs_by_status(self, status: str) -> int:
-        """Delete runs and related data by status. Returns count of deleted runs."""
-        pool = await self.get_pool()
-        
-        async with pool.acquire() as conn:
-            run_ids = await conn.fetch(
-                "SELECT run_id FROM runs WHERE status = $1",
-                status
-            )
-            
-            if not run_ids:
-                return 0
-            
-            run_id_list = [r["run_id"] for r in run_ids]
-            
-            await conn.execute(
-                "DELETE FROM findings WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            await conn.execute(
-                "DELETE FROM assets WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            await conn.execute(
-                "DELETE FROM artifacts WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            await conn.execute(
-                "DELETE FROM observation_samples WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            await conn.execute(
-                "DELETE FROM ambiguous_matches WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            await conn.execute(
-                "DELETE FROM rejections WHERE run_id = ANY($1)",
-                run_id_list
-            )
-            
-            result = await conn.execute(
-                "DELETE FROM runs WHERE status = $1",
-                status
-            )
-            
-            count = int(result.split()[-1]) if result else 0
-            return count
-    
     async def create_asset(self, asset: Asset) -> Asset:
         """Create a new asset"""
         pool = await self.get_pool()

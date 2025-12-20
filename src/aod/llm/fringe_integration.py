@@ -54,7 +54,7 @@ def should_trigger_fringe(
     if is_governed and not recent_activity:
         return True, "zombie_candidate"
     
-    return False, ""
+    return False, "skipped"
 
 
 def build_fringe_input_from_entity(

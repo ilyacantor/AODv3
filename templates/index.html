@@ -1613,7 +1613,7 @@
                 const r = await fetch('/api/runs/from-farm', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, llm_enabled: getLlmEnabled() }) 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, enable_llm: getLlmEnabled() }) 
                 });
                 
                 const result = await r.json();

@@ -131,10 +131,12 @@ async def apply_fringe_resolution(
         entity, cmdb_matched, idp_matched, asset_type, vendor, recent_activity
     )
     
+    print(f"[LLM] {entity_key}: should_trigger={should_trigger}, reason={trigger_reason}, cmdb={cmdb_matched}, idp={idp_matched}, recent={recent_activity}", flush=True)
+    
     if not should_trigger:
         return correlation_result, explainability
     
-    logger.debug(f"Fringe triggered for {entity_key}: {trigger_reason}")
+    print(f"[LLM] {entity_key}: checking fact store...", flush=True)
     
     existing_fact = await db.get_llm_fact(tenant_id, entity_key)
     

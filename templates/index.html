@@ -489,6 +489,27 @@
             return llmMode === 'prod';
         }
         
+        function updateLlmStats(calls, model) {
+            const llmStats = document.getElementById('llmStats');
+            llmStats.classList.remove('hidden');
+            document.getElementById('llmCallCount').textContent = calls;
+            document.getElementById('llmModel').textContent = model ? `(${model.split(':').pop()})` : '';
+            localStorage.setItem('aod_llm_stats', JSON.stringify({ calls, model }));
+        }
+        
+        function initLlmStats() {
+            const saved = localStorage.getItem('aod_llm_stats');
+            if (saved) {
+                try {
+                    const { calls, model } = JSON.parse(saved);
+                    const llmStats = document.getElementById('llmStats');
+                    llmStats.classList.remove('hidden');
+                    document.getElementById('llmCallCount').textContent = calls;
+                    document.getElementById('llmModel').textContent = model ? `(${model.split(':').pop()})` : '';
+                } catch (e) {}
+            }
+        }
+        
         function initMainTabs() {
             document.querySelectorAll('.main-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -1465,16 +1486,7 @@
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
                 document.getElementById('statRejected').textContent = run.counts.rejected;
                 
-                const llmStats = document.getElementById('llmStats');
-                const llmCalls = run.counts.llm_calls || 0;
-                const llmModel = run.counts.llm_model || '';
-                if (llmCalls > 0) {
-                    llmStats.classList.remove('hidden');
-                    document.getElementById('llmCallCount').textContent = llmCalls;
-                    document.getElementById('llmModel').textContent = llmModel ? `(${llmModel.split(':').pop()})` : '';
-                } else {
-                    llmStats.classList.add('hidden');
-                }
+                updateLlmStats(run.counts.llm_calls || 0, run.counts.llm_model || '');
             } catch (e) { console.error('Failed to load run details:', e); }
             
             try {
@@ -1645,6 +1657,7 @@
         });
         
         initModeToggle();
+        initLlmStats();
         initMainTabs();
         initTestTab();
         checkHealth(); 

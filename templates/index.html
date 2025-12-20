@@ -460,10 +460,12 @@
                     </div>
                 </div>
                 
-                <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+                <div style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;">
                     <button class="btn btn-primary decision-filter active" data-filter="all">All</button>
                     <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
                     <button class="btn btn-secondary decision-filter" data-filter="mismatch">Mismatches</button>
+                    <div style="flex:1;"></div>
+                    <button class="btn btn-secondary" id="exportMismatches" style="padding:0.5rem 1rem;">Export Mismatches</button>
                 </div>
                 
                 <div id="decisionTraceDetail" style="display:none;background:var(--slate-800);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
@@ -716,6 +718,34 @@
             
             document.getElementById('runDecisionTrace').addEventListener('click', loadDecisionTraces);
             document.getElementById('decisionTraceRunId').addEventListener('change', loadDecisionTraces);
+            
+            document.getElementById('exportMismatches').addEventListener('click', exportMismatches);
+            
+            function exportMismatches() {
+                if (!decisionTracesCache) {
+                    alert('Load traces first');
+                    return;
+                }
+                
+                const mismatchKeys = Object.keys(decisionMismatches).filter(k => decisionMismatches[k]);
+                if (mismatchKeys.length === 0) {
+                    alert('No mismatches tracked. Compare assets with Farm traces first.');
+                    return;
+                }
+                
+                const exportData = mismatchKeys.map(key => ({
+                    asset_key: key,
+                    ...decisionTracesCache[key]
+                }));
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `aod_mismatches_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
             
             async function loadDecisionTraces() {
                 const runId = document.getElementById('decisionTraceRunId').value;

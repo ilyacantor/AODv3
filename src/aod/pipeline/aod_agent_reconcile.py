@@ -480,50 +480,85 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     return None
 
 
+def _classify_shadow(reasons: list[ReasonCode], eligible: bool) -> bool:
+    """
+    Determine if asset is shadow IT.
+
+    Shadow IT = Ungoverned + Active:
+    - No governance (no IDP, no CMDB)
+    - Has evidence of usage (discovery or cloud)
+    - Recently active
+
+    Args:
+        reasons: Computed reason codes for the asset
+        eligible: Whether asset is reconciliation-eligible
+
+    Returns:
+        True if asset is shadow IT
+    """
+    if not eligible:
+        return False
+
+    has_governance = ReasonCode.HAS_IDP in reasons or ReasonCode.HAS_CMDB in reasons
+    has_usage = ReasonCode.HAS_CLOUD in reasons or ReasonCode.HAS_DISCOVERY in reasons
+    has_activity = ReasonCode.RECENT_ACTIVITY in reasons
+
+    return not has_governance and has_usage and has_activity
+
+
+def _classify_zombie(reasons: list[ReasonCode], eligible: bool) -> bool:
+    """
+    Determine if asset is zombie (governed but inactive).
+
+    Zombie = Governed + Stale:
+    - Has governance (IDP or CMDB)
+    - No recent activity
+
+    Args:
+        reasons: Computed reason codes for the asset
+        eligible: Whether asset is reconciliation-eligible
+
+    Returns:
+        True if asset is zombie
+    """
+    if not eligible:
+        return False
+
+    has_governance = ReasonCode.HAS_IDP in reasons or ReasonCode.HAS_CMDB in reasons
+    has_activity = ReasonCode.RECENT_ACTIVITY in reasons
+
+    return has_governance and not has_activity
+
+
 def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "sprawl") -> AssetActualResult:
     """
     Produce the actual classification result for an asset.
-    
+
     This is AOD's view of what the asset IS - not what it should be.
-    
+
     IMPORTANT: Only reconciliation-eligible assets (registered domains, known SaaS)
     are classified as shadow/zombie. Internal identifiers are excluded to prevent
     false positives.
-    
+
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
-    
+
     Args:
         asset: The asset to classify
         activity_window_days: Activity window for classification
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
     """
     reasons, evidence = compute_asset_reasons(asset, activity_window_days)
-    
+
     eligible = is_reconciliation_eligible(asset, mode=mode)
     evidence["reconciliation_eligible"] = eligible
-    
+
     if not eligible:
         reasons.append(ReasonCode.NOT_RECONCILIATION_ELIGIBLE)
-    
-    has_idp = ReasonCode.HAS_IDP in reasons
-    has_cmdb = ReasonCode.HAS_CMDB in reasons
-    has_finance = ReasonCode.HAS_FINANCE in reasons
-    has_cloud = ReasonCode.HAS_CLOUD in reasons
-    has_discovery = ReasonCode.HAS_DISCOVERY in reasons
-    has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
-    
-    is_shadow = False
-    is_zombie = False
-    
-    if eligible:
-        if not has_idp and not has_cmdb:
-            if (has_cloud or has_discovery) and has_recent_activity:
-                is_shadow = True
-        
-        if has_idp or has_cmdb:
-            if not has_recent_activity:
-                is_zombie = True
+
+    # Use extracted classification functions for clarity and testability
+    is_shadow = _classify_shadow(reasons, eligible)
+    is_zombie = _classify_zombie(reasons, eligible)
     
     raw_domain = _extract_raw_domain(asset)
     if raw_domain:

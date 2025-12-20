@@ -432,26 +432,41 @@
                         <div id="twoPathDiffResult" class="test-result hidden"></div>
                     </div>
                     
-                    <div class="test-card">
-                        <div class="test-card-header">
-                            <div class="test-card-title">Decision Traces</div>
-                        </div>
-                        <div class="test-card-desc">
-                            View all 13 decision fields per asset for Farm/AOD comparison. 
-                            Identifies keying, activity, governance, and infra exclusion mismatches.
-                        </div>
-                        <div class="debug-input">
-                            <select class="form-input" id="decisionTraceRunId" style="flex:1;">
-                                <option value="">Select a run...</option>
-                            </select>
-                            <input type="number" class="form-input" id="decisionTraceWindow" placeholder="Window (days)" style="width:120px;" value="90">
-                            <button class="btn btn-primary" id="runDecisionTrace">Load Traces</button>
-                        </div>
-                        <div class="debug-input" style="margin-top:0.5rem;">
-                            <input type="text" class="form-input" id="decisionTraceFilter" placeholder="Filter by asset key..." style="flex:1;">
-                        </div>
-                        <div id="decisionTraceResult" class="test-result hidden" style="max-height:400px;overflow-y:auto;"></div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <div>
+                        <h2 class="section-title" style="margin-bottom:0.25rem;">All Decision Traces</h2>
+                        <p class="config-note" style="margin:0;">View how each asset was classified. Filter by name or show only shadow assets.</p>
                     </div>
+                    <span id="decisionTraceCount" style="color:var(--slate-400);font-size:0.875rem;"></span>
+                </div>
+                
+                <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem;">
+                    <div style="flex:0 0 300px;">
+                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Snapshot</label>
+                        <select class="form-input" id="decisionTraceRunId" style="width:100%;">
+                            <option value="">Select a run...</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Filter by Asset</label>
+                        <input type="text" class="form-input" id="decisionTraceFilter" placeholder="e.g. slack.com" style="width:100%;">
+                    </div>
+                    <div style="flex:0 0 auto;padding-top:1.25rem;">
+                        <button class="btn btn-primary" id="runDecisionTrace" style="padding:0.75rem 1.5rem;">Load Traces</button>
+                    </div>
+                </div>
+                
+                <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+                    <button class="btn btn-primary decision-filter active" data-filter="all">All</button>
+                    <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
+                </div>
+                
+                <div id="decisionTraceResult" style="background:var(--slate-800);border-radius:8px;overflow:hidden;">
+                    <div style="padding:2rem;text-align:center;color:var(--slate-500);">Select a snapshot to load decision traces</div>
                 </div>
             </div>
         </main>
@@ -656,6 +671,7 @@
             });
             
             let decisionTracesCache = null;
+            let decisionTraceFilter = 'all';
             
             async function loadDecisionTraceRuns() {
                 const select = document.getElementById('decisionTraceRunId');
@@ -668,122 +684,119 @@
                             const opt = document.createElement('option');
                             opt.value = run.run_id;
                             const date = run.created_at ? new Date(run.created_at).toLocaleDateString() : '';
-                            opt.textContent = `${run.run_id} (${run.tenant_name || 'unknown'}, ${date})`;
+                            opt.textContent = `${run.tenant_name || 'Unknown'} - ${date}`;
                             select.appendChild(opt);
                         });
                 } catch (err) {
-                    console.error('Failed to load runs for decision trace:', err);
+                    console.error('Failed to load runs:', err);
                 }
             }
             loadDecisionTraceRuns();
             
-            document.getElementById('runDecisionTrace').addEventListener('click', async () => {
+            document.querySelectorAll('.decision-filter').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.decision-filter').forEach(b => {
+                        b.classList.remove('active');
+                        b.classList.remove('btn-primary');
+                        b.classList.add('btn-secondary');
+                    });
+                    btn.classList.add('active');
+                    btn.classList.remove('btn-secondary');
+                    btn.classList.add('btn-primary');
+                    decisionTraceFilter = btn.dataset.filter;
+                    if (decisionTracesCache) applyDecisionFilters();
+                });
+            });
+            
+            document.getElementById('runDecisionTrace').addEventListener('click', loadDecisionTraces);
+            document.getElementById('decisionTraceRunId').addEventListener('change', loadDecisionTraces);
+            
+            async function loadDecisionTraces() {
                 const runId = document.getElementById('decisionTraceRunId').value;
-                const windowDays = parseInt(document.getElementById('decisionTraceWindow').value) || 90;
                 const resultDiv = document.getElementById('decisionTraceResult');
                 
                 if (!runId) {
-                    resultDiv.className = 'test-result failure';
-                    resultDiv.classList.remove('hidden');
-                    resultDiv.innerHTML = 'Please enter a Run ID';
+                    resultDiv.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--slate-500);">Select a snapshot to load decision traces</div>';
                     return;
                 }
                 
-                resultDiv.className = 'test-result running';
-                resultDiv.classList.remove('hidden');
-                resultDiv.innerHTML = '<div class="spinner"></div> Loading decision traces...';
+                resultDiv.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--cyan-400);"><div class="spinner"></div> Loading traces...</div>';
                 
                 try {
                     const response = await fetch('/api/debug/decision-trace', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ run_id: runId, activity_window_days: windowDays })
+                        body: JSON.stringify({ run_id: runId, activity_window_days: 90 })
                     });
                     const data = await response.json();
                     
-                    if (data.error) {
-                        resultDiv.className = 'test-result failure';
-                        resultDiv.innerHTML = `<strong>Error:</strong> ${data.detail || data.error}`;
+                    if (data.detail) {
+                        resultDiv.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--red-400);">${data.detail}</div>`;
                         return;
                     }
                     
                     decisionTracesCache = data.traces;
-                    renderDecisionTraces(data.traces, data.count, data.fields);
+                    applyDecisionFilters();
                 } catch (err) {
-                    resultDiv.className = 'test-result failure';
-                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                    resultDiv.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--red-400);">Error: ${err.message}</div>`;
                 }
+            }
+            
+            document.getElementById('decisionTraceFilter').addEventListener('input', () => {
+                if (decisionTracesCache) applyDecisionFilters();
             });
             
-            document.getElementById('decisionTraceFilter').addEventListener('input', (e) => {
-                if (!decisionTracesCache) return;
-                const filter = e.target.value.toLowerCase().trim();
+            function applyDecisionFilters() {
+                const textFilter = document.getElementById('decisionTraceFilter').value.toLowerCase().trim();
                 const filtered = {};
-                let count = 0;
+                
                 for (const [key, trace] of Object.entries(decisionTracesCache)) {
-                    if (!filter || key.toLowerCase().includes(filter)) {
-                        filtered[key] = trace;
-                        count++;
-                    }
+                    if (textFilter && !key.toLowerCase().includes(textFilter)) continue;
+                    if (decisionTraceFilter === 'shadow' && !trace.is_shadow) continue;
+                    filtered[key] = trace;
                 }
-                renderDecisionTraces(filtered, count, null);
-            });
+                
+                renderDecisionTraces(filtered);
+            }
             
-            function renderDecisionTraces(traces, count, fields) {
+            function renderDecisionTraces(traces) {
                 const resultDiv = document.getElementById('decisionTraceResult');
-                resultDiv.className = 'test-result success';
+                const countSpan = document.getElementById('decisionTraceCount');
+                const total = Object.keys(traces).length;
+                countSpan.textContent = `${total} traces`;
                 
-                let html = `<strong>${count} assets</strong>`;
-                if (fields) {
-                    html += ` | Fields: ${fields.length}`;
-                }
-                html += `<br><br>`;
-                
-                html += `<table style="width:100%;font-size:0.75rem;border-collapse:collapse;">`;
-                html += `<thead><tr style="position:sticky;top:0;background:var(--slate-800);z-index:1;">`;
-                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Asset</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Shadow</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Active</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">IdP</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">CMDB</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Ext</th>`;
-                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Infra</th>`;
-                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Domain</th>`;
-                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Reason Codes</th>`;
+                let html = `<div style="max-height:500px;overflow-y:auto;">`;
+                html += `<table style="width:100%;font-size:0.875rem;border-collapse:collapse;">`;
+                html += `<thead><tr style="position:sticky;top:0;background:var(--slate-700);z-index:1;">`;
+                html += `<th style="text-align:left;padding:0.75rem 1rem;font-weight:500;color:var(--slate-300);">Asset Key</th>`;
+                html += `<th style="text-align:left;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">Registered Domain</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">External</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">Active</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">IdP</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">CMDB</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">Infra</th>`;
+                html += `<th style="text-align:center;padding:0.75rem 0.5rem;font-weight:500;color:var(--slate-300);">Shadow</th>`;
+                html += `<th style="text-align:left;padding:0.75rem 1rem;font-weight:500;color:var(--slate-300);">Activity Source</th>`;
                 html += `</tr></thead><tbody>`;
                 
                 const sortedKeys = Object.keys(traces).sort();
-                const displayLimit = 200;
-                const displayKeys = sortedKeys.slice(0, displayLimit);
                 
-                for (const key of displayKeys) {
+                for (const key of sortedKeys) {
                     const t = traces[key];
-                    const shadowStyle = t.is_shadow ? 'color:var(--orange-400);font-weight:600;' : 'color:var(--slate-500);';
-                    const activeStyle = t.is_active ? 'color:var(--green-400);' : 'color:var(--red-400);';
-                    const idpStyle = t.idp_present ? 'color:var(--green-400);' : 'color:var(--slate-500);';
-                    const cmdbStyle = t.cmdb_present ? 'color:var(--green-400);' : 'color:var(--slate-500);';
-                    const extStyle = t.is_external ? 'color:var(--cyan-400);' : 'color:var(--slate-500);';
-                    const infraStyle = t.infra_excluded ? 'color:var(--purple-400);' : 'color:var(--slate-500);';
-                    
                     html += `<tr style="border-bottom:1px solid var(--slate-700);">`;
-                    html += `<td style="padding:4px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${key}">${key}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${shadowStyle}">${t.is_shadow ? '⚠' : '–'}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${activeStyle}">${t.is_active ? '✓' : '✗'}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${idpStyle}">${t.idp_present ? '✓' : '–'}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${cmdbStyle}">${t.cmdb_present ? '✓' : '–'}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${extStyle}">${t.is_external ? '✓' : '–'}</td>`;
-                    html += `<td style="text-align:center;padding:4px;${infraStyle}">${t.infra_excluded ? '✓' : '–'}</td>`;
-                    html += `<td style="padding:4px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.registered_domain || ''}">${t.registered_domain || '–'}</td>`;
-                    html += `<td style="padding:4px;font-size:0.7rem;color:var(--slate-400);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.reason_codes || []).join(', ')}">${(t.reason_codes || []).join(', ')}</td>`;
+                    html += `<td style="padding:0.5rem 1rem;color:var(--cyan-400);">${key}</td>`;
+                    html += `<td style="padding:0.5rem;color:var(--slate-300);">${t.registered_domain || ''}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;color:${t.is_external ? 'var(--green-400)' : 'var(--slate-500)'};">${t.is_external ? 'Y' : '-'}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;color:${t.is_active ? 'var(--green-400)' : 'var(--slate-500)'};">${t.is_active ? 'Y' : '-'}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;color:${t.idp_present ? 'var(--green-400)' : 'var(--slate-500)'};">${t.idp_present ? 'Y' : '-'}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;color:${t.cmdb_present ? 'var(--green-400)' : 'var(--slate-500)'};">${t.cmdb_present ? 'Y' : '-'}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;color:${t.infra_excluded ? 'var(--purple-400)' : 'var(--slate-500)'};">${t.infra_excluded ? 'Y' : '-'}</td>`;
+                    html += `<td style="text-align:center;padding:0.5rem;"><span style="color:${t.is_shadow ? 'var(--orange-400)' : 'var(--slate-500)'};">${t.is_shadow ? 'SHADOW' : '-'}</span></td>`;
+                    html += `<td style="padding:0.5rem 1rem;color:var(--slate-400);">${t.activity_source || ''}</td>`;
                     html += `</tr>`;
                 }
                 
-                html += `</tbody></table>`;
-                
-                if (sortedKeys.length > displayLimit) {
-                    html += `<br><em style="color:var(--slate-500);">Showing first ${displayLimit} of ${sortedKeys.length} assets. Use filter to narrow results.</em>`;
-                }
-                
+                html += `</tbody></table></div>`;
                 resultDiv.innerHTML = html;
             }
         }

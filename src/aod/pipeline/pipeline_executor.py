@@ -16,6 +16,7 @@ from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
+from .vendor_governance import propagate_vendor_governance
 from .admission import apply_admission_criteria, AdmissionResult
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
@@ -191,6 +192,8 @@ async def execute_pipeline(
         
         correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
         
+        propagated_governance = propagate_vendor_governance(correlations)
+        
         assets = []
         rejections_batch = []
         
@@ -206,8 +209,16 @@ async def execute_pipeline(
                 ))
                 continue
             
+            prop_gov = propagated_governance.get(candidate.entity_id)
+            prop_idp = prop_gov.idp_present if prop_gov else False
+            prop_cmdb = prop_gov.cmdb_present if prop_gov else False
+            prop_reason = prop_gov.propagation_reason if prop_gov else None
+            
             entity_observations = [obs for obs in observations if obs.name == candidate.original_name or obs.domain == candidate.domain]
-            admission_result = apply_admission_criteria(correlation, tenant_id, run_id, snapshot_id, entity_observations)
+            admission_result = apply_admission_criteria(
+                correlation, tenant_id, run_id, snapshot_id, entity_observations,
+                propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason
+            )
             
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)

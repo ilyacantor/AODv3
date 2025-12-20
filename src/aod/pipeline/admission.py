@@ -347,7 +347,10 @@ def apply_admission_criteria(
     tenant_id: str,
     run_id: str,
     snapshot_id: str,
-    observations: Optional[list[Observation]] = None
+    observations: Optional[list[Observation]] = None,
+    propagated_idp: bool = False,
+    propagated_cmdb: bool = False,
+    propagation_reason: Optional[str] = None
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -358,6 +361,7 @@ def apply_admission_criteria(
     - Cloud plane: cloud match AND resource_type indicates real system/resource
     - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
     - Discovery plane: ≥2 distinct sources AND recent activity ≤90 days (allows shadow IT admission)
+    - Propagated governance: IdP/CMDB presence propagated from vendor sibling
     
     IMPORTANT: Vendor alone is not admission.
     
@@ -365,6 +369,11 @@ def apply_admission_criteria(
         correlation: Correlation result for the entity
         tenant_id: Tenant ID
         run_id: Run ID
+        snapshot_id: Snapshot ID
+        observations: Discovery observations for this entity
+        propagated_idp: IdP governance propagated from vendor sibling
+        propagated_cmdb: CMDB governance propagated from vendor sibling
+        propagation_reason: Explanation of governance propagation
         
     Returns:
         AdmissionResult indicating whether entity is admitted
@@ -377,7 +386,13 @@ def apply_admission_criteria(
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(observations)
     
-    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
+    governance_admitted = False
+    governance_reason = ""
+    if propagated_idp or propagated_cmdb:
+        governance_admitted = True
+        governance_reason = f"Propagated governance: {propagation_reason}"
+    
+    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted, governance_admitted]):
         return AdmissionResult(
             admitted=False,
             rejection_reason="No admission criteria satisfied"
@@ -394,6 +409,8 @@ def apply_admission_criteria(
         admission_reasons.append(finance_reason)
     if discovery_admitted:
         admission_reasons.append(discovery_reason)
+    if governance_admitted:
+        admission_reasons.append(governance_reason)
     
     lens_status = LensStatuses(
         idp=LensStatus(correlation.idp.status.value),
@@ -427,6 +444,8 @@ def apply_admission_criteria(
         tags.append("finance_tracked")
     if discovery_admitted:
         tags.append("discovery_only")
+    if governance_admitted:
+        tags.append("vendor_governed")
     
     activity_evidence = extract_activity_timestamps(correlation, entity, observations)
     

@@ -22,10 +22,64 @@ from .admission import apply_admission_criteria, AdmissionResult
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
+from .aod_agent_reconcile import VENDOR_TO_DOMAIN
+from ..llm.fringe_integration import apply_fringe_resolution
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
 MAX_OBSERVATION_SAMPLES = 2000
+
+
+def _get_rejection_key(candidate: CandidateEntity) -> str | None:
+    """
+    Extract canonical rejection key matching Farm's expectations.
+
+    CRITICAL: This MUST match the exact logic of _extract_raw_domain() in
+    aod_agent_reconcile.py to ensure rejected assets use the same keys as
+    admitted assets. Any divergence causes KEY_NORMALIZATION_MISMATCH errors.
+
+    TODO: Refactor to share code with _extract_raw_domain() to eliminate duplication.
+    Consider extracting to a shared utility that works with both Asset and CandidateEntity.
+
+    Priority order (matches _extract_raw_domain() exactly):
+    1. Domain from candidate (preserves subdomains for host-level granularity)
+    2. Name if it looks like a domain (TLD length heuristic: 2-4 chars, alphabetic)
+    3. Direct vendor lookup using VENDOR_TO_DOMAIN
+    4. Normalized name vendor lookup
+    5. None (no forced fallback - let caller handle)
+    """
+    from .aod_agent_reconcile import _normalize_name_for_vendor_lookup
+
+    # Priority 1: Domain (preserve subdomains, no normalization)
+    if candidate.domain and "." in candidate.domain:
+        return candidate.domain.lower().strip()
+
+    # Priority 2: Name if it looks like a domain
+    # Uses TLD LENGTH HEURISTIC (2-4 alphabetic chars) instead of hardcoded list
+    # Handles .uk, .com, .tech, .cloud, and future TLDs robustly
+    name = candidate.original_name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            return name
+
+    # Priority 3: Direct vendor lookup
+    if candidate.vendor and candidate.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = candidate.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            return VENDOR_TO_DOMAIN[vendor_key]
+
+    # Priority 4: Normalized name vendor lookup
+    # Handles cases like "Slack Inc." -> "slack" -> "slack.com"
+    normalized_name = _normalize_name_for_vendor_lookup(candidate.original_name)
+    if normalized_name in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_name]
+
+    # No match: Return None instead of forcing a fallback
+    # Caller must decide how to handle (e.g., use entity_id, skip rejection, etc.)
+    return None
 
 
 @dataclass
@@ -44,7 +98,8 @@ async def execute_pipeline(
     db: Database,
     run_id: str,
     started_at: datetime,
-    provenance: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None,
+    enable_llm: bool = False
 ) -> PipelineResult:
     """
     Execute the full AOD discovery pipeline.
@@ -68,7 +123,8 @@ async def execute_pipeline(
         run_id: Unique run identifier (generated at API boundary)
         started_at: Run start timestamp (generated at API boundary)
         provenance: Optional provenance data for Farm runs (farm_url, snapshot_id, fetch_duration_ms, schema_version)
-        
+        enable_llm: Enable LLM fringe resolution for ambiguous/unknown assets (default: False)
+
     Returns:
         PipelineResult with run log, assets, artifacts, and findings
     """
@@ -235,7 +291,35 @@ async def execute_pipeline(
                     ))
         await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
-        
+
+        # Stage 4.5: LLM Fringe Resolution (optional)
+        if enable_llm:
+            logger.info(f"LLM fringe resolution enabled - processing {len(correlations)} entities")
+            fringe_processed = 0
+            fringe_resolved = 0
+            updated_correlations = []
+
+            for correlation in correlations:
+                entity_key = correlation.entity.entity_id
+                updated_correlation, explainability = await apply_fringe_resolution(
+                    entity_key=entity_key,
+                    tenant_id=tenant_id,
+                    correlation_result=correlation,
+                    db=db,
+                    cmdb_candidates=None,
+                    idp_candidates=None,
+                    enable_llm=True,
+                )
+                updated_correlations.append(updated_correlation)
+
+                if explainability.llm_used:
+                    fringe_processed += 1
+                    if explainability.fact_id:
+                        fringe_resolved += 1
+
+            correlations = updated_correlations
+            logger.info(f"LLM fringe resolution: {fringe_processed} processed, {fringe_resolved} resolved")
+
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
         run_log.counts.artifacts_recorded = len(artifacts)
         
@@ -247,11 +331,25 @@ async def execute_pipeline(
         for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
+                rejection_key = _get_rejection_key(candidate)
+                if not rejection_key:
+                    # No canonical key extractable - use normalized name as fallback
+                    # This won't match Farm's expectations, but ensures rejection is recorded
+                    import re
+                    rejection_key = re.sub(r'[^a-z0-9]', '', candidate.original_name.lower()) or candidate.entity_id
+
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
-                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    rejection_id, run_id,
+                    rejection_key,  # entity_key: canonical domain key (e.g., "dropboxusercontent.io")
+                    rejection_key,  # entity_name: same as entity_key for consistency
                     "no_correlation", "Entity not found in correlation results",
-                    json.dumps({"source": candidate.source, "domain": candidate.domain}),
+                    json.dumps({
+                        "source": candidate.source,
+                        "domain": candidate.domain,
+                        "original_name": candidate.original_name,
+                        "original_entity_id": candidate.entity_id
+                    }),
                     started_at.isoformat()
                 ))
                 continue
@@ -262,15 +360,26 @@ async def execute_pipeline(
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
+                rejection_key = _get_rejection_key(candidate)
+                if not rejection_key:
+                    # No canonical key extractable - use normalized name as fallback
+                    # This won't match Farm's expectations, but ensures rejection is recorded
+                    import re
+                    rejection_key = re.sub(r'[^a-z0-9]', '', candidate.original_name.lower()) or candidate.entity_id
+
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
-                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    rejection_id, run_id,
+                    rejection_key,  # entity_key: canonical domain key (e.g., "dropboxusercontent.io")
+                    rejection_key,  # entity_name: same as entity_key for consistency
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
                     json.dumps({
                         "idp_status": correlation.idp.status.value,
                         "cmdb_status": correlation.cmdb.status.value,
                         "cloud_status": correlation.cloud.status.value,
-                        "finance_status": correlation.finance.status.value
+                        "finance_status": correlation.finance.status.value,
+                        "original_name": candidate.original_name,
+                        "original_entity_id": candidate.entity_id
                     }),
                     started_at.isoformat()
                 ))

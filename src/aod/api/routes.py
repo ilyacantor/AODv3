@@ -177,7 +177,8 @@ async def create_run(file: UploadFile = File(...)):
     started_at = now_pst()
     
     db = await get_db()
-    result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at)
+    # LLM disabled by default for file upload endpoint
+    result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at, enable_llm=False)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -205,7 +206,8 @@ async def create_run_json(snapshot: dict[str, Any]):
     started_at = now_pst()
     
     db = await get_db()
-    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
+    # LLM disabled by default for JSON endpoint
+    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at, enable_llm=False)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -280,6 +282,11 @@ async def create_run_from_farm(request: FarmRunRequest):
     }
     
     db = await get_db()
+    # Use enable_llm from request (defaults to False)
+    result = await execute_pipeline(
+        snapshot_data, db, run_id=run_id, started_at=started_at,
+        provenance=provenance, enable_llm=request.enable_llm
+    )
     
     async def run_pipeline_background():
         """Execute pipeline and reconciliation in background"""

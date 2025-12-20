@@ -127,15 +127,18 @@ DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
 
 def check_discovery_admission(
     observations: Optional[list[Observation]],
-    min_sources: int = 2
+    min_sources: int = 1
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
-    
-    Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct discovery sources
+
+    Admit discovery-only candidates when usage is detected and recent:
+    - Evidence from ≥1 distinct discovery source (lowered from 2 for broader admission)
     - Recent activity ≤ 90 days
-    
+
+    POLICY: Admit broadly at this stage (even DNS-only) so correlation can happen.
+    Shadow classification will apply stricter "strong activity" requirements later.
+
     This allows shadow IT to be admitted before finance/cloud evidence appears,
     since usage signals typically precede contracts or infrastructure.
     """

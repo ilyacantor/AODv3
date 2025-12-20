@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from ..models.input_contracts import Snapshot
 from ..models.output_contracts import (
@@ -133,6 +133,7 @@ async def execute_pipeline(
         
         enable_llm = bool(provenance and provenance.get("enable_llm", False))
         llm_resolution_count = 0
+        llm_model_used: Optional[str] = None
         
         if enable_llm:
             import asyncio
@@ -166,9 +167,13 @@ async def execute_pipeline(
                 updated_correlations.append(updated_correlation)
                 if explainability.llm_used:
                     llm_resolution_count += 1
+                    if explainability.llm_model_id and not llm_model_used:
+                        llm_model_used = f"{explainability.llm_provider}:{explainability.llm_model_id}"
                     logger.info(f"LLM resolved {updated_correlation.entity.entity_id}: {explainability.llm_reason}")
             
             correlations = updated_correlations
+            run_log.counts.llm_calls = llm_resolution_count
+            run_log.counts.llm_model = llm_model_used
             logger.info(f"LLM fringe resolution completed: {llm_resolution_count} entities resolved")
         
         def is_finance_truly_ambiguous(plane_match) -> bool:

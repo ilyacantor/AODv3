@@ -221,7 +221,7 @@
         .mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
         .llm-stats { display: flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem; padding: 0.3rem 0.6rem; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 6px; font-size: 0.75rem; color: var(--purple-400); }
         .llm-stats.hidden { display: none; }
-        .llm-stats-icon { width: 14px; height: 14px; flex-shrink: 0; }
+        .llm-stats-label { font-weight: 700; }
         .llm-stats-count { font-weight: 600; color: var(--purple-300); }
         .llm-stats-model { color: var(--slate-400); font-size: 0.7rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .main-tabs { display: flex; background: var(--gray-900); border-bottom: 1px solid var(--gray-700); padding: 0 2rem; }
@@ -259,7 +259,7 @@
                 <span class="mode-label" id="prodLabel">Prod</span>
             </div>
             <div class="llm-stats hidden" id="llmStats" title="LLM calls made during this run">
-                <svg class="llm-stats-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                <span class="llm-stats-label">LLM</span>
                 <span class="llm-stats-count" id="llmCallCount">0</span>
                 <span>calls</span>
                 <span class="llm-stats-model" id="llmModel"></span>

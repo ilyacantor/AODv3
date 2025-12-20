@@ -197,32 +197,63 @@ async def execute_pipeline(
         
         if enable_llm:
             import asyncio
-            print(f"[PIPELINE] Starting LLM fringe resolution for {len(correlations)} correlations...", flush=True)
+            from ..llm.fringe_integration import should_trigger_fringe
             
-            async def resolve_single(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
-                """Apply fringe resolution to a single correlation."""
-                try:
-                    return await apply_fringe_resolution(
-                        entity_key=correlation.entity.entity_id,
-                        tenant_id=tenant_id,
-                        correlation_result=correlation,
-                        db=db,
-                        enable_llm=True
-                    )
-                except Exception as e:
-                    logger.error(f"Fringe resolution error for {correlation.entity.entity_id}: {e}")
-                    return correlation, LLMExplainability()
+            def needs_llm(c: CorrelationResult) -> bool:
+                """Pre-filter: only process candidates that actually need LLM"""
+                cmdb_matched = c.cmdb.status == MatchStatus.MATCHED
+                idp_matched = c.idp.status == MatchStatus.MATCHED
+                should_trigger, _ = should_trigger_fringe(
+                    c.entity, cmdb_matched, idp_matched, None, None, True
+                )
+                return should_trigger
             
-            MAX_CONCURRENT = 5
-            semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+            candidates_for_llm = [c for c in correlations if needs_llm(c)]
+            print(f"[PIPELINE] LLM fringe: {len(candidates_for_llm)}/{len(correlations)} need resolution", flush=True)
             
-            async def bounded_resolve(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
-                async with semaphore:
-                    return await resolve_single(correlation)
-            
-            print(f"[PIPELINE] Awaiting asyncio.gather for LLM resolution...", flush=True)
-            results = await asyncio.gather(*[bounded_resolve(c) for c in correlations])
-            print(f"[PIPELINE] LLM gather completed, got {len(results)} results", flush=True)
+            if not candidates_for_llm:
+                print(f"[PIPELINE] No candidates need LLM resolution, skipping", flush=True)
+            else:
+                processed_count = 0
+                
+                async def resolve_single(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
+                    """Apply fringe resolution to a single correlation."""
+                    nonlocal processed_count
+                    try:
+                        result = await apply_fringe_resolution(
+                            entity_key=correlation.entity.entity_id,
+                            tenant_id=tenant_id,
+                            correlation_result=correlation,
+                            db=db,
+                            enable_llm=True
+                        )
+                        processed_count += 1
+                        if processed_count % 50 == 0:
+                            print(f"[PIPELINE] LLM progress: {processed_count}/{len(candidates_for_llm)}", flush=True)
+                        return result
+                    except Exception as e:
+                        logger.error(f"Fringe resolution error for {correlation.entity.entity_id}: {e}")
+                        return correlation, LLMExplainability()
+                
+                MAX_CONCURRENT = 10
+                semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+                
+                async def bounded_resolve(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
+                    async with semaphore:
+                        return await resolve_single(correlation)
+                
+                print(f"[PIPELINE] Starting LLM gather for {len(candidates_for_llm)} candidates...", flush=True)
+                llm_results = await asyncio.gather(*[bounded_resolve(c) for c in candidates_for_llm])
+                print(f"[PIPELINE] LLM gather completed", flush=True)
+                
+                llm_result_map = {r[0].entity.entity_id: r for r in llm_results}
+                
+                results = []
+                for c in correlations:
+                    if c.entity.entity_id in llm_result_map:
+                        results.append(llm_result_map[c.entity.entity_id])
+                    else:
+                        results.append((c, LLMExplainability()))
             
             updated_correlations = []
             for updated_correlation, explainability in results:

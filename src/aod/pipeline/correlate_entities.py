@@ -444,70 +444,6 @@ def disambiguate_matches(
     )
 
 
-def _try_match(
-    entity: CandidateEntity,
-    match_ids: list[str],
-    plane_index: PlaneIndex,
-    match_method: str,
-    match_key: str
-) -> PlaneMatch | None:
-    """
-    Generic matching logic for single/multiple/ambiguous matches.
-
-    Handles the common pattern:
-    - 0 matches → return None
-    - 1 match → return MATCHED
-    - >1 matches → disambiguate, return MATCHED if resolved, otherwise AMBIGUOUS
-
-    Args:
-        entity: The candidate entity being correlated
-        match_ids: List of matched record IDs from index lookup
-        plane_index: The plane index containing full records
-        match_method: Description of match type ("domain", "uri", etc.)
-        match_key: The key used for matching (for evidence)
-
-    Returns:
-        PlaneMatch if matches found, None otherwise
-    """
-    if not match_ids:
-        return None
-
-    if len(match_ids) == 1:
-        return PlaneMatch(
-            status=MatchStatus.MATCHED,
-            matched_ids=match_ids,
-            matched_records=[plane_index.records.get(match_ids[0])],
-            match_method=match_method,
-            match_key=match_key,
-            ambiguity_code=AmbiguityCode.NONE
-        )
-
-    # Multiple matches - attempt disambiguation
-    records = [plane_index.records.get(mid) for mid in match_ids]
-    code, detail, resolved = disambiguate_matches(entity, match_ids, records, match_method)
-
-    if resolved and len(resolved) == 1:
-        return PlaneMatch(
-            status=MatchStatus.MATCHED,
-            matched_ids=resolved,
-            matched_records=[plane_index.records.get(resolved[0])],
-            match_method=match_method,
-            match_key=match_key,
-            ambiguity_code=code,
-            disambiguation_detail=detail
-        )
-
-    return PlaneMatch(
-        status=MatchStatus.AMBIGUOUS,
-        matched_ids=match_ids,
-        matched_records=records,
-        match_method=match_method,
-        match_key=match_key,
-        ambiguity_code=code,
-        disambiguation_detail=detail
-    )
-
-
 def correlate_to_plane(
     entity: CandidateEntity,
     plane_index: PlaneIndex,
@@ -517,48 +453,104 @@ def correlate_to_plane(
 ) -> PlaneMatch:
     """
     Correlate an entity to a plane using multi-pass matching with disambiguation.
-
+    
     Pass 1: Domain match (if applicable)
     Pass 2: Exact canonical normalized name match
     Pass 3: Unique contains match (strict; if >1 candidate → try disambiguate)
     Pass 4: Vendor match (last resort, PARENT_VENDOR if multiple)
     Pass 5: Domain-to-vendor match (for CMDB - use domain to find vendor, then match)
-
+    
     When multiple matches occur, disambiguation logic attempts to resolve:
     - MULTI_ENV: Same app in different environments → pick prod
     - LEGACY: Current + deprecated → pick current
     - DUPLICATE: True duplicates → pick first
     - PARENT_VENDOR: Vendor-only match → treat as UNMATCHED
-
+    
     Args:
         entity: The candidate entity to correlate
         plane_index: The index to search
         use_domain: Enable domain-based matching
         use_uri: Enable URI-based matching
         use_vendor: Enable domain-to-vendor lookup for matching (useful for CMDB)
-
+    
     Returns matched/ambiguous/unmatched plus evidence refs.
     """
-
-    # Pass 1: Domain match
+    
     if use_domain and entity.domain and plane_index.by_domain:
         domain_matches = plane_index.by_domain.get(entity.domain, [])
-        result = _try_match(entity, domain_matches, plane_index, "domain", entity.domain)
-        if result:
-            return result
-
-    # Pass 2: URI match
+        if len(domain_matches) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=domain_matches,
+                matched_records=[plane_index.records.get(mid) for mid in domain_matches],
+                match_method="domain",
+                match_key=entity.domain,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(domain_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in domain_matches]
+            code, detail, resolved = disambiguate_matches(entity, domain_matches, records, "domain")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="domain",
+                    match_key=entity.domain,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=domain_matches,
+                matched_records=records,
+                match_method="domain",
+                match_key=entity.domain,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
     if use_uri and entity.uri and plane_index.by_uri:
         uri_matches = plane_index.by_uri.get(entity.uri.lower().strip(), [])
-        result = _try_match(entity, uri_matches, plane_index, "uri", entity.uri)
-        if result:
-            return result
-
-    # Pass 3: Canonical name match (with optional vendor validation)
+        if len(uri_matches) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=uri_matches,
+                matched_records=[plane_index.records.get(mid) for mid in uri_matches],
+                match_method="uri",
+                match_key=entity.uri,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(uri_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in uri_matches]
+            code, detail, resolved = disambiguate_matches(entity, uri_matches, records, "uri")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="uri",
+                    match_key=entity.uri,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=uri_matches,
+                matched_records=records,
+                match_method="uri",
+                match_key=entity.uri,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
     canonical = entity.canonical_name
     name_matches = plane_index.by_canonical_name.get(canonical, [])
-
-    # Vendor validation: filter matches to expected vendor if applicable
+    
     if name_matches and use_vendor:
         expected_vendor = None
         if entity.domain:
@@ -578,34 +570,123 @@ def correlate_to_plane(
                     if record_vendor and record_vendor == expected_vendor_normalized:
                         validated_matches.append(mid)
             name_matches = validated_matches
-
-    result = _try_match(entity, name_matches, plane_index, "canonical_name", canonical)
-    if result:
-        return result
     
-    # Pass 4: Fuzzy match
+    if len(name_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=name_matches,
+            matched_records=[plane_index.records.get(mid) for mid in name_matches],
+            match_method="canonical_name",
+            match_key=canonical,
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(name_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in name_matches]
+        code, detail, resolved = disambiguate_matches(entity, name_matches, records, "canonical_name")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="canonical_name",
+                match_key=canonical,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=name_matches,
+            matched_records=records,
+            match_method="canonical_name",
+            match_key=canonical,
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
     fuzzy_matches: list[str] = []
     for indexed_name, record_ids in plane_index.by_canonical_name.items():
         if _is_fuzzy_match(canonical, indexed_name):
             fuzzy_matches.extend(record_ids)
+    
     fuzzy_matches = list(set(fuzzy_matches))
-
-    result = _try_match(entity, fuzzy_matches, plane_index, "fuzzy", canonical)
-    if result:
-        return result
-
-    # Pass 5: Contains match
+    
+    if len(fuzzy_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=fuzzy_matches,
+            matched_records=[plane_index.records.get(mid) for mid in fuzzy_matches],
+            match_method="fuzzy",
+            match_key=canonical,
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(fuzzy_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in fuzzy_matches]
+        code, detail, resolved = disambiguate_matches(entity, fuzzy_matches, records, "fuzzy")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="fuzzy",
+                match_key=canonical,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=fuzzy_matches,
+            matched_records=records,
+            match_method="fuzzy",
+            match_key=canonical,
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
     contains_matches: list[str] = []
     for indexed_name, record_ids in plane_index.by_canonical_name.items():
         if _is_valid_contains_match(canonical, indexed_name):
             contains_matches.extend(record_ids)
-    contains_matches = list(set(contains_matches))
-
-    result = _try_match(entity, contains_matches, plane_index, "contains", canonical)
-    if result:
-        return result
     
-    # Pass 6: Domain token match (domain base in indexed names)
+    contains_matches = list(set(contains_matches))
+    
+    if len(contains_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=contains_matches,
+            matched_records=[plane_index.records.get(mid) for mid in contains_matches],
+            match_method="contains",
+            match_key=canonical,
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(contains_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in contains_matches]
+        code, detail, resolved = disambiguate_matches(entity, contains_matches, records, "contains")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="contains",
+                match_key=canonical,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=contains_matches,
+            matched_records=records,
+            match_method="contains",
+            match_key=canonical,
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
     if entity.domain and plane_index.by_canonical_name:
         raw_domain_token = _extract_domain_base_token(entity.domain)
         domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
@@ -614,11 +695,42 @@ def correlate_to_plane(
             for indexed_name, record_ids in plane_index.by_canonical_name.items():
                 if domain_token in indexed_name:
                     token_matches.extend(record_ids)
+            
             token_matches = list(set(token_matches))
-
-            result = _try_match(entity, token_matches, plane_index, "name_contains_domain_token", domain_token)
-            if result:
-                return result
+            
+            if len(token_matches) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=token_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in token_matches],
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(token_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in token_matches]
+                code, detail, resolved = disambiguate_matches(entity, token_matches, records, "name_contains_domain_token")
+                
+                if resolved and len(resolved) == 1:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="name_contains_domain_token",
+                        match_key=domain_token,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+                
+                return PlaneMatch(
+                    status=MatchStatus.AMBIGUOUS,
+                    matched_ids=token_matches,
+                    matched_records=records,
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
     
     if entity.vendor and plane_index.by_vendor_product:
         vendor_key = normalize_string(entity.vendor)

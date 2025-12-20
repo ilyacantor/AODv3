@@ -35,26 +35,27 @@ def should_trigger_fringe(
     idp_matched: bool,
     asset_type: Optional[str],
     vendor: Optional[str],
-    recent_activity: bool = True,
 ) -> tuple[bool, str]:
     """
     Determine if fringe resolution should be triggered for an entity.
     
-    ONLY trigger for high-value entities that would produce findings:
-    1. Shadow candidates: ungoverned (no CMDB/IdP) AND recent activity
-    2. Zombie candidates: governed (has CMDB/IdP) but no recent activity
+    Trigger conditions:
+    1. asset_type is missing/UNKNOWN after deterministic passes
+    2. NO_CMDB AND NO_IDP AND entity is about to affect findings (shadow/governance gap)
+    3. vendor is missing/ambiguous (vendor/product/brand confusion)
     
     Returns: (should_trigger, trigger_reason)
     """
-    is_governed = cmdb_matched or idp_matched
+    if asset_type is None or asset_type.upper() == "UNKNOWN":
+        return True, "asset_type_unknown"
     
-    if not is_governed and recent_activity:
-        return True, "shadow_candidate"
+    if not cmdb_matched and not idp_matched:
+        return True, "governance_gap"
     
-    if is_governed and not recent_activity:
-        return True, "zombie_candidate"
+    if vendor is None or vendor.strip() == "":
+        return True, "vendor_missing"
     
-    return False, "skipped"
+    return False, ""
 
 
 def build_fringe_input_from_entity(
@@ -122,21 +123,14 @@ async def apply_fringe_resolution(
     
     vendor = entity.vendor if hasattr(entity, 'vendor') else None
     
-    recent_activity = True
-    if hasattr(entity, 'last_seen') and entity.last_seen:
-        days_since = (datetime.utcnow() - entity.last_seen).days
-        recent_activity = days_since <= 90
-    
     should_trigger, trigger_reason = should_trigger_fringe(
-        entity, cmdb_matched, idp_matched, asset_type, vendor, recent_activity
+        entity, cmdb_matched, idp_matched, asset_type, vendor
     )
-    
-    print(f"[LLM] {entity_key}: should_trigger={should_trigger}, reason={trigger_reason}, cmdb={cmdb_matched}, idp={idp_matched}, recent={recent_activity}", flush=True)
     
     if not should_trigger:
         return correlation_result, explainability
     
-    print(f"[LLM] {entity_key}: checking fact store...", flush=True)
+    logger.debug(f"Fringe triggered for {entity_key}: {trigger_reason}")
     
     existing_fact = await db.get_llm_fact(tenant_id, entity_key)
     

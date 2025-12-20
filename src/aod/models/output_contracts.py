@@ -228,8 +228,6 @@ class RunCounts(BaseModel):
     rejected: int = 0
     ambiguous_matches: int = 0
     findings_generated: int = 0
-    llm_calls: int = 0
-    llm_model: Optional[str] = None
 
 
 class RunLog(BaseModel):

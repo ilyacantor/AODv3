@@ -31,7 +31,6 @@ class FarmRunRequest(BaseModel):
     tenant_id: str
     farm_base_url: str | None = None
     snapshot_id: str
-    enable_llm: bool = False
 
 
 class RunResponse(BaseModel):
@@ -177,8 +176,7 @@ async def create_run(file: UploadFile = File(...)):
     started_at = now_pst()
     
     db = await get_db()
-    # LLM disabled by default for file upload endpoint
-    result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at, enable_llm=False)
+    result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -206,8 +204,7 @@ async def create_run_json(snapshot: dict[str, Any]):
     started_at = now_pst()
     
     db = await get_db()
-    # LLM disabled by default for JSON endpoint
-    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at, enable_llm=False)
+    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
@@ -277,74 +274,56 @@ async def create_run_from_farm(request: FarmRunRequest):
         "farm_url": farm_url,
         "snapshot_id": request.snapshot_id,
         "schema_version": schema_version,
-        "fetch_duration_ms": fetch_duration_ms,
-        "enable_llm": request.enable_llm
+        "fetch_duration_ms": fetch_duration_ms
     }
     
     db = await get_db()
-    # Use enable_llm from request (defaults to False)
-    result = await execute_pipeline(
-        snapshot_data, db, run_id=run_id, started_at=started_at,
-        provenance=provenance, enable_llm=request.enable_llm
-    )
+    result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
     
-    async def run_pipeline_background():
-        """Execute pipeline and reconciliation in background"""
-        import sys
-        print(f"[BACKGROUND] Pipeline started for run {run_id}, enable_llm={request.enable_llm}", flush=True)
-        sys.stdout.flush()
+    if not result.success:
+        if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
+            raise HTTPException(status_code=400, detail=result.error)
+        raise HTTPException(status_code=500, detail=result.error)
+    
+    sync_status = SyncStatus.PENDING
+    sync_error = None
+    
+    if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
+        result.run_log.sync_status = SyncStatus.PENDING
+        await db.update_run(result.run_log)
         
-        try:
-            print(f"[BACKGROUND] Calling execute_pipeline...", flush=True)
-            result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
-            print(f"[BACKGROUND] execute_pipeline returned: success={result.success}", flush=True)
-            
-            if not result.success:
-                print(f"[BACKGROUND] Pipeline failed for run {run_id}: {result.error}", flush=True)
-                return
-            
-            if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
-                result.run_log.sync_status = SyncStatus.PENDING
-                await db.update_run(result.run_log)
-                
-                assets = await db.get_assets_by_run(run_id)
-                findings = await db.get_findings_by_run(run_id)
-                rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
-                
-                success, error = await reconcile_to_farm(
-                    run_log=result.run_log,
-                    assets=assets,
-                    findings=findings,
-                    snapshot_id=request.snapshot_id,
-                    farm_url=farm_url,
-                    rejections=rejections
-                )
-                
-                if success:
-                    result.run_log.sync_status = SyncStatus.SYNCED
-                    result.run_log.sync_error = None
-                else:
-                    result.run_log.sync_status = SyncStatus.FAILED
-                    result.run_log.sync_error = error
-                
-                await db.update_run(result.run_log)
-                print(f"[BACKGROUND] Pipeline completed for run {run_id}: {result.run_log.counts.assets_admitted} assets, sync={result.run_log.sync_status.value}", flush=True)
-        except Exception as e:
-            print(f"[BACKGROUND] Pipeline error for run {run_id}: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-    
-    import asyncio
-    asyncio.create_task(run_pipeline_background())
+        assets = await db.get_assets_by_run(run_id)
+        findings = await db.get_findings_by_run(run_id)
+        rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
+        
+        success, error = await reconcile_to_farm(
+            run_log=result.run_log,
+            assets=assets,
+            findings=findings,
+            snapshot_id=request.snapshot_id,
+            farm_url=farm_url,
+            rejections=rejections
+        )
+        
+        if success:
+            result.run_log.sync_status = SyncStatus.SYNCED
+            result.run_log.sync_error = None
+        else:
+            result.run_log.sync_status = SyncStatus.FAILED
+            result.run_log.sync_error = error
+        
+        await db.update_run(result.run_log)
+        sync_status = result.run_log.sync_status
+        sync_error = result.run_log.sync_error
     
     return RunResponse(
-        run_id=run_id,
-        tenant_id=request.tenant_id,
-        status="running",
-        counts=RunCounts(),
-        message=f"Discovery started. Run ID: {run_id}. Check status for updates.",
-        sync_status="pending",
-        sync_error=None
+        run_id=result.run_log.run_id,
+        tenant_id=result.run_log.tenant_id,
+        status=result.run_log.status.value,
+        counts=result.run_log.counts,
+        message=f"Discovery completed from Farm. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated.",
+        sync_status=sync_status.value,
+        sync_error=sync_error
     )
 
 

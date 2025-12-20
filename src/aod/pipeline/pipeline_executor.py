@@ -147,9 +147,12 @@ async def execute_pipeline(
         counts=RunCounts()
     )
     
+    print(f"[PIPELINE] Creating run record {run_id}...", flush=True)
     await db.create_run(run_log)
+    print(f"[PIPELINE] Run record created", flush=True)
     
     try:
+        print(f"[PIPELINE] Validating snapshot...", flush=True)
         snapshot = validate_snapshot(
             data,
             normalize=is_farm_source,
@@ -188,13 +191,13 @@ async def execute_pipeline(
         correlations = correlate_entities_to_planes(candidates, indexes)
         
         enable_llm = bool(provenance and provenance.get("enable_llm", False))
-        logger.info(f"Pipeline LLM config: enable_llm={enable_llm}, provenance={provenance}")
+        print(f"[PIPELINE] LLM config: enable_llm={enable_llm}", flush=True)
         llm_resolution_count = 0
         llm_model_used: Optional[str] = None
         
         if enable_llm:
             import asyncio
-            logger.info(f"LLM fringe resolution enabled for run {run_id}")
+            print(f"[PIPELINE] Starting LLM fringe resolution for {len(correlations)} correlations...", flush=True)
             
             async def resolve_single(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
                 """Apply fringe resolution to a single correlation."""
@@ -217,7 +220,9 @@ async def execute_pipeline(
                 async with semaphore:
                     return await resolve_single(correlation)
             
+            print(f"[PIPELINE] Awaiting asyncio.gather for LLM resolution...", flush=True)
             results = await asyncio.gather(*[bounded_resolve(c) for c in correlations])
+            print(f"[PIPELINE] LLM gather completed, got {len(results)} results", flush=True)
             
             updated_correlations = []
             for updated_correlation, explainability in results:

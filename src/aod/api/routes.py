@@ -2188,3 +2188,67 @@ async def two_path_diff(request: TwoPathDiffRequest) -> TwoPathDiffResponse:
         all_match=len(mismatches) == 0,
         mismatches=mismatches
     )
+
+
+class DecisionTraceRequest(BaseModel):
+    """Request for decision trace"""
+    run_id: str
+    activity_window_days: int = 90
+
+
+class DecisionTraceResponse(BaseModel):
+    """Response with decision traces for all assets"""
+    run_id: str
+    traces: dict[str, dict]
+    count: int
+    fields: list[str]
+
+
+@router.post("/debug/decision-trace", response_model=DecisionTraceResponse)
+async def get_decision_traces(request: DecisionTraceRequest):
+    """
+    Get decision traces for all assets in a run.
+    
+    This produces exactly 13 fields per asset for Farm/AOD comparison:
+    - asset_key_used, registered_domain, raw_domains_seen
+    - is_external, is_active, activity_window_days, activity_source, latest_activity_at
+    - idp_present, cmdb_present, infra_excluded, is_shadow, reason_codes
+    """
+    from ..pipeline.decision_trace import compute_decision_trace, decision_traces_to_dict
+    
+    db = await get_db()
+    
+    run_row = await db.fetchrow(
+        "SELECT run_id, status FROM runs WHERE run_id = $1",
+        request.run_id
+    )
+    if not run_row:
+        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+    
+    asset_rows = await db.fetch(
+        "SELECT data FROM assets WHERE run_id = $1",
+        request.run_id
+    )
+    
+    assets = []
+    for row in asset_rows:
+        asset_data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+        asset = Asset.model_validate(asset_data)
+        assets.append(asset)
+    
+    traces = [compute_decision_trace(a, request.activity_window_days) for a in assets]
+    traces_dict = decision_traces_to_dict(traces)
+    
+    fields = [
+        "asset_key_used", "registered_domain", "raw_domains_seen",
+        "is_external", "is_active", "activity_window_days", "activity_source",
+        "latest_activity_at", "idp_present", "cmdb_present", "infra_excluded",
+        "is_shadow", "reason_codes"
+    ]
+    
+    return DecisionTraceResponse(
+        run_id=request.run_id,
+        traces=traces_dict,
+        count=len(traces),
+        fields=fields
+    )

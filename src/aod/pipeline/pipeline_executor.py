@@ -250,6 +250,7 @@ async def execute_pipeline(
                 print(f"[PIPELINE] LLM gather completed", flush=True)
                 
                 llm_result_map = {r[0].entity.entity_id: r for r in llm_results}
+                print(f"[PIPELINE] Building result map...", flush=True)
                 
                 results = []
                 for c in correlations:
@@ -257,6 +258,7 @@ async def execute_pipeline(
                         results.append(llm_result_map[c.entity.entity_id])
                     else:
                         results.append((c, LLMExplainability()))
+                print(f"[PIPELINE] Result map built, processing {len(results)} results", flush=True)
             
             updated_correlations = []
             for updated_correlation, explainability in results:

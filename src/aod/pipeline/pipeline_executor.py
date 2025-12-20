@@ -267,12 +267,11 @@ async def execute_pipeline(
                     llm_resolution_count += 1
                     if explainability.llm_model_id and not llm_model_used:
                         llm_model_used = f"{explainability.llm_provider}:{explainability.llm_model_id}"
-                    logger.info(f"LLM resolved {updated_correlation.entity.entity_id}: {explainability.llm_reason}")
             
             correlations = updated_correlations
             run_log.counts.llm_calls = llm_resolution_count
             run_log.counts.llm_model = llm_model_used
-            logger.info(f"LLM fringe resolution completed: {llm_resolution_count} entities resolved")
+            print(f"[PIPELINE] LLM processing done: {llm_resolution_count} calls", flush=True)
         
         def is_finance_truly_ambiguous(plane_match) -> bool:
             """

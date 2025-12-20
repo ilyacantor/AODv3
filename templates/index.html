@@ -441,8 +441,10 @@
                             Identifies keying, activity, governance, and infra exclusion mismatches.
                         </div>
                         <div class="debug-input">
-                            <input type="text" class="form-input" id="decisionTraceRunId" placeholder="Run ID">
-                            <input type="number" class="form-input" id="decisionTraceWindow" placeholder="Activity window (days, default 90)" style="width:180px;">
+                            <select class="form-input" id="decisionTraceRunId" style="flex:1;">
+                                <option value="">Select a run...</option>
+                            </select>
+                            <input type="number" class="form-input" id="decisionTraceWindow" placeholder="Window (days)" style="width:120px;" value="90">
                             <button class="btn btn-primary" id="runDecisionTrace">Load Traces</button>
                         </div>
                         <div class="debug-input" style="margin-top:0.5rem;">
@@ -655,8 +657,28 @@
             
             let decisionTracesCache = null;
             
+            async function loadDecisionTraceRuns() {
+                const select = document.getElementById('decisionTraceRunId');
+                try {
+                    const response = await fetch('/api/runs');
+                    const runs = await response.json();
+                    select.innerHTML = '<option value="">Select a run...</option>';
+                    runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS')
+                        .forEach(run => {
+                            const opt = document.createElement('option');
+                            opt.value = run.run_id;
+                            const date = run.created_at ? new Date(run.created_at).toLocaleDateString() : '';
+                            opt.textContent = `${run.run_id} (${run.tenant_name || 'unknown'}, ${date})`;
+                            select.appendChild(opt);
+                        });
+                } catch (err) {
+                    console.error('Failed to load runs for decision trace:', err);
+                }
+            }
+            loadDecisionTraceRuns();
+            
             document.getElementById('runDecisionTrace').addEventListener('click', async () => {
-                const runId = document.getElementById('decisionTraceRunId').value.trim();
+                const runId = document.getElementById('decisionTraceRunId').value;
                 const windowDays = parseInt(document.getElementById('decisionTraceWindow').value) || 90;
                 const resultDiv = document.getElementById('decisionTraceResult');
                 

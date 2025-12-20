@@ -431,6 +431,25 @@
                         </div>
                         <div id="twoPathDiffResult" class="test-result hidden"></div>
                     </div>
+                    
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">Decision Traces</div>
+                        </div>
+                        <div class="test-card-desc">
+                            View all 13 decision fields per asset for Farm/AOD comparison. 
+                            Identifies keying, activity, governance, and infra exclusion mismatches.
+                        </div>
+                        <div class="debug-input">
+                            <input type="text" class="form-input" id="decisionTraceRunId" placeholder="Run ID">
+                            <input type="number" class="form-input" id="decisionTraceWindow" placeholder="Activity window (days, default 90)" style="width:180px;">
+                            <button class="btn btn-primary" id="runDecisionTrace">Load Traces</button>
+                        </div>
+                        <div class="debug-input" style="margin-top:0.5rem;">
+                            <input type="text" class="form-input" id="decisionTraceFilter" placeholder="Filter by asset key..." style="flex:1;">
+                        </div>
+                        <div id="decisionTraceResult" class="test-result hidden" style="max-height:400px;overflow-y:auto;"></div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -633,6 +652,118 @@
                     resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
                 }
             });
+            
+            let decisionTracesCache = null;
+            
+            document.getElementById('runDecisionTrace').addEventListener('click', async () => {
+                const runId = document.getElementById('decisionTraceRunId').value.trim();
+                const windowDays = parseInt(document.getElementById('decisionTraceWindow').value) || 90;
+                const resultDiv = document.getElementById('decisionTraceResult');
+                
+                if (!runId) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.classList.remove('hidden');
+                    resultDiv.innerHTML = 'Please enter a Run ID';
+                    return;
+                }
+                
+                resultDiv.className = 'test-result running';
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = '<div class="spinner"></div> Loading decision traces...';
+                
+                try {
+                    const response = await fetch('/api/debug/decision-trace', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ run_id: runId, activity_window_days: windowDays })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        resultDiv.className = 'test-result failure';
+                        resultDiv.innerHTML = `<strong>Error:</strong> ${data.detail || data.error}`;
+                        return;
+                    }
+                    
+                    decisionTracesCache = data.traces;
+                    renderDecisionTraces(data.traces, data.count, data.fields);
+                } catch (err) {
+                    resultDiv.className = 'test-result failure';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
+                }
+            });
+            
+            document.getElementById('decisionTraceFilter').addEventListener('input', (e) => {
+                if (!decisionTracesCache) return;
+                const filter = e.target.value.toLowerCase().trim();
+                const filtered = {};
+                let count = 0;
+                for (const [key, trace] of Object.entries(decisionTracesCache)) {
+                    if (!filter || key.toLowerCase().includes(filter)) {
+                        filtered[key] = trace;
+                        count++;
+                    }
+                }
+                renderDecisionTraces(filtered, count, null);
+            });
+            
+            function renderDecisionTraces(traces, count, fields) {
+                const resultDiv = document.getElementById('decisionTraceResult');
+                resultDiv.className = 'test-result success';
+                
+                let html = `<strong>${count} assets</strong>`;
+                if (fields) {
+                    html += ` | Fields: ${fields.length}`;
+                }
+                html += `<br><br>`;
+                
+                html += `<table style="width:100%;font-size:0.75rem;border-collapse:collapse;">`;
+                html += `<thead><tr style="position:sticky;top:0;background:var(--slate-800);z-index:1;">`;
+                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Asset</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Shadow</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Active</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">IdP</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">CMDB</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Ext</th>`;
+                html += `<th style="text-align:center;padding:4px;border-bottom:1px solid var(--slate-600);">Infra</th>`;
+                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Domain</th>`;
+                html += `<th style="text-align:left;padding:4px;border-bottom:1px solid var(--slate-600);">Reason Codes</th>`;
+                html += `</tr></thead><tbody>`;
+                
+                const sortedKeys = Object.keys(traces).sort();
+                const displayLimit = 200;
+                const displayKeys = sortedKeys.slice(0, displayLimit);
+                
+                for (const key of displayKeys) {
+                    const t = traces[key];
+                    const shadowStyle = t.is_shadow ? 'color:var(--orange-400);font-weight:600;' : 'color:var(--slate-500);';
+                    const activeStyle = t.is_active ? 'color:var(--green-400);' : 'color:var(--red-400);';
+                    const idpStyle = t.idp_present ? 'color:var(--green-400);' : 'color:var(--slate-500);';
+                    const cmdbStyle = t.cmdb_present ? 'color:var(--green-400);' : 'color:var(--slate-500);';
+                    const extStyle = t.is_external ? 'color:var(--cyan-400);' : 'color:var(--slate-500);';
+                    const infraStyle = t.infra_excluded ? 'color:var(--purple-400);' : 'color:var(--slate-500);';
+                    
+                    html += `<tr style="border-bottom:1px solid var(--slate-700);">`;
+                    html += `<td style="padding:4px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${key}">${key}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${shadowStyle}">${t.is_shadow ? '⚠' : '–'}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${activeStyle}">${t.is_active ? '✓' : '✗'}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${idpStyle}">${t.idp_present ? '✓' : '–'}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${cmdbStyle}">${t.cmdb_present ? '✓' : '–'}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${extStyle}">${t.is_external ? '✓' : '–'}</td>`;
+                    html += `<td style="text-align:center;padding:4px;${infraStyle}">${t.infra_excluded ? '✓' : '–'}</td>`;
+                    html += `<td style="padding:4px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.registered_domain || ''}">${t.registered_domain || '–'}</td>`;
+                    html += `<td style="padding:4px;font-size:0.7rem;color:var(--slate-400);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.reason_codes || []).join(', ')}">${(t.reason_codes || []).join(', ')}</td>`;
+                    html += `</tr>`;
+                }
+                
+                html += `</tbody></table>`;
+                
+                if (sortedKeys.length > displayLimit) {
+                    html += `<br><em style="color:var(--slate-500);">Showing first ${displayLimit} of ${sortedKeys.length} assets. Use filter to narrow results.</em>`;
+                }
+                
+                resultDiv.innerHTML = html;
+            }
         }
         
         function safeStr(value, maxLen = 200) {

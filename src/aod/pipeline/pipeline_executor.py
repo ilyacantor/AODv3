@@ -199,7 +199,7 @@ async def execute_pipeline(
             import asyncio
             from ..llm.fringe_integration import should_trigger_fringe
             
-            MAX_LLM_CANDIDATES = 50
+            MAX_LLM_CANDIDATES = 5
             
             def needs_llm(c: CorrelationResult) -> bool:
                 """Pre-filter: only process candidates that actually need LLM"""

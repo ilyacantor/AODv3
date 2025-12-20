@@ -17,6 +17,75 @@ from .vendor_inference import DOMAIN_TO_VENDOR
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
 VALID_LIFECYCLES = {"prod", "production", "staging", "stage", "live", "active"}
+
+# Corporate/marketing/vendor root domains - NEVER admit these
+# These are vendor web properties, not operational assets
+CORPORATE_ROOT_DOMAINS = {
+    # Atlassian
+    "atlassian.com",
+    # Salesforce
+    "salesforce.com",
+    # Microsoft
+    "microsoft.com",
+    # Google
+    "google.com",
+    # Amazon
+    "amazon.com",
+    # Adobe
+    "adobe.com",
+    # Oracle
+    "oracle.com",
+    # SAP
+    "sap.com",
+    # IBM
+    "ibm.com",
+    # Cisco
+    "cisco.com",
+    # VMware
+    "vmware.com",
+    # ServiceNow
+    "servicenow.com",
+    # Workday
+    "workday.com",
+    # Zendesk
+    "zendesk.com",
+    # HubSpot
+    "hubspot.com",
+    # Intuit
+    "intuit.com",
+    # Autodesk
+    "autodesk.com",
+    # Splunk
+    "splunk.com",
+    # Datadog
+    "datadog.com",
+    # Cloudflare
+    "cloudflare.com",
+    # Twilio
+    "twilio.com",
+    # Stripe
+    "stripe.com",
+    # MongoDB
+    "mongodb.com",
+    # Elastic
+    "elastic.co",
+    # Snowflake
+    "snowflake.com",
+    # Okta
+    "okta.com",
+    # PagerDuty
+    "pagerduty.com",
+}
+
+
+def is_corporate_root_domain(domain: Optional[str]) -> bool:
+    """Check if domain is a corporate/marketing root domain that should never be admitted."""
+    if not domain:
+        return False
+    domain_lower = domain.lower().strip()
+    return domain_lower in CORPORATE_ROOT_DOMAINS
+
+
 VALID_CLOUD_RESOURCE_TYPES = {
     "compute", "ec2", "vm", "instance", "container", "ecs", "eks", "kubernetes",
     "database", "rds", "dynamodb", "aurora", "redis", "elasticache",
@@ -361,9 +430,11 @@ def apply_admission_criteria(
     - Cloud plane: cloud match AND resource_type indicates real system/resource
     - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
     - Discovery plane: ≥2 distinct sources AND recent activity ≤90 days (allows shadow IT admission)
-    - Propagated governance: IdP/CMDB presence propagated from vendor sibling
     
-    IMPORTANT: Vendor alone is not admission.
+    INVARIANTS:
+    - Vendor governance NEVER causes admission (only explains/classifies)
+    - Corporate/marketing root domains are ALWAYS rejected
+    - Vendor alone is not admission
     
     Args:
         correlation: Correlation result for the entity
@@ -371,28 +442,33 @@ def apply_admission_criteria(
         run_id: Run ID
         snapshot_id: Snapshot ID
         observations: Discovery observations for this entity
-        propagated_idp: IdP governance propagated from vendor sibling
-        propagated_cmdb: CMDB governance propagated from vendor sibling
-        propagation_reason: Explanation of governance propagation
+        propagated_idp: IdP governance propagated from vendor sibling (for classification only)
+        propagated_cmdb: CMDB governance propagated from vendor sibling (for classification only)
+        propagation_reason: Explanation of governance propagation (for metadata only)
         
     Returns:
         AdmissionResult indicating whether entity is admitted
     """
     entity = correlation.entity
     
+    # GATE 1: Reject corporate/marketing root domains unconditionally
+    if is_corporate_root_domain(entity.domain):
+        return AdmissionResult(
+            admitted=False,
+            rejection_reason=f"Corporate root domain: {entity.domain}"
+        )
+    
+    # Check each admission criterion
     idp_admitted, idp_reason = check_idp_admission(correlation)
     cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(observations)
     
-    governance_admitted = False
-    governance_reason = ""
-    if propagated_idp or propagated_cmdb:
-        governance_admitted = True
-        governance_reason = f"Propagated governance: {propagation_reason}"
+    # NOTE: Vendor governance propagation does NOT cause admission
+    # It is recorded as metadata for classification/explanation only
     
-    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted, governance_admitted]):
+    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
             rejection_reason="No admission criteria satisfied"
@@ -409,8 +485,6 @@ def apply_admission_criteria(
         admission_reasons.append(finance_reason)
     if discovery_admitted:
         admission_reasons.append(discovery_reason)
-    if governance_admitted:
-        admission_reasons.append(governance_reason)
     
     lens_status = LensStatuses(
         idp=LensStatus(correlation.idp.status.value),
@@ -444,8 +518,6 @@ def apply_admission_criteria(
         tags.append("finance_tracked")
     if discovery_admitted:
         tags.append("discovery_only")
-    if governance_admitted:
-        tags.append("vendor_governed")
     
     activity_evidence = extract_activity_timestamps(correlation, entity, observations)
     

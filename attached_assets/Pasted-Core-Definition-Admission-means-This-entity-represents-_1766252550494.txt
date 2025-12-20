@@ -1,0 +1,119 @@
+Core Definition
+
+Admission means:
+
+“This entity represents a real, operational system that the organization uses, operates, or pays for — such that governance, risk, and optimization decisions make sense.”
+
+Admission is not discovery, governance, or shadow detection.
+
+Admit an Entity IF AND ONLY IF at least one of the following is true:
+1. Direct Governance Signal (Strong)
+
+The entity has a direct match to any of:
+
+IdP application (SSO / SCIM / OAuth)
+
+CMDB configuration item
+
+Cloud resource
+
+Endpoint agent
+
+➡️ Admit unconditionally.
+
+2. Direct Financial Commitment
+
+The entity has:
+
+A recurring contract, OR
+
+Repeated financial transactions clearly tied to the entity
+
+➡️ Admit.
+
+3. Multi-Plane Operational Evidence
+
+The entity shows real system usage, defined as:
+
+Evidence from two or more operational planes, e.g.:
+
+browser + saas_audit_log
+
+endpoint + cloud_api
+
+network_scan + IdP token usage
+
+Discovery planes like DNS or browser alone do not qualify.
+
+➡️ Admit.
+
+Do NOT Admit an Entity If:
+❌ Corporate / Marketing / Vendor Root Domains
+
+Examples:
+
+atlassian.com
+
+salesforce.com
+
+microsoft.com
+
+google.com
+
+Even if:
+
+highly active
+
+many discovery sources
+
+vendor governance exists elsewhere
+
+These are vendor web properties, not operational assets.
+
+➡️ Reject admission.
+
+❌ Discovery-Only Noise
+
+DNS-only
+
+Browser-only
+
+Proxy-only
+
+Single-plane activity
+
+➡️ Reject admission.
+
+Vendor Governance Rule (Critical)
+
+Vendor governance must NEVER cause admission.
+
+Governance propagation may:
+
+explain an asset
+
+affect shadow classification
+
+add reason codes
+
+Governance propagation must not:
+
+admit a new asset
+
+override lack of direct operational signal
+
+Governance can explain an asset — it cannot create one.
+
+Output Requirements
+
+For every evaluated entity, return:
+
+admitted: true | false
+
+admission_reason (e.g., DIRECT_IDP, MULTI_PLANE_USAGE, REJECTED_DISCOVERY_ONLY, REJECTED_CORPORATE_ROOT)
+
+If rejected, do not generate a shadow decision trace
+
+Invariant to Enforce
+
+An entity that is not a real operational system must never appear as a shadow, governed, or risk-scored asset.

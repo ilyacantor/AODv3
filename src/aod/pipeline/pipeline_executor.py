@@ -25,41 +25,54 @@ from .aod_agent_reconcile import VENDOR_TO_DOMAIN
 MAX_OBSERVATION_SAMPLES = 2000
 
 
-def _get_rejection_key(candidate: CandidateEntity) -> str:
+def _get_rejection_key(candidate: CandidateEntity) -> str | None:
     """
     Extract canonical rejection key matching Farm's expectations.
 
-    Uses same priority logic as _extract_raw_domain() in aod_agent_reconcile.py
-    to ensure rejected assets use the same keys as admitted assets.
+    CRITICAL: This MUST match the exact logic of _extract_raw_domain() in
+    aod_agent_reconcile.py to ensure rejected assets use the same keys as
+    admitted assets. Any divergence causes KEY_NORMALIZATION_MISMATCH errors.
 
-    Priority order:
+    TODO: Refactor to share code with _extract_raw_domain() to eliminate duplication.
+    Consider extracting to a shared utility that works with both Asset and CandidateEntity.
+
+    Priority order (matches _extract_raw_domain() exactly):
     1. Domain from candidate (preserves subdomains for host-level granularity)
-    2. Name if it looks like a domain
-    3. Vendor lookup using VENDOR_TO_DOMAIN
-    4. Fallback: Normalized name
+    2. Name if it looks like a domain (TLD length heuristic: 2-4 chars, alphabetic)
+    3. Direct vendor lookup using VENDOR_TO_DOMAIN
+    4. Normalized name vendor lookup
+    5. None (no forced fallback - let caller handle)
     """
-    # Priority 1: Domain (preserve subdomains)
-    if candidate.domain:
+    from .aod_agent_reconcile import _normalize_name_for_vendor_lookup
+
+    # Priority 1: Domain (preserve subdomains, no normalization)
+    if candidate.domain and "." in candidate.domain:
         return candidate.domain.lower().strip()
 
     # Priority 2: Name if it looks like a domain
+    # Uses TLD LENGTH HEURISTIC (2-4 alphabetic chars) instead of hardcoded list
+    # Handles .uk, .com, .tech, .cloud, and future TLDs robustly
     name = candidate.original_name.lower().strip()
     if "." in name:
         parts = name.split(".")
-        if len(parts) >= 2:
-            tld = parts[-1]
-            if tld in ("com", "net", "org", "io", "co", "app", "dev", "us", "cloud", "ai"):
-                return name
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            return name
 
-    # Priority 3: Vendor lookup
+    # Priority 3: Direct vendor lookup
     if candidate.vendor and candidate.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = candidate.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
             return VENDOR_TO_DOMAIN[vendor_key]
 
-    # Fallback: Normalized name
-    import re
-    return re.sub(r'[^a-z0-9]', '', name.lower())
+    # Priority 4: Normalized name vendor lookup
+    # Handles cases like "Slack Inc." -> "slack" -> "slack.com"
+    normalized_name = _normalize_name_for_vendor_lookup(candidate.original_name)
+    if normalized_name in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_name]
+
+    # No match: Return None instead of forcing a fallback
+    # Caller must decide how to handle (e.g., use entity_id, skip rejection, etc.)
+    return None
 
 
 @dataclass
@@ -236,6 +249,12 @@ async def execute_pipeline(
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
                 rejection_key = _get_rejection_key(candidate)
+                if not rejection_key:
+                    # No canonical key extractable - use normalized name as fallback
+                    # This won't match Farm's expectations, but ensures rejection is recorded
+                    import re
+                    rejection_key = re.sub(r'[^a-z0-9]', '', candidate.original_name.lower()) or candidate.entity_id
+
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
                     rejection_id, run_id,
@@ -259,6 +278,12 @@ async def execute_pipeline(
                 assets.append(admission_result.asset)
             else:
                 rejection_key = _get_rejection_key(candidate)
+                if not rejection_key:
+                    # No canonical key extractable - use normalized name as fallback
+                    # This won't match Farm's expectations, but ensures rejection is recorded
+                    import re
+                    rejection_key = re.sub(r'[^a-z0-9]', '', candidate.original_name.lower()) or candidate.entity_id
+
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
                     rejection_id, run_id,

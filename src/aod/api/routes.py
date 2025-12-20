@@ -2218,23 +2218,11 @@ async def get_decision_traces(request: DecisionTraceRequest):
     
     db = await get_db()
     
-    run_row = await db.fetchrow(
-        "SELECT run_id, status FROM runs WHERE run_id = $1",
-        request.run_id
-    )
-    if not run_row:
+    run = await db.get_run(request.run_id)
+    if not run:
         raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
     
-    asset_rows = await db.fetch(
-        "SELECT data FROM assets WHERE run_id = $1",
-        request.run_id
-    )
-    
-    assets = []
-    for row in asset_rows:
-        asset_data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
-        asset = Asset.model_validate(asset_data)
-        assets.append(asset)
+    assets = await db.get_assets_by_run(request.run_id)
     
     traces = [compute_decision_trace(a, request.activity_window_days) for a in assets]
     traces_dict = decision_traces_to_dict(traces)

@@ -673,8 +673,8 @@
                 }
             });
             
-            let decisionTracesCache = null;
-            let decisionTraceFilter = 'all';
+        let decisionTracesCache = null;
+        let decisionTraceFilter = 'all';
             
             async function loadDecisionTraceRuns() {
                 const select = document.getElementById('decisionTraceRunId');
@@ -806,7 +806,9 @@
                 resultDiv.innerHTML = html;
             }
             
-            function showDecisionDetail(assetKey) {
+        }
+        
+        function showDecisionDetail(assetKey) {
                 const t = decisionTracesCache[assetKey];
                 if (!t) return;
                 
@@ -858,41 +860,40 @@
                         </div>
                     </div>
                 `;
-                detailDiv.innerHTML = html;
-                detailDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            detailDiv.innerHTML = html;
+            detailDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        function compareFarmTrace(assetKey) {
+            const aod = decisionTracesCache[assetKey];
+            const farmInput = document.getElementById('farmTraceInput').value.trim();
+            const resultDiv = document.getElementById('farmCompareResult');
+            
+            if (!farmInput) {
+                resultDiv.innerHTML = '<p style="color:var(--red-400);margin-top:0.5rem;">Paste Farm trace JSON first</p>';
+                return;
             }
             
-            function compareFarmTrace(assetKey) {
-                const aod = decisionTracesCache[assetKey];
-                const farmInput = document.getElementById('farmTraceInput').value.trim();
-                const resultDiv = document.getElementById('farmCompareResult');
+            try {
+                const farm = JSON.parse(farmInput);
+                const fields = ['asset_key_used','registered_domain','is_external','is_active','activity_window_days','activity_source','idp_present','cmdb_present','infra_excluded','is_shadow'];
+                let diffs = [];
                 
-                if (!farmInput) {
-                    resultDiv.innerHTML = '<p style="color:var(--red-400);margin-top:0.5rem;">Paste Farm trace JSON first</p>';
-                    return;
+                for (const f of fields) {
+                    const aodVal = JSON.stringify(aod[f]);
+                    const farmVal = JSON.stringify(farm[f]);
+                    if (aodVal !== farmVal) {
+                        diffs.push(`<tr><td style="color:var(--red-400);">${f}</td><td>${farmVal}</td><td>${aodVal}</td></tr>`);
+                    }
                 }
                 
-                try {
-                    const farm = JSON.parse(farmInput);
-                    const fields = ['asset_key_used','registered_domain','is_external','is_active','activity_window_days','activity_source','idp_present','cmdb_present','infra_excluded','is_shadow'];
-                    let diffs = [];
-                    
-                    for (const f of fields) {
-                        const aodVal = JSON.stringify(aod[f]);
-                        const farmVal = JSON.stringify(farm[f]);
-                        if (aodVal !== farmVal) {
-                            diffs.push(`<tr><td style="color:var(--red-400);">${f}</td><td>${farmVal}</td><td>${aodVal}</td></tr>`);
-                        }
-                    }
-                    
-                    if (diffs.length === 0) {
-                        resultDiv.innerHTML = '<p style="color:var(--green-400);margin-top:0.75rem;">All fields match!</p>';
-                    } else {
-                        resultDiv.innerHTML = `<table style="width:100%;margin-top:0.75rem;font-size:0.8rem;"><tr style="color:var(--slate-400);"><th>Field</th><th>Farm</th><th>AOD</th></tr>${diffs.join('')}</table>`;
-                    }
-                } catch (e) {
-                    resultDiv.innerHTML = `<p style="color:var(--red-400);margin-top:0.5rem;">Invalid JSON: ${e.message}</p>`;
+                if (diffs.length === 0) {
+                    resultDiv.innerHTML = '<p style="color:var(--green-400);margin-top:0.75rem;">All fields match!</p>';
+                } else {
+                    resultDiv.innerHTML = `<table style="width:100%;margin-top:0.75rem;font-size:0.8rem;"><tr style="color:var(--slate-400);"><th>Field</th><th>Farm</th><th>AOD</th></tr>${diffs.join('')}</table>`;
                 }
+            } catch (e) {
+                resultDiv.innerHTML = `<p style="color:var(--red-400);margin-top:0.5rem;">Invalid JSON: ${e.message}</p>`;
             }
         }
         

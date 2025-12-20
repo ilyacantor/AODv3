@@ -482,6 +482,8 @@
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
+        let decisionTracesCache = null;
+        let decisionTraceFilter = 'all';
         
         function initModeToggle() {
             const toggle = document.getElementById('modeToggle');
@@ -672,9 +674,6 @@
                     resultDiv.innerHTML = `<strong>Error:</strong> ${err.message}`;
                 }
             });
-            
-        let decisionTracesCache = null;
-        let decisionTraceFilter = 'all';
             
             async function loadDecisionTraceRuns() {
                 const select = document.getElementById('decisionTraceRunId');

@@ -199,6 +199,8 @@ async def execute_pipeline(
             import asyncio
             from ..llm.fringe_integration import should_trigger_fringe
             
+            MAX_LLM_CANDIDATES = 50
+            
             def needs_llm(c: CorrelationResult) -> bool:
                 """Pre-filter: only process candidates that actually need LLM"""
                 cmdb_matched = c.cmdb.status == MatchStatus.MATCHED
@@ -208,12 +210,13 @@ async def execute_pipeline(
                 )
                 return should_trigger
             
-            candidates_for_llm = [c for c in correlations if needs_llm(c)]
-            print(f"[PIPELINE] LLM fringe: {len(candidates_for_llm)}/{len(correlations)} need resolution", flush=True)
+            all_candidates_for_llm = [c for c in correlations if needs_llm(c)]
+            candidates_for_llm = all_candidates_for_llm[:MAX_LLM_CANDIDATES]
+            print(f"[PIPELINE] LLM fringe: {len(candidates_for_llm)}/{len(all_candidates_for_llm)} candidates (max {MAX_LLM_CANDIDATES})", flush=True)
             
-            if not candidates_for_llm:
-                print(f"[PIPELINE] No candidates need LLM resolution, skipping", flush=True)
-            else:
+            results = [(c, LLMExplainability()) for c in correlations]
+            
+            if candidates_for_llm:
                 processed_count = 0
                 
                 async def resolve_single(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
@@ -228,11 +231,11 @@ async def execute_pipeline(
                             enable_llm=True
                         )
                         processed_count += 1
-                        if processed_count % 50 == 0:
+                        if processed_count % 10 == 0:
                             print(f"[PIPELINE] LLM progress: {processed_count}/{len(candidates_for_llm)}", flush=True)
                         return result
                     except Exception as e:
-                        logger.error(f"Fringe resolution error for {correlation.entity.entity_id}: {e}")
+                        print(f"[PIPELINE] LLM error for {correlation.entity.entity_id}: {e}", flush=True)
                         return correlation, LLMExplainability()
                 
                 MAX_CONCURRENT = 10
@@ -242,7 +245,7 @@ async def execute_pipeline(
                     async with semaphore:
                         return await resolve_single(correlation)
                 
-                print(f"[PIPELINE] Starting LLM gather for {len(candidates_for_llm)} candidates...", flush=True)
+                print(f"[PIPELINE] Starting LLM gather...", flush=True)
                 llm_results = await asyncio.gather(*[bounded_resolve(c) for c in candidates_for_llm])
                 print(f"[PIPELINE] LLM gather completed", flush=True)
                 

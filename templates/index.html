@@ -219,6 +219,11 @@
         .mode-indicator { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
         .mode-indicator.dev { background: rgba(148, 163, 184, 0.2); color: var(--slate-400); }
         .mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .llm-stats { display: flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem; padding: 0.3rem 0.6rem; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 6px; font-size: 0.75rem; color: var(--purple-400); }
+        .llm-stats.hidden { display: none; }
+        .llm-stats-label { font-weight: 700; }
+        .llm-stats-count { font-weight: 600; color: var(--purple-300); }
+        .llm-stats-model { color: var(--slate-400); font-size: 0.7rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .main-tabs { display: flex; background: var(--gray-900); border-bottom: 1px solid var(--gray-700); padding: 0 2rem; }
         .main-tab { padding: 1rem 1.5rem; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; border-bottom: 3px solid transparent; margin-bottom: -1px; }
         .main-tab:hover { color: white; background: rgba(30, 41, 59, 0.3); }
@@ -252,6 +257,12 @@
                     <div class="toggle-knob"></div>
                 </div>
                 <span class="mode-label" id="prodLabel">Prod</span>
+            </div>
+            <div class="llm-stats hidden" id="llmStats" title="LLM calls made during this run">
+                <span class="llm-stats-label">LLM</span>
+                <span class="llm-stats-count" id="llmCallCount">0</span>
+                <span>calls</span>
+                <span class="llm-stats-model" id="llmModel"></span>
             </div>
             <button class="btn-refresh" id="refreshBtn" title="Refresh page">↻ Refresh</button>
             <button class="btn-help" id="helpBtn">? Help</button>
@@ -476,6 +487,27 @@
         
         function getLlmEnabled() {
             return llmMode === 'prod';
+        }
+        
+        function updateLlmStats(calls, model) {
+            const llmStats = document.getElementById('llmStats');
+            llmStats.classList.remove('hidden');
+            document.getElementById('llmCallCount').textContent = calls;
+            document.getElementById('llmModel').textContent = model ? `(${model.split(':').pop()})` : '';
+            localStorage.setItem('aod_llm_stats', JSON.stringify({ calls, model }));
+        }
+        
+        function initLlmStats() {
+            const saved = localStorage.getItem('aod_llm_stats');
+            if (saved) {
+                try {
+                    const { calls, model } = JSON.parse(saved);
+                    const llmStats = document.getElementById('llmStats');
+                    llmStats.classList.remove('hidden');
+                    document.getElementById('llmCallCount').textContent = calls;
+                    document.getElementById('llmModel').textContent = model ? `(${model.split(':').pop()})` : '';
+                } catch (e) {}
+            }
         }
         
         function initMainTabs() {
@@ -1453,6 +1485,8 @@
                 document.getElementById('statObservations').textContent = run.counts.observations_in;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
                 document.getElementById('statRejected').textContent = run.counts.rejected;
+                
+                updateLlmStats(run.counts.llm_calls || 0, run.counts.llm_model || '');
             } catch (e) { console.error('Failed to load run details:', e); }
             
             try {
@@ -1579,7 +1613,7 @@
                 const r = await fetch('/api/runs/from-farm', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, llm_enabled: getLlmEnabled() }) 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, enable_llm: getLlmEnabled() }) 
                 });
                 
                 const result = await r.json();
@@ -1623,6 +1657,7 @@
         });
         
         initModeToggle();
+        initLlmStats();
         initMainTabs();
         initTestTab();
         checkHealth(); 

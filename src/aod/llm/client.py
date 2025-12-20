@@ -69,10 +69,16 @@ class GeminiClient(LLMClient):
     
     async def generate_json(self, prompt: str, schema: dict) -> LLMResponse:
         """Generate JSON response using Gemini"""
+        import asyncio
+        
         try:
             from google import genai
             from google.genai import types
-            
+        except ImportError as e:
+            logger.error(f"Gemini SDK not available: {e}")
+            return LLMResponse(success=False, error=f"SDK_UNAVAILABLE: {e}", provider=self.provider, model_id=self.model_id)
+        
+        try:
             client = self._get_client()
             
             system_prompt = (
@@ -84,13 +90,19 @@ class GeminiClient(LLMClient):
             
             full_prompt = f"{prompt}\n\nRespond with JSON matching this schema:\n{json.dumps(schema, indent=2)}"
             
-            response = client.models.generate_content(
-                model=self._model,
-                contents=[types.Content(role="user", parts=[types.Part(text=full_prompt)])],
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    response_mime_type="application/json",
-                ),
+            def _sync_call():
+                return client.models.generate_content(
+                    model=self._model,
+                    contents=[types.Content(role="user", parts=[types.Part(text=full_prompt)])],
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        response_mime_type="application/json",
+                    ),
+                )
+            
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, _sync_call),
+                timeout=30.0
             )
             
             if not response.text:
@@ -103,6 +115,9 @@ class GeminiClient(LLMClient):
             
             return LLMResponse(success=True, data=data, provider=self.provider, model_id=self.model_id)
             
+        except asyncio.TimeoutError:
+            logger.warning(f"Gemini API timeout after 30s")
+            return LLMResponse(success=False, error="TIMEOUT: 30s", provider=self.provider, model_id=self.model_id)
         except json.JSONDecodeError as e:
             logger.warning(f"Gemini returned invalid JSON: {e}")
             return LLMResponse(success=False, error=f"Invalid JSON: {e}", provider=self.provider, model_id=self.model_id)
@@ -143,6 +158,14 @@ class OpenAIClient(LLMClient):
     
     async def generate_json(self, prompt: str, schema: dict) -> LLMResponse:
         """Generate JSON response using OpenAI"""
+        import asyncio
+        
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            logger.error(f"OpenAI SDK not available: {e}")
+            return LLMResponse(success=False, error=f"SDK_UNAVAILABLE: {e}", provider=self.provider, model_id=self.model_id)
+        
         try:
             client = self._get_client()
             
@@ -155,14 +178,20 @@ class OpenAIClient(LLMClient):
             
             full_prompt = f"{prompt}\n\nRespond with JSON matching this schema:\n{json.dumps(schema, indent=2)}"
             
-            response = client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": full_prompt}
-                ],
-                response_format={"type": "json_object"},
-                timeout=30,
+            def _sync_call():
+                return client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": full_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    timeout=30,
+                )
+            
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, _sync_call),
+                timeout=30.0
             )
             
             content = response.choices[0].message.content
@@ -176,6 +205,9 @@ class OpenAIClient(LLMClient):
             
             return LLMResponse(success=True, data=data, provider=self.provider, model_id=self.model_id)
             
+        except asyncio.TimeoutError:
+            logger.warning(f"OpenAI API timeout after 30s")
+            return LLMResponse(success=False, error="TIMEOUT: 30s", provider=self.provider, model_id=self.model_id)
         except json.JSONDecodeError as e:
             logger.warning(f"OpenAI returned invalid JSON: {e}")
             return LLMResponse(success=False, error=f"Invalid JSON: {e}", provider=self.provider, model_id=self.model_id)

@@ -1,0 +1,81 @@
+Read
+/home/user/AODv3/src/aod/pipeline/normalize_observations.py
+Read 180 lines
+Grep
+class CandidateEntity|entity.domain|identifiers.domains
+Perfect! I found the root cause. Let me trace through the exact bug:
+
+Bash
+grep -n "entity.domain\|entity.vendor" src/aod/pipeline/admission.py | head -20
+438:            confidence=entity.vendor_hypothesis.confidence,
+439:            basis=entity.vendor_hypothesis.basis
+449:        vendor=entity.vendor,
+... +5 lines
+You're absolutely right! Let me update my understanding and find where the domain evidence is actually being lost. I can see that:
+
+CandidateEntity (normalize_observations.py:12-27) has ONE domain field (singular):
+
+@dataclass
+class CandidateEntity:
+    domain: Optional[str] = None  # ← Only ONE domain!
+
+But AssetIdentifiers expects a LIST of domains:
+
+# admission.py:413-417
+identifiers = AssetIdentifiers(
+    domains=[entity.domain] if entity.domain else [],  # ← Converts single to list
+
+Write
+/home/user/AODv3/ROOT_CAUSE_CORRECTED.md
+# KEY_NORMALIZATION_MISMATCH Root Cause - CORRECTED
+
+ 
+
+## Actual Root Cause (User Correction)
+
+ 
+
+### What I Got Wrong
+
+ 
+
+In my initial review, I incorrectly stated:
+
+- ❌ "Farm expects normalized keys (eTLD+1), not raw subdomain keys"
+
+- ❌ "The vendor fallback overrides existing domain evidence"
+
+ 
+
+### What's Actually Happening
+
+ 
+
+✅ **Farm expects HOST-LEVEL keys** (full subdomains like `login498.edge.com`, `dropboxusercontent.io`)
+
+✅ **Domain evidence is lost during entity correlation/merging**, NOT overridden
+
+ 
+
+## The Real Bug
+
+ 
+
+### Data Structure Mismatch
+
+ 
+
+**CandidateEntity** has ONE domain field:
+
+Show full diff (55 more lines)
+Now let me investigate WHERE exactly domains get lost. Can you help clarify the specific scenario?
+
+Question for you:
+
+When you say "during entity correlation, the asset gets merged with 'Dropbox' vendor entities" - where does this merge happen?
+
+Is it:
+A) During normalize_observations() when multiple observations are collapsed into one entity?
+B) During correlate_entities_to_planes() when matching to CMDB/IDP?
+C) During apply_admission_criteria() when creating the final Asset?
+D) Somewhere else in the pipeline?

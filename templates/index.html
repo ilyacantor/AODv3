@@ -683,8 +683,10 @@
                         .forEach(run => {
                             const opt = document.createElement('option');
                             opt.value = run.run_id;
-                            const date = run.created_at ? new Date(run.created_at).toLocaleDateString() : '';
-                            opt.textContent = `${run.tenant_name || 'Unknown'} - ${date}`;
+                            const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                            const dateStr = run.started_at || run.created_at;
+                            const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
+                            opt.textContent = `${tenant} - ${date}`;
                             select.appendChild(opt);
                         });
                 } catch (err) {

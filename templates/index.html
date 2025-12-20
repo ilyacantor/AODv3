@@ -465,6 +465,9 @@
                     <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
                 </div>
                 
+                <div id="decisionTraceDetail" style="display:none;background:var(--slate-800);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
+                </div>
+                
                 <div id="decisionTraceResult" style="background:var(--slate-800);border-radius:8px;overflow:hidden;">
                     <div style="padding:2rem;text-align:center;color:var(--slate-500);">Select a snapshot to load decision traces</div>
                 </div>
@@ -785,7 +788,8 @@
                 
                 for (const key of sortedKeys) {
                     const t = traces[key];
-                    html += `<tr style="border-bottom:1px solid var(--slate-700);">`;
+                    const escapedKey = key.replace(/'/g, "\\'");
+                    html += `<tr style="border-bottom:1px solid var(--slate-700);cursor:pointer;" onclick="showDecisionDetail('${escapedKey}')" onmouseover="this.style.background='var(--slate-700)'" onmouseout="this.style.background=''">`;
                     html += `<td style="padding:0.5rem 1rem;color:var(--cyan-400);">${key}</td>`;
                     html += `<td style="padding:0.5rem;color:var(--slate-300);">${t.registered_domain || ''}</td>`;
                     html += `<td style="text-align:center;padding:0.5rem;color:${t.is_external ? 'var(--green-400)' : 'var(--slate-500)'};">${t.is_external ? 'Y' : '-'}</td>`;
@@ -800,6 +804,95 @@
                 
                 html += `</tbody></table></div>`;
                 resultDiv.innerHTML = html;
+            }
+            
+            function showDecisionDetail(assetKey) {
+                const t = decisionTracesCache[assetKey];
+                if (!t) return;
+                
+                const detailDiv = document.getElementById('decisionTraceDetail');
+                detailDiv.style.display = 'block';
+                
+                const boolVal = (v) => `<span style="color:${v ? 'var(--cyan-400)' : 'var(--red-400)'};">${v ? 'true' : 'false'}</span>`;
+                const tagColors = {
+                    'HAS_DISCOVERY': 'var(--cyan-600)', 'NO_IDP': 'var(--red-500)', 'NO_CMDB': 'var(--red-500)',
+                    'HAS_FINANCE': 'var(--green-600)', 'HAS_ONGOING_FINANCE': 'var(--green-600)',
+                    'RECENT_ACTIVITY': 'var(--purple-600)', 'HAS_IDP': 'var(--green-600)', 'HAS_CMDB': 'var(--green-600)'
+                };
+                
+                let reasonTags = (t.reason_codes || []).map(code => {
+                    const bg = tagColors[code] || 'var(--slate-600)';
+                    return `<span style="display:inline-block;padding:0.25rem 0.5rem;margin:0.125rem;border-radius:4px;background:${bg};color:white;font-size:0.75rem;">${code}</span>`;
+                }).join('');
+                
+                let html = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                        <h3 style="margin:0;color:var(--cyan-400);font-size:1.25rem;">Decision Trace: ${assetKey}</h3>
+                        <button onclick="document.getElementById('decisionTraceDetail').style.display='none'" style="background:none;border:none;color:var(--slate-400);cursor:pointer;font-size:1.25rem;">&times;</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+                        <div>
+                            <h4 style="color:var(--cyan-400);margin:0 0 1rem 0;font-size:1rem;">AOD Decision Trace</h4>
+                            <table style="width:100%;font-size:0.875rem;">
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">asset_key_used:</td><td style="color:white;text-align:right;">${t.asset_key_used}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">registered_domain:</td><td style="color:white;text-align:right;">${t.registered_domain || ''}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">raw_domains_seen:</td><td style="color:white;text-align:right;">${JSON.stringify(t.raw_domains_seen || [])}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">is_external:</td><td style="text-align:right;">${boolVal(t.is_external)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">is_active:</td><td style="text-align:right;">${boolVal(t.is_active)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">activity_window_days:</td><td style="color:white;text-align:right;">${t.activity_window_days}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">activity_source:</td><td style="color:white;text-align:right;">${t.activity_source || ''}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">latest_activity_at:</td><td style="color:white;text-align:right;font-size:0.75rem;">${t.latest_activity_at || ''}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">idp_present:</td><td style="text-align:right;">${boolVal(t.idp_present)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">cmdb_present:</td><td style="text-align:right;">${boolVal(t.cmdb_present)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">infra_excluded:</td><td style="text-align:right;">${boolVal(t.infra_excluded)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);">is_shadow:</td><td style="text-align:right;">${boolVal(t.is_shadow)}</td></tr>
+                                <tr><td style="padding:0.5rem 0;color:var(--slate-400);vertical-align:top;">reason_codes:</td><td style="text-align:right;">${reasonTags}</td></tr>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 style="color:var(--slate-400);margin:0 0 1rem 0;font-size:1rem;">Farm Decision Trace</h4>
+                            <p style="color:var(--slate-500);font-size:0.875rem;">Paste Farm's trace JSON here for comparison</p>
+                            <textarea id="farmTraceInput" style="width:100%;height:200px;background:var(--slate-900);border:1px solid var(--slate-600);border-radius:4px;color:var(--slate-300);padding:0.75rem;font-family:'Fira Code',monospace;font-size:0.75rem;resize:vertical;" placeholder='{"asset_key_used": "...", ...}'></textarea>
+                            <button class="btn btn-primary" style="margin-top:0.75rem;" onclick="compareFarmTrace('${assetKey.replace(/'/g, "\\'")}')">Compare</button>
+                            <div id="farmCompareResult"></div>
+                        </div>
+                    </div>
+                `;
+                detailDiv.innerHTML = html;
+                detailDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            function compareFarmTrace(assetKey) {
+                const aod = decisionTracesCache[assetKey];
+                const farmInput = document.getElementById('farmTraceInput').value.trim();
+                const resultDiv = document.getElementById('farmCompareResult');
+                
+                if (!farmInput) {
+                    resultDiv.innerHTML = '<p style="color:var(--red-400);margin-top:0.5rem;">Paste Farm trace JSON first</p>';
+                    return;
+                }
+                
+                try {
+                    const farm = JSON.parse(farmInput);
+                    const fields = ['asset_key_used','registered_domain','is_external','is_active','activity_window_days','activity_source','idp_present','cmdb_present','infra_excluded','is_shadow'];
+                    let diffs = [];
+                    
+                    for (const f of fields) {
+                        const aodVal = JSON.stringify(aod[f]);
+                        const farmVal = JSON.stringify(farm[f]);
+                        if (aodVal !== farmVal) {
+                            diffs.push(`<tr><td style="color:var(--red-400);">${f}</td><td>${farmVal}</td><td>${aodVal}</td></tr>`);
+                        }
+                    }
+                    
+                    if (diffs.length === 0) {
+                        resultDiv.innerHTML = '<p style="color:var(--green-400);margin-top:0.75rem;">All fields match!</p>';
+                    } else {
+                        resultDiv.innerHTML = `<table style="width:100%;margin-top:0.75rem;font-size:0.8rem;"><tr style="color:var(--slate-400);"><th>Field</th><th>Farm</th><th>AOD</th></tr>${diffs.join('')}</table>`;
+                    }
+                } catch (e) {
+                    resultDiv.innerHTML = `<p style="color:var(--red-400);margin-top:0.5rem;">Invalid JSON: ${e.message}</p>`;
+                }
             }
         }
         

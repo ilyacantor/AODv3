@@ -463,6 +463,7 @@
                 <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
                     <button class="btn btn-primary decision-filter active" data-filter="all">All</button>
                     <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
+                    <button class="btn btn-secondary decision-filter" data-filter="mismatch">Mismatches</button>
                 </div>
                 
                 <div id="decisionTraceDetail" style="display:none;background:var(--slate-800);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
@@ -484,6 +485,7 @@
         let llmMode = 'dev';
         let decisionTracesCache = null;
         let decisionTraceFilter = 'all';
+        let decisionMismatches = {};
         
         function initModeToggle() {
             const toggle = document.getElementById('modeToggle');
@@ -757,6 +759,7 @@
                 for (const [key, trace] of Object.entries(decisionTracesCache)) {
                     if (textFilter && !key.toLowerCase().includes(textFilter)) continue;
                     if (decisionTraceFilter === 'shadow' && !trace.is_shadow) continue;
+                    if (decisionTraceFilter === 'mismatch' && !decisionMismatches[key]) continue;
                     filtered[key] = trace;
                 }
                 
@@ -887,8 +890,10 @@
                 }
                 
                 if (diffs.length === 0) {
+                    decisionMismatches[assetKey] = false;
                     resultDiv.innerHTML = '<p style="color:var(--green-400);margin-top:0.75rem;">All fields match!</p>';
                 } else {
+                    decisionMismatches[assetKey] = true;
                     resultDiv.innerHTML = `<table style="width:100%;margin-top:0.75rem;font-size:0.8rem;"><tr style="color:var(--slate-400);"><th>Field</th><th>Farm</th><th>AOD</th></tr>${diffs.join('')}</table>`;
                 }
             } catch (e) {

@@ -283,15 +283,17 @@ async def create_run_from_farm(request: FarmRunRequest):
     
     async def run_pipeline_background():
         """Execute pipeline and reconciliation in background"""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Background pipeline started for run {run_id}, enable_llm={request.enable_llm}")
+        import sys
+        print(f"[BACKGROUND] Pipeline started for run {run_id}, enable_llm={request.enable_llm}", flush=True)
+        sys.stdout.flush()
         
         try:
+            print(f"[BACKGROUND] Calling execute_pipeline...", flush=True)
             result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
+            print(f"[BACKGROUND] execute_pipeline returned: success={result.success}", flush=True)
             
             if not result.success:
-                logger.error(f"Pipeline failed for run {run_id}: {result.error}")
+                print(f"[BACKGROUND] Pipeline failed for run {run_id}: {result.error}", flush=True)
                 return
             
             if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
@@ -319,9 +321,9 @@ async def create_run_from_farm(request: FarmRunRequest):
                     result.run_log.sync_error = error
                 
                 await db.update_run(result.run_log)
-                logger.info(f"Pipeline completed for run {run_id}: {result.run_log.counts.assets_admitted} assets, sync={result.run_log.sync_status.value}")
+                print(f"[BACKGROUND] Pipeline completed for run {run_id}: {result.run_log.counts.assets_admitted} assets, sync={result.run_log.sync_status.value}", flush=True)
         except Exception as e:
-            logger.error(f"Background pipeline error for run {run_id}: {e}")
+            print(f"[BACKGROUND] Pipeline error for run {run_id}: {e}", flush=True)
             import traceback
             traceback.print_exc()
     

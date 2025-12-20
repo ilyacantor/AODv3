@@ -6,6 +6,7 @@ from typing import Optional
 
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult
+from .aod_agent_reconcile import VENDOR_TO_DOMAIN, _normalize_name_for_vendor_lookup
 
 
 @dataclass
@@ -108,10 +109,24 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
             domain = extract_domain_from_uri(obs.uri)
         if not domain and _looks_like_domain(obs.name.lower().strip()):
             domain = normalize_domain(obs.name.lower().strip())
-        
+
         hostname = obs.hostname.lower().strip() if obs.hostname else None
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
+
+        # CRITICAL FIX for KEY_NORMALIZATION_MISMATCH:
+        # If no domain extracted yet, try vendor lookup to get canonical domain
+        # This ensures assets like "Stack" -> domain="stack.com" for Farm reconciliation
+        if not domain and vendor:
+            vendor_key = vendor.lower().strip()
+            if vendor_key in VENDOR_TO_DOMAIN:
+                domain = VENDOR_TO_DOMAIN[vendor_key]
+
+        # Final fallback: normalize name and check vendor lookup
+        if not domain:
+            normalized_name = _normalize_name_for_vendor_lookup(canonical_name)
+            if normalized_name in VENDOR_TO_DOMAIN:
+                domain = VENDOR_TO_DOMAIN[normalized_name]
         
         existing_entity = None
         
@@ -154,13 +169,19 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
 
 
 def _looks_like_domain(name: str) -> bool:
-    """Check if a canonical name looks like a domain (e.g., 'slack.com')"""
+    """
+    Check if a canonical name looks like a domain (e.g., 'slack.com').
+
+    Uses TLD LENGTH HEURISTIC (2-4 alphabetic chars) instead of hardcoded list
+    to handle all current and future TLDs (.com, .io, .tech, .uk, .ai, etc.)
+    """
     if not name:
         return False
     parts = name.split('.')
     if len(parts) >= 2:
         tld = parts[-1]
-        if tld in ('com', 'org', 'net', 'io', 'co', 'dev', 'app', 'us', 'cloud'):
+        # TLD must be 2-4 alphabetic characters (covers .uk, .com, .tech, .ai, etc.)
+        if len(tld) in (2, 3, 4) and tld.isalpha():
             return True
     return False
 

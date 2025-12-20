@@ -132,6 +132,7 @@ async def execute_pipeline(
         correlations = correlate_entities_to_planes(candidates, indexes)
         
         enable_llm = bool(provenance and provenance.get("enable_llm", False))
+        logger.info(f"Pipeline LLM config: enable_llm={enable_llm}, provenance={provenance}")
         llm_resolution_count = 0
         llm_model_used: Optional[str] = None
         

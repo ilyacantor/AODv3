@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -11,6 +12,7 @@ from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts
 )
 from ..db.database import Database
+from ..llm.fringe_integration import apply_fringe_resolution, LLMExplainability
 
 from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
@@ -20,6 +22,8 @@ from .admission import apply_admission_criteria, AdmissionResult
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
+
+logger = logging.getLogger(__name__)
 
 MAX_OBSERVATION_SAMPLES = 2000
 
@@ -126,6 +130,46 @@ async def execute_pipeline(
         indexes = build_plane_indexes(snapshot.planes)
         
         correlations = correlate_entities_to_planes(candidates, indexes)
+        
+        enable_llm = bool(provenance and provenance.get("enable_llm", False))
+        llm_resolution_count = 0
+        
+        if enable_llm:
+            import asyncio
+            logger.info(f"LLM fringe resolution enabled for run {run_id}")
+            
+            async def resolve_single(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
+                """Apply fringe resolution to a single correlation."""
+                try:
+                    return await apply_fringe_resolution(
+                        entity_key=correlation.entity.entity_id,
+                        tenant_id=tenant_id,
+                        correlation_result=correlation,
+                        db=db,
+                        enable_llm=True
+                    )
+                except Exception as e:
+                    logger.error(f"Fringe resolution error for {correlation.entity.entity_id}: {e}")
+                    return correlation, LLMExplainability()
+            
+            MAX_CONCURRENT = 5
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+            
+            async def bounded_resolve(correlation: CorrelationResult) -> tuple[CorrelationResult, LLMExplainability]:
+                async with semaphore:
+                    return await resolve_single(correlation)
+            
+            results = await asyncio.gather(*[bounded_resolve(c) for c in correlations])
+            
+            updated_correlations = []
+            for updated_correlation, explainability in results:
+                updated_correlations.append(updated_correlation)
+                if explainability.llm_used:
+                    llm_resolution_count += 1
+                    logger.info(f"LLM resolved {updated_correlation.entity.entity_id}: {explainability.llm_reason}")
+            
+            correlations = updated_correlations
+            logger.info(f"LLM fringe resolution completed: {llm_resolution_count} entities resolved")
         
         def is_finance_truly_ambiguous(plane_match) -> bool:
             """

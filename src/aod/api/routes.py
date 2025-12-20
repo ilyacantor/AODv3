@@ -31,6 +31,7 @@ class FarmRunRequest(BaseModel):
     tenant_id: str
     farm_base_url: str | None = None
     snapshot_id: str
+    enable_llm: bool = False
 
 
 class RunResponse(BaseModel):
@@ -274,7 +275,8 @@ async def create_run_from_farm(request: FarmRunRequest):
         "farm_url": farm_url,
         "snapshot_id": request.snapshot_id,
         "schema_version": schema_version,
-        "fetch_duration_ms": fetch_duration_ms
+        "fetch_duration_ms": fetch_duration_ms,
+        "enable_llm": request.enable_llm
     }
     
     db = await get_db()

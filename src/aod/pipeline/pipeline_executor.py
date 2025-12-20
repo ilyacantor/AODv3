@@ -20,8 +20,46 @@ from .admission import apply_admission_criteria, AdmissionResult
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
+from .aod_agent_reconcile import VENDOR_TO_DOMAIN
 
 MAX_OBSERVATION_SAMPLES = 2000
+
+
+def _get_rejection_key(candidate: CandidateEntity) -> str:
+    """
+    Extract canonical rejection key matching Farm's expectations.
+
+    Uses same priority logic as _extract_raw_domain() in aod_agent_reconcile.py
+    to ensure rejected assets use the same keys as admitted assets.
+
+    Priority order:
+    1. Domain from candidate (preserves subdomains for host-level granularity)
+    2. Name if it looks like a domain
+    3. Vendor lookup using VENDOR_TO_DOMAIN
+    4. Fallback: Normalized name
+    """
+    # Priority 1: Domain (preserve subdomains)
+    if candidate.domain:
+        return candidate.domain.lower().strip()
+
+    # Priority 2: Name if it looks like a domain
+    name = candidate.original_name.lower().strip()
+    if "." in name:
+        parts = name.split(".")
+        if len(parts) >= 2:
+            tld = parts[-1]
+            if tld in ("com", "net", "org", "io", "co", "app", "dev", "us", "cloud", "ai"):
+                return name
+
+    # Priority 3: Vendor lookup
+    if candidate.vendor and candidate.vendor.lower() not in ("unknown", "", "none"):
+        vendor_key = candidate.vendor.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            return VENDOR_TO_DOMAIN[vendor_key]
+
+    # Fallback: Normalized name
+    import re
+    return re.sub(r'[^a-z0-9]', '', name.lower())
 
 
 @dataclass
@@ -197,11 +235,19 @@ async def execute_pipeline(
         for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
+                rejection_key = _get_rejection_key(candidate)
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
-                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    rejection_id, run_id,
+                    rejection_key,  # entity_key: canonical domain key (e.g., "dropboxusercontent.io")
+                    rejection_key,  # entity_name: same as entity_key for consistency
                     "no_correlation", "Entity not found in correlation results",
-                    json.dumps({"source": candidate.source, "domain": candidate.domain}),
+                    json.dumps({
+                        "source": candidate.source,
+                        "domain": candidate.domain,
+                        "original_name": candidate.original_name,
+                        "original_entity_id": candidate.entity_id
+                    }),
                     started_at.isoformat()
                 ))
                 continue
@@ -212,15 +258,20 @@ async def execute_pipeline(
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
+                rejection_key = _get_rejection_key(candidate)
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
-                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    rejection_id, run_id,
+                    rejection_key,  # entity_key: canonical domain key (e.g., "dropboxusercontent.io")
+                    rejection_key,  # entity_name: same as entity_key for consistency
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
                     json.dumps({
                         "idp_status": correlation.idp.status.value,
                         "cmdb_status": correlation.cmdb.status.value,
                         "cloud_status": correlation.cloud.status.value,
-                        "finance_status": correlation.finance.status.value
+                        "finance_status": correlation.finance.status.value,
+                        "original_name": candidate.original_name,
+                        "original_entity_id": candidate.entity_id
                     }),
                     started_at.isoformat()
                 ))

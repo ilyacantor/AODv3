@@ -72,7 +72,11 @@ class GeminiClient(LLMClient):
         try:
             from google import genai
             from google.genai import types
-            
+        except ImportError as e:
+            logger.error(f"Gemini SDK not available: {e}")
+            return LLMResponse(success=False, error=f"SDK_UNAVAILABLE: {e}", provider=self.provider, model_id=self.model_id)
+        
+        try:
             client = self._get_client()
             
             system_prompt = (
@@ -143,6 +147,12 @@ class OpenAIClient(LLMClient):
     
     async def generate_json(self, prompt: str, schema: dict) -> LLMResponse:
         """Generate JSON response using OpenAI"""
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            logger.error(f"OpenAI SDK not available: {e}")
+            return LLMResponse(success=False, error=f"SDK_UNAVAILABLE: {e}", provider=self.provider, model_id=self.model_id)
+        
         try:
             client = self._get_client()
             

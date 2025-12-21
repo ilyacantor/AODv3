@@ -881,6 +881,9 @@ async def get_findings(run_id: str):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     findings = await db.get_findings_by_run(run_id)
+    assets = await db.get_assets_by_run(run_id)
+    
+    asset_map = {str(a.asset_id): a.name for a in assets}
     
     return FindingsResponse(
         run_id=run_id,
@@ -888,6 +891,7 @@ async def get_findings(run_id: str):
             {
                 "finding_id": str(f.finding_id),
                 "asset_id": str(f.asset_id) if f.asset_id else None,
+                "asset_name": asset_map.get(str(f.asset_id), "") if f.asset_id else "",
                 "finding_type": f.finding_type.value,
                 "category": f.category.value,
                 "severity": f.severity.value,

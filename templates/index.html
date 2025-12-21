@@ -342,6 +342,7 @@
         .triage-tag { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: var(--slate-700); color: var(--slate-300); }
         .triage-tag.type { background: rgba(168, 85, 247, 0.2); color: var(--purple-400); }
         .triage-tag.vendor { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .triage-tag.finding { background: rgba(239, 68, 68, 0.2); color: #FF6B6B; }
         .batch-action-bar { display: none; padding: 0.75rem 1rem; background: var(--slate-700); border-bottom: 1px solid var(--slate-600); align-items: center; gap: 1rem; }
         .batch-action-bar.show { display: flex; }
         .batch-select-all { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
@@ -354,6 +355,11 @@
         .batch-btn.ack { background: var(--cyan-600); color: white; }
         .batch-btn.ack:hover { background: var(--cyan-500); }
         .triage-item-checkbox { width: 16px; height: 16px; accent-color: var(--cyan-500); cursor: pointer; flex-shrink: 0; margin-top: 6px; }
+        .triage-sort-bar { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--slate-800); border-bottom: 1px solid var(--slate-700); align-items: center; }
+        .triage-sort-label { font-size: 0.7rem; color: var(--slate-400); }
+        .triage-sort-btn { padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--slate-600); background: var(--slate-700); color: var(--slate-300); font-size: 0.7rem; cursor: pointer; transition: all 0.15s ease; }
+        .triage-sort-btn:hover { background: var(--slate-600); border-color: var(--slate-500); }
+        .triage-sort-btn.active { background: var(--cyan-600); border-color: var(--cyan-500); color: white; }
     </style>
 </head>
 <body>
@@ -552,6 +558,12 @@
                         </div>
                         <div class="triage-section-desc">Material, multi-source signals requiring attention</div>
                     </div>
+                    <div class="triage-sort-bar" id="tier1SortBar">
+                        <span class="triage-sort-label">Sort by:</span>
+                        <button class="triage-sort-btn active" data-sort="name" data-tier="1">Asset</button>
+                        <button class="triage-sort-btn" data-sort="type" data-tier="1">Type</button>
+                        <button class="triage-sort-btn" data-sort="category" data-tier="1">Category</button>
+                    </div>
                     <div class="triage-section-content" id="triageTier1Content">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
@@ -567,6 +579,12 @@
                         </div>
                         <div class="triage-section-desc">Ambiguous matches or conflicting data requiring review</div>
                     </div>
+                    <div class="triage-sort-bar" id="tier2SortBar">
+                        <span class="triage-sort-label">Sort by:</span>
+                        <button class="triage-sort-btn active" data-sort="name" data-tier="2">Asset</button>
+                        <button class="triage-sort-btn" data-sort="type" data-tier="2">Type</button>
+                        <button class="triage-sort-btn" data-sort="category" data-tier="2">Category</button>
+                    </div>
                     <div class="triage-section-content" id="triageTier2Content">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
@@ -581,6 +599,12 @@
                             <span class="triage-count tier-3-count" id="triageTier3Count">0</span>
                         </div>
                         <div class="triage-section-desc">Low-risk hygiene signals; safe to batch-handle</div>
+                    </div>
+                    <div class="triage-sort-bar" id="tier3SortBar">
+                        <span class="triage-sort-label">Sort by:</span>
+                        <button class="triage-sort-btn active" data-sort="name" data-tier="3">Asset</button>
+                        <button class="triage-sort-btn" data-sort="type" data-tier="3">Type</button>
+                        <button class="triage-sort-btn" data-sort="category" data-tier="3">Category</button>
                     </div>
                     <div class="batch-action-bar" id="tier3BatchBar">
                         <label class="batch-select-all">
@@ -869,6 +893,9 @@
             }
         }
         
+        let triageTierData = { 1: [], 2: [], 3: [] };
+        let triageSortState = { 1: 'name', 2: 'name', 3: 'name' };
+        
         async function loadTriageData() {
             const runId = document.getElementById('triageRunSelect').value;
             if (!runId) return;
@@ -951,13 +978,17 @@
                     }
                 });
                 
+                triageTierData = { 1: tier1Items, 2: tier2Items, 3: tier3Items };
+                
                 document.getElementById('triageTier1Count').textContent = tier1Items.length;
                 document.getElementById('triageTier2Count').textContent = tier2Items.length;
                 document.getElementById('triageTier3Count').textContent = tier3Items.length;
                 
-                renderTierSection(tier1Content, tier1Items, 1);
-                renderTierSection(tier2Content, tier2Items, 2);
-                renderTierSection(tier3Content, tier3Items, 3);
+                renderTierSection(tier1Content, sortTriageItems(tier1Items, triageSortState[1]), 1);
+                renderTierSection(tier2Content, sortTriageItems(tier2Items, triageSortState[2]), 2);
+                renderTierSection(tier3Content, sortTriageItems(tier3Items, triageSortState[3]), 3);
+                
+                initTriageSorting();
                 
             } catch (err) {
                 console.error('Failed to load triage data:', err);
@@ -965,6 +996,59 @@
                 tier2Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
                 tier3Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
             }
+        }
+        
+        function getItemName(item) {
+            if (item.itemType === 'finding') {
+                return item.asset_name || item.finding_type?.replace(/_/g, ' ') || '';
+            }
+            return item.name || item.asset_key || '';
+        }
+        
+        function getItemType(item) {
+            if (item.itemType === 'finding') return item.finding_type || '';
+            return item.itemType || '';
+        }
+        
+        function getItemCategory(item) {
+            if (item.itemType === 'finding') return item.category || '';
+            return item.asset_type || '';
+        }
+        
+        function sortTriageItems(items, sortBy) {
+            const sorted = [...items];
+            sorted.sort((a, b) => {
+                let aVal = '', bVal = '';
+                if (sortBy === 'name') {
+                    aVal = getItemName(a);
+                    bVal = getItemName(b);
+                } else if (sortBy === 'type') {
+                    aVal = getItemType(a);
+                    bVal = getItemType(b);
+                } else if (sortBy === 'category') {
+                    aVal = getItemCategory(a);
+                    bVal = getItemCategory(b);
+                }
+                return aVal.localeCompare(bVal);
+            });
+            return sorted;
+        }
+        
+        function initTriageSorting() {
+            document.querySelectorAll('.triage-sort-btn').forEach(btn => {
+                btn.onclick = function() {
+                    const tier = parseInt(this.dataset.tier);
+                    const sortBy = this.dataset.sort;
+                    triageSortState[tier] = sortBy;
+                    
+                    document.querySelectorAll(`.triage-sort-btn[data-tier="${tier}"]`).forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const container = document.getElementById(`triageTier${tier}Content`);
+                    const sorted = sortTriageItems(triageTierData[tier], sortBy);
+                    renderTierSection(container, sorted, tier);
+                };
+            });
         }
         
         function renderTierSection(container, items, tier) {
@@ -1033,14 +1117,16 @@
                 const checkbox = tier === 3 ? `<input type="checkbox" class="triage-item-checkbox" data-item-id="${itemId}" data-item-type="${itemType}">` : '';
                 
                 if (itemType === 'finding') {
+                    const assetName = item.asset_name || 'Unknown Asset';
                     const findingType = (item.finding_type || 'unknown').replace(/_/g, ' ');
                     return `<div class="triage-item" data-item-id="${itemId}" data-item-type="${itemType}">
                         ${checkbox}
                         <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
-                            <div class="triage-item-title">${findingType}</div>
+                            <div class="triage-item-title">${assetName}</div>
                             <div class="triage-item-subtitle">${item.explanation || ''}</div>
                             <div class="triage-item-meta">
+                                <span class="triage-tag finding">${findingType}</span>
                                 <span class="triage-tag type">${item.category || ''}</span>
                                 ${item.triage_priority ? `<span class="triage-tag priority">${item.triage_priority.toUpperCase()}</span>` : ''}
                             </div>

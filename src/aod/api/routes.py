@@ -553,6 +553,12 @@ async def view_catalog(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     
+    triage_actions = await db.get_triage_actions_by_run(run_id)
+    triage_by_asset = {}
+    for action in triage_actions:
+        if action.get('item_type') == 'asset':
+            triage_by_asset[action['item_id']] = action
+    
     def get_tag(asset, key):
         """Get tag value from asset, handling both dict and list formats"""
         if not asset.tags:
@@ -560,6 +566,27 @@ async def view_catalog(run_id: str):
         if isinstance(asset.tags, dict):
             return asset.tags.get(key)
         return None
+    
+    def get_triage_badge(asset_id):
+        """Get triage disposition badge for an asset"""
+        action = triage_by_asset.get(str(asset_id))
+        if not action:
+            return ''
+        
+        action_type = action.get('action_type', '')
+        state = action.get('state', '')
+        
+        if action_type == 'assign':
+            owner = action.get('metadata', {}).get('assigned_to', '')
+            return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
+        elif action_type == 'defer':
+            days = action.get('metadata', {}).get('defer_days', '')
+            return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred {days}d</span>'
+        elif action_type == 'ignore':
+            return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
+        elif state == 'acknowledged':
+            return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
+        return ''
     
     shadow_count = sum(1 for a in assets if get_tag(a, 'shadow_actual') == True)
     zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
@@ -586,6 +613,8 @@ async def view_catalog(run_id: str):
             if a.lens_coverage.cloud: lens_parts.append('Cloud')
             if a.lens_coverage.finance: lens_parts.append('Finance')
         
+        triage_badge = get_triage_badge(a.asset_id)
+        
         rows_html += f'''
         <tr style="border-bottom: 1px solid #334155;">
             <td style="padding: 0.75rem; color: #06b6d4; font-weight: 500;">{a.name or 'Unknown'}</td>
@@ -595,6 +624,7 @@ async def view_catalog(run_id: str):
             <td style="padding: 0.75rem;">{' '.join(status_badges)}</td>
             <td style="padding: 0.75rem; color: #64748b; font-size: 0.8rem;">{', '.join(lens_parts) or '-'}</td>
             <td style="padding: 0.75rem; color: #64748b; font-size: 0.75rem;">{a.admission_reason or '-'}</td>
+            <td style="padding: 0.75rem;">{triage_badge or '<span style="color: #475569; font-size: 0.75rem;">-</span>'}</td>
         </tr>'''
     
     html = f'''
@@ -709,10 +739,11 @@ async def view_catalog(run_id: str):
                         <th>Status</th>
                         <th>Data Sources</th>
                         <th>Admission Reason</th>
+                        <th>Triage</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="8" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
                 </tbody>
             </table>
         </div>

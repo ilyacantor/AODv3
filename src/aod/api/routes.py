@@ -603,6 +603,48 @@ async def view_catalog(run_id: str):
     zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
     governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
     
+    triaged_finding_ids = {action['item_id'] for action in triage_actions if action.get('item_type') == 'finding'}
+    orphan_findings = [f for f in findings if not f.asset_id and str(f.finding_id) in triaged_finding_ids]
+    
+    def get_finding_triage_badge(finding_id):
+        """Get triage disposition badge for a finding"""
+        for action in triage_actions:
+            if action.get('item_id') == str(finding_id):
+                action_type = action.get('action', '')
+                state = action.get('state', '')
+                
+                if action_type == 'assign':
+                    owner = action.get('owner', '')
+                    return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
+                elif action_type == 'defer':
+                    defer_until = action.get('defer_until', '')
+                    return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred</span>'
+                elif action_type == 'ignore':
+                    return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
+                elif action_type == 'acknowledge' or state == 'acknowledged':
+                    return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
+        return ''
+    
+    orphan_rows_html = ""
+    for f in orphan_findings:
+        vendor_match = None
+        if f.explanation:
+            import re
+            match = re.search(r"Vendor '([^']+)'", f.explanation)
+            if match:
+                vendor_match = match.group(1)
+        
+        finding_type_display = f.finding_type.value.replace('_', ' ').title() if f.finding_type else '-'
+        triage_badge = get_finding_triage_badge(f.finding_id)
+        
+        orphan_rows_html += f'''
+        <tr style="border-bottom: 1px solid #334155;" data-type="finding" data-name="{vendor_match or 'Unknown'}">
+            <td style="padding: 0.75rem; color: #f59e0b; font-weight: 500;">{vendor_match or 'Unknown Vendor'}</td>
+            <td style="padding: 0.75rem; color: #94a3b8;">{finding_type_display}</td>
+            <td style="padding: 0.75rem; color: #64748b; font-size: 0.8rem; max-width: 400px; overflow: hidden; text-overflow: ellipsis;">{f.explanation[:100] + '...' if f.explanation and len(f.explanation) > 100 else f.explanation or '-'}</td>
+            <td style="padding: 0.75rem;">{triage_badge}</td>
+        </tr>'''
+    
     rows_html = ""
     for a in assets:
         is_shadow = get_tag(a, 'shadow_actual') == True
@@ -638,6 +680,30 @@ async def view_catalog(run_id: str):
             <td style="padding: 0.75rem;">{triage_badge or '<span style="color: #475569; font-size: 0.75rem;">-</span>'}</td>
         </tr>'''
     
+    orphan_section = ""
+    if orphan_rows_html:
+        sort_icon = "&#8597;"
+        orphan_section = f'''
+            <div class="section-header">
+                <div class="section-title">Triaged Findings (No Asset)</div>
+                <div class="section-subtitle">{len(orphan_findings)} finding(s) triaged for vendors without a corresponding cataloged asset</div>
+            </div>
+            <table id="findingsTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('findingsTable', 0)">Vendor <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('findingsTable', 1)">Finding Type <span class="sort-icon">{sort_icon}</span></th>
+                        <th>Description</th>
+                        <th onclick="sortTable('findingsTable', 3)">Triage <span class="sort-icon">{sort_icon}</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {orphan_rows_html}
+                </tbody>
+            </table>
+        '''
+    
+    sort_icon = "&#8597;"
     html = f'''
     <!DOCTYPE html>
     <html>
@@ -701,8 +767,23 @@ async def view_catalog(run_id: str):
                 font-size: 0.8rem;
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
+                cursor: pointer;
+                user-select: none;
             }}
+            th:hover {{ background: #3f5165; }}
+            th .sort-icon {{ opacity: 0.5; margin-left: 0.25rem; }}
+            th.sorted .sort-icon {{ opacity: 1; }}
             tr:hover {{ background: #263445; }}
+            .section-header {{ 
+                margin-top: 2rem; 
+                margin-bottom: 1rem; 
+                padding: 0.75rem 1rem;
+                background: #1e293b;
+                border-radius: 8px;
+                border-left: 4px solid #f59e0b;
+            }}
+            .section-title {{ font-size: 1rem; font-weight: 600; color: #f59e0b; }}
+            .section-subtitle {{ font-size: 0.8rem; color: #64748b; margin-top: 0.25rem; }}
         </style>
     </head>
     <body>
@@ -740,24 +821,50 @@ async def view_catalog(run_id: str):
                     </a>
                 </div>
             </div>
-            <table>
+            <table id="assetsTable">
                 <thead>
                     <tr>
-                        <th>Asset Name</th>
-                        <th>Vendor</th>
-                        <th>Type</th>
-                        <th>Environment</th>
-                        <th>Status</th>
-                        <th>Data Sources</th>
-                        <th>Admission Reason</th>
-                        <th>Triage</th>
+                        <th onclick="sortTable('assetsTable', 0)">Asset Name <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 1)">Vendor <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 2)">Type <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 3)">Environment <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 4)">Status <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 5)">Data Sources <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 6)">Admission Reason <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 7)">Triage <span class="sort-icon">{sort_icon}</span></th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows_html if rows_html else '<tr><td colspan="8" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
                 </tbody>
             </table>
+            
+            {orphan_section}
         </div>
+        <script>
+            let sortDirections = {{}};
+            function sortTable(tableId, colIndex) {{
+                const table = document.getElementById(tableId);
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                
+                const dir = sortDirections[tableId + '_' + colIndex] === 'asc' ? 'desc' : 'asc';
+                sortDirections[tableId + '_' + colIndex] = dir;
+                
+                rows.sort((a, b) => {{
+                    const aText = a.cells[colIndex]?.textContent?.trim() || '';
+                    const bText = b.cells[colIndex]?.textContent?.trim() || '';
+                    const cmp = aText.localeCompare(bText);
+                    return dir === 'asc' ? cmp : -cmp;
+                }});
+                
+                rows.forEach(row => tbody.appendChild(row));
+                
+                table.querySelectorAll('th').forEach((th, i) => {{
+                    th.classList.toggle('sorted', i === colIndex);
+                }});
+            }}
+        </script>
     </body>
     </html>
     '''

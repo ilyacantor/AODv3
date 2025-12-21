@@ -48,9 +48,8 @@ def build_reconcile_payload(
     )
     
     high_priority_findings = [
-        f"{f.finding_type.value}: {f.explanation[:150]}"
+        f.explanation[:150]
         for f in findings
-        if f.triage_priority.value in ("p0", "p1")
     ][:10]
     
     aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")

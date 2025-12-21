@@ -67,11 +67,6 @@
         .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
         .findings-list { max-height: 400px; overflow-y: auto; }
         .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
-        .priority-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-        .priority-p0 { background: rgba(220, 38, 38, 0.3); color: #FF6B6B; border: 1px solid rgba(220, 38, 38, 0.6); }
-        .priority-p1 { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); border: 1px solid rgba(245, 158, 11, 0.4); }
-        .priority-p2 { background: rgba(34, 197, 94, 0.2); color: var(--green-400); border: 1px solid rgba(34, 197, 94, 0.4); }
-        .stat-value.stat-security { color: #FF6B6B; }
         .finding-type { font-size: 0.75rem; color: var(--purple-400); margin-bottom: 0.25rem; }
         .finding-explanation { color: var(--slate-400); font-size: 0.875rem; }
         .assets-table { width: 100%; border-collapse: collapse; }
@@ -344,8 +339,7 @@
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks (Actionable): P0 + P1 priority risks requiring action. Click for breakdown by priority."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
-                    <div class="stat-card clickable" data-drill-type="findings" title="Governance and operational findings including CMDB gaps, ownership issues, and data quality concerns."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings" title="Findings generated from asset analysis. Categories pending."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                     <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
                     <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
@@ -412,7 +406,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], security_risks: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let normalizedData = { assets: [], findings: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
@@ -744,23 +738,11 @@
         }
         
         function formatDrillValue(value, field) {
-            if (field === 'triage_priority') {
-                if (!value || value === 'unknown' || value === null || value === undefined) {
-                    return `<span class="priority-badge priority-p2">Unrated (Legacy)</span>`;
-                }
-                const priorityLabels = { 'p0': 'P0 - Critical', 'p1': 'P1 - High', 'p2': 'P2 - Medium' };
-                const priorityClass = `priority-${value}`;
-                return `<span class="priority-badge ${priorityClass}">${priorityLabels[value] || value.toUpperCase()}</span>`;
-            }
             if (value === 'unknown' || value === null || value === undefined) {
                 const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 return `Unknown ${fieldLabel}`;
             }
-            const friendlyLabels = {
-                'security_risk': 'Security Risks',
-                'governance_finding': 'Governance & Data Quality'
-            };
-            return friendlyLabels[value] || value;
+            return value;
         }
         
         function copyToClipboard(text) {
@@ -792,32 +774,14 @@
                     drillPaths: ['asset_type', 'vendor', 'environment'],
                     displayName: 'Assets'
                 },
-                security_risks: {
-                    fields: {
-                        finding_type: { default: 'unknown' },
-                        severity: { default: 'unknown' },
-                        explanation: { default: 'No explanation available' },
-                        asset_id: { default: null },
-                        created_at: { default: null }
-                    },
-                    drillPaths: ['triage_priority', 'finding_type'],
-                    displayName: 'Security Risks'
-                },
                 findings: {
                     fields: {
-                        category: { default: 'governance_finding' },
-                        finding_type: { default: 'unknown' },
-                        severity: { default: 'unknown' },
                         explanation: { default: 'No explanation available' },
                         asset_id: { default: null },
                         created_at: { default: null }
                     },
-                    drillPaths: ['finding_type', 'triage_priority', 'sub_view'],
-                    displayName: 'Findings',
-                    subViews: {
-                        artifacts: 'Artifacts',
-                        ambiguous: 'Ambiguous Matches'
-                    }
+                    drillPaths: [],
+                    displayName: 'Findings'
                 },
                 artifacts: {
                     fields: {
@@ -887,7 +851,6 @@
             },
             summaryCardMappings: {
                 statAssets: 'assets',
-                statSecurityRisks: 'security_risks',
                 statFindings: 'findings',
                 statObservations: 'observations',
                 statRejected: 'rejections',
@@ -1119,7 +1082,7 @@
             const plane = item.plane || item.source_lens || item.source || null;
             const itemType = item.asset_type || item.artifact_type || item.finding_type || item.reason_code || null;
             
-            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'triage_priority', 'reason', 'reason_detail', 'explanation'];
+            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'reason', 'reason_detail', 'explanation'];
             const keyFacts = [];
             keyFactFields.forEach(field => {
                 if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {
@@ -1597,37 +1560,14 @@
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
                 const allFindings = data.findings || [];
                 
-                const securityRisks = allFindings.filter(f => f.category === 'security_risk');
-                const governanceFindings = allFindings.filter(f => f.category !== 'security_risk');
+                const { data: normalized, errors } = normalizeResponse('findings', allFindings);
+                normalizedData.findings = normalized;
+                if (errors.length > 0) console.warn('Findings normalization errors:', errors);
                 
-                const { data: secNorm, errors: secErrs } = normalizeResponse('security_risks', securityRisks);
-                normalizedData.security_risks = secNorm;
-                if (secErrs.length > 0) console.warn('Security risks normalization errors:', secErrs);
-                
-                const { data: govNorm, errors: govErrs } = normalizeResponse('findings', governanceFindings);
-                normalizedData.findings = govNorm;
-                if (govErrs.length > 0) console.warn('Findings normalization errors:', govErrs);
-                
-                // Compute risk case counts by priority (handle null/missing as P2)
-                const p0Count = securityRisks.filter(f => f.triage_priority === 'p0').length;
-                const p1Count = securityRisks.filter(f => f.triage_priority === 'p1').length;
-                const p2Count = securityRisks.filter(f => f.triage_priority === 'p2' || !f.triage_priority).length;
-                const actionableCount = p0Count + p1Count;
-                
-                // Show total security risks as headline
-                document.getElementById('statSecurityRisks').textContent = securityRisks.length;
-                // Show priority breakdown in sublabel
-                const breakdownEl = document.getElementById('riskBreakdown');
-                if (securityRisks.length > 0) {
-                    breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
-                } else {
-                    breakdownEl.textContent = '';
-                }
-                document.getElementById('statFindings').textContent = governanceFindings.length;
+                document.getElementById('statFindings').textContent = allFindings.length;
             } catch (e) { 
                 console.error('Failed to load findings:', e);
                 normalizedData.findings = [];
-                normalizedData.security_risks = [];
             }
         }
         

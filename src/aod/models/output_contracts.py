@@ -160,65 +160,18 @@ class Artifact(BaseModel):
     created_at: datetime = Field(default_factory=now_pst)
 
 
-class FindingType(str, Enum):
-    """Finding type enumeration"""
-    GOVERNANCE_GAP = "governance_gap"
-    IDENTITY_GAP = "identity_gap"
-    CMDB_GAP = "cmdb_gap"
-    FINANCE_GAP = "finance_gap"
-    DATA_CONFLICT = "data_conflict"
-    DUPLICATION_RISK = "duplication_risk"
-
-
-class Severity(str, Enum):
-    """Severity enumeration"""
-    LOW = "low"
-    MED = "med"
-    CRITICAL = "critical"
-
-
-class FindingCategory(str, Enum):
-    """Finding category - security risks vs governance/operational findings"""
-    SECURITY_RISK = "security_risk"
-    GOVERNANCE_FINDING = "governance_finding"
-
-
-class Confidence(str, Enum):
-    """Confidence level for findings"""
-    LOW = "low"
-    MED = "med"
-    HIGH = "high"
-
-
-class Materiality(str, Enum):
-    """Materiality level - business impact significance"""
-    LOW = "low"
-    MED = "med"
-    HIGH = "high"
-
-
-class TriagePriority(str, Enum):
-    """Triage priority for actionable findings"""
-    P0 = "p0"  # Immediate - high confidence + high materiality
-    P1 = "p1"  # High priority - actionable
-    P2 = "p2"  # Backlog / monitor
-
-
 class Finding(BaseModel):
-    """Explainable finding"""
+    """
+    Explainable finding - placeholder structure.
+    
+    Categorization fields will be added based on new structured categories.
+    """
     finding_id: UUID
     asset_id: Optional[UUID] = None
     tenant_id: str
     run_id: str
-    finding_type: FindingType
-    category: FindingCategory
-    severity: Severity
     explanation: str
     evidence_refs: list[str] = Field(default_factory=list)
-    confidence: Confidence = Confidence.MED
-    materiality: Materiality = Materiality.MED
-    triage_priority: TriagePriority = TriagePriority.P2
-    conflict_field: Optional[str] = None  # For DATA_CONFLICT deduplication
     created_at: datetime = Field(default_factory=now_pst)
 
 
@@ -266,5 +219,3 @@ class RunLog(BaseModel):
     failure_reasons: list[str] = Field(default_factory=list)
     sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
     sync_error: Optional[str] = None
-
-

@@ -352,7 +352,7 @@ class Database:
         pool = await self.get_pool()
         
         async with pool.acquire() as conn:
-            for table in ["derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
+            for table in ["observation_samples", "derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
                 try:
                     await conn.execute(f"DELETE FROM {table}")
                 except Exception:

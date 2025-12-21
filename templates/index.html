@@ -262,7 +262,6 @@
                 </div>
                 <span class="mode-label" id="prodLabel">Prod</span>
             </div>
-            <span class="snapshot-count" id="snapshotCount"></span>
             <button class="btn-refresh" id="refreshBtn" title="Refresh page"><span>↻</span> Refresh</button>
         </div>
     </header>
@@ -1422,9 +1421,6 @@
                 const data = await r.json();
                 loadedSnapshots = data.snapshots || [];
                 
-                document.getElementById('snapshotCount').textContent = loadedSnapshots.length > 0 
-                    ? `${loadedSnapshots.length} snapshots` 
-                    : '';
                 
                 if (loadedSnapshots.length === 0) {
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';

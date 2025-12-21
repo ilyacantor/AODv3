@@ -746,10 +746,14 @@
                 });
             });
             
-            document.getElementById('triageDetailClose').addEventListener('click', closeTriageDetail);
-            document.getElementById('triageDetailOverlay').addEventListener('click', closeTriageDetail);
+            const closeBtn = document.getElementById('triageDetailClose');
+            const overlay = document.getElementById('triageDetailOverlay');
+            const actionsPanel = document.getElementById('triageDetailActions');
             
-            document.getElementById('triageDetailActions').addEventListener('click', async (e) => {
+            if (closeBtn) closeBtn.addEventListener('click', closeTriageDetail);
+            if (overlay) overlay.addEventListener('click', closeTriageDetail);
+            
+            if (actionsPanel) actionsPanel.addEventListener('click', async (e) => {
                 const btn = e.target.closest('[data-action]');
                 if (!btn) return;
                 

@@ -364,6 +364,9 @@
                     <div id="drillError" class="drill-error hidden"></div>
                     <div id="drillContent"></div>
                 </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button class="btn btn-secondary" id="goToFarmBtn">Go to Farm for Grading →</button>
+                </div>
             </div>
         </div>
     </main>
@@ -1841,6 +1844,21 @@
             if (discoveryCancelBtn) {
                 discoveryCancelBtn.addEventListener('click', () => {
                     hideDiscoveryCompleteModal();
+                });
+            }
+            
+            const goToFarmBtn = document.getElementById('goToFarmBtn');
+            if (goToFarmBtn) {
+                goToFarmBtn.addEventListener('click', async () => {
+                    try {
+                        const r = await fetch('/api/farm/url');
+                        const data = await r.json();
+                        if (data.farm_url) {
+                            window.open(data.farm_url, '_blank');
+                        }
+                    } catch (e) {
+                        console.error('Failed to get Farm URL:', e);
+                    }
                 });
             }
         }, 0);

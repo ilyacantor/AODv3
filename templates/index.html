@@ -22,11 +22,11 @@
         body { font-family: 'Quicksand', sans-serif; background: linear-gradient(135deg, var(--slate-950) 0%, var(--slate-900) 100%); color: white; min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         header { display: flex; align-items: center; padding: 0 2rem; height: 56px; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); }
-        .header-left { display: flex; align-items: center; }
-        .logo { display: flex; align-items: center; }
+        .header-left { display: flex; align-items: center; flex-shrink: 0; }
+        .logo { display: flex; align-items: center; flex-shrink: 0; }
         .logo-img { height: 28px; width: auto; }
-        .header-divider { width: 1px; height: 28px; background: var(--slate-600); margin: 0 1.25rem; }
-        .module-name { font-size: 1.15rem; font-weight: 600; color: white; letter-spacing: 0.3px; }
+        .header-divider { width: 1px; height: 28px; background: var(--slate-600); margin: 0 1.25rem; flex-shrink: 0; }
+        .module-name { font-size: 1.15rem; font-weight: 600; color: white; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0; }
         .header-nav { display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
         .header-nav-tab { padding: 0.35rem 0.9rem; border-radius: 5px; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
         .header-nav-tab:hover { color: white; background: rgba(30, 41, 59, 0.5); }

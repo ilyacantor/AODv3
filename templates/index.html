@@ -23,11 +23,8 @@
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         header { display: flex; align-items: center; padding: 0 2rem; height: 56px; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); gap: 0; }
         .header-left { display: flex; align-items: center; gap: 0; }
-        .logo { display: flex; align-items: center; gap: 0.5rem; }
-        .logo-icon { width: 28px; height: 28px; background: var(--cyan-500); border-radius: 2px; }
-        .logo-text { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); letter-spacing: 0.5px; }
-        .logo-text .os { color: var(--cyan-400); }
-        .logo-text .tm { font-size: 0.65rem; vertical-align: super; color: var(--cyan-400); margin-left: 1px; }
+        .logo { display: flex; align-items: center; }
+        .logo-img { height: 24px; width: auto; }
         .header-divider { width: 1px; height: 24px; background: var(--slate-700); margin: 0 1.25rem; }
         .module-name { font-size: 1rem; font-weight: 600; color: white; margin-right: 2rem; }
         .header-nav { display: flex; align-items: center; gap: 0; height: 100%; }
@@ -252,8 +249,7 @@
     <header>
         <div class="header-left">
             <div class="logo">
-                <div class="logo-icon"></div>
-                <div class="logo-text">autonom<span class="os">OS</span><span class="tm">™</span></div>
+                <img src="/static/autonomos-logo.png" alt="autonomOS" class="logo-img">
             </div>
             <div class="header-divider"></div>
             <div class="module-name">AOD Fresh</div>

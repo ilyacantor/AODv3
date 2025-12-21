@@ -258,6 +258,11 @@
         .triage-section.tier-2 { border-left-color: #eab308; }
         .triage-section.tier-3 { border-left-color: #64748b; }
         .triage-section-header { padding: 1rem 1.5rem; background: var(--slate-800); border-bottom: 1px solid var(--slate-700); }
+        .triage-collapsible { cursor: pointer; user-select: none; }
+        .triage-collapsible:hover { background: var(--gray-800); }
+        .triage-collapse-icon { display: inline-block; width: 1rem; margin-right: 0.25rem; transition: transform 0.2s ease; font-size: 0.75rem; color: var(--slate-400); }
+        .triage-collapsible.collapsed .triage-collapse-icon { transform: rotate(-90deg); }
+        .triage-section-content.collapsed { display: none; }
         .triage-section-title { display: flex; align-items: center; gap: 0.75rem; font-weight: 600; font-size: 1rem; color: white; }
         .triage-section-desc { font-size: 0.75rem; color: var(--slate-400); margin-top: 0.25rem; margin-left: 2rem; }
         .triage-icon.tier-1 { background: #f97316; color: white; }
@@ -494,8 +499,9 @@
             
             <div class="triage-sections" id="triageSections">
                 <div class="triage-section tier-1">
-                    <div class="triage-section-header tier-1-header">
+                    <div class="triage-section-header tier-1-header triage-collapsible" data-target="triageTier1Content">
                         <div class="triage-section-title">
+                            <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon tier-1">!</span>
                             Tier 1 — Action Recommended
                             <span class="triage-count tier-1-count" id="triageTier1Count">0</span>
@@ -508,8 +514,9 @@
                 </div>
                 
                 <div class="triage-section tier-2">
-                    <div class="triage-section-header tier-2-header">
+                    <div class="triage-section-header tier-2-header triage-collapsible" data-target="triageTier2Content">
                         <div class="triage-section-title">
+                            <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon tier-2">?</span>
                             Tier 2 — Needs Judgment
                             <span class="triage-count tier-2-count" id="triageTier2Count">0</span>
@@ -522,8 +529,9 @@
                 </div>
                 
                 <div class="triage-section tier-3">
-                    <div class="triage-section-header tier-3-header">
+                    <div class="triage-section-header tier-3-header triage-collapsible" data-target="triageTier3Content">
                         <div class="triage-section-title">
+                            <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon tier-3">i</span>
                             Tier 3 — Informational
                             <span class="triage-count tier-3-count" id="triageTier3Count">0</span>
@@ -645,7 +653,19 @@
             const triageSelect = document.getElementById('triageRunSelect');
             triageSelect.addEventListener('change', loadTriageData);
             
+            document.querySelectorAll('.triage-collapsible').forEach(header => {
+                header.addEventListener('click', () => {
+                    const targetId = header.dataset.target;
+                    const content = document.getElementById(targetId);
+                    if (content) {
+                        header.classList.toggle('collapsed');
+                        content.classList.toggle('collapsed');
+                    }
+                });
+            });
+            
             document.getElementById('triageSections').addEventListener('click', async (e) => {
+                if (e.target.closest('.triage-collapsible')) return;
                 const btn = e.target.closest('[data-action]');
                 if (!btn) return;
                 
@@ -723,17 +743,22 @@
                 const runs = await response.json();
                 const currentVal = select.value;
                 select.innerHTML = '<option value="">Select a run...</option>';
-                runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS')
-                    .forEach(run => {
-                        const opt = document.createElement('option');
-                        opt.value = run.run_id;
-                        const tenant = run.tenant_id || run.tenant_name || 'Unknown';
-                        const dateStr = run.started_at || run.created_at;
-                        const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
-                        opt.textContent = `${tenant} - ${date}`;
-                        select.appendChild(opt);
-                    });
-                if (currentVal) select.value = currentVal;
+                const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
+                completedRuns.forEach(run => {
+                    const opt = document.createElement('option');
+                    opt.value = run.run_id;
+                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                    const dateStr = run.started_at || run.created_at;
+                    const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
+                    opt.textContent = `${tenant} - ${date}`;
+                    select.appendChild(opt);
+                });
+                if (currentVal) {
+                    select.value = currentVal;
+                } else if (completedRuns.length > 0) {
+                    select.value = completedRuns[0].run_id;
+                    loadTriageData();
+                }
             } catch (err) {
                 console.error('Failed to load triage runs:', err);
             }

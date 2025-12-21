@@ -88,23 +88,21 @@ def generate_identity_gap_finding(
     
     Trigger ONLY if:
     - No IdP governance (idp_present == false)
-    - Has STRONG activity evidence based on DIRECT correlation matches (any of):
-      - Cloud evidence (direct cloud plane match)
-      - Finance recurring spend (direct finance plane match)
-      - Multiple independent planes (discovery + finance OR discovery + cloud)
+    - Has STRONG activity evidence (any of):
+      - Cloud evidence (passed cloud admission = valid resource type)
+      - Finance recurring spend (passed finance admission)
+      - CMDB + other plane (multi-plane corroboration)
     
-    IMPORTANT: Uses correlation.*.status instead of lens_coverage to avoid
-    false positives from vendor governance propagation.
+    Uses lens_coverage which is set from direct admission checks (not propagated).
     """
     if asset.lens_status.idp != LensStatus.UNMATCHED:
         return None
     
-    # Check for STRONG activity evidence via DIRECT correlation matches
-    # NOT lens_coverage (which can be propagated from vendor siblings)
-    has_cloud = correlation.cloud.status == MatchStatus.MATCHED
-    has_finance = correlation.finance.status == MatchStatus.MATCHED
-    has_cmdb = correlation.cmdb.status == MatchStatus.MATCHED
-    has_discovery = len(correlation.entity.observation_ids) > 0 if correlation.entity else False
+    # lens_coverage is set from check_*_admission results - direct evidence only
+    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+    has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
     
     # Count independent planes for multi-plane corroboration
     strong_planes = sum([has_cloud, has_finance, has_cmdb])
@@ -394,14 +392,16 @@ def generate_finance_gap_findings(
     - Spend >= $200/month OR $2,000/year threshold
     - No governance visibility (no CMDB owner, no IdP app, etc.)
     
-    This typically reduces FINANCE_GAP findings by 70-90%.
+    DEDUPLICATION: Aggregates by vendor/product name to prevent multiple findings
+    for the same vendor with many transactions.
     """
-    findings = []
-    
     matched_finance_ids = set()
     for correlation in correlations:
         if correlation.finance.status == MatchStatus.MATCHED:
             matched_finance_ids.update(correlation.finance.matched_ids)
+    
+    # Aggregate unmatched finance by vendor/product name
+    vendor_aggregates: dict[str, dict] = {}
     
     for record_id, record in indexes.finance.records.items():
         if record_id in matched_finance_ids:
@@ -415,7 +415,6 @@ def generate_finance_gap_findings(
             is_recurring = True
             if isinstance(record, Contract):
                 amount = record.amount or 0.0
-                # Assume contract amount is annual, convert to monthly
                 monthly_amount = amount / 12.0
         elif record_id.startswith("transaction:"):
             if hasattr(record, 'is_recurring') and record.is_recurring:
@@ -426,17 +425,38 @@ def generate_finance_gap_findings(
         if not is_recurring:
             continue
         
-        # Apply spend threshold: >= $200/month
         if monthly_amount < FINANCE_GAP_MONTHLY_THRESHOLD:
             continue
         
-        product_name = getattr(record, 'product', None) or getattr(record, 'vendor_name', None) or record_id
+        # Get vendor/product name for aggregation
+        vendor_name = getattr(record, 'vendor_name', None) or getattr(record, 'vendor', None)
+        product_name = getattr(record, 'product', None)
+        aggregate_key = (vendor_name or product_name or record_id).lower().strip()
+        
+        if aggregate_key not in vendor_aggregates:
+            vendor_aggregates[aggregate_key] = {
+                'display_name': vendor_name or product_name or record_id,
+                'total_monthly': 0.0,
+                'record_count': 0,
+                'evidence_refs': []
+            }
+        
+        vendor_aggregates[aggregate_key]['total_monthly'] += monthly_amount
+        vendor_aggregates[aggregate_key]['record_count'] += 1
+        vendor_aggregates[aggregate_key]['evidence_refs'].append(record_id)
+    
+    # Generate one finding per vendor/product (deduplicated)
+    findings = []
+    for aggregate_key, agg in vendor_aggregates.items():
+        total_monthly = agg['total_monthly']
+        display_name = agg['display_name']
+        record_count = agg['record_count']
         
         # Determine confidence/materiality based on spend level
-        if monthly_amount >= 1000:
+        if total_monthly >= 1000:
             confidence = Confidence.HIGH
             materiality = Materiality.HIGH
-        elif monthly_amount >= 500:
+        elif total_monthly >= 500:
             confidence = Confidence.HIGH
             materiality = Materiality.MED
         else:
@@ -445,16 +465,21 @@ def generate_finance_gap_findings(
         
         triage = compute_triage_priority(confidence, materiality)
         
+        if record_count > 1:
+            explanation = f"Vendor '{display_name}' has ${total_monthly:.0f}/mo across {record_count} finance records with no corresponding asset. Possible undiscovered system(s)."
+        else:
+            explanation = f"Finance record '{display_name}' (${total_monthly:.0f}/mo) has no corresponding asset in catalog. Possible undiscovered system."
+        
         findings.append(Finding(
-            finding_id=deterministic_uuid(snapshot_id, run_id, record_id, "finance_gap"),
+            finding_id=deterministic_uuid(snapshot_id, run_id, aggregate_key, "finance_gap"),
             asset_id=None,
             tenant_id=tenant_id,
             run_id=run_id,
             finding_type=FindingType.FINANCE_GAP,
             category=get_category(FindingType.FINANCE_GAP),
             severity=Severity.HIGH,
-            explanation=f"Finance record '{product_name}' (${monthly_amount:.0f}/mo) has no corresponding asset in catalog. Possible undiscovered system.",
-            evidence_refs=[record_id],
+            explanation=explanation,
+            evidence_refs=agg['evidence_refs'][:50],  # Limit refs
             confidence=confidence,
             materiality=materiality,
             triage_priority=triage

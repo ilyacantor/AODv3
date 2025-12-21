@@ -27,8 +27,8 @@
         .logo-img { height: 28px; width: auto; }
         .header-divider { width: 1px; height: 28px; background: var(--slate-600); margin: 0 1.25rem; }
         .module-name { font-size: 1.15rem; font-weight: 600; color: white; letter-spacing: 0.3px; }
-        .header-nav { display: flex; align-items: center; gap: 0.25rem; }
-        .header-nav-tab { padding: 0.35rem 0.9rem; border-radius: 5px; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: all 0.15s ease; }
+        .header-nav { display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
+        .header-nav-tab { padding: 0.35rem 0.9rem; border-radius: 5px; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
         .header-nav-tab:hover { color: white; background: rgba(30, 41, 59, 0.5); }
         .header-nav-tab.active { color: var(--cyan-400); background: rgba(6, 182, 212, 0.15); }
         .header-right { display: flex; align-items: center; gap: 1.5rem; margin-left: auto; }

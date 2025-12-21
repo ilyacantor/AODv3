@@ -1537,7 +1537,7 @@
             }
         }
         
-        async function loadRuns() {
+        async function loadRuns(autoSelect = false) {
             const loading = document.getElementById('runsLoading'), list = document.getElementById('runsList');
             loading.classList.remove('hidden');
             try {
@@ -1564,6 +1564,10 @@
                         </div>`;
                     }).join('');
                     document.querySelectorAll('.run-item').forEach(item => item.addEventListener('click', () => selectRun(item.dataset.runId)));
+                    
+                    if (autoSelect && runs.length > 0 && !currentRunId) {
+                        await selectRun(runs[0].run_id);
+                    }
                 }
             } catch { list.innerHTML = '<div class="error-message">Failed to load runs</div>'; }
             finally { loading.classList.add('hidden'); }
@@ -1810,7 +1814,7 @@
         initMainTabs();
         initTestTab();
         checkHealth(); 
-        loadRuns();
+        loadRuns(true);
         loadTenants();
         setInterval(checkHealth, 30000);
         

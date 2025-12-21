@@ -178,7 +178,22 @@ class Severity(str, Enum):
 
 
 class FindingCategory(str, Enum):
-    """Finding category - security risks vs governance/operational findings"""
+    """Finding category - enterprise risk taxonomy (Dec 2025)
+    
+    Security Risks (headline KPI):
+    - IDENTITY_ACCESS: Ungoverned access paths
+    - SHADOW_IT: Financially-backed shadow systems  
+    - DATA_INTEGRITY: Conflicting authoritative data
+    
+    Non-Security (secondary KPIs):
+    - VISIBILITY_GAP: Coverage gaps in control planes
+    - GOVERNANCE_HYGIENE: Exposure amplifiers (ownership, duplication)
+    """
+    IDENTITY_ACCESS = "identity_access"
+    SHADOW_IT = "shadow_it"
+    DATA_INTEGRITY = "data_integrity"
+    VISIBILITY_GAP = "visibility_gap"
+    GOVERNANCE_HYGIENE = "governance_hygiene"
     SECURITY_RISK = "security_risk"
     GOVERNANCE_FINDING = "governance_finding"
 

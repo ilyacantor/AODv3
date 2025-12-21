@@ -20,14 +20,17 @@ from ..models.output_contracts import (
 )
 from ..models.input_contracts import Contract, Transaction
 
-SECURITY_RISKS = {
+SECURITY_RISK_TYPES = {
     FindingType.IDENTITY_GAP,
     FindingType.FINANCE_GAP,
     FindingType.DATA_CONFLICT,
 }
 
-GOVERNANCE_FINDINGS = {
+VISIBILITY_GAP_TYPES = {
     FindingType.CMDB_GAP,
+}
+
+GOVERNANCE_HYGIENE_TYPES = {
     FindingType.GOVERNANCE_GAP,
     FindingType.DUPLICATION_RISK,
 }
@@ -53,10 +56,35 @@ from .deterministic_ids import deterministic_uuid
 
 
 def get_category(finding_type: FindingType) -> FindingCategory:
-    """Map finding type to category"""
-    if finding_type in SECURITY_RISKS:
-        return FindingCategory.SECURITY_RISK
-    return FindingCategory.GOVERNANCE_FINDING
+    """Map finding type to specific category (Dec 2025 taxonomy)
+    
+    Security Risks:
+    - IDENTITY_GAP → Identity & Access
+    - FINANCE_GAP → Shadow IT (financially-backed)
+    - DATA_CONFLICT → Data Integrity
+    
+    Non-Security:
+    - CMDB_GAP → Visibility Gap
+    - GOVERNANCE_GAP, DUPLICATION_RISK → Governance Hygiene
+    """
+    if finding_type == FindingType.IDENTITY_GAP:
+        return FindingCategory.IDENTITY_ACCESS
+    if finding_type == FindingType.FINANCE_GAP:
+        return FindingCategory.SHADOW_IT
+    if finding_type == FindingType.DATA_CONFLICT:
+        return FindingCategory.DATA_INTEGRITY
+    if finding_type in VISIBILITY_GAP_TYPES:
+        return FindingCategory.VISIBILITY_GAP
+    return FindingCategory.GOVERNANCE_HYGIENE
+
+
+def is_security_risk(category: FindingCategory) -> bool:
+    """Check if a category is a security risk (for headline KPI)"""
+    return category in {
+        FindingCategory.IDENTITY_ACCESS,
+        FindingCategory.SHADOW_IT,
+        FindingCategory.DATA_INTEGRITY,
+    }
 
 
 def compute_triage_priority(confidence: Confidence, materiality: Materiality) -> TriagePriority:
@@ -553,7 +581,7 @@ def generate_findings(
     findings.extend(finance_gaps)
     
     findings.sort(key=lambda f: (
-        {"security_risk": 0, "governance_finding": 1}.get(f.category.value, 2),
+        0 if is_security_risk(f.category) else 1,
         {"p0": 0, "p1": 1, "p2": 2}.get(f.triage_priority.value, 3),
         f.finding_type.value,
         str(f.asset_id) if f.asset_id else "",
@@ -598,8 +626,8 @@ def compute_risk_case_counts(findings: list[Finding]) -> RiskCaseCounts:
     """
     counts = RiskCaseCounts()
     
-    # Filter to security risks only
-    security_findings = [f for f in findings if f.category == FindingCategory.SECURITY_RISK]
+    # Filter to security risks only (new taxonomy)
+    security_findings = [f for f in findings if is_security_risk(f.category)]
     counts.raw_triggers = len(security_findings)
     
     # Dedupe into cases by (asset_id, finding_type, conflict_field)

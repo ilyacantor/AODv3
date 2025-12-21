@@ -63,6 +63,7 @@
         .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
         .stat-value.stat-shadow { color: var(--amber-400); }
         .stat-value.stat-zombie { color: var(--red-400); }
+        .stat-value.stat-visibility { color: var(--cyan-400); }
         .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
         .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
         .findings-list { max-height: 400px; overflow-y: auto; }
@@ -344,8 +345,10 @@
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks (Actionable): P0 + P1 priority risks requiring action. Click for breakdown by priority."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
-                    <div class="stat-card clickable" data-drill-type="findings" title="Governance and operational findings including CMDB gaps, ownership issues, and data quality concerns."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
+                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks: Identity gaps, shadow IT spend, and data conflicts. Click for breakdown."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
+                    <div class="stat-card clickable" data-drill-type="visibility_gaps" title="Visibility Gaps: Assets active but outside control planes (CMDB gaps)."><div class="stat-value stat-visibility" id="statVisibilityGaps">-</div><div class="stat-label">Visibility Gaps</div></div>
+                    <div class="stat-card clickable" data-drill-type="governance_hygiene" title="Governance Hygiene: Ownership gaps and duplicate records - exposure amplifiers."><div class="stat-value" id="statGovernanceHygiene">-</div><div class="stat-label">Governance Hygiene</div></div>
+                    <div class="stat-card clickable" data-drill-type="findings" title="All non-security findings combined."><div class="stat-value" id="statFindings">-</div><div class="stat-label">All Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                     <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
                     <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
@@ -412,7 +415,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], security_risks: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let normalizedData = { assets: [], findings: [], security_risks: [], visibility_gaps: [], governance_hygiene: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
@@ -757,8 +760,19 @@
                 return `Unknown ${fieldLabel}`;
             }
             const friendlyLabels = {
+                'identity_access': 'Identity & Access',
+                'shadow_it': 'Shadow IT (Financial)',
+                'data_integrity': 'Data Integrity',
+                'visibility_gap': 'Visibility Gaps',
+                'governance_hygiene': 'Governance Hygiene',
                 'security_risk': 'Security Risks',
-                'governance_finding': 'Governance & Data Quality'
+                'governance_finding': 'Governance & Data Quality',
+                'identity_gap': 'Identity Gap',
+                'finance_gap': 'Finance Gap',
+                'data_conflict': 'Data Conflict',
+                'cmdb_gap': 'CMDB Gap',
+                'governance_gap': 'Governance Gap',
+                'duplication_risk': 'Duplication Risk'
             };
             return friendlyLabels[value] || value;
         }
@@ -795,13 +809,34 @@
                 security_risks: {
                     fields: {
                         finding_type: { default: 'unknown' },
+                        category: { default: 'identity_access' },
                         severity: { default: 'unknown' },
                         explanation: { default: 'No explanation available' },
                         asset_id: { default: null },
                         created_at: { default: null }
                     },
-                    drillPaths: ['finding_type'],
+                    drillPaths: ['category', 'finding_type'],
                     displayName: 'Security Risks'
+                },
+                visibility_gaps: {
+                    fields: {
+                        finding_type: { default: 'cmdb_gap' },
+                        explanation: { default: 'No explanation available' },
+                        asset_id: { default: null },
+                        created_at: { default: null }
+                    },
+                    drillPaths: ['finding_type'],
+                    displayName: 'Visibility Gaps'
+                },
+                governance_hygiene: {
+                    fields: {
+                        finding_type: { default: 'governance_gap' },
+                        explanation: { default: 'No explanation available' },
+                        asset_id: { default: null },
+                        created_at: { default: null }
+                    },
+                    drillPaths: ['finding_type'],
+                    displayName: 'Governance Hygiene'
                 },
                 findings: {
                     fields: {
@@ -888,6 +923,8 @@
             summaryCardMappings: {
                 statAssets: 'assets',
                 statSecurityRisks: 'security_risks',
+                statVisibilityGaps: 'visibility_gaps',
+                statGovernanceHygiene: 'governance_hygiene',
                 statFindings: 'findings',
                 statObservations: 'observations',
                 statRejected: 'rejections',
@@ -1385,11 +1422,14 @@
         }
 
         async function checkHealth() {
+            const dot = document.getElementById('healthDot');
+            const text = document.getElementById('healthText');
+            if (!dot || !text) return;
             try {
                 const r = await fetch('/api/health'); const d = await r.json();
-                document.getElementById('healthDot').classList.remove('error');
-                document.getElementById('healthText').textContent = `v${d.version} - Healthy`;
-            } catch { document.getElementById('healthDot').classList.add('error'); document.getElementById('healthText').textContent = 'Offline'; }
+                dot.classList.remove('error');
+                text.textContent = `v${d.version} - Healthy`;
+            } catch { dot.classList.add('error'); text.textContent = 'Offline'; }
         }
         
         async function loadTenants() {
@@ -1593,16 +1633,30 @@
         }
         
         async function loadFindings(runId) {
+            const SECURITY_CATEGORIES = ['identity_access', 'shadow_it', 'data_integrity', 'security_risk'];
+            const VISIBILITY_CATEGORIES = ['visibility_gap'];
+            const HYGIENE_CATEGORIES = ['governance_hygiene', 'governance_finding'];
+            
             try {
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
                 const allFindings = data.findings || [];
                 
-                const securityRisks = allFindings.filter(f => f.category === 'security_risk');
-                const governanceFindings = allFindings.filter(f => f.category !== 'security_risk');
+                const securityRisks = allFindings.filter(f => SECURITY_CATEGORIES.includes(f.category));
+                const visibilityGaps = allFindings.filter(f => VISIBILITY_CATEGORIES.includes(f.category));
+                const governanceHygiene = allFindings.filter(f => HYGIENE_CATEGORIES.includes(f.category));
+                const governanceFindings = allFindings.filter(f => !SECURITY_CATEGORIES.includes(f.category));
                 
                 const { data: secNorm, errors: secErrs } = normalizeResponse('security_risks', securityRisks);
                 normalizedData.security_risks = secNorm;
                 if (secErrs.length > 0) console.warn('Security risks normalization errors:', secErrs);
+                
+                const { data: visNorm, errors: visErrs } = normalizeResponse('visibility_gaps', visibilityGaps);
+                normalizedData.visibility_gaps = visNorm;
+                if (visErrs.length > 0) console.warn('Visibility gaps normalization errors:', visErrs);
+                
+                const { data: hygNorm, errors: hygErrs } = normalizeResponse('governance_hygiene', governanceHygiene);
+                normalizedData.governance_hygiene = hygNorm;
+                if (hygErrs.length > 0) console.warn('Governance hygiene normalization errors:', hygErrs);
                 
                 const { data: govNorm, errors: govErrs } = normalizeResponse('findings', governanceFindings);
                 normalizedData.findings = govNorm;
@@ -1612,7 +1666,6 @@
                 const p0Count = securityRisks.filter(f => f.triage_priority === 'p0').length;
                 const p1Count = securityRisks.filter(f => f.triage_priority === 'p1').length;
                 const p2Count = securityRisks.filter(f => f.triage_priority === 'p2' || !f.triage_priority).length;
-                const actionableCount = p0Count + p1Count;
                 
                 // Show total security risks as headline
                 document.getElementById('statSecurityRisks').textContent = securityRisks.length;
@@ -1623,11 +1676,17 @@
                 } else {
                     breakdownEl.textContent = '';
                 }
+                
+                // Secondary KPIs
+                document.getElementById('statVisibilityGaps').textContent = visibilityGaps.length;
+                document.getElementById('statGovernanceHygiene').textContent = governanceHygiene.length;
                 document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 
                 console.error('Failed to load findings:', e);
                 normalizedData.findings = [];
                 normalizedData.security_risks = [];
+                document.getElementById('statVisibilityGaps').textContent = '-';
+                document.getElementById('statGovernanceHygiene').textContent = '-';
             }
         }
         

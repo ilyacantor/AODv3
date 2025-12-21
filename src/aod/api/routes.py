@@ -99,6 +99,13 @@ async def health_check():
     )
 
 
+@router.get("/farm/url")
+async def get_farm_url():
+    """Get the configured Farm URL"""
+    farm_url = os.environ.get("FARM_URL")
+    return {"farm_url": farm_url}
+
+
 @router.get("/farm/tenants", response_model=TenantListResponse)
 async def list_farm_tenants():
     """

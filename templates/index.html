@@ -1821,9 +1821,17 @@
             }
             
             if (discoveryFarmBtn) {
-                discoveryFarmBtn.addEventListener('click', () => {
+                discoveryFarmBtn.addEventListener('click', async () => {
                     hideDiscoveryCompleteModal();
-                    window.open('https://farm.aos.dev', '_blank');
+                    try {
+                        const r = await fetch('/api/farm/url');
+                        const data = await r.json();
+                        if (data.farm_url) {
+                            window.open(data.farm_url, '_blank');
+                        }
+                    } catch (e) {
+                        console.error('Failed to get Farm URL:', e);
+                    }
                 });
             }
             

@@ -327,7 +327,10 @@
         </div>
         
         <div class="section compact">
-            <h2 class="section-title">Discovery Runs</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h2 class="section-title" style="margin:0;">Discovery Runs</h2>
+                <button class="btn btn-secondary" id="clearAllRuns" style="padding:0.35rem 0.75rem;font-size:0.75rem;" title="Delete all runs and start fresh">Clear All</button>
+            </div>
             <div id="runsLoading" class="loading hidden"><div class="spinner"></div>Loading runs...</div>
             <div id="runsList" class="runs-list"><div class="empty-state">No runs yet. Fetch a snapshot to get started.</div></div>
         </div>
@@ -1715,6 +1718,24 @@
             const icon = document.getElementById('advancedIcon');
             content.classList.toggle('hidden');
             icon.classList.toggle('open');
+        });
+        
+        document.getElementById('clearAllRuns').addEventListener('click', async () => {
+            if (!confirm('Delete all discovery runs? This cannot be undone.')) return;
+            const btn = document.getElementById('clearAllRuns');
+            btn.disabled = true;
+            btn.textContent = 'Clearing...';
+            try {
+                const r = await fetch('/api/runs', { method: 'DELETE' });
+                const data = await r.json();
+                await loadRuns();
+                document.getElementById('resultsSection').classList.add('hidden');
+                currentRunId = null;
+            } catch (e) {
+                console.error('Failed to clear runs:', e);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Clear All';
         });
         
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {

@@ -469,6 +469,14 @@ async def list_runs(tenant_id: Optional[str] = None):
     ]
 
 
+@router.delete("/runs")
+async def delete_all_runs():
+    """Delete all discovery runs and associated data"""
+    db = await get_db()
+    deleted = await db.delete_all_runs()
+    return {"message": f"Deleted {deleted} runs and all associated data", "deleted": deleted}
+
+
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 async def get_run(run_id: str):
     """Get run detail + counts"""

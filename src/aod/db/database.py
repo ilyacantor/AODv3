@@ -347,6 +347,22 @@ class Database:
             ))
         return runs
     
+    async def delete_all_runs(self) -> int:
+        """Delete all runs and associated data (assets, findings, etc.)"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            await conn.execute("DELETE FROM derived_classifications")
+            await conn.execute("DELETE FROM llm_facts")
+            await conn.execute("DELETE FROM rejections")
+            await conn.execute("DELETE FROM ambiguous_matches")
+            await conn.execute("DELETE FROM artifacts")
+            await conn.execute("DELETE FROM findings")
+            await conn.execute("DELETE FROM assets")
+            result = await conn.execute("DELETE FROM runs")
+            deleted = int(result.split()[-1]) if result else 0
+        return deleted
+    
     async def create_asset(self, asset: Asset) -> Asset:
         """Create a new asset"""
         pool = await self.get_pool()

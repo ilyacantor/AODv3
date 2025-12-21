@@ -21,7 +21,11 @@ The system utilizes a 7-stage sequential pipeline:
 7.  `findings_engine.py`: Deterministic findings generation.
 
 ### UI/UX Decisions
-The UI features a single-page application using the AutonomOS color palette and Quicksand font. It provides a dropdown snapshot picker and drillable KPI cards. Finding categories are split into "Security Risks" (actionable, risk-bearing) and "Governance/Operational Findings" (hygiene, accuracy, readiness), with "Security Risks" as a standalone top-level KPI.
+The UI features a single-page application using the AutonomOS color palette and Quicksand font. It provides a dropdown snapshot picker and drillable KPI cards organized into two rows:
+*   **Lifecycle Row**: Ingested (observations) → Validated (passed processing) → Rejected → Cataloged (assets)
+*   **Classifications Row**: Shadow, Zombie, Security Risks, Governance
+
+Each KPI box includes a help icon (?) in the top right corner with detailed tooltip explanation. Finding categories are split into "Security Risks" (actionable, risk-bearing) and "Governance" (hygiene, accuracy, readiness including CMDB gaps).
 
 ### Feature Specifications
 *   **Finding Categories (Dec 2025 Taxonomy)**: Security risks are categorized into three buckets:
@@ -29,9 +33,8 @@ The UI features a single-page application using the AutonomOS color palette and 
     - **Shadow IT** (`shadow_it`): FINANCE_GAP - financially-backed shadow systems  
     - **Data Integrity** (`data_integrity`): DATA_CONFLICT - conflicting authoritative data
     
-    Non-security findings have two categories:
-    - **Visibility Gaps** (`visibility_gap`): CMDB_GAP - coverage gaps in control planes
-    - **Governance Hygiene** (`governance_hygiene`): GOVERNANCE_GAP, DUPLICATION_RISK - exposure amplifiers
+    Non-security findings are consolidated into Governance:
+    - **Governance** (includes `visibility_gap`, `governance_hygiene`): CMDB_GAP (partial governance), GOVERNANCE_GAP, DUPLICATION_RISK - exposure amplifiers that reduce control plane accuracy
 *   **Correlation Disambiguation**: Employs specific codes (e.g., `MULTI_ENV`, `DUPLICATE`) and fuzzy matching (Levenshtein distance) to resolve multiple matches, always evidence-driven.
 *   **Data Planes**: Evidence is sourced from Discovery, IdP, CMDB, Cloud, Endpoint, Network, and Finance planes.
 *   **Derived Classifications**: `Shadow Asset` (discovered, active, ungoverned) and `Zombie Asset` (IdP/CMDB presence but no recent activity) are derived post-pipeline. Shadow classification specifically excludes finance evidence as a trigger.

@@ -2364,9 +2364,9 @@
                     select.innerHTML = '<option value="">No tenants found in Farm</option>';
                     select.disabled = true;
                 } else {
-                    select.innerHTML = '<option value="">Select a tenant...</option>' +
-                        tenants.map(t => `<option value="${t}">${t}</option>`).join('');
+                    select.innerHTML = tenants.map((t, i) => `<option value="${t}"${i === 0 ? ' selected' : ''}>${t}</option>`).join('');
                     select.disabled = false;
+                    loadSnapshots();
                 }
                 msg.className = 'success-message';
                 msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;

@@ -1042,15 +1042,18 @@
             return labels[category] || category || '';
         }
         
-        function toggleTriageMenu(btn) {
+        function toggleTriageMenu(btn, event) {
+            event.stopPropagation();
             const menu = btn.nextElementSibling;
             const wasOpen = menu.classList.contains('open');
             document.querySelectorAll('.triage-more-menu.open').forEach(m => m.classList.remove('open'));
             if (!wasOpen) menu.classList.add('open');
         }
         
-        document.addEventListener('click', () => {
-            document.querySelectorAll('.triage-more-menu.open').forEach(m => m.classList.remove('open'));
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.triage-more')) {
+                document.querySelectorAll('.triage-more-menu.open').forEach(m => m.classList.remove('open'));
+            }
         });
         
         function renderTierSection(container, items, tier) {
@@ -1116,7 +1119,7 @@
                 const actionBtns = `
                     ${primaryBtn}
                     <div class="triage-more">
-                        <button class="triage-more-btn" onclick="toggleTriageMenu(this);">&#8942;</button>
+                        <button class="triage-more-btn" onclick="toggleTriageMenu(this, event);">&#8942;</button>
                         <div class="triage-more-menu">${moreOptions}</div>
                     </div>`;
                 

@@ -516,7 +516,7 @@ class Database:
         
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM findings WHERE run_id = $1 ORDER BY severity DESC, finding_type",
+                "SELECT * FROM findings WHERE run_id = $1 ORDER BY triage_priority ASC, finding_type",
                 run_id
             )
         

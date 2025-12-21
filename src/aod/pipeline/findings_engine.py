@@ -152,7 +152,7 @@ def generate_identity_gap_finding(
         run_id=run_id,
         finding_type=FindingType.IDENTITY_GAP,
         category=get_category(FindingType.IDENTITY_GAP),
-        severity=Severity.CRITICAL,
+        severity=Severity.MED,
         explanation=f"Asset '{asset.name}' has strong activity evidence ({', '.join(admitted_via)}) but no identity provider governance (no SSO/SCIM)",
         evidence_refs=asset.evidence_refs,
         confidence=confidence,
@@ -232,7 +232,7 @@ def generate_governance_gap_finding(
         run_id=run_id,
         finding_type=FindingType.GOVERNANCE_GAP,
         category=get_category(FindingType.GOVERNANCE_GAP),
-        severity=Severity.LOW,
+        severity=Severity.MED,
         explanation=f"Asset '{asset.name}' has no designated owner in CMDB or IdP records",
         evidence_refs=asset.evidence_refs
     )
@@ -477,7 +477,7 @@ def generate_finance_gap_findings(
             run_id=run_id,
             finding_type=FindingType.FINANCE_GAP,
             category=get_category(FindingType.FINANCE_GAP),
-            severity=Severity.CRITICAL,
+            severity=Severity.MED,
             explanation=explanation,
             evidence_refs=agg['evidence_refs'][:50],  # Limit refs
             confidence=confidence,
@@ -555,7 +555,6 @@ def generate_findings(
     findings.sort(key=lambda f: (
         {"security_risk": 0, "governance_finding": 1}.get(f.category.value, 2),
         {"p0": 0, "p1": 1, "p2": 2}.get(f.triage_priority.value, 3),
-        {"critical": 0, "med": 1, "low": 2}.get(f.severity.value, 3),
         f.finding_type.value,
         str(f.asset_id) if f.asset_id else "",
         f.explanation

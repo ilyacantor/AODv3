@@ -1815,15 +1815,14 @@
                 const p2Count = securityRisks.filter(f => f.triage_priority === 'p2' || !f.triage_priority).length;
                 const actionableCount = p0Count + p1Count;
                 
-                // Show actionable count as headline (or total if no priority data)
-                const hasTriageData = securityRisks.some(f => f.triage_priority);
-                document.getElementById('statSecurityRisks').textContent = hasTriageData ? actionableCount : securityRisks.length;
-                // Show breakdown in sublabel
+                // Show total security risks as headline
+                document.getElementById('statSecurityRisks').textContent = securityRisks.length;
+                // Show priority breakdown in sublabel
                 const breakdownEl = document.getElementById('riskBreakdown');
-                if (securityRisks.length > 0 && hasTriageData) {
+                if (securityRisks.length > 0) {
                     breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
                 } else {
-                    breakdownEl.textContent = hasTriageData ? '' : '(run new snapshot for priority breakdown)';
+                    breakdownEl.textContent = '';
                 }
                 document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 

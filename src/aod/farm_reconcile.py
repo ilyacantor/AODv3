@@ -47,10 +47,10 @@ def build_reconcile_payload(
         mode=mode
     )
     
-    critical_severity_findings = [
+    high_priority_findings = [
         f"{f.finding_type.value}: {f.explanation[:150]}"
         for f in findings
-        if f.severity.value == "critical"
+        if f.triage_priority.value in ("p0", "p1")
     ][:10]
     
     aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
@@ -102,7 +102,7 @@ def build_reconcile_payload(
         "aod_lists": {
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],
-            "critical_severity_findings": critical_severity_findings,
+            "high_priority_findings": high_priority_findings,
             "actual_reason_codes": actual_results.actual_reasons,
             "asset_summaries": asset_summaries
         }

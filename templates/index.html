@@ -423,7 +423,7 @@
                             <div class="stat-label">Ingested</div>
                         </div>
                         <div class="stat-card" data-drill-type="validated">
-                            <div class="stat-help" title="Observations that passed schema validation, were correlated across data planes, and classified. This count equals Ingested minus Rejected.">?</div>
+                            <div class="stat-help" title="Observations that passed schema validation and normalization. These are candidates ready for correlation and admission processing.">?</div>
                             <div class="stat-value" id="statValidated">-</div>
                             <div class="stat-label">Validated</div>
                         </div>
@@ -2078,9 +2078,10 @@
                 document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
                 document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
                 const obsIn = run.counts.observations_in || 0;
+                const candidatesOut = run.counts.candidates_out || 0;
                 const rejected = run.counts.rejected || 0;
                 document.getElementById('statObservations').textContent = obsIn;
-                document.getElementById('statValidated').textContent = Math.max(0, obsIn - rejected);
+                document.getElementById('statValidated').textContent = candidatesOut;
                 document.getElementById('statRejected').textContent = rejected;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
             } catch (e) { console.error('Failed to load run details:', e); }

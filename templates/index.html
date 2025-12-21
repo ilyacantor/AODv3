@@ -21,11 +21,20 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Quicksand', sans-serif; background: linear-gradient(135deg, var(--slate-950) 0%, var(--slate-900) 100%); color: white; min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); }
-        .logo { display: flex; align-items: center; gap: 0.75rem; }
-        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, var(--cyan-600) 0%, var(--purple-600) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; }
-        .logo-text { font-size: 1.5rem; font-weight: 700; color: white; }
-        .logo-text span { color: var(--cyan-400); }
+        header { display: flex; align-items: center; padding: 0 2rem; height: 56px; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); gap: 0; }
+        .header-left { display: flex; align-items: center; gap: 0; }
+        .logo { display: flex; align-items: center; gap: 0.5rem; }
+        .logo-icon { width: 28px; height: 28px; background: var(--cyan-500); border-radius: 2px; }
+        .logo-text { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); letter-spacing: 0.5px; }
+        .logo-text .os { color: var(--cyan-400); }
+        .logo-text .tm { font-size: 0.65rem; vertical-align: super; color: var(--cyan-400); margin-left: 1px; }
+        .header-divider { width: 1px; height: 24px; background: var(--slate-700); margin: 0 1.25rem; }
+        .module-name { font-size: 1rem; font-weight: 600; color: white; margin-right: 2rem; }
+        .header-nav { display: flex; align-items: center; gap: 0; height: 100%; }
+        .header-nav-tab { padding: 0 1.25rem; height: 100%; display: flex; align-items: center; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.15s ease; border-bottom: 2px solid transparent; }
+        .header-nav-tab:hover { color: white; background: rgba(30, 41, 59, 0.4); }
+        .header-nav-tab.active { color: var(--cyan-400); background: rgba(6, 182, 212, 0.1); border-bottom-color: var(--cyan-400); }
+        .header-right { display: flex; align-items: center; gap: 1.5rem; margin-left: auto; }
         .health-status { display: flex; align-items: center; gap: 0.5rem; color: var(--slate-400); font-size: 0.875rem; }
         .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-400); }
         .health-dot.error { background: var(--red-400); }
@@ -156,10 +165,11 @@
         .btn-back { background: var(--slate-700); color: white; padding: 0.5rem 1rem; font-size: 0.875rem; }
         .btn-back:hover { background: var(--slate-600); }
         .header-actions { display: flex; align-items: center; gap: 1rem; }
-        .btn-help { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem; }
+        .snapshot-count { color: var(--slate-400); font-size: 0.875rem; font-weight: 500; }
+        .btn-refresh { background: transparent; border: 1px solid var(--cyan-600); color: var(--cyan-400); padding: 0.4rem 1rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.4rem; }
+        .btn-refresh:hover { background: rgba(6, 182, 212, 0.1); border-color: var(--cyan-400); }
+        .btn-help { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.4rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem; }
         .btn-help:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
-        .btn-refresh { background: transparent; border: 1px solid var(--slate-700); color: var(--slate-400); padding: 0.5rem 0.75rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; }
-        .btn-refresh:hover { border-color: var(--cyan-500); color: var(--cyan-400); }
         .item-detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--slate-700); }
         .item-detail-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); }
         .item-detail-meta { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
@@ -220,10 +230,6 @@
         .mode-indicator { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
         .mode-indicator.dev { background: rgba(148, 163, 184, 0.2); color: var(--slate-400); }
         .mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
-        .main-tabs { display: flex; background: var(--gray-900); border-bottom: 1px solid var(--gray-700); padding: 0 2rem; }
-        .main-tab { padding: 1rem 1.5rem; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; border-bottom: 3px solid transparent; margin-bottom: -1px; }
-        .main-tab:hover { color: white; background: rgba(30, 41, 59, 0.3); }
-        .main-tab.active { color: var(--cyan-400); border-bottom-color: var(--cyan-400); background: rgba(6, 182, 212, 0.1); }
         .main-tab-content { display: none; }
         .main-tab-content.active { display: block; }
         .test-card { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; transition: all 0.2s ease; }
@@ -245,8 +251,19 @@
 </head>
 <body>
     <header>
-        <div class="logo"><div class="logo-icon">A</div><div class="logo-text">AOD <span>Fresh</span></div></div>
-        <div class="header-actions">
+        <div class="header-left">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <div class="logo-text">autonom<span class="os">OS</span><span class="tm">™</span></div>
+            </div>
+            <div class="header-divider"></div>
+            <div class="module-name">AOD Fresh</div>
+            <nav class="header-nav">
+                <button class="header-nav-tab active" data-tab="discovery">Console</button>
+                <button class="header-nav-tab" data-tab="test">Test Lab</button>
+            </nav>
+        </div>
+        <div class="header-right">
             <div class="mode-toggle" title="Dev mode: LLM off (deterministic only). Prod mode: LLM on (calls made as needed for fringe resolution).">
                 <span class="mode-label active" id="devLabel">Dev</span>
                 <div class="toggle-switch" id="modeToggle">
@@ -254,15 +271,10 @@
                 </div>
                 <span class="mode-label" id="prodLabel">Prod</span>
             </div>
-            <button class="btn-refresh" id="refreshBtn" title="Refresh page">↻ Refresh</button>
-            <button class="btn-help" id="helpBtn">? Help</button>
-            <div class="health-status"><div class="health-dot" id="healthDot"></div><span id="healthText">Checking...</span></div>
+            <span class="snapshot-count" id="snapshotCount"></span>
+            <button class="btn-refresh" id="refreshBtn" title="Refresh page"><span>↻</span> Refresh</button>
         </div>
     </header>
-    <nav class="main-tabs">
-        <button class="main-tab active" data-tab="discovery">Discovery</button>
-        <button class="main-tab" data-tab="test">Test</button>
-    </nav>
     <div id="discoveryTabContent" class="main-tab-content active">
     <main class="container">
         <div class="section-row">
@@ -525,10 +537,10 @@
         }
         
         function initMainTabs() {
-            document.querySelectorAll('.main-tab').forEach(tab => {
+            document.querySelectorAll('.header-nav-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     const targetTab = tab.dataset.tab;
-                    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.header-nav-tab').forEach(t => t.classList.remove('active'));
                     document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
                     tab.classList.add('active');
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
@@ -1663,6 +1675,10 @@
                 }
                 const data = await r.json();
                 loadedSnapshots = data.snapshots || [];
+                
+                document.getElementById('snapshotCount').textContent = loadedSnapshots.length > 0 
+                    ? `${loadedSnapshots.length} snapshots` 
+                    : '';
                 
                 if (loadedSnapshots.length === 0) {
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';

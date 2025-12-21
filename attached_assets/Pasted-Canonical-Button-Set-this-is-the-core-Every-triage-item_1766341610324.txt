@@ -1,0 +1,159 @@
+Canonical Button Set (this is the core)
+
+Every triage item supports only these actions.
+
+Primary buttons (visible)
+
+These vary by tier but come from the same set.
+
+🟢 Acknowledge
+
+“Yes, I’ve seen this and it’s understood.”
+
+What it does (system):
+
+Marks signal as acknowledged
+
+Keeps it visible but deprioritized
+
+No suppression timer
+
+When shown:
+
+Action Recommended
+
+Needs Judgment
+
+This is the lowest-friction button and should be encouraged.
+
+🧑 Assign Owner
+
+“This should have an accountable owner.”
+
+What it does:
+
+Attaches owner metadata (person / team)
+
+Signals intent to govern
+
+Enables downstream workflows (AAM / tickets later)
+
+Important:
+This does not require CMDB write-back yet. It can be logical ownership only.
+
+⏸️ Defer
+
+“This matters, but not now.”
+
+What it does:
+
+Suppresses signal for a time window
+
+Default options: 30 / 60 / 90 days
+
+Reappears automatically
+
+Why this matters:
+This prevents false positives from eroding trust without pretending the issue is solved.
+
+🗑️ Ignore Signal
+
+“This signal is not useful.”
+
+What it does:
+
+Suppresses indefinitely
+
+Requires a reason selection (dropdown, not free text)
+
+Known vendor
+
+Expected architecture
+
+Test / sandbox
+
+Other (rare)
+
+This is explicit, not passive.
+
+3️⃣ Tier → Button Mapping (important)
+Action Recommended
+
+Show 2 buttons max to avoid paralysis:
+
+Acknowledge (primary)
+
+Assign Owner (secondary)
+
+⋯ → Defer, Ignore
+
+Needs Judgment
+
+Acknowledge
+
+Defer
+
+⋯ → Assign Owner, Ignore
+
+Informational
+
+Archive / Ignore
+
+⋯ → Acknowledge
+
+4️⃣ What you should NOT have (by design)
+
+🚫 “Fix now”
+🚫 “Resolve”
+🚫 “Remediate”
+🚫 “Create ticket” (until AAM/agents exist)
+🚫 “Mark compliant”
+
+Those all imply authority AOD does not have.
+
+5️⃣ Detail panel workflow (single-pass)
+
+When a user clicks a signal:
+
+They read What’s happening
+
+They glance at Why we believe this
+
+They click one button
+
+Panel auto-closes or advances to next signal
+
+Rule:
+No signal should require scrolling before a decision can be made.
+
+6️⃣ System state transitions (internal, clean)
+
+Each signal has a simple state machine:
+
+NEW
+ ↓
+ACKNOWLEDGED
+ ↓
+( optional )
+DEFERRED ──► resurfaces
+ ↓
+IGNORED (terminal)
+
+
+Ownership is an overlay, not a terminal state.
+
+7️⃣ What gets handed to AAM (future-proof)
+
+Triage outputs intent, not actions:
+
+{
+  "asset_id": "…",
+  "signal_type": "identity_gap",
+  "intent": "ASSIGN_OWNER",
+  "owner": "sec-ops@company.com",
+  "confidence": "HIGH",
+  "acknowledged_at": "2025-12-21T17:43Z"
+}
+
+
+This is gold for agents later.

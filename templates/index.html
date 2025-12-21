@@ -286,6 +286,19 @@
         .signal-badge.finance { background: rgba(34, 197, 94, 0.15); color: var(--green-400); }
         .signal-badge.cloud { background: rgba(96, 165, 250, 0.15); color: #60A5FA; }
         .signal-badge.gap { background: rgba(239, 68, 68, 0.1); color: #F87171; }
+        .triage-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; margin-left: 1rem; }
+        .triage-btn { padding: 0.375rem 0.75rem; border-radius: 6px; border: none; font-family: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
+        .triage-btn.primary { background: var(--cyan-500); color: white; }
+        .triage-btn.primary:hover { background: var(--cyan-400); }
+        .triage-btn.secondary { background: var(--slate-700); color: var(--slate-300); }
+        .triage-btn.secondary:hover { background: var(--slate-600); color: white; }
+        .triage-btn.more-btn { background: var(--slate-700); color: var(--slate-400); padding: 0.375rem 0.5rem; }
+        .triage-btn.more-btn:hover { background: var(--slate-600); }
+        .triage-more { position: relative; }
+        .triage-more-menu { position: absolute; top: 100%; right: 0; margin-top: 0.25rem; background: var(--slate-800); border: 1px solid var(--slate-600); border-radius: 6px; padding: 0.25rem; min-width: 140px; z-index: 100; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .triage-more-menu.show { display: block; }
+        .triage-menu-item { display: block; width: 100%; padding: 0.5rem 0.75rem; border: none; background: transparent; color: var(--slate-300); font-size: 0.75rem; text-align: left; cursor: pointer; border-radius: 4px; font-family: inherit; }
+        .triage-menu-item:hover { background: var(--slate-700); color: white; }
         .triage-item:last-child { margin-bottom: 0; }
         .triage-item-priority { flex-shrink: 0; }
         .triage-item-content { flex: 1; min-width: 0; }
@@ -631,6 +644,76 @@
         function initTriageTab() {
             const triageSelect = document.getElementById('triageRunSelect');
             triageSelect.addEventListener('change', loadTriageData);
+            
+            document.getElementById('triageSections').addEventListener('click', async (e) => {
+                const btn = e.target.closest('[data-action]');
+                if (!btn) return;
+                
+                const action = btn.dataset.action;
+                const itemId = btn.dataset.itemId;
+                const itemType = btn.dataset.itemType;
+                const runId = document.getElementById('triageRunSelect').value;
+                
+                if (!runId || !itemId) return;
+                
+                if (action === 'defer') {
+                    showDeferModal(runId, itemId, itemType);
+                } else if (action === 'ignore') {
+                    showIgnoreModal(runId, itemId, itemType);
+                } else if (action === 'assign') {
+                    showAssignModal(runId, itemId, itemType);
+                } else {
+                    await submitTriageAction(runId, itemId, itemType, action);
+                }
+            });
+        }
+        
+        async function submitTriageAction(runId, itemId, itemType, action, extra = {}) {
+            try {
+                const response = await fetch('/api/triage/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ run_id: runId, item_id: itemId, item_type: itemType, action, ...extra })
+                });
+                
+                if (response.ok) {
+                    const item = document.querySelector(`.triage-item[data-item-id="${itemId}"]`);
+                    if (item) {
+                        item.style.opacity = '0.5';
+                        item.style.transition = 'opacity 0.3s';
+                        const badge = document.createElement('span');
+                        badge.className = 'triage-tag ' + action;
+                        badge.textContent = action.charAt(0).toUpperCase() + action.slice(1) + 'd';
+                        badge.style.marginLeft = '0.5rem';
+                        const title = item.querySelector('.triage-item-title');
+                        if (title && !title.querySelector('.' + action)) title.appendChild(badge);
+                    }
+                }
+            } catch (err) {
+                console.error('Triage action failed:', err);
+            }
+        }
+        
+        function showDeferModal(runId, itemId, itemType) {
+            const days = prompt('Defer for how many days? (30, 60, or 90)', '30');
+            if (days && ['30', '60', '90'].includes(days)) {
+                submitTriageAction(runId, itemId, itemType, 'defer', { defer_days: parseInt(days) });
+            }
+        }
+        
+        function showIgnoreModal(runId, itemId, itemType) {
+            const reasons = ['Known vendor', 'Expected architecture', 'Test / sandbox', 'Other'];
+            const reason = prompt('Select reason to ignore:\\n1. Known vendor\\n2. Expected architecture\\n3. Test / sandbox\\n4. Other', '1');
+            if (reason && ['1','2','3','4'].includes(reason)) {
+                submitTriageAction(runId, itemId, itemType, 'ignore', { ignore_reason: reasons[parseInt(reason) - 1] });
+            }
+        }
+        
+        function showAssignModal(runId, itemId, itemType) {
+            const owner = prompt('Enter owner email or team name:');
+            if (owner && owner.trim()) {
+                submitTriageAction(runId, itemId, itemType, 'assign', { owner: owner.trim() });
+            }
         }
         
         async function loadTriageRuns() {
@@ -742,9 +825,9 @@
                 document.getElementById('triageTier2Count').textContent = tier2Items.length;
                 document.getElementById('triageTier3Count').textContent = tier3Items.length;
                 
-                renderTierSection(tier1Content, tier1Items);
-                renderTierSection(tier2Content, tier2Items);
-                renderTierSection(tier3Content, tier3Items);
+                renderTierSection(tier1Content, tier1Items, 1);
+                renderTierSection(tier2Content, tier2Items, 2);
+                renderTierSection(tier3Content, tier3Items, 3);
                 
             } catch (err) {
                 console.error('Failed to load triage data:', err);
@@ -754,14 +837,54 @@
             }
         }
         
-        function renderTierSection(container, items) {
+        function renderTierSection(container, items, tier) {
             if (!items || items.length === 0) {
                 container.innerHTML = '<div class="triage-empty">No items in this tier</div>';
                 return;
             }
             
+            function getActionButtons(tier, itemId, itemType) {
+                const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
+                if (tier === 1) {
+                    return `<div class="triage-actions">
+                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="assign">Assign Owner</button>
+                        <div class="triage-more">
+                            <button class="triage-btn more-btn">⋯</button>
+                            <div class="triage-more-menu">
+                                <button class="triage-menu-item" ${dataAttrs} data-action="defer">Defer</button>
+                                <button class="triage-menu-item" ${dataAttrs} data-action="ignore">Ignore Signal</button>
+                            </div>
+                        </div>
+                    </div>`;
+                } else if (tier === 2) {
+                    return `<div class="triage-actions">
+                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="defer">Defer</button>
+                        <div class="triage-more">
+                            <button class="triage-btn more-btn">⋯</button>
+                            <div class="triage-more-menu">
+                                <button class="triage-menu-item" ${dataAttrs} data-action="assign">Assign Owner</button>
+                                <button class="triage-menu-item" ${dataAttrs} data-action="ignore">Ignore Signal</button>
+                            </div>
+                        </div>
+                    </div>`;
+                } else {
+                    return `<div class="triage-actions">
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="ignore">Ignore</button>
+                        <div class="triage-more">
+                            <button class="triage-btn more-btn">⋯</button>
+                            <div class="triage-more-menu">
+                                <button class="triage-menu-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            }
+            
             container.innerHTML = items.map(item => {
                 const itemType = item.itemType || 'unknown';
+                const itemId = item.finding_id || item.asset_id || '';
                 let icon = '•';
                 let iconClass = '';
                 
@@ -776,9 +899,11 @@
                     iconClass = 'zombie';
                 }
                 
+                const actionButtons = getActionButtons(tier, itemId, itemType);
+                
                 if (itemType === 'finding') {
                     const findingType = (item.finding_type || 'unknown').replace(/_/g, ' ');
-                    return `<div class="triage-item">
+                    return `<div class="triage-item" data-item-id="${itemId}">
                         <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
                             <div class="triage-item-title">${findingType}</div>
@@ -788,6 +913,7 @@
                                 ${item.triage_priority ? `<span class="triage-tag priority">${item.triage_priority.toUpperCase()}</span>` : ''}
                             </div>
                         </div>
+                        ${actionButtons}
                     </div>`;
                 } else {
                     const name = item.name || item.asset_key || 'Unknown';
@@ -803,7 +929,7 @@
                     if (!agg.has_idp && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No IdP</span>');
                     if (!agg.has_cmdb && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No CMDB</span>');
                     
-                    return `<div class="triage-item">
+                    return `<div class="triage-item" data-item-id="${itemId}">
                         <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
                             <div class="triage-item-title">${name}</div>
@@ -815,9 +941,25 @@
                             </div>
                             ${signalBadges.length ? `<div class="triage-item-signals">${signalBadges.join('')}</div>` : ''}
                         </div>
+                        ${actionButtons}
                     </div>`;
                 }
             }).join('');
+            
+            container.querySelectorAll('.more-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const menu = btn.nextElementSibling;
+                    document.querySelectorAll('.triage-more-menu.show').forEach(m => {
+                        if (m !== menu) m.classList.remove('show');
+                    });
+                    menu.classList.toggle('show');
+                });
+            });
+            
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.triage-more-menu.show').forEach(m => m.classList.remove('show'));
+            });
         }
         
         function initTestTab() {

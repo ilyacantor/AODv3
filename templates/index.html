@@ -58,6 +58,7 @@
         .stat-value.stat-shadow { color: var(--amber-400); }
         .stat-value.stat-zombie { color: var(--red-400); }
         .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
+        .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
         .findings-list { max-height: 400px; overflow-y: auto; }
         .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
         .severity-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
@@ -335,7 +336,7 @@
                 <div id="summaryStats" class="stats-grid">
                     <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks: Identity gaps, finance gaps, and data conflicts that represent potential attack surface or exposure."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div></div>
+                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks (Actionable): P0 + P1 priority risks requiring action. Click for breakdown by priority."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
                     <div class="stat-card clickable" data-drill-type="findings" title="Governance and operational findings including CMDB gaps, ownership issues, and data quality concerns."><div class="stat-value" id="statFindings">-</div><div class="stat-label">Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
                     <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
@@ -1808,7 +1809,21 @@
                 normalizedData.findings = govNorm;
                 if (govErrs.length > 0) console.warn('Findings normalization errors:', govErrs);
                 
-                document.getElementById('statSecurityRisks').textContent = securityRisks.length;
+                // Compute risk case counts by priority
+                const p0Count = securityRisks.filter(f => f.triage_priority === 'p0').length;
+                const p1Count = securityRisks.filter(f => f.triage_priority === 'p1').length;
+                const p2Count = securityRisks.filter(f => f.triage_priority === 'p2').length;
+                const actionableCount = p0Count + p1Count;
+                
+                // Show actionable count as headline
+                document.getElementById('statSecurityRisks').textContent = actionableCount;
+                // Show breakdown in sublabel
+                const breakdownEl = document.getElementById('riskBreakdown');
+                if (securityRisks.length > 0) {
+                    breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
+                } else {
+                    breakdownEl.textContent = '';
+                }
                 document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 
                 console.error('Failed to load findings:', e);

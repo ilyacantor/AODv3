@@ -374,6 +374,9 @@
             <div class="button-row">
                 <button class="btn btn-primary" id="fetchFromFarm">Fetch & Run Discovery</button>
             </div>
+            <div style="margin-top: 0.75rem;">
+                <button class="btn btn-secondary" id="goToFarmSnapshotBtn" style="width: 100%;">Go to Farm to Generate New Snapshot →</button>
+            </div>
         </div>
         
         <div class="section compact">
@@ -456,7 +459,7 @@
                     <div id="drillContent"></div>
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
-                    <button class="btn btn-secondary" id="goToFarmBtn">Go to Farm to Generate New Snapshot →</button>
+                    <button class="btn btn-secondary" id="goToFarmBtn">Go to Farm for Grading →</button>
                 </div>
             </div>
         </div>
@@ -2164,6 +2167,21 @@
                     }
                 });
             }
+            
+            const goToFarmSnapshotBtn = document.getElementById('goToFarmSnapshotBtn');
+            if (goToFarmSnapshotBtn) {
+                goToFarmSnapshotBtn.addEventListener('click', async () => {
+                    try {
+                        const r = await fetch('/api/farm/url');
+                        const data = await r.json();
+                        if (data.farm_url) {
+                            window.open(data.farm_url, '_blank');
+                        }
+                    } catch (e) {
+                        console.error('Failed to get Farm URL:', e);
+                    }
+                });
+            }
         }, 0);
         
         
@@ -2289,7 +2307,7 @@
                 <p style="color: var(--slate-300); margin-bottom: 1.5rem;">What would you like to do next?</p>
                 <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                     <button class="btn btn-primary" id="discoveryReviewBtn" style="width: 100%;">Review Results</button>
-                    <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm to Generate New Snapshot</button>
+                    <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm for Grading</button>
                     <button class="btn" id="discoveryCancelBtn" style="width: 100%; background: var(--slate-700);">Cancel</button>
                 </div>
             </div>

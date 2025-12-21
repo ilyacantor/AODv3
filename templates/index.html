@@ -1736,10 +1736,10 @@
                 
                 if (detail.includes('corporate root domain') || detail.includes('root domain')) {
                     return {
-                        summary: `"${domainMention}" is your company's main domain, not a separate application.`,
-                        whyRejected: `We saw activity on ${domainMention}, but this is a root domain (like "company.com") that represents your entire organization. It's not a specific software tool or service — it's just your company's web address.`,
+                        summary: `Traffic to "${domainMention}" was detected, but this is a vendor's main website — not a specific application.`,
+                        whyRejected: `We saw network activity to ${domainMention}, which is the vendor's public homepage or marketing site. This root domain isn't a specific application instance — it's like visiting "salesforce.com" instead of "yourcompany.salesforce.com". Only tenant-specific subdomains (where your organization actually uses the service) are tracked as assets.`,
                         action: 'No',
-                        actionDetail: `This is expected. Root domains are always excluded because they're not applications. The actual apps (like "app.${domainMention}" or "mail.${domainMention}") are tracked separately.`
+                        actionDetail: `This is normal. If your team uses this vendor, look for tenant-specific domains in your catalog (e.g., "yourcompany.${domainMention}" or "app.${domainMention}"). If those are missing but expected, check if the subdomain traffic is being captured correctly.`
                     };
                 }
                 

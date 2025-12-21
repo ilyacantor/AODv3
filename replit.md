@@ -36,6 +36,8 @@ The UI features a single-page application using the AutonomOS color palette and 
 *   **CMDB Correlation**: Utilizes multiple matching strategies including domain, canonical name, fuzzy, contains, domain token, and vendor matching, with vendor validation for accuracy.
 *   **Infrastructure Domain Exclusion**: Excludes internal infrastructure domains from shadow/zombie classification.
 *   **LLM Fringe Resolution**: For ambiguous assets, an LLM-based resolver provides classification assistance, persisting facts for reuse and excluding INFRA_TECH assets.
+*   **Risk Case Aggregation**: Security findings include confidence, materiality, and triage_priority fields. P0 = HIGH confidence + HIGH materiality; P1 = HIGH+MED or MED+HIGH; P2 = everything else. UI shows actionable (P0+P1) as headline.
+*   **Tighter Trigger Gates**: IDENTITY_GAP requires strong activity evidence (cloud/finance/multi-plane); FINANCE_GAP requires recurring spend ≥$200/mo; DATA_CONFLICT only fires for security-relevant fields (owner, environment, data_classification, etc.) with deduplication by (asset, field).
 *   **API Structure**: A FastAPI application exposes endpoints for triggering runs, retrieving details, and debug/reconciliation.
 *   **Run Status Semantics**: Explicit run statuses (e.g., `UPSTREAM_ERROR`, `COMPLETED_WITH_RESULTS`).
 *   **Database Design**: PostgreSQL persistence for `runs`, `assets`, `findings`, `artifacts`, and other related data.

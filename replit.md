@@ -24,7 +24,14 @@ The system utilizes a 7-stage sequential pipeline:
 The UI features a single-page application using the AutonomOS color palette and Quicksand font. It provides a dropdown snapshot picker and drillable KPI cards. Finding categories are split into "Security Risks" (actionable, risk-bearing) and "Governance/Operational Findings" (hygiene, accuracy, readiness), with "Security Risks" as a standalone top-level KPI.
 
 ### Feature Specifications
-*   **Finding Categories**: Findings are categorized into "Security Risks" (e.g., `identity_gap`, `finance_gap`) and "Governance/Operational Findings" (e.g., `cmdb_gap`, `duplication_risk`), sorted by category and severity.
+*   **Finding Categories (Dec 2025 Taxonomy)**: Security risks are categorized into three buckets:
+    - **Identity & Access** (`identity_access`): IDENTITY_GAP - ungoverned access paths
+    - **Shadow IT** (`shadow_it`): FINANCE_GAP - financially-backed shadow systems  
+    - **Data Integrity** (`data_integrity`): DATA_CONFLICT - conflicting authoritative data
+    
+    Non-security findings have two categories:
+    - **Visibility Gaps** (`visibility_gap`): CMDB_GAP - coverage gaps in control planes
+    - **Governance Hygiene** (`governance_hygiene`): GOVERNANCE_GAP, DUPLICATION_RISK - exposure amplifiers
 *   **Correlation Disambiguation**: Employs specific codes (e.g., `MULTI_ENV`, `DUPLICATE`) and fuzzy matching (Levenshtein distance) to resolve multiple matches, always evidence-driven.
 *   **Data Planes**: Evidence is sourced from Discovery, IdP, CMDB, Cloud, Endpoint, Network, and Finance planes.
 *   **Derived Classifications**: `Shadow Asset` (discovered, active, ungoverned) and `Zombie Asset` (IdP/CMDB presence but no recent activity) are derived post-pipeline. Shadow classification specifically excludes finance evidence as a trigger.

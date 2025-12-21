@@ -1,0 +1,204 @@
+Here’s a **clean, enterprise-grade categorization of security risks** that fits AOD’s philosophy (evidence-driven, low-noise, actionable) and scales without becoming SOC theater.
+
+I’ll give you:
+
+1. The **top-level categories** (what CISOs expect)
+2. **How your existing findings map**
+3. What’s **intentionally excluded**
+4. How this drives UI, KPIs, and prioritization
+
+---
+
+## 1. Canonical Security Risk Categories (AOD-aligned)
+
+### **1) Identity & Access Risks**
+
+> *“Who can access this, and should they?”*
+
+**Definition**
+Risks where access exists or is implied **without centralized identity control or policy enforcement**.
+
+**Examples**
+
+* App in use with no IdP / SSO / SCIM
+* Orphaned access paths (API keys, local auth, service accounts)
+* Access exists but ownership is unknown or unmanaged
+
+**AOD Mapping**
+
+* `IDENTITY_GAP` → **Identity & Access Risk (HIGH)**
+
+**Why it’s first**
+
+* Most breaches start here
+* Clean, defensible, board-level understandable
+* Almost always actionable
+
+---
+
+### **2) Financially-Backed Shadow IT Risks**
+
+> *“We are paying for something we do not govern.”*
+
+**Definition**
+Spend or contractual obligation exists **without corresponding governance or visibility**, implying unsanctioned systems with unknown access, data handling, or compliance posture.
+
+**Examples**
+
+* SaaS contract with no CMDB entry and no IdP integration
+* Recurring charges tied to unknown vendor/product
+* Department-level tools bypassing IT/security review
+
+**AOD Mapping**
+
+* `FINANCE_GAP` → **Shadow IT Risk (HIGH)**
+  *(only when spend is recurring + material)*
+
+**Key nuance**
+This is **not “finance hygiene”** — money + usage = latent security exposure.
+
+---
+
+### **3) Data Integrity & Control Risks**
+
+> *“We can’t trust what we think we know.”*
+
+**Definition**
+Conflicting or inconsistent authoritative data across systems of record that undermines security posture, enforcement, or auditability.
+
+**Examples**
+
+* CMDB says “prod” while cloud says “staging”
+* Owner differs across IdP vs CMDB
+* Asset marked “inactive” but shows active usage
+
+**AOD Mapping**
+
+* `DATA_CONFLICT` → **Data Integrity Risk (MEDIUM)**
+
+**Why it matters**
+Bad data leads to:
+
+* Missed access reviews
+* Incorrect risk acceptance
+* Broken controls
+
+Usually **not P0**, but dangerous if ignored.
+
+---
+
+### **4) Coverage & Visibility Gaps (Conditional Security Risk)**
+
+> *“We can’t protect what we can’t see.”*
+
+**Definition**
+Assets that are active but **outside one or more core control planes**, reducing the organization’s ability to enforce security policies.
+
+**Examples**
+
+* Asset exists but not in CMDB *and* has access or spend
+* System used in production but not logged centrally
+* SaaS detected in discovery but invisible to security tooling
+
+**AOD Mapping**
+
+* Derived from combinations:
+
+  * `CMDB_GAP` + activity
+  * `IDENTITY_GAP` + usage
+  * `FINANCE_GAP` + no ownership
+
+**Important**
+This category should **not always count as a security risk** — only when paired with evidence of use or impact.
+
+---
+
+### **5) Exposure Amplifiers (Secondary / Contextual)**
+
+> *“This makes other risks worse.”*
+
+**Definition**
+Conditions that **increase blast radius** or reduce response effectiveness but are rarely standalone vulnerabilities.
+
+**Examples**
+
+* No owner assigned
+* Duplicate representations of same asset
+* Ambiguous vendor/product identity
+
+**AOD Mapping**
+
+* `GOVERNANCE_GAP`
+* `DUPLICATION_RISK`
+
+**Treatment**
+
+* Never P0 on their own
+* Used as **risk multipliers**, not headline counts
+
+---
+
+## 2. How Your Current Findings Fit (Cleanly)
+
+| AOD Finding        | Category           | Security Risk?      | Notes                      |
+| ------------------ | ------------------ | ------------------- | -------------------------- |
+| `IDENTITY_GAP`     | Identity & Access  | ✅ Yes               | Core security risk         |
+| `FINANCE_GAP`      | Shadow IT          | ✅ Yes (conditional) | Only if recurring/material |
+| `DATA_CONFLICT`    | Data Integrity     | ⚠️ Sometimes        | Field-scoped               |
+| `CMDB_GAP`         | Visibility         | ⚠️ Conditional      | Needs activity             |
+| `GOVERNANCE_GAP`   | Exposure Amplifier | ❌ No                | Hygiene                    |
+| `DUPLICATION_RISK` | Exposure Amplifier | ❌ No                | Context only               |
+
+This preserves your taxonomy **without re-labeling everything “security.”**
+
+---
+
+## 3. What AOD Should Explicitly NOT Call a Security Risk
+
+These should *never* inflate the “Security Risks” KPI:
+
+* Missing CMDB entries **with no usage**
+* One-time or trivial spend
+* Discovery-only signals (DNS, passive observation)
+* Duplicate records without access implications
+* Unknown vendor **without activity**
+
+This distinction is what separates AOD from noisy CNAPP/iPaaS/SaaS-security tools.
+
+---
+
+## 4. How This Should Drive the UI + KPIs
+
+### Top-Level KPI
+
+**“Actionable Security Risks”**
+
+* Count of **risk cases**
+* Only P0 + P1
+* Deduped per asset + category
+
+### Breakdown (stacked or drill-down)
+
+* Identity & Access
+* Shadow IT (Financial)
+* Data Integrity
+
+### Secondary KPIs
+
+* “Visibility Gaps”
+* “Governance Hygiene Issues”
+
+This reinforces:
+
+> *Security ≠ cleanliness ≠ completeness*
+
+---
+
+## 5. One-Sentence Executive Framing (Investor-ready)
+
+> “AOD classifies security risk based on **ungoverned access, financially-backed shadow systems, and integrity failures across systems of record — not on raw discovery noise.”
+
+If you want, next step I’d recommend:
+
+* Define **P0/P1/P2 criteria per category** (very mechanical)
+* Or produce a **one-page taxonomy diagram** for the AOD guided tour that visually separates *signals → risks → amplifiers*

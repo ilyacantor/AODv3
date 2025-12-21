@@ -3,6 +3,7 @@
 from typing import Any, Optional
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse
 
 from pydantic import BaseModel, Field
 
@@ -539,6 +540,180 @@ async def get_catalog(run_id: str):
         ],
         count=len(assets)
     )
+
+
+@router.get("/catalog/view", response_class=HTMLResponse)
+async def view_catalog(run_id: str):
+    """Display catalog as HTML page"""
+    db = await get_db()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    assets = await db.get_assets_by_run(run_id)
+    
+    shadow_count = sum(1 for a in assets if a.tags and a.tags.get('shadow_actual') == True)
+    zombie_count = sum(1 for a in assets if a.tags and a.tags.get('zombie_actual') == True)
+    governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
+    
+    rows_html = ""
+    for a in assets:
+        is_shadow = a.tags.get('shadow_actual', False) if a.tags else False
+        is_zombie = a.tags.get('zombie_actual', False) if a.tags else False
+        
+        status_badges = []
+        if is_shadow:
+            status_badges.append('<span style="background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">SHADOW</span>')
+        if is_zombie:
+            status_badges.append('<span style="background: #ef4444; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">ZOMBIE</span>')
+        if not is_shadow and not is_zombie:
+            status_badges.append('<span style="background: #22c55e; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">GOVERNED</span>')
+        
+        lens_parts = []
+        if a.lens_status:
+            if a.lens_status.discovery: lens_parts.append('Discovery')
+            if a.lens_status.idp: lens_parts.append('IdP')
+            if a.lens_status.cmdb: lens_parts.append('CMDB')
+            if a.lens_status.cloud: lens_parts.append('Cloud')
+            if a.lens_status.endpoint: lens_parts.append('Endpoint')
+            if a.lens_status.network: lens_parts.append('Network')
+            if a.lens_status.finance: lens_parts.append('Finance')
+        
+        rows_html += f'''
+        <tr style="border-bottom: 1px solid #334155;">
+            <td style="padding: 0.75rem; color: #06b6d4; font-weight: 500;">{a.name or 'Unknown'}</td>
+            <td style="padding: 0.75rem; color: #94a3b8;">{a.vendor or '-'}</td>
+            <td style="padding: 0.75rem; color: #94a3b8;">{a.asset_type.value if a.asset_type else '-'}</td>
+            <td style="padding: 0.75rem; color: #94a3b8;">{a.environment.value if a.environment else '-'}</td>
+            <td style="padding: 0.75rem;">{' '.join(status_badges)}</td>
+            <td style="padding: 0.75rem; color: #64748b; font-size: 0.8rem;">{', '.join(lens_parts) or '-'}</td>
+            <td style="padding: 0.75rem; color: #64748b; font-size: 0.75rem;">{a.admission_reason or '-'}</td>
+        </tr>'''
+    
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Asset Catalog - Run {run_id[:8]}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ 
+                font-family: 'Quicksand', sans-serif; 
+                background: #0f172a; 
+                color: #e2e8f0; 
+                padding: 2rem;
+                min-height: 100vh;
+            }}
+            .container {{ max-width: 1400px; margin: 0 auto; }}
+            .header {{ 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                margin-bottom: 2rem;
+                padding-bottom: 1rem;
+                border-bottom: 1px solid #334155;
+            }}
+            .title {{ font-size: 1.5rem; font-weight: 700; color: #06b6d4; }}
+            .subtitle {{ font-size: 0.9rem; color: #64748b; margin-top: 0.25rem; }}
+            .stats {{ display: flex; gap: 1.5rem; }}
+            .stat {{ 
+                background: #1e293b; 
+                padding: 0.75rem 1.25rem; 
+                border-radius: 8px;
+                text-align: center;
+            }}
+            .stat-value {{ font-size: 1.25rem; font-weight: 700; color: #06b6d4; }}
+            .stat-label {{ font-size: 0.75rem; color: #64748b; }}
+            .export-btn {{
+                background: #334155;
+                color: #e2e8f0;
+                padding: 0.5rem 1rem;
+                border-radius: 6px;
+                text-decoration: none;
+                font-size: 0.85rem;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+            }}
+            .export-btn:hover {{ background: #475569; }}
+            table {{ 
+                width: 100%; 
+                border-collapse: collapse; 
+                background: #1e293b; 
+                border-radius: 8px;
+                overflow: hidden;
+            }}
+            th {{ 
+                background: #334155; 
+                padding: 0.75rem; 
+                text-align: left; 
+                font-weight: 600;
+                color: #94a3b8;
+                font-size: 0.8rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }}
+            tr:hover {{ background: #263445; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div>
+                    <div class="title">Asset Catalog</div>
+                    <div class="subtitle">
+                        Run: {run_id[:8]}... | 
+                        Tenant: {run.tenant_id} | 
+                        {run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else 'In Progress'}
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-value">{len(assets)}</div>
+                            <div class="stat-label">Total Assets</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" style="color: #f59e0b;">{shadow_count}</div>
+                            <div class="stat-label">Shadow</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" style="color: #ef4444;">{zombie_count}</div>
+                            <div class="stat-label">Zombie</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" style="color: #22c55e;">{governed_count}</div>
+                            <div class="stat-label">Governed</div>
+                        </div>
+                    </div>
+                    <a href="/api/catalog?run_id={run_id}" class="export-btn" target="_blank">
+                        Export JSON ↗
+                    </a>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset Name</th>
+                        <th>Vendor</th>
+                        <th>Type</th>
+                        <th>Environment</th>
+                        <th>Status</th>
+                        <th>Data Sources</th>
+                        <th>Admission Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html if rows_html else '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    </body>
+    </html>
+    '''
+    return HTMLResponse(content=html)
 
 
 @router.get("/findings", response_model=FindingsResponse)

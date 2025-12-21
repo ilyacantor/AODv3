@@ -102,6 +102,8 @@
         .run-item:hover { background: var(--gray-800); }
         .run-item.selected { border: 1px solid var(--cyan-500); }
         .run-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+        .catalog-link { font-size: 0.75rem; color: var(--cyan-400); text-decoration: none; padding: 2px 8px; background: rgba(6, 182, 212, 0.15); border-radius: 4px; margin-left: 0.5rem; }
+        .catalog-link:hover { background: rgba(6, 182, 212, 0.25); text-decoration: underline; }
         .run-info { display: flex; align-items: center; gap: 0.75rem; width: 100%; }
         .run-tenant { font-weight: 600; color: var(--cyan-400); }
         .run-meta { display: flex; gap: 0.75rem; font-size: 0.8rem; color: var(--slate-400); }
@@ -1669,9 +1671,9 @@
             const catalogLinkEl = document.getElementById('drillCatalogLink');
             if (currentState.rootType === 'assets' && currentRunId) {
                 catalogLinkEl.innerHTML = `
-                    <a href="/api/catalog?run_id=${currentRunId}" target="_blank" 
+                    <a href="/api/catalog/view?run_id=${currentRunId}" target="_blank" 
                        style="font-size: 0.8rem; color: var(--cyan-400); text-decoration: none; display: flex; align-items: center; gap: 0.35rem;">
-                        <span>Export Catalog JSON</span>
+                        <span>View Full Catalog</span>
                         <span style="font-size: 0.7rem;">↗</span>
                     </a>`;
                 catalogLinkEl.classList.remove('hidden');
@@ -1714,9 +1716,14 @@
                             <div style="font-size: 0.85rem; font-weight: 600; color: var(--cyan-400);">Asset Catalog for this Discovery Run</div>
                             <div style="font-size: 0.75rem; color: var(--slate-400);">${result.items.length} assets cataloged • ${runInfo}</div>
                         </div>
-                        <a href="/api/catalog?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem;">
-                            Export JSON ↗
-                        </a>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <a href="/api/catalog/view?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem;">
+                                Full Catalog ↗
+                            </a>
+                            <a href="/api/catalog?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem; opacity: 0.7;">
+                                JSON
+                            </a>
+                        </div>
                     </div>`;
             }
             
@@ -2254,10 +2261,14 @@
                         const tenant = run.tenant_id || '-';
                         const size = run.input_meta?.scale || '-';
                         const profile = run.input_meta?.enterprise_profile || '-';
+                        const catalogLink = run.status === 'COMPLETED_WITH_RESULTS' || run.status === 'COMPLETED_EMPTY'
+                            ? `<a href="/api/catalog/view?run_id=${run.run_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog</a>`
+                            : '';
                         return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
                             <div class="run-info">
                                 <span class="run-tenant">${tenant}</span>
                                 <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}
+                                ${catalogLink}
                             </div>
                             <div class="run-meta">
                                 <span class="run-size">${size}</span>

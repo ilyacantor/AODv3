@@ -744,14 +744,17 @@
         }
         
         function formatDrillValue(value, field) {
-            if (value === 'unknown' || value === null || value === undefined) {
-                const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                return `Unknown ${fieldLabel}`;
-            }
             if (field === 'triage_priority') {
+                if (!value || value === 'unknown' || value === null || value === undefined) {
+                    return `<span class="priority-badge priority-p2">Unrated (Legacy)</span>`;
+                }
                 const priorityLabels = { 'p0': 'P0 - Critical', 'p1': 'P1 - High', 'p2': 'P2 - Medium' };
                 const priorityClass = `priority-${value}`;
                 return `<span class="priority-badge ${priorityClass}">${priorityLabels[value] || value.toUpperCase()}</span>`;
+            }
+            if (value === 'unknown' || value === null || value === undefined) {
+                const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                return `Unknown ${fieldLabel}`;
             }
             const friendlyLabels = {
                 'security_risk': 'Security Risks',

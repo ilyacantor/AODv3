@@ -88,21 +88,23 @@ def generate_identity_gap_finding(
     
     Trigger ONLY if:
     - No IdP governance (idp_present == false)
-    - Has STRONG activity evidence (any of):
-      - Cloud evidence (resource/API calls)
-      - Finance recurring spend
+    - Has STRONG activity evidence based on DIRECT correlation matches (any of):
+      - Cloud evidence (direct cloud plane match)
+      - Finance recurring spend (direct finance plane match)
       - Multiple independent planes (discovery + finance OR discovery + cloud)
     
-    This ensures only truly actionable identity gaps are raised.
+    IMPORTANT: Uses correlation.*.status instead of lens_coverage to avoid
+    false positives from vendor governance propagation.
     """
     if asset.lens_status.idp != LensStatus.UNMATCHED:
         return None
     
-    # Check for STRONG activity evidence (not just discovery)
-    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
-    has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
-    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
-    has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+    # Check for STRONG activity evidence via DIRECT correlation matches
+    # NOT lens_coverage (which can be propagated from vendor siblings)
+    has_cloud = correlation.cloud.status == MatchStatus.MATCHED
+    has_finance = correlation.finance.status == MatchStatus.MATCHED
+    has_cmdb = correlation.cmdb.status == MatchStatus.MATCHED
+    has_discovery = len(correlation.entity.observation_ids) > 0 if correlation.entity else False
     
     # Count independent planes for multi-plane corroboration
     strong_planes = sum([has_cloud, has_finance, has_cmdb])

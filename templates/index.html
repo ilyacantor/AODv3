@@ -69,6 +69,7 @@
         .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
         .stat-value.stat-shadow { color: var(--amber-400); }
         .stat-value.stat-zombie { color: var(--red-400); }
+        .stat-value.stat-rejected { color: var(--red-400); }
         .stat-value.stat-visibility { color: var(--cyan-400); }
         .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
         .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
@@ -476,7 +477,7 @@
                         </div>
                         <div class="stat-card clickable" data-drill-type="rejections">
                             <div class="stat-help" title="Observations rejected during processing. Includes schema failures, banned fields, and records that failed admission criteria.">?</div>
-                            <div class="stat-value" id="statRejected">-</div>
+                            <div class="stat-value stat-rejected" id="statRejected">-</div>
                             <div class="stat-label">Rejected</div>
                         </div>
                         <div class="stat-card clickable" data-drill-type="assets">

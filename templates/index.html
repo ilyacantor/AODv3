@@ -1728,35 +1728,73 @@
             return renderSingleItemDetail(items[0], rootType, 0, items.length);
         }
         
-        const REASON_EXPLANATIONS = {
-            'admission_failed': 'Did not meet minimum evidence requirements for asset classification.',
-            'no_admission_evidence': 'Insufficient evidence from authoritative sources (CMDB, IdP, cloud, or finance) to confirm this is a real asset.',
-            'infrastructure_domain': 'This is an infrastructure or internal domain that is excluded from asset classification.',
-            'corporate_root_domain': 'This is a corporate root domain (e.g., company.com) which represents the organization, not a specific application.',
-            'internal_service': 'This appears to be an internal service or infrastructure component, not an end-user application.',
-            'duplicate_entity': 'This entity was merged with another asset due to matching identifiers.',
-            'insufficient_activity': 'No recent usage or activity detected for this entity.',
-            'excluded_vendor': 'This vendor or domain is on the exclusion list.',
-            'test_environment': 'Identified as a test or sandbox environment, excluded from production asset catalog.',
-            'unknown': 'This item was rejected during processing. Check the raw data for more details.'
-        };
-        
         function getPlainEnglishReason(reasonCode, reasonDetail) {
-            let explanation = REASON_EXPLANATIONS[reasonCode] || REASON_EXPLANATIONS['unknown'];
+            const domainMention = reasonDetail?.split(':').pop()?.trim() || '';
             
             if (reasonDetail) {
                 const detail = reasonDetail.toLowerCase();
+                
                 if (detail.includes('corporate root domain') || detail.includes('root domain')) {
-                    explanation = `This domain belongs to a corporate root (${reasonDetail.split(':').pop()?.trim() || 'company domain'}). Root domains represent organizations, not individual applications, so they are excluded from the asset catalog.`;
-                } else if (detail.includes('infrastructure')) {
-                    explanation = `This is an infrastructure component (${reasonDetail}). Infrastructure services are tracked separately from end-user applications.`;
-                } else if (detail.includes('no admission')) {
-                    explanation = `We couldn't find enough evidence to confirm this is a real asset. It wasn't found in your CMDB, IdP, cloud inventory, or finance records.`;
-                } else if (detail.includes('duplicate')) {
-                    explanation = `This item was identified as a duplicate and merged with another asset in the catalog.`;
+                    return {
+                        summary: `"${domainMention}" is your company's main domain, not a separate application.`,
+                        whyRejected: `We saw activity on ${domainMention}, but this is a root domain (like "company.com") that represents your entire organization. It's not a specific software tool or service — it's just your company's web address.`,
+                        action: 'No',
+                        actionDetail: `This is expected. Root domains are always excluded because they're not applications. The actual apps (like "app.${domainMention}" or "mail.${domainMention}") are tracked separately.`
+                    };
+                }
+                
+                if (detail.includes('infrastructure') || detail.includes('internal')) {
+                    return {
+                        summary: `This is internal infrastructure, not a business application.`,
+                        whyRejected: `We detected this as an internal system (like a server, database, or network service) rather than a software application your team uses directly.`,
+                        action: 'No',
+                        actionDetail: `Infrastructure components are managed separately from business applications. This keeps your asset catalog focused on the software tools your teams actually use.`
+                    };
                 }
             }
-            return explanation;
+            
+            if (reasonCode === 'admission_failed' || reasonCode === 'no_admission_evidence') {
+                return {
+                    summary: `We couldn't confirm this is a real application your organization uses.`,
+                    whyRejected: `We saw some activity for this item, but we couldn't find it in any of your official systems — not in your IT inventory (CMDB), login system (IdP), cloud accounts, or financial records. Without at least one of these confirmations, we can't be sure it's a real business tool.`,
+                    action: 'Maybe',
+                    actionDetail: `If you recognize this as a legitimate tool your team uses, you may want to add it to your CMDB or IdP so it gets tracked properly next time. If you don't recognize it, it might just be noise and safe to ignore.`
+                };
+            }
+            
+            if (reasonCode === 'duplicate_entity') {
+                return {
+                    summary: `This was combined with another item to avoid double-counting.`,
+                    whyRejected: `We found this item appears to be the same as another asset already in the catalog (same domain, same vendor, or matching identifiers). Instead of showing it twice, we merged them together.`,
+                    action: 'No',
+                    actionDetail: `This is normal housekeeping. The asset still exists in your catalog — just not as a separate entry. Check the main Assets list to find the merged record.`
+                };
+            }
+            
+            if (reasonCode === 'insufficient_activity') {
+                return {
+                    summary: `No recent usage was detected for this item.`,
+                    whyRejected: `We found records mentioning this item, but there's no evidence anyone has actually used it recently. Without activity, we can't confirm it's still relevant.`,
+                    action: 'Maybe',
+                    actionDetail: `If this is something your team still uses, the usage data might not be flowing correctly. Otherwise, this might be an old or unused tool.`
+                };
+            }
+            
+            if (reasonCode === 'test_environment') {
+                return {
+                    summary: `This appears to be a test or sandbox environment.`,
+                    whyRejected: `We identified this as a non-production environment (like a staging server or developer sandbox). Test environments are excluded from the production asset catalog.`,
+                    action: 'No',
+                    actionDetail: `This is expected behavior. Test environments are tracked separately to keep your production catalog clean and accurate.`
+                };
+            }
+            
+            return {
+                summary: `This item didn't meet the criteria for inclusion in your asset catalog.`,
+                whyRejected: reasonDetail || `The system determined this item should not be included based on the available evidence. This could be due to insufficient data, duplicate detection, or exclusion rules.`,
+                action: 'Unlikely',
+                actionDetail: `Review the raw data below if you need more details about why this specific item was excluded.`
+            };
         }
         
         function renderSingleItemDetail(item, rootType, index, total) {
@@ -1791,9 +1829,9 @@
                 }
             }
             
+            let rejectionExplanation = null;
             if (rootType === 'rejections' && item.reason_code) {
-                const plainExplanation = getPlainEnglishReason(item.reason_code, item.reason_detail);
-                keyFacts.unshift({ label: 'Why Rejected', value: plainExplanation });
+                rejectionExplanation = getPlainEnglishReason(item.reason_code, item.reason_detail);
             }
             
             if (item.lens_status && typeof item.lens_status === 'object') {
@@ -1818,6 +1856,25 @@
                 </div>
                 ${total > 1 ? `<div style="color: var(--slate-500); font-size: 0.8rem;">Item ${index + 1} of ${total}</div>` : ''}
             </div>`;
+            
+            if (rejectionExplanation) {
+                const actionColor = rejectionExplanation.action === 'No' ? 'var(--green-400)' : 
+                                   rejectionExplanation.action === 'Maybe' ? 'var(--amber-400)' : 'var(--slate-400)';
+                html += `
+                <div style="background: var(--slate-800); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; border-left: 3px solid var(--cyan-500);">
+                    <div style="font-size: 1rem; font-weight: 600; color: white; margin-bottom: 0.75rem;">${rejectionExplanation.summary}</div>
+                    
+                    <div style="margin-bottom: 0.75rem;">
+                        <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--slate-500); margin-bottom: 0.25rem;">Why was this rejected?</div>
+                        <div style="font-size: 0.85rem; color: var(--slate-300); line-height: 1.5;">${rejectionExplanation.whyRejected}</div>
+                    </div>
+                    
+                    <div style="background: var(--gray-900); border-radius: 6px; padding: 0.75rem; display: flex; gap: 0.75rem; align-items: flex-start;">
+                        <div style="background: ${actionColor}; color: var(--gray-900); font-weight: 700; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; flex-shrink: 0;">ACTION NEEDED: ${rejectionExplanation.action.toUpperCase()}</div>
+                        <div style="font-size: 0.8rem; color: var(--slate-400); line-height: 1.4;">${rejectionExplanation.actionDetail}</div>
+                    </div>
+                </div>`;
+            }
             
             if (keyFacts.length > 0) {
                 html += `<div class="key-facts-grid">`;

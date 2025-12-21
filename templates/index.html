@@ -345,6 +345,8 @@
                     <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
                 </div>
                 <div id="summaryStats" class="stats-grid">
+                    <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
+                    <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
                     <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
                     <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
                     <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks: Identity gaps, shadow IT spend, and data conflicts. Click for breakdown."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
@@ -352,8 +354,6 @@
                     <div class="stat-card clickable" data-drill-type="governance_hygiene" title="Governance Hygiene: Ownership gaps and duplicate records - exposure amplifiers."><div class="stat-value" id="statGovernanceHygiene">-</div><div class="stat-label">Governance Hygiene</div></div>
                     <div class="stat-card clickable" data-drill-type="findings" title="All non-security findings combined."><div class="stat-value" id="statFindings">-</div><div class="stat-label">All Findings</div></div>
                     <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
-                    <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
-                    <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">

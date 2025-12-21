@@ -1809,20 +1809,21 @@
                 normalizedData.findings = govNorm;
                 if (govErrs.length > 0) console.warn('Findings normalization errors:', govErrs);
                 
-                // Compute risk case counts by priority
+                // Compute risk case counts by priority (handle null/missing as P2)
                 const p0Count = securityRisks.filter(f => f.triage_priority === 'p0').length;
                 const p1Count = securityRisks.filter(f => f.triage_priority === 'p1').length;
-                const p2Count = securityRisks.filter(f => f.triage_priority === 'p2').length;
+                const p2Count = securityRisks.filter(f => f.triage_priority === 'p2' || !f.triage_priority).length;
                 const actionableCount = p0Count + p1Count;
                 
-                // Show actionable count as headline
-                document.getElementById('statSecurityRisks').textContent = actionableCount;
+                // Show actionable count as headline (or total if no priority data)
+                const hasTriageData = securityRisks.some(f => f.triage_priority);
+                document.getElementById('statSecurityRisks').textContent = hasTriageData ? actionableCount : securityRisks.length;
                 // Show breakdown in sublabel
                 const breakdownEl = document.getElementById('riskBreakdown');
-                if (securityRisks.length > 0) {
+                if (securityRisks.length > 0 && hasTriageData) {
                     breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
                 } else {
-                    breakdownEl.textContent = '';
+                    breakdownEl.textContent = hasTriageData ? '' : '(run new snapshot for priority breakdown)';
                 }
                 document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 

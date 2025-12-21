@@ -422,7 +422,7 @@
                             <div class="stat-value" id="statObservations">-</div>
                             <div class="stat-label">Ingested</div>
                         </div>
-                        <div class="stat-card" data-drill-type="validated">
+                        <div class="stat-card clickable" data-drill-type="validated">
                             <div class="stat-help" title="Observations that passed schema validation and normalization. These are candidates ready for correlation and admission processing.">?</div>
                             <div class="stat-value" id="statValidated">-</div>
                             <div class="stat-label">Validated</div>
@@ -594,7 +594,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], validated: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
@@ -1367,6 +1367,16 @@
                     drillPaths: ['source', 'category'],
                     displayName: 'Observations'
                 },
+                validated: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        domain: { default: null },
+                        source: { default: 'unknown' },
+                        category: { default: null }
+                    },
+                    drillPaths: ['source', 'category'],
+                    displayName: 'Validated Observations'
+                },
                 ambiguous: {
                     fields: {
                         entity_name: { default: 'unknown' },
@@ -1826,6 +1836,7 @@
         async function loadDrillData(type, runId) {
             const endpointMap = {
                 observations: `/api/runs/${runId}/observations?limit=500`,
+                validated: `/api/runs/${runId}/observations?limit=500`,
                 ambiguous: `/api/runs/${runId}/ambiguous?limit=500`,
                 rejections: `/api/runs/${runId}/rejections?limit=500`
             };
@@ -1854,7 +1865,7 @@
         async function initiateDrill(type) {
             if (!currentRunId) return;
             
-            if (['observations', 'ambiguous', 'rejections'].includes(type)) {
+            if (['observations', 'validated', 'ambiguous', 'rejections'].includes(type)) {
                 await loadDrillData(type, currentRunId);
             }
             

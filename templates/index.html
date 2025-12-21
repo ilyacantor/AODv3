@@ -208,6 +208,33 @@
         .modal-close { background: transparent; border: none; color: var(--slate-400); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; }
         .modal-close:hover { color: white; }
         .modal-body { padding: 1.5rem; }
+        .triage-modal { max-width: 480px; }
+        .triage-modal-title { font-size: 1.1rem; font-weight: 600; color: var(--cyan-400); margin-bottom: 0.5rem; }
+        .triage-modal-subtitle { font-size: 0.85rem; color: var(--slate-400); margin-bottom: 1.5rem; }
+        .triage-form-group { margin-bottom: 1.25rem; }
+        .triage-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--slate-300); margin-bottom: 0.5rem; }
+        .triage-select { width: 100%; padding: 0.75rem 1rem; background: var(--slate-800); border: 1px solid var(--slate-600); border-radius: 8px; color: white; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 1rem center; }
+        .triage-select:hover { border-color: var(--cyan-500); }
+        .triage-select:focus { outline: none; border-color: var(--cyan-400); box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2); }
+        .triage-select option { background: var(--slate-800); color: white; padding: 0.5rem; }
+        .triage-input { width: 100%; padding: 0.75rem 1rem; background: var(--slate-800); border: 1px solid var(--slate-600); border-radius: 8px; color: white; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; }
+        .triage-input:focus { outline: none; border-color: var(--cyan-400); box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2); }
+        .triage-input::placeholder { color: var(--slate-500); }
+        .triage-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--slate-700); }
+        .triage-modal-btn { padding: 0.6rem 1.25rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s ease; }
+        .triage-modal-btn.cancel { background: transparent; border: 1px solid var(--slate-600); color: var(--slate-400); }
+        .triage-modal-btn.cancel:hover { border-color: var(--slate-400); color: white; }
+        .triage-modal-btn.primary { background: var(--cyan-600); border: none; color: white; }
+        .triage-modal-btn.primary:hover { background: var(--cyan-500); }
+        .triage-option-cards { display: flex; flex-direction: column; gap: 0.5rem; }
+        .triage-option-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--slate-800); border: 2px solid transparent; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; }
+        .triage-option-card:hover { border-color: var(--cyan-600); background: var(--gray-800); }
+        .triage-option-card.selected { border-color: var(--cyan-400); background: rgba(6, 182, 212, 0.1); }
+        .triage-option-radio { width: 18px; height: 18px; border: 2px solid var(--slate-500); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .triage-option-card.selected .triage-option-radio { border-color: var(--cyan-400); }
+        .triage-option-card.selected .triage-option-radio::after { content: ''; width: 10px; height: 10px; background: var(--cyan-400); border-radius: 50%; }
+        .triage-option-text { font-size: 0.9rem; color: white; }
+        .triage-option-hint { font-size: 0.75rem; color: var(--slate-500); margin-top: 0.15rem; }
         .help-section { margin-bottom: 1.5rem; }
         .help-section:last-child { margin-bottom: 0; }
         .help-section-title { font-size: 1rem; font-weight: 600; color: white; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
@@ -714,25 +741,75 @@
             }
         }
         
+        let triageModalContext = { runId: null, itemId: null, itemType: null };
+        
         function showDeferModal(runId, itemId, itemType) {
-            const days = prompt('Defer for how many days? (30, 60, or 90)', '30');
-            if (days && ['30', '60', '90'].includes(days)) {
-                submitTriageAction(runId, itemId, itemType, 'defer', { defer_days: parseInt(days) });
-            }
+            triageModalContext = { runId, itemId, itemType };
+            document.querySelectorAll('#deferModal .triage-option-card').forEach(c => c.classList.remove('selected'));
+            document.querySelector('#deferModal .triage-option-card[data-days="30"]').classList.add('selected');
+            document.getElementById('deferModal').classList.add('active');
         }
         
         function showIgnoreModal(runId, itemId, itemType) {
-            const reasons = ['Known vendor', 'Expected architecture', 'Test / sandbox', 'Other'];
-            const reason = prompt('Select reason to ignore:\\n1. Known vendor\\n2. Expected architecture\\n3. Test / sandbox\\n4. Other', '1');
-            if (reason && ['1','2','3','4'].includes(reason)) {
-                submitTriageAction(runId, itemId, itemType, 'ignore', { ignore_reason: reasons[parseInt(reason) - 1] });
-            }
+            triageModalContext = { runId, itemId, itemType };
+            document.querySelectorAll('#ignoreModal .triage-option-card').forEach(c => c.classList.remove('selected'));
+            document.querySelector('#ignoreModal .triage-option-card').classList.add('selected');
+            document.getElementById('ignoreModal').classList.add('active');
         }
         
         function showAssignModal(runId, itemId, itemType) {
-            const owner = prompt('Enter owner email or team name:');
-            if (owner && owner.trim()) {
-                submitTriageAction(runId, itemId, itemType, 'assign', { owner: owner.trim() });
+            triageModalContext = { runId, itemId, itemType };
+            document.getElementById('assignDepartment').value = '';
+            document.getElementById('assignOwner').value = '';
+            updateOwnerOptions();
+            document.getElementById('assignModal').classList.add('active');
+        }
+        
+        function closeTriageModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        function updateOwnerOptions() {
+            const dept = document.getElementById('assignDepartment').value;
+            const ownerSelect = document.getElementById('assignOwner');
+            const owners = {
+                '': [],
+                'engineering': ['Alex Chen', 'Jordan Smith', 'Taylor Kim', 'Morgan Lee', 'Casey Wright'],
+                'security': ['Sam Rodriguez', 'Riley Johnson', 'Jamie Park', 'Drew Martinez', 'Quinn Anderson'],
+                'it_operations': ['Pat Thompson', 'Blake Wilson', 'Avery Davis', 'Cameron Brown', 'Skyler White'],
+                'finance': ['Dana Miller', 'Jesse Garcia', 'Robin Taylor', 'Reese Jackson', 'Charlie Moore'],
+                'compliance': ['Morgan Clark', 'Jordan Lewis', 'Alex Walker', 'Taylor Hall', 'Casey Young']
+            };
+            const deptOwners = owners[dept] || [];
+            ownerSelect.innerHTML = '<option value="">Select an owner...</option>' + 
+                deptOwners.map(o => `<option value="${o}">${o}</option>`).join('');
+        }
+        
+        function submitDeferAction() {
+            const selected = document.querySelector('#deferModal .triage-option-card.selected');
+            if (selected) {
+                const days = parseInt(selected.dataset.days);
+                submitTriageAction(triageModalContext.runId, triageModalContext.itemId, triageModalContext.itemType, 'defer', { defer_days: days });
+                closeTriageModal('deferModal');
+            }
+        }
+        
+        function submitIgnoreAction() {
+            const selected = document.querySelector('#ignoreModal .triage-option-card.selected');
+            if (selected) {
+                const reason = selected.dataset.reason;
+                submitTriageAction(triageModalContext.runId, triageModalContext.itemId, triageModalContext.itemType, 'ignore', { ignore_reason: reason });
+                closeTriageModal('ignoreModal');
+            }
+        }
+        
+        function submitAssignAction() {
+            const dept = document.getElementById('assignDepartment').value;
+            const owner = document.getElementById('assignOwner').value;
+            if (owner) {
+                const ownerStr = `${owner} (${dept.replace('_', ' ')})`;
+                submitTriageAction(triageModalContext.runId, triageModalContext.itemId, triageModalContext.itemType, 'assign', { owner: ownerStr });
+                closeTriageModal('assignModal');
             }
         }
         
@@ -2486,6 +2563,124 @@
                     <button class="btn btn-primary" id="discoveryReviewBtn" style="width: 100%;">Review Results</button>
                     <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm for Grading</button>
                     <button class="btn" id="discoveryCancelBtn" style="width: 100%; background: var(--slate-700);">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="assignModal">
+        <div class="modal triage-modal">
+            <div class="modal-header">
+                <span class="modal-title">Assign Owner</span>
+                <button class="modal-close" onclick="closeTriageModal('assignModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="triage-modal-subtitle">Select a department and owner to assign responsibility for this item.</p>
+                <div class="triage-form-group">
+                    <label class="triage-form-label">Department</label>
+                    <select class="triage-select" id="assignDepartment" onchange="updateOwnerOptions()">
+                        <option value="">Select a department...</option>
+                        <option value="engineering">Engineering</option>
+                        <option value="security">Security</option>
+                        <option value="it_operations">IT Operations</option>
+                        <option value="finance">Finance</option>
+                        <option value="compliance">Compliance</option>
+                    </select>
+                </div>
+                <div class="triage-form-group">
+                    <label class="triage-form-label">Owner</label>
+                    <select class="triage-select" id="assignOwner">
+                        <option value="">Select an owner...</option>
+                    </select>
+                </div>
+                <div class="triage-modal-actions">
+                    <button class="triage-modal-btn cancel" onclick="closeTriageModal('assignModal')">Cancel</button>
+                    <button class="triage-modal-btn primary" onclick="submitAssignAction()">Assign Owner</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="deferModal">
+        <div class="modal triage-modal">
+            <div class="modal-header">
+                <span class="modal-title">Defer Item</span>
+                <button class="modal-close" onclick="closeTriageModal('deferModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="triage-modal-subtitle">Choose how long to defer this item. It will resurface after the selected period.</p>
+                <div class="triage-option-cards">
+                    <div class="triage-option-card selected" data-days="30" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">30 Days</div>
+                            <div class="triage-option-hint">Short-term deferral for items needing quick follow-up</div>
+                        </div>
+                    </div>
+                    <div class="triage-option-card" data-days="60" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">60 Days</div>
+                            <div class="triage-option-hint">Medium-term deferral for items requiring more time</div>
+                        </div>
+                    </div>
+                    <div class="triage-option-card" data-days="90" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">90 Days</div>
+                            <div class="triage-option-hint">Long-term deferral for items with low urgency</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="triage-modal-actions">
+                    <button class="triage-modal-btn cancel" onclick="closeTriageModal('deferModal')">Cancel</button>
+                    <button class="triage-modal-btn primary" onclick="submitDeferAction()">Defer Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="ignoreModal">
+        <div class="modal triage-modal">
+            <div class="modal-header">
+                <span class="modal-title">Ignore Item</span>
+                <button class="modal-close" onclick="closeTriageModal('ignoreModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="triage-modal-subtitle">Select a reason for ignoring this item. This action is terminal.</p>
+                <div class="triage-option-cards">
+                    <div class="triage-option-card selected" data-reason="Known vendor" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">Known Vendor</div>
+                            <div class="triage-option-hint">This is a recognized, approved vendor or service</div>
+                        </div>
+                    </div>
+                    <div class="triage-option-card" data-reason="Expected architecture" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">Expected Architecture</div>
+                            <div class="triage-option-hint">Part of documented infrastructure design</div>
+                        </div>
+                    </div>
+                    <div class="triage-option-card" data-reason="Test / sandbox" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">Test / Sandbox</div>
+                            <div class="triage-option-hint">Non-production environment or test system</div>
+                        </div>
+                    </div>
+                    <div class="triage-option-card" data-reason="Other" onclick="this.parentElement.querySelectorAll('.triage-option-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+                        <div class="triage-option-radio"></div>
+                        <div>
+                            <div class="triage-option-text">Other</div>
+                            <div class="triage-option-hint">Different reason not listed above</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="triage-modal-actions">
+                    <button class="triage-modal-btn cancel" onclick="closeTriageModal('ignoreModal')">Cancel</button>
+                    <button class="triage-modal-btn primary" onclick="submitIgnoreAction()">Ignore Item</button>
                 </div>
             </div>
         </div>

@@ -1,7 +1,7 @@
-# AOD Fresh - AutonomOS Discover
+# AOS Discover - AutonomOS Discovery Module
 
 ## Overview
-AOD Fresh is the discovery module of AutonomOS, an enterprise operating system. Its core purpose is to ingest raw enterprise evidence to produce an Asset Catalog, a Run Log, and Explainable Findings. The system is deterministic, evidence-only, and fully explainable, rejecting pre-adjudicated labels to accurately identify and classify enterprise assets based on observed evidence. This contributes to a clear and auditable view of an organization's digital footprint, supporting business vision for robust asset management and risk mitigation.
+AOS Discover (formerly AOD Fresh) is the discovery module of AutonomOS, an enterprise operating system. Its core purpose is to ingest raw enterprise evidence to produce an Asset Catalog, a Run Log, and Explainable Findings. The system is deterministic, evidence-only, and fully explainable, rejecting pre-adjudicated labels to accurately identify and classify enterprise assets based on observed evidence. This contributes to a clear and auditable view of an organization's digital footprint, supporting business vision for robust asset management and risk mitigation.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

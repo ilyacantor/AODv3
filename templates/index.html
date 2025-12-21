@@ -1816,7 +1816,10 @@
                     const modal = document.getElementById('discoveryCompleteModal');
                     const runId = modal.dataset.runId;
                     hideDiscoveryCompleteModal();
-                    if (runId) await selectRun(runId);
+                    if (runId) {
+                        await selectRun(runId);
+                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                    }
                 });
             }
             

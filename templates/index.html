@@ -2261,18 +2261,19 @@
                         const tenant = run.tenant_id || '-';
                         const size = run.input_meta?.scale || '-';
                         const profile = run.input_meta?.enterprise_profile || '-';
-                        const catalogLink = run.status === 'COMPLETED_WITH_RESULTS' || run.status === 'COMPLETED_EMPTY'
-                            ? `<a href="/api/catalog/view?run_id=${run.run_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog</a>`
+                        const isCompleted = run.status.toLowerCase().includes('completed');
+                        const catalogLink = isCompleted
+                            ? `<a href="/api/catalog/view?run_id=${run.run_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
                             : '';
                         return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
                             <div class="run-info">
                                 <span class="run-tenant">${tenant}</span>
                                 <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}
-                                ${catalogLink}
                             </div>
                             <div class="run-meta">
                                 <span class="run-size">${size}</span>
                                 <span class="run-profile">${profile}</span>
+                                ${catalogLink}
                             </div>
                         </div>`;
                     }).join('');

@@ -553,14 +553,22 @@ async def view_catalog(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     
-    shadow_count = sum(1 for a in assets if a.tags and a.tags.get('shadow_actual') == True)
-    zombie_count = sum(1 for a in assets if a.tags and a.tags.get('zombie_actual') == True)
+    def get_tag(asset, key):
+        """Get tag value from asset, handling both dict and list formats"""
+        if not asset.tags:
+            return None
+        if isinstance(asset.tags, dict):
+            return asset.tags.get(key)
+        return None
+    
+    shadow_count = sum(1 for a in assets if get_tag(a, 'shadow_actual') == True)
+    zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
     governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
     
     rows_html = ""
     for a in assets:
-        is_shadow = a.tags.get('shadow_actual', False) if a.tags else False
-        is_zombie = a.tags.get('zombie_actual', False) if a.tags else False
+        is_shadow = get_tag(a, 'shadow_actual') == True
+        is_zombie = get_tag(a, 'zombie_actual') == True
         
         status_badges = []
         if is_shadow:
@@ -571,14 +579,12 @@ async def view_catalog(run_id: str):
             status_badges.append('<span style="background: #22c55e; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">GOVERNED</span>')
         
         lens_parts = []
-        if a.lens_status:
-            if a.lens_status.discovery: lens_parts.append('Discovery')
-            if a.lens_status.idp: lens_parts.append('IdP')
-            if a.lens_status.cmdb: lens_parts.append('CMDB')
-            if a.lens_status.cloud: lens_parts.append('Cloud')
-            if a.lens_status.endpoint: lens_parts.append('Endpoint')
-            if a.lens_status.network: lens_parts.append('Network')
-            if a.lens_status.finance: lens_parts.append('Finance')
+        if a.lens_coverage:
+            if a.lens_coverage.discovery: lens_parts.append('Discovery')
+            if a.lens_coverage.idp: lens_parts.append('IdP')
+            if a.lens_coverage.cmdb: lens_parts.append('CMDB')
+            if a.lens_coverage.cloud: lens_parts.append('Cloud')
+            if a.lens_coverage.finance: lens_parts.append('Finance')
         
         rows_html += f'''
         <tr style="border-bottom: 1px solid #334155;">

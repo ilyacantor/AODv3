@@ -352,13 +352,11 @@ class Database:
         pool = await self.get_pool()
         
         async with pool.acquire() as conn:
-            await conn.execute("DELETE FROM derived_classifications")
-            await conn.execute("DELETE FROM llm_facts")
-            await conn.execute("DELETE FROM rejections")
-            await conn.execute("DELETE FROM ambiguous_matches")
-            await conn.execute("DELETE FROM artifacts")
-            await conn.execute("DELETE FROM findings")
-            await conn.execute("DELETE FROM assets")
+            for table in ["derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
+                try:
+                    await conn.execute(f"DELETE FROM {table}")
+                except Exception:
+                    pass
             result = await conn.execute("DELETE FROM runs")
             deleted = int(result.split()[-1]) if result else 0
         return deleted

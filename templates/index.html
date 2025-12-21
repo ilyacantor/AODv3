@@ -331,12 +331,21 @@
         .triage-tag.shadow_it { background: rgba(245, 158, 11, 0.15); color: var(--amber-400); }
         .triage-tag.data_integrity { background: rgba(168, 85, 247, 0.15); color: var(--purple-400); }
         .triage-tag.governance { background: rgba(100, 116, 139, 0.2); color: var(--slate-300); }
-        .triage-cell-actions { display: flex; gap: 0.25rem; }
+        .triage-cell-actions { display: flex; gap: 0.25rem; align-items: center; }
         .triage-btn { padding: 0.25rem 0.5rem; border-radius: 4px; border: none; font-family: inherit; font-size: 0.65rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
         .triage-btn.primary { background: var(--cyan-600); color: white; }
         .triage-btn.primary:hover { background: var(--cyan-500); }
         .triage-btn.secondary { background: var(--slate-700); color: var(--slate-300); }
         .triage-btn.secondary:hover { background: var(--slate-600); color: white; }
+        .triage-more { position: relative; }
+        .triage-more-btn { background: transparent; border: none; color: var(--slate-400); cursor: pointer; padding: 0.25rem; font-size: 1rem; line-height: 1; border-radius: 4px; }
+        .triage-more-btn:hover { background: var(--slate-700); color: white; }
+        .triage-more-menu { position: absolute; right: 0; top: 100%; background: var(--slate-800); border: 1px solid var(--slate-600); border-radius: 6px; min-width: 120px; z-index: 100; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .triage-more-menu.open { display: block; }
+        .triage-more-item { display: block; width: 100%; padding: 0.5rem 0.75rem; text-align: left; background: transparent; border: none; color: var(--slate-300); font-family: inherit; font-size: 0.75rem; cursor: pointer; }
+        .triage-more-item:hover { background: var(--slate-700); color: white; }
+        .triage-more-item:first-child { border-radius: 6px 6px 0 0; }
+        .triage-more-item:last-child { border-radius: 0 0 6px 6px; }
         .triage-detail-panel { position: fixed; top: 0; right: -400px; width: 400px; height: 100vh; background: var(--slate-900); border-left: 1px solid var(--slate-700); z-index: 200; transition: right 0.25s ease; overflow-y: auto; box-shadow: -4px 0 20px rgba(0,0,0,0.4); }
         .triage-detail-panel.open { right: 0; }
         .triage-detail-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: var(--slate-800); border-bottom: 1px solid var(--slate-700); position: sticky; top: 0; z-index: 10; }
@@ -1161,6 +1170,17 @@
             overlay.classList.add('open');
         }
         
+        function toggleTriageMenu(btn) {
+            const menu = btn.nextElementSibling;
+            const wasOpen = menu.classList.contains('open');
+            document.querySelectorAll('.triage-more-menu.open').forEach(m => m.classList.remove('open'));
+            if (!wasOpen) menu.classList.add('open');
+        }
+        
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.triage-more-menu.open').forEach(m => m.classList.remove('open'));
+        });
+        
         function closeTriageDetail() {
             document.getElementById('triageDetailPanel').classList.remove('open');
             document.getElementById('triageDetailOverlay').classList.remove('open');
@@ -1208,20 +1228,31 @@
                 }
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
-                let actionBtns;
+                let primaryBtn, moreOptions;
                 if (tier === 1) {
-                    actionBtns = `
-                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>
-                        <button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>`;
+                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Acknowledge</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer" onclick="event.stopPropagation()">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign" onclick="event.stopPropagation()">Assign</button>`;
                 } else if (tier === 2) {
-                    actionBtns = `
-                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>
-                        <button class="triage-btn secondary" ${dataAttrs} data-action="defer" onclick="event.stopPropagation()">Defer</button>`;
+                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Acknowledge</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer" onclick="event.stopPropagation()">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign" onclick="event.stopPropagation()">Assign</button>`;
                 } else {
-                    actionBtns = `
-                        <button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>
-                        <button class="triage-btn secondary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>`;
+                    primaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Acknowledge</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer" onclick="event.stopPropagation()">Defer</button>`;
                 }
+                const actionBtns = `
+                    ${primaryBtn}
+                    <div class="triage-more">
+                        <button class="triage-more-btn" onclick="event.stopPropagation(); toggleTriageMenu(this);">&#8942;</button>
+                        <div class="triage-more-menu">${moreOptions}</div>
+                    </div>`;
                 
                 tableHtml += `
                     <tr class="triage-row" data-item-idx="${idx}" data-tier="${tier}">

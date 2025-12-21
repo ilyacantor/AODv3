@@ -494,7 +494,10 @@
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
-                        <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
+                            <span id="drillCatalogLink" class="hidden"></span>
+                        </div>
                         <button class="btn btn-back" id="drillBackBtn">← Back</button>
                     </div>
                     <div class="breadcrumb" id="drillBreadcrumb"></div>
@@ -1663,6 +1666,19 @@
             
             titleEl.textContent = `Drill Down: ${displayName}`;
             
+            const catalogLinkEl = document.getElementById('drillCatalogLink');
+            if (currentState.rootType === 'assets' && currentRunId) {
+                catalogLinkEl.innerHTML = `
+                    <a href="/api/catalog?run_id=${currentRunId}" target="_blank" 
+                       style="font-size: 0.8rem; color: var(--cyan-400); text-decoration: none; display: flex; align-items: center; gap: 0.35rem;">
+                        <span>Export Catalog JSON</span>
+                        <span style="font-size: 0.7rem;">↗</span>
+                    </a>`;
+                catalogLinkEl.classList.remove('hidden');
+            } else {
+                catalogLinkEl.classList.add('hidden');
+            }
+            
             let breadcrumbHtml = `<span class="breadcrumb-item" onclick="navigateToDrillLevel(-1)">${displayName}</span>`;
             drillStack.forEach((state, index) => {
                 if (Object.keys(state.filters).length > 0) {
@@ -1689,10 +1705,25 @@
                 return;
             }
             
+            let catalogBanner = '';
+            if (currentState.rootType === 'assets' && drillStack.length === 1) {
+                const runInfo = catalogData ? `Run: ${catalogData.tenant_id || 'Unknown'} • ${catalogData.completed_at ? new Date(catalogData.completed_at).toLocaleDateString() : ''}` : '';
+                catalogBanner = `
+                    <div style="background: rgba(6, 182, 212, 0.1); border: 1px solid var(--cyan-600); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: var(--cyan-400);">Asset Catalog for this Discovery Run</div>
+                            <div style="font-size: 0.75rem; color: var(--slate-400);">${result.items.length} assets cataloged • ${runInfo}</div>
+                        </div>
+                        <a href="/api/catalog?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem;">
+                            Export JSON ↗
+                        </a>
+                    </div>`;
+            }
+            
             if (!result.canDrillFurther || result.nextDrillOptions.length === 0) {
-                contentEl.innerHTML = renderDetailView(currentState.rootType, result.items);
+                contentEl.innerHTML = catalogBanner + renderDetailView(currentState.rootType, result.items);
             } else {
-                contentEl.innerHTML = renderGroupView(currentState.rootType, result.nextDrillOptions, result.groupField);
+                contentEl.innerHTML = catalogBanner + renderGroupView(currentState.rootType, result.nextDrillOptions, result.groupField);
             }
             
             panel.classList.remove('hidden');

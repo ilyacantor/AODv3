@@ -1787,13 +1787,39 @@
                 showOutcome(result.status, result.message);
                 currentRunId = result.run_id; 
                 await loadRuns(); 
-                await selectRun(result.run_id);
+                showDiscoveryCompleteModal(result.run_id);
             } catch (e) { 
                 showOutcome('upstream_error', e.message);
             } finally { 
                 btn.disabled = false; 
                 btn.textContent = 'Fetch & Run Discovery'; 
             }
+        });
+        
+        function showDiscoveryCompleteModal(runId) {
+            const modal = document.getElementById('discoveryCompleteModal');
+            modal.dataset.runId = runId;
+            modal.classList.add('active');
+        }
+        
+        function hideDiscoveryCompleteModal() {
+            document.getElementById('discoveryCompleteModal').classList.remove('active');
+        }
+        
+        document.getElementById('discoveryReviewBtn').addEventListener('click', async () => {
+            const modal = document.getElementById('discoveryCompleteModal');
+            const runId = modal.dataset.runId;
+            hideDiscoveryCompleteModal();
+            if (runId) await selectRun(runId);
+        });
+        
+        document.getElementById('discoveryFarmBtn').addEventListener('click', () => {
+            hideDiscoveryCompleteModal();
+            window.open('https://farm.aos.dev', '_blank');
+        });
+        
+        document.getElementById('discoveryCancelBtn').addEventListener('click', () => {
+            hideDiscoveryCompleteModal();
         });
         
         
@@ -1904,6 +1930,22 @@
                         <li><strong>Click "Fetch & Run Discovery"</strong> to analyze the data</li>
                         <li><strong>Review the results</strong> - explore assets, findings, and drill into the numbers</li>
                     </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="discoveryCompleteModal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <span class="modal-title">Discovery Complete</span>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 1.5rem;">
+                <p style="color: var(--slate-300); margin-bottom: 1.5rem;">What would you like to do next?</p>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <button class="btn btn-primary" id="discoveryReviewBtn" style="width: 100%;">Review Results</button>
+                    <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm for Grading</button>
+                    <button class="btn" id="discoveryCancelBtn" style="width: 100%; background: var(--slate-700);">Cancel</button>
                 </div>
             </div>
         </div>

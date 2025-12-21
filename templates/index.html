@@ -59,8 +59,13 @@
         .btn-primary:disabled { background: var(--slate-700); color: var(--slate-500); cursor: not-allowed; }
         .btn-secondary { background: var(--gray-800); color: var(--slate-400); }
         .btn-secondary:hover { background: var(--gray-700); color: white; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; }
-        .stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; }
+        .kpi-section { margin-bottom: 1.5rem; }
+        .kpi-section-label { font-size: 0.7rem; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 0.5rem; }
+        .stats-grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; position: relative; }
+        .stat-help { position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; border-radius: 50%; background: var(--slate-700); color: var(--slate-400); font-size: 0.7rem; font-weight: 600; display: flex; align-items: center; justify-content: center; cursor: help; transition: all 0.2s; }
+        .stat-help:hover { background: var(--cyan-400); color: var(--slate-900); }
         .stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
         .stat-value.stat-shadow { color: var(--amber-400); }
         .stat-value.stat-zombie { color: var(--red-400); }
@@ -344,16 +349,56 @@
                     <div class="run-desc-item"><span class="run-desc-label">Status:</span><span class="run-desc-value" id="descStatus">-</span></div>
                     <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
                 </div>
-                <div id="summaryStats" class="stats-grid">
-                    <div class="stat-card clickable" data-drill-type="observations" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service."><div class="stat-value" id="statObservations">-</div><div class="stat-label">Observations</div></div>
-                    <div class="stat-card clickable" data-drill-type="assets" title="Confirmed enterprise systems that met admission criteria. These are the actionable items in your asset catalog."><div class="stat-value" id="statAssets">-</div><div class="stat-label">Assets</div></div>
-                    <div class="stat-card clickable" data-drill-type="security_risks" title="Security Risks: Identity gaps, shadow IT spend, and data conflicts. Click for breakdown."><div class="stat-value stat-security" id="statSecurityRisks">-</div><div class="stat-label">Security Risks</div><div class="stat-sublabel" id="riskBreakdown"></div></div>
-                    <div class="stat-card clickable" data-drill-type="visibility_gaps" title="Visibility Gaps: Assets active but outside control planes (CMDB gaps)."><div class="stat-value stat-visibility" id="statVisibilityGaps">-</div><div class="stat-label">Visibility Gaps</div></div>
-                    <div class="stat-card clickable" data-drill-type="governance_hygiene" title="Governance Hygiene: Ownership gaps and duplicate records - exposure amplifiers."><div class="stat-value" id="statGovernanceHygiene">-</div><div class="stat-label">Governance Hygiene</div></div>
-                    <div class="stat-card clickable" data-drill-type="findings" title="All non-security findings combined."><div class="stat-value" id="statFindings">-</div><div class="stat-label">All Findings</div></div>
-                    <div class="stat-card clickable" data-drill-type="rejections" title="Observations rejected during processing (banned fields, invalid data, or failed validation)."><div class="stat-value" id="statRejected">-</div><div class="stat-label">Rejected</div></div>
-                    <div class="stat-card clickable" data-drill-type="shadow" title="Shadow IT: Assets discovered + actively used but NOT governed (no IdP or CMDB presence). Potential security/compliance risk."><div class="stat-value stat-shadow" id="statShadow">-</div><div class="stat-label">Shadow</div></div>
-                    <div class="stat-card clickable" data-drill-type="zombie" title="Zombie Assets: Governed (in IdP/CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems."><div class="stat-value stat-zombie" id="statZombie">-</div><div class="stat-label">Zombie</div></div>
+                <div class="kpi-section">
+                    <div class="kpi-section-label">Lifecycle</div>
+                    <div id="lifecycleStats" class="stats-grid stats-grid-4">
+                        <div class="stat-card clickable" data-drill-type="observations">
+                            <div class="stat-help" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service.">?</div>
+                            <div class="stat-value" id="statObservations">-</div>
+                            <div class="stat-label">Ingested</div>
+                        </div>
+                        <div class="stat-card" data-drill-type="validated">
+                            <div class="stat-help" title="Observations that passed schema validation, were correlated across data planes, and classified. This count equals Ingested minus Rejected.">?</div>
+                            <div class="stat-value" id="statValidated">-</div>
+                            <div class="stat-label">Validated</div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="rejections">
+                            <div class="stat-help" title="Observations rejected during processing. Includes schema failures, banned fields, and records that failed admission criteria.">?</div>
+                            <div class="stat-value" id="statRejected">-</div>
+                            <div class="stat-label">Rejected</div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="assets">
+                            <div class="stat-help" title="Confirmed enterprise systems admitted to the asset catalog. These are deduplicated, correlated assets ready for governance.">?</div>
+                            <div class="stat-value" id="statAssets">-</div>
+                            <div class="stat-label">Cataloged</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="kpi-section">
+                    <div class="kpi-section-label">Classifications</div>
+                    <div id="summaryStats" class="stats-grid stats-grid-4">
+                        <div class="stat-card clickable" data-drill-type="shadow">
+                            <div class="stat-help" title="Shadow IT: Assets discovered and actively used but NOT governed (no IdP AND no CMDB presence). Represents potential security and compliance risk.">?</div>
+                            <div class="stat-value stat-shadow" id="statShadow">-</div>
+                            <div class="stat-label">Shadow</div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="zombie">
+                            <div class="stat-help" title="Zombie Assets: Governed (in IdP or CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems.">?</div>
+                            <div class="stat-value stat-zombie" id="statZombie">-</div>
+                            <div class="stat-label">Zombie</div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="security_risks">
+                            <div class="stat-help" title="Security Risks: Identity gaps (ungoverned access paths), shadow IT spend (financially-backed shadow systems), and data conflicts (conflicting authoritative data).">?</div>
+                            <div class="stat-value stat-security" id="statSecurityRisks">-</div>
+                            <div class="stat-label">Security Risks</div>
+                            <div class="stat-sublabel" id="riskBreakdown"></div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="governance_hygiene">
+                            <div class="stat-help" title="Governance Hygiene: CMDB coverage gaps (partial governance), ownership gaps, and duplicate records. These are exposure amplifiers that reduce control plane accuracy.">?</div>
+                            <div class="stat-value" id="statGovernanceHygiene">-</div>
+                            <div class="stat-label">Governance</div>
+                        </div>
+                    </div>
                 </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
@@ -420,7 +465,7 @@
     <script>
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
         let drillStack = [];
-        let normalizedData = { assets: [], findings: [], security_risks: [], visibility_gaps: [], governance_hygiene: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
+        let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
         let llmMode = 'dev';
@@ -823,41 +868,16 @@
                     drillPaths: ['finding_type'],
                     displayName: 'Security Risks'
                 },
-                visibility_gaps: {
-                    fields: {
-                        finding_type: { default: 'cmdb_gap' },
-                        explanation: { default: 'No explanation available' },
-                        asset_id: { default: null },
-                        created_at: { default: null }
-                    },
-                    drillPaths: ['finding_type'],
-                    displayName: 'Visibility Gaps'
-                },
                 governance_hygiene: {
                     fields: {
                         finding_type: { default: 'governance_gap' },
+                        category: { default: 'governance_hygiene' },
                         explanation: { default: 'No explanation available' },
                         asset_id: { default: null },
                         created_at: { default: null }
                     },
                     drillPaths: ['finding_type'],
-                    displayName: 'Governance Hygiene'
-                },
-                findings: {
-                    fields: {
-                        category: { default: 'governance_finding' },
-                        finding_type: { default: 'unknown' },
-                        severity: { default: 'unknown' },
-                        explanation: { default: 'No explanation available' },
-                        asset_id: { default: null },
-                        created_at: { default: null }
-                    },
-                    drillPaths: ['finding_type', 'triage_priority', 'sub_view'],
-                    displayName: 'Findings',
-                    subViews: {
-                        artifacts: 'Artifacts',
-                        ambiguous: 'Ambiguous Matches'
-                    }
+                    displayName: 'Governance'
                 },
                 artifacts: {
                     fields: {
@@ -928,9 +948,7 @@
             summaryCardMappings: {
                 statAssets: 'assets',
                 statSecurityRisks: 'security_risks',
-                statVisibilityGaps: 'visibility_gaps',
                 statGovernanceHygiene: 'governance_hygiene',
-                statFindings: 'findings',
                 statObservations: 'observations',
                 statRejected: 'rejections',
                 statShadow: 'shadow',
@@ -1591,9 +1609,12 @@
                 document.getElementById('descTenant').textContent = run.tenant_id;
                 document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
                 document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
-                document.getElementById('statObservations').textContent = run.counts.observations_in;
+                const obsIn = run.counts.observations_in || 0;
+                const rejected = run.counts.rejected || 0;
+                document.getElementById('statObservations').textContent = obsIn;
+                document.getElementById('statValidated').textContent = Math.max(0, obsIn - rejected);
+                document.getElementById('statRejected').textContent = rejected;
                 document.getElementById('statAssets').textContent = run.counts.assets_admitted;
-                document.getElementById('statRejected').textContent = run.counts.rejected;
             } catch (e) { console.error('Failed to load run details:', e); }
             
             try {
@@ -1639,42 +1660,28 @@
         
         async function loadFindings(runId) {
             const SECURITY_CATEGORIES = ['identity_access', 'shadow_it', 'data_integrity', 'security_risk'];
-            const VISIBILITY_CATEGORIES = ['visibility_gap'];
-            const HYGIENE_CATEGORIES = ['governance_hygiene', 'governance_finding'];
+            const GOVERNANCE_CATEGORIES = ['visibility_gap', 'governance_hygiene', 'governance_finding'];
             
             try {
                 const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
                 const allFindings = data.findings || [];
                 
                 const securityRisks = allFindings.filter(f => SECURITY_CATEGORIES.includes(f.category));
-                const visibilityGaps = allFindings.filter(f => VISIBILITY_CATEGORIES.includes(f.category));
-                const governanceHygiene = allFindings.filter(f => HYGIENE_CATEGORIES.includes(f.category));
-                const governanceFindings = allFindings.filter(f => !SECURITY_CATEGORIES.includes(f.category));
+                const governanceHygiene = allFindings.filter(f => GOVERNANCE_CATEGORIES.includes(f.category));
                 
                 const { data: secNorm, errors: secErrs } = normalizeResponse('security_risks', securityRisks);
                 normalizedData.security_risks = secNorm;
                 if (secErrs.length > 0) console.warn('Security risks normalization errors:', secErrs);
                 
-                const { data: visNorm, errors: visErrs } = normalizeResponse('visibility_gaps', visibilityGaps);
-                normalizedData.visibility_gaps = visNorm;
-                if (visErrs.length > 0) console.warn('Visibility gaps normalization errors:', visErrs);
-                
                 const { data: hygNorm, errors: hygErrs } = normalizeResponse('governance_hygiene', governanceHygiene);
                 normalizedData.governance_hygiene = hygNorm;
                 if (hygErrs.length > 0) console.warn('Governance hygiene normalization errors:', hygErrs);
                 
-                const { data: govNorm, errors: govErrs } = normalizeResponse('findings', governanceFindings);
-                normalizedData.findings = govNorm;
-                if (govErrs.length > 0) console.warn('Findings normalization errors:', govErrs);
-                
-                // Compute risk case counts by priority (handle null/missing as P2)
                 const p0Count = securityRisks.filter(f => f.triage_priority === 'p0').length;
                 const p1Count = securityRisks.filter(f => f.triage_priority === 'p1').length;
                 const p2Count = securityRisks.filter(f => f.triage_priority === 'p2' || !f.triage_priority).length;
                 
-                // Show total security risks as headline
                 document.getElementById('statSecurityRisks').textContent = securityRisks.length;
-                // Show priority breakdown in sublabel
                 const breakdownEl = document.getElementById('riskBreakdown');
                 if (securityRisks.length > 0) {
                     breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
@@ -1682,15 +1689,11 @@
                     breakdownEl.textContent = '';
                 }
                 
-                // Secondary KPIs
-                document.getElementById('statVisibilityGaps').textContent = visibilityGaps.length;
                 document.getElementById('statGovernanceHygiene').textContent = governanceHygiene.length;
-                document.getElementById('statFindings').textContent = governanceFindings.length;
             } catch (e) { 
                 console.error('Failed to load findings:', e);
-                normalizedData.findings = [];
                 normalizedData.security_risks = [];
-                document.getElementById('statVisibilityGaps').textContent = '-';
+                normalizedData.governance_hygiene = [];
                 document.getElementById('statGovernanceHygiene').textContent = '-';
             }
         }

@@ -1721,7 +1721,6 @@
         });
         
         document.getElementById('clearAllRuns').addEventListener('click', async () => {
-            if (!confirm('Delete all discovery runs? This cannot be undone.')) return;
             const btn = document.getElementById('clearAllRuns');
             btn.disabled = true;
             btn.textContent = 'Clearing...';

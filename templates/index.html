@@ -1806,21 +1806,33 @@
             document.getElementById('discoveryCompleteModal').classList.remove('active');
         }
         
-        document.getElementById('discoveryReviewBtn').addEventListener('click', async () => {
-            const modal = document.getElementById('discoveryCompleteModal');
-            const runId = modal.dataset.runId;
-            hideDiscoveryCompleteModal();
-            if (runId) await selectRun(runId);
-        });
-        
-        document.getElementById('discoveryFarmBtn').addEventListener('click', () => {
-            hideDiscoveryCompleteModal();
-            window.open('https://farm.aos.dev', '_blank');
-        });
-        
-        document.getElementById('discoveryCancelBtn').addEventListener('click', () => {
-            hideDiscoveryCompleteModal();
-        });
+        setTimeout(() => {
+            const discoveryReviewBtn = document.getElementById('discoveryReviewBtn');
+            const discoveryFarmBtn = document.getElementById('discoveryFarmBtn');
+            const discoveryCancelBtn = document.getElementById('discoveryCancelBtn');
+            
+            if (discoveryReviewBtn) {
+                discoveryReviewBtn.addEventListener('click', async () => {
+                    const modal = document.getElementById('discoveryCompleteModal');
+                    const runId = modal.dataset.runId;
+                    hideDiscoveryCompleteModal();
+                    if (runId) await selectRun(runId);
+                });
+            }
+            
+            if (discoveryFarmBtn) {
+                discoveryFarmBtn.addEventListener('click', () => {
+                    hideDiscoveryCompleteModal();
+                    window.open('https://farm.aos.dev', '_blank');
+                });
+            }
+            
+            if (discoveryCancelBtn) {
+                discoveryCancelBtn.addEventListener('click', () => {
+                    hideDiscoveryCompleteModal();
+                });
+            }
+        }, 0);
         
         
         document.querySelectorAll('.stat-card.clickable').forEach(card => {

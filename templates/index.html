@@ -342,6 +342,18 @@
         .triage-tag { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: var(--slate-700); color: var(--slate-300); }
         .triage-tag.type { background: rgba(168, 85, 247, 0.2); color: var(--purple-400); }
         .triage-tag.vendor { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
+        .batch-action-bar { display: none; padding: 0.75rem 1rem; background: var(--slate-700); border-bottom: 1px solid var(--slate-600); align-items: center; gap: 1rem; }
+        .batch-action-bar.show { display: flex; }
+        .batch-select-all { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .batch-checkbox { width: 16px; height: 16px; accent-color: var(--cyan-500); cursor: pointer; }
+        .batch-count { font-size: 0.8rem; color: var(--slate-300); }
+        .batch-actions { display: flex; gap: 0.5rem; margin-left: auto; }
+        .batch-btn { padding: 0.375rem 0.75rem; border-radius: 6px; border: none; font-family: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }
+        .batch-btn.ignore { background: var(--slate-600); color: var(--slate-200); }
+        .batch-btn.ignore:hover { background: var(--slate-500); }
+        .batch-btn.ack { background: var(--cyan-600); color: white; }
+        .batch-btn.ack:hover { background: var(--cyan-500); }
+        .triage-item-checkbox { width: 16px; height: 16px; accent-color: var(--cyan-500); cursor: pointer; flex-shrink: 0; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -569,6 +581,17 @@
                             <span class="triage-count tier-3-count" id="triageTier3Count">0</span>
                         </div>
                         <div class="triage-section-desc">Low-risk hygiene signals; safe to batch-handle</div>
+                    </div>
+                    <div class="batch-action-bar" id="tier3BatchBar">
+                        <label class="batch-select-all">
+                            <input type="checkbox" class="batch-checkbox" id="tier3SelectAll">
+                            <span>Select All</span>
+                        </label>
+                        <span class="batch-count" id="tier3BatchCount">0 selected</span>
+                        <div class="batch-actions">
+                            <button class="batch-btn ignore" id="tier3BatchIgnore">Ignore Selected</button>
+                            <button class="batch-btn ack" id="tier3BatchAck">Acknowledge Selected</button>
+                        </div>
                     </div>
                     <div class="triage-section-content" id="triageTier3Content">
                         <div class="triage-empty">Select a snapshot to load items</div>
@@ -1007,10 +1030,12 @@
                 }
                 
                 const actionButtons = getActionButtons(tier, itemId, itemType);
+                const checkbox = tier === 3 ? `<input type="checkbox" class="triage-item-checkbox" data-item-id="${itemId}" data-item-type="${itemType}">` : '';
                 
                 if (itemType === 'finding') {
                     const findingType = (item.finding_type || 'unknown').replace(/_/g, ' ');
-                    return `<div class="triage-item" data-item-id="${itemId}">
+                    return `<div class="triage-item" data-item-id="${itemId}" data-item-type="${itemType}">
+                        ${checkbox}
                         <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
                             <div class="triage-item-title">${findingType}</div>
@@ -1036,7 +1061,8 @@
                     if (!agg.has_idp && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No IdP</span>');
                     if (!agg.has_cmdb && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No CMDB</span>');
                     
-                    return `<div class="triage-item" data-item-id="${itemId}">
+                    return `<div class="triage-item" data-item-id="${itemId}" data-item-type="${itemType}">
+                        ${checkbox}
                         <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
                             <div class="triage-item-title">${name}</div>
@@ -1053,6 +1079,10 @@
                 }
             }).join('');
             
+            if (tier === 3) {
+                initTier3BatchSelection();
+            }
+            
             container.querySelectorAll('.more-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -1067,6 +1097,87 @@
             document.addEventListener('click', () => {
                 document.querySelectorAll('.triage-more-menu.show').forEach(m => m.classList.remove('show'));
             });
+        }
+        
+        function initTier3BatchSelection() {
+            const batchBar = document.getElementById('tier3BatchBar');
+            const selectAllCheckbox = document.getElementById('tier3SelectAll');
+            const batchCount = document.getElementById('tier3BatchCount');
+            const tier3Content = document.getElementById('triageTier3Content');
+            const ignoreBtn = document.getElementById('tier3BatchIgnore');
+            const ackBtn = document.getElementById('tier3BatchAck');
+            
+            const checkboxes = tier3Content.querySelectorAll('.triage-item-checkbox');
+            if (checkboxes.length === 0) {
+                batchBar.classList.remove('show');
+                return;
+            }
+            
+            batchBar.classList.add('show');
+            
+            function updateBatchCount() {
+                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
+                const count = checked.length;
+                batchCount.textContent = count === 0 ? '0 selected' : `${count} selected`;
+                selectAllCheckbox.checked = count === checkboxes.length && count > 0;
+                selectAllCheckbox.indeterminate = count > 0 && count < checkboxes.length;
+            }
+            
+            selectAllCheckbox.onclick = function() {
+                const isChecked = this.checked;
+                tier3Content.querySelectorAll('.triage-item-checkbox').forEach(cb => {
+                    cb.checked = isChecked;
+                });
+                updateBatchCount();
+            };
+            
+            checkboxes.forEach(cb => {
+                cb.onclick = updateBatchCount;
+            });
+            
+            ignoreBtn.onclick = async function() {
+                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
+                if (checked.length === 0) return;
+                const runId = document.getElementById('triageRunSelect').value;
+                if (!runId) return;
+                
+                this.disabled = true;
+                this.textContent = 'Processing...';
+                
+                for (const cb of checked) {
+                    const itemId = cb.dataset.itemId;
+                    const itemType = cb.dataset.itemType;
+                    await submitTriageAction(runId, itemId, itemType, 'ignore', { ignore_reason: 'Batch ignored' });
+                }
+                
+                this.disabled = false;
+                this.textContent = 'Ignore Selected';
+                selectAllCheckbox.checked = false;
+                updateBatchCount();
+            };
+            
+            ackBtn.onclick = async function() {
+                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
+                if (checked.length === 0) return;
+                const runId = document.getElementById('triageRunSelect').value;
+                if (!runId) return;
+                
+                this.disabled = true;
+                this.textContent = 'Processing...';
+                
+                for (const cb of checked) {
+                    const itemId = cb.dataset.itemId;
+                    const itemType = cb.dataset.itemType;
+                    await submitTriageAction(runId, itemId, itemType, 'acknowledge', {});
+                }
+                
+                this.disabled = false;
+                this.textContent = 'Acknowledge Selected';
+                selectAllCheckbox.checked = false;
+                updateBatchCount();
+            };
+            
+            updateBatchCount();
         }
         
         function initTestTab() {

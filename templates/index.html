@@ -24,8 +24,9 @@
         header { display: flex; align-items: center; padding: 0 2rem; height: 56px; background: var(--gray-900); border-bottom: 1px solid var(--gray-800); }
         .header-left { display: flex; align-items: center; flex-shrink: 0; }
         .logo { display: flex; align-items: center; flex-shrink: 0; }
-        .logo-img { height: 28px; width: auto; }
-        .header-divider { width: 1px; height: 28px; background: var(--slate-600); margin: 0 1.25rem; flex-shrink: 0; }
+        .logo-img { height: 36px; width: auto; }
+        .header-divider { width: 1px; height: 24px; background: var(--slate-700); margin: 0 1rem; flex-shrink: 0; }
+        .header-divider.subtle { background: var(--slate-600); margin: 0 0.75rem; }
         .module-name { font-size: 1.15rem; font-weight: 600; color: white; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0; }
         .header-nav { display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
         .header-nav-tab { padding: 0.35rem 0.9rem; border-radius: 5px; background: transparent; border: none; color: var(--slate-400); font-family: 'Quicksand', sans-serif; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
@@ -252,7 +253,7 @@
             <div class="logo">
                 <img src="/static/autonomos-logo.png" alt="autonomOS" class="logo-img">
             </div>
-            <div class="header-divider"></div>
+            <div class="header-divider subtle"></div>
             <div class="module-name">AOS Discover</div>
             <div class="header-divider"></div>
             <nav class="header-nav">

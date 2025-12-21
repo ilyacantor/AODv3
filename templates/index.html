@@ -332,6 +332,18 @@
         .triage-tag.data_integrity { background: rgba(168, 85, 247, 0.15); color: var(--purple-400); }
         .triage-tag.governance { background: rgba(100, 116, 139, 0.2); color: var(--slate-300); }
         .triage-cell-actions { display: flex; gap: 0.25rem; align-items: center; }
+        .triage-row { cursor: pointer; }
+        .triage-row:hover { background: var(--slate-700); }
+        .triage-row.expanded { background: var(--slate-750, #3a4556); }
+        .triage-detail-row { display: none; }
+        .triage-detail-row.open { display: table-row; }
+        .triage-detail-row td { padding: 0; background: var(--slate-800); border-bottom: 1px solid var(--slate-600); }
+        .triage-detail-content { padding: 1rem 1.5rem; }
+        .triage-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .triage-detail-field { }
+        .triage-detail-label { font-size: 0.7rem; color: var(--slate-400); text-transform: uppercase; margin-bottom: 0.25rem; }
+        .triage-detail-value { font-size: 0.85rem; color: var(--slate-200); }
+        .triage-detail-evidence { margin-top: 1rem; padding: 0.75rem; background: var(--slate-900); border-radius: 6px; font-family: monospace; font-size: 0.75rem; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
         .triage-btn { padding: 0.25rem 0.5rem; border-radius: 4px; border: none; font-family: inherit; font-size: 0.65rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
         .triage-btn.primary { background: var(--cyan-600); color: white; }
         .triage-btn.primary:hover { background: var(--cyan-500); }
@@ -1042,6 +1054,53 @@
             return labels[category] || category || '';
         }
         
+        function buildDetailHtml(item, itemType) {
+            let fields = [];
+            
+            if (itemType === 'finding') {
+                fields.push({ label: 'Finding Type', value: (item.finding_type || 'unknown').replace(/_/g, ' ') });
+                fields.push({ label: 'Category', value: getCategoryLabel(item.category) });
+                if (item.triage_priority) fields.push({ label: 'Priority', value: item.triage_priority.toUpperCase() });
+                if (item.confidence) fields.push({ label: 'Confidence', value: item.confidence });
+                if (item.materiality) fields.push({ label: 'Materiality', value: item.materiality });
+                fields.push({ label: 'Explanation', value: item.explanation || 'No explanation provided' });
+            } else {
+                const typeLabel = itemType === 'shadow' ? 'Shadow Asset' : 'Zombie Asset';
+                fields.push({ label: 'Classification', value: typeLabel });
+                if (item.vendor || item.vendor_hypothesis?.value) {
+                    fields.push({ label: 'Vendor', value: item.vendor || item.vendor_hypothesis?.value });
+                }
+                if (item.domain) fields.push({ label: 'Domain', value: item.domain });
+                fields.push({ label: 'Reason', value: item.reason || (itemType === 'zombie' ? 'Inactive 90+ days' : 'Ungoverned') });
+                
+                const agg = item.aggregated_evidence || {};
+                let sources = [];
+                if (agg.has_discovery) sources.push('Discovery');
+                if (agg.has_idp) sources.push('IdP');
+                if (agg.has_cmdb) sources.push('CMDB');
+                if (agg.has_cloud) sources.push('Cloud');
+                if (agg.has_finance) sources.push('Finance');
+                if (sources.length) fields.push({ label: 'Evidence Sources', value: sources.join(', ') });
+            }
+            
+            let gridHtml = fields.map(f => `
+                <div class="triage-detail-field">
+                    <div class="triage-detail-label">${f.label}</div>
+                    <div class="triage-detail-value">${f.value}</div>
+                </div>
+            `).join('');
+            
+            let evidenceHtml = '';
+            if (item.evidence) {
+                evidenceHtml = `<div class="triage-detail-evidence">${JSON.stringify(item.evidence, null, 2)}</div>`;
+            }
+            
+            return `<div class="triage-detail-content">
+                <div class="triage-detail-grid">${gridHtml}</div>
+                ${evidenceHtml}
+            </div>`;
+        }
+        
         function toggleTriageMenu(btn, event) {
             event.stopPropagation();
             const menu = btn.nextElementSibling;
@@ -1123,6 +1182,9 @@
                         <div class="triage-more-menu">${moreOptions}</div>
                     </div>`;
                 
+                const detailHtml = buildDetailHtml(item, itemType);
+                const colSpan = tier === 3 ? 5 : 4;
+                
                 tableHtml += `
                     <tr class="triage-row" data-item-idx="${idx}" data-tier="${tier}">
                         ${checkboxCell}
@@ -1130,6 +1192,9 @@
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>
                         <td class="triage-cell-category">${category}</td>
                         <td class="triage-cell-actions">${actionBtns}</td>
+                    </tr>
+                    <tr class="triage-detail-row" data-detail-for="${idx}">
+                        <td colspan="${colSpan}">${detailHtml}</td>
                     </tr>`;
             });
             
@@ -1146,6 +1211,17 @@
                 };
             });
             
+            container.querySelectorAll('.triage-row').forEach(row => {
+                row.onclick = function(e) {
+                    if (e.target.closest('.triage-cell-actions') || e.target.closest('.triage-item-checkbox')) return;
+                    const idx = this.dataset.itemIdx;
+                    const detailRow = container.querySelector(`.triage-detail-row[data-detail-for="${idx}"]`);
+                    if (detailRow) {
+                        detailRow.classList.toggle('open');
+                        this.classList.toggle('expanded');
+                    }
+                };
+            });
             
             if (tier === 3) {
                 initTier3BatchSelection();

@@ -331,6 +331,7 @@
         .triage-tag.shadow_it { background: rgba(245, 158, 11, 0.15); color: var(--amber-400); }
         .triage-tag.data_integrity { background: rgba(168, 85, 247, 0.15); color: var(--purple-400); }
         .triage-tag.governance { background: rgba(100, 116, 139, 0.2); color: var(--slate-300); }
+        .triage-cell-actions { display: flex; gap: 0.25rem; }
         .triage-btn { padding: 0.25rem 0.5rem; border-radius: 4px; border: none; font-family: inherit; font-size: 0.65rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
         .triage-btn.primary { background: var(--cyan-600); color: white; }
         .triage-btn.primary:hover { background: var(--cyan-500); }
@@ -1182,7 +1183,7 @@
                         <th data-sort="name" data-tier="${tier}" class="${currentSort === 'name' ? 'sorted' : ''}">Asset <span class="sort-arrow">&#8597;</span></th>
                         <th data-sort="type" data-tier="${tier}" class="${currentSort === 'type' ? 'sorted' : ''}">Issue <span class="sort-arrow">&#8597;</span></th>
                         <th data-sort="category" data-tier="${tier}" class="${currentSort === 'category' ? 'sorted' : ''}">Category <span class="sort-arrow">&#8597;</span></th>
-                        <th style="width: 100px;"></th>
+                        <th style="width: 130px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>`;
@@ -1207,9 +1208,20 @@
                 }
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
-                const actionBtn = tier === 3 
-                    ? `<button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>`
-                    : `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>`;
+                let actionBtns;
+                if (tier === 1) {
+                    actionBtns = `
+                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>`;
+                } else if (tier === 2) {
+                    actionBtns = `
+                        <button class="triage-btn primary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="defer" onclick="event.stopPropagation()">Defer</button>`;
+                } else {
+                    actionBtns = `
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="ignore" onclick="event.stopPropagation()">Ignore</button>
+                        <button class="triage-btn secondary" ${dataAttrs} data-action="acknowledge" onclick="event.stopPropagation()">Ack</button>`;
+                }
                 
                 tableHtml += `
                     <tr class="triage-row" data-item-idx="${idx}" data-tier="${tier}">
@@ -1217,7 +1229,7 @@
                         <td class="triage-cell-asset">${assetName}</td>
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>
                         <td class="triage-cell-category">${category}</td>
-                        <td class="triage-cell-actions">${actionBtn}</td>
+                        <td class="triage-cell-actions">${actionBtns}</td>
                     </tr>`;
             });
             

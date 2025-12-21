@@ -174,7 +174,6 @@ class Severity(str, Enum):
     """Severity enumeration"""
     LOW = "low"
     MED = "med"
-    HIGH = "high"
     CRITICAL = "critical"
 
 

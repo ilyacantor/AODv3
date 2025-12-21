@@ -253,9 +253,19 @@
         .triage-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; padding: 1.5rem; background: var(--slate-900); border-radius: 12px; }
         .triage-run-select { display: flex; flex-direction: column; gap: 0.25rem; }
         .triage-sections { display: flex; flex-direction: column; gap: 1.5rem; }
-        .triage-section { background: var(--slate-900); border-radius: 12px; overflow: hidden; }
+        .triage-section { background: var(--slate-900); border-radius: 12px; overflow: hidden; border-left: 4px solid var(--slate-600); }
+        .triage-section.tier-1 { border-left-color: #f97316; }
+        .triage-section.tier-2 { border-left-color: #eab308; }
+        .triage-section.tier-3 { border-left-color: #64748b; }
         .triage-section-header { padding: 1rem 1.5rem; background: var(--slate-800); border-bottom: 1px solid var(--slate-700); }
         .triage-section-title { display: flex; align-items: center; gap: 0.75rem; font-weight: 600; font-size: 1rem; color: white; }
+        .triage-section-desc { font-size: 0.75rem; color: var(--slate-400); margin-top: 0.25rem; margin-left: 2rem; }
+        .triage-icon.tier-1 { background: #f97316; color: white; }
+        .triage-icon.tier-2 { background: #eab308; color: #1e1e1e; }
+        .triage-icon.tier-3 { background: #64748b; color: white; }
+        .tier-1-count { background: rgba(249,115,22,0.2); color: #f97316; }
+        .tier-2-count { background: rgba(234,179,8,0.2); color: #eab308; }
+        .tier-3-count { background: rgba(100,116,139,0.2); color: #94a3b8; }
         .triage-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; }
         .triage-icon.security { background: rgba(239, 68, 68, 0.2); color: #FF6B6B; }
         .triage-icon.shadow { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); }
@@ -264,6 +274,18 @@
         .triage-section-content { max-height: 400px; overflow-y: auto; padding: 1rem; }
         .triage-empty { text-align: center; padding: 2rem; color: var(--slate-500); }
         .triage-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
+        .triage-item-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; flex-shrink: 0; }
+        .triage-item-icon.finding { background: rgba(239, 68, 68, 0.2); color: #FF6B6B; }
+        .triage-item-icon.shadow { background: rgba(245, 158, 11, 0.2); color: var(--amber-400); }
+        .triage-item-icon.zombie { background: rgba(168, 85, 247, 0.2); color: var(--purple-400); }
+        .triage-tag.shadow { background: rgba(245, 158, 11, 0.15); color: var(--amber-400); }
+        .triage-tag.zombie { background: rgba(168, 85, 247, 0.15); color: var(--purple-400); }
+        .triage-tag.priority { background: rgba(239, 68, 68, 0.15); color: #FF6B6B; }
+        .triage-item-signals { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
+        .signal-badge { padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .signal-badge.finance { background: rgba(34, 197, 94, 0.15); color: var(--green-400); }
+        .signal-badge.cloud { background: rgba(96, 165, 250, 0.15); color: #60A5FA; }
+        .signal-badge.gap { background: rgba(239, 68, 68, 0.1); color: #F87171; }
         .triage-item:last-child { margin-bottom: 0; }
         .triage-item-priority { flex-shrink: 0; }
         .triage-item-content { flex: 1; min-width: 0; }
@@ -447,7 +469,7 @@
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Triage Workflow</h2>
-                    <p class="config-note" style="margin:0;">Review and action security risks, shadow IT, and zombie assets.</p>
+                    <p class="config-note" style="margin:0;">Prioritized observations for review. Tier 1 items need action; Tier 2 needs judgment; Tier 3 is informational.</p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -458,42 +480,45 @@
             </div>
             
             <div class="triage-sections" id="triageSections">
-                <div class="triage-section">
-                    <div class="triage-section-header">
+                <div class="triage-section tier-1">
+                    <div class="triage-section-header tier-1-header">
                         <div class="triage-section-title">
-                            <span class="triage-icon security">!</span>
-                            Security Risks
-                            <span class="triage-count" id="triageSecurityCount">0</span>
+                            <span class="triage-icon tier-1">!</span>
+                            Tier 1 — Action Recommended
+                            <span class="triage-count tier-1-count" id="triageTier1Count">0</span>
                         </div>
+                        <div class="triage-section-desc">Material, multi-source signals requiring attention</div>
                     </div>
-                    <div class="triage-section-content" id="triageSecurityContent">
-                        <div class="triage-empty">Select a snapshot to load security risks</div>
+                    <div class="triage-section-content" id="triageTier1Content">
+                        <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section">
-                    <div class="triage-section-header">
+                <div class="triage-section tier-2">
+                    <div class="triage-section-header tier-2-header">
                         <div class="triage-section-title">
-                            <span class="triage-icon shadow">◐</span>
-                            Shadow Assets
-                            <span class="triage-count" id="triageShadowCount">0</span>
+                            <span class="triage-icon tier-2">?</span>
+                            Tier 2 — Needs Judgment
+                            <span class="triage-count tier-2-count" id="triageTier2Count">0</span>
                         </div>
+                        <div class="triage-section-desc">Ambiguous matches or conflicting data requiring review</div>
                     </div>
-                    <div class="triage-section-content" id="triageShadowContent">
-                        <div class="triage-empty">Select a snapshot to load shadow assets</div>
+                    <div class="triage-section-content" id="triageTier2Content">
+                        <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section">
-                    <div class="triage-section-header">
+                <div class="triage-section tier-3">
+                    <div class="triage-section-header tier-3-header">
                         <div class="triage-section-title">
-                            <span class="triage-icon zombie">☠</span>
-                            Zombie Assets
-                            <span class="triage-count" id="triageZombieCount">0</span>
+                            <span class="triage-icon tier-3">i</span>
+                            Tier 3 — Informational
+                            <span class="triage-count tier-3-count" id="triageTier3Count">0</span>
                         </div>
+                        <div class="triage-section-desc">Low-risk hygiene signals; safe to batch-handle</div>
                     </div>
-                    <div class="triage-section-content" id="triageZombieContent">
-                        <div class="triage-empty">Select a snapshot to load zombie assets</div>
+                    <div class="triage-section-content" id="triageTier3Content">
+                        <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
             </div>
@@ -635,13 +660,13 @@
             const runId = document.getElementById('triageRunSelect').value;
             if (!runId) return;
             
-            const securityContent = document.getElementById('triageSecurityContent');
-            const shadowContent = document.getElementById('triageShadowContent');
-            const zombieContent = document.getElementById('triageZombieContent');
+            const tier1Content = document.getElementById('triageTier1Content');
+            const tier2Content = document.getElementById('triageTier2Content');
+            const tier3Content = document.getElementById('triageTier3Content');
             
-            securityContent.innerHTML = '<div class="triage-empty">Loading...</div>';
-            shadowContent.innerHTML = '<div class="triage-empty">Loading...</div>';
-            zombieContent.innerHTML = '<div class="triage-empty">Loading...</div>';
+            tier1Content.innerHTML = '<div class="triage-empty">Loading...</div>';
+            tier2Content.innerHTML = '<div class="triage-empty">Loading...</div>';
+            tier3Content.innerHTML = '<div class="triage-empty">Loading...</div>';
             
             try {
                 const [findingsRes, derivedRes] = await Promise.all([
@@ -652,62 +677,143 @@
                 const findingsData = await findingsRes.json();
                 const derivedData = await derivedRes.json();
                 
-                const SECURITY_CATEGORIES = ['identity_access', 'shadow_it', 'data_integrity', 'security_risk'];
-                const securityRisks = (findingsData.findings || []).filter(f => SECURITY_CATEGORIES.includes(f.category));
+                const findings = findingsData.findings || [];
                 const shadowAssets = derivedData.shadow_assets || [];
                 const zombieAssets = derivedData.zombie_assets || [];
                 
-                document.getElementById('triageSecurityCount').textContent = securityRisks.length;
-                document.getElementById('triageShadowCount').textContent = shadowAssets.length;
-                document.getElementById('triageZombieCount').textContent = zombieAssets.length;
+                const tier1Items = [];
+                const tier2Items = [];
+                const tier3Items = [];
                 
-                renderTriageSection(securityContent, securityRisks, 'security');
-                renderTriageSection(shadowContent, shadowAssets, 'shadow');
-                renderTriageSection(zombieContent, zombieAssets, 'zombie');
+                findings.forEach(f => {
+                    const item = { ...f, itemType: 'finding' };
+                    const priority = (f.triage_priority || 'p2').toLowerCase();
+                    const TIER1_TYPES = ['identity_gap', 'finance_gap'];
+                    const TIER2_TYPES = ['data_conflict'];
+                    
+                    if (priority === 'p0' || priority === 'p1' || TIER1_TYPES.includes(f.finding_type)) {
+                        tier1Items.push(item);
+                    } else if (TIER2_TYPES.includes(f.finding_type) || f.category === 'data_integrity') {
+                        tier2Items.push(item);
+                    } else {
+                        tier3Items.push(item);
+                    }
+                });
+                
+                shadowAssets.forEach(a => {
+                    const item = { ...a, itemType: 'shadow' };
+                    const agg = a.aggregated_evidence || {};
+                    const lens = a.lens_status || {};
+                    
+                    const hasFinance = agg.has_finance === true;
+                    const hasCloud = agg.has_cloud === true;
+                    const hasIdp = agg.has_idp === true;
+                    const hasDiscovery = agg.has_discovery === true;
+                    const hasCmdb = agg.has_cmdb === true;
+                    
+                    const activeNoIdp = hasDiscovery && !hasIdp;
+                    const cloudNotCataloged = hasCloud && !hasCmdb;
+                    const multiPlane = [hasFinance, hasCloud, hasIdp, hasDiscovery].filter(Boolean).length > 1;
+                    
+                    const hasAmbiguousLens = Object.values(lens).some(v => v === 'ambiguous');
+                    
+                    if (hasFinance || cloudNotCataloged || (activeNoIdp && multiPlane)) {
+                        tier1Items.push(item);
+                    } else if (hasAmbiguousLens) {
+                        tier2Items.push(item);
+                    } else {
+                        tier3Items.push(item);
+                    }
+                });
+                
+                zombieAssets.forEach(a => {
+                    const item = { ...a, itemType: 'zombie' };
+                    const lens = a.lens_status || {};
+                    const hasAmbiguousLens = Object.values(lens).some(v => v === 'ambiguous');
+                    
+                    if (hasAmbiguousLens) {
+                        tier2Items.push(item);
+                    } else {
+                        tier3Items.push(item);
+                    }
+                });
+                
+                document.getElementById('triageTier1Count').textContent = tier1Items.length;
+                document.getElementById('triageTier2Count').textContent = tier2Items.length;
+                document.getElementById('triageTier3Count').textContent = tier3Items.length;
+                
+                renderTierSection(tier1Content, tier1Items);
+                renderTierSection(tier2Content, tier2Items);
+                renderTierSection(tier3Content, tier3Items);
                 
             } catch (err) {
                 console.error('Failed to load triage data:', err);
-                securityContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
-                shadowContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
-                zombieContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                tier1Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                tier2Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                tier3Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
             }
         }
         
-        function renderTriageSection(container, items, type) {
+        function renderTierSection(container, items) {
             if (!items || items.length === 0) {
-                container.innerHTML = '<div class="triage-empty">No items found</div>';
+                container.innerHTML = '<div class="triage-empty">No items in this tier</div>';
                 return;
             }
             
             container.innerHTML = items.map(item => {
-                if (type === 'security') {
-                    const priority = item.triage_priority || 'p2';
-                    const priorityClass = `priority-${priority}`;
+                const itemType = item.itemType || 'unknown';
+                let icon = '•';
+                let iconClass = '';
+                
+                if (itemType === 'finding') {
+                    icon = '!';
+                    iconClass = 'finding';
+                } else if (itemType === 'shadow') {
+                    icon = '◐';
+                    iconClass = 'shadow';
+                } else if (itemType === 'zombie') {
+                    icon = '☠';
+                    iconClass = 'zombie';
+                }
+                
+                if (itemType === 'finding') {
+                    const findingType = (item.finding_type || 'unknown').replace(/_/g, ' ');
                     return `<div class="triage-item">
-                        <div class="triage-item-priority">
-                            <span class="priority-badge ${priorityClass}">${priority.toUpperCase()}</span>
-                        </div>
+                        <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
-                            <div class="triage-item-title">${item.finding_type || 'Unknown'}</div>
+                            <div class="triage-item-title">${findingType}</div>
                             <div class="triage-item-subtitle">${item.explanation || ''}</div>
                             <div class="triage-item-meta">
                                 <span class="triage-tag type">${item.category || ''}</span>
+                                ${item.triage_priority ? `<span class="triage-tag priority">${item.triage_priority.toUpperCase()}</span>` : ''}
                             </div>
                         </div>
                     </div>`;
                 } else {
-                    const name = item.name || 'Unknown';
+                    const name = item.name || item.asset_key || 'Unknown';
                     const vendor = item.vendor || item.vendor_hypothesis?.value || '';
                     const assetType = item.asset_type || '';
-                    const reason = item.reason || '';
+                    const reason = item.reason || (itemType === 'zombie' ? 'Inactive 90+ days' : 'Ungoverned');
+                    const typeLabel = itemType === 'shadow' ? 'Shadow' : 'Zombie';
+                    
+                    const agg = item.aggregated_evidence || {};
+                    const signalBadges = [];
+                    if (agg.has_finance) signalBadges.push('<span class="signal-badge finance">$ Spend</span>');
+                    if (agg.has_cloud) signalBadges.push('<span class="signal-badge cloud">Cloud</span>');
+                    if (!agg.has_idp && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No IdP</span>');
+                    if (!agg.has_cmdb && agg.has_discovery) signalBadges.push('<span class="signal-badge gap">No CMDB</span>');
+                    
                     return `<div class="triage-item">
+                        <div class="triage-item-icon ${iconClass}">${icon}</div>
                         <div class="triage-item-content">
                             <div class="triage-item-title">${name}</div>
                             <div class="triage-item-subtitle">${reason}</div>
                             <div class="triage-item-meta">
+                                <span class="triage-tag ${itemType}">${typeLabel}</span>
                                 ${assetType ? `<span class="triage-tag type">${assetType}</span>` : ''}
                                 ${vendor ? `<span class="triage-tag vendor">${vendor}</span>` : ''}
                             </div>
+                            ${signalBadges.length ? `<div class="triage-item-signals">${signalBadges.join('')}</div>` : ''}
                         </div>
                     </div>`;
                 }

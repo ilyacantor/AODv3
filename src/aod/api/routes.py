@@ -554,10 +554,21 @@ async def view_catalog(run_id: str):
     assets = await db.get_assets_by_run(run_id)
     
     triage_actions = await db.get_triage_actions_by_run(run_id)
+    findings = await db.get_findings_by_run(run_id)
+    
+    finding_to_asset = {str(f.finding_id): str(f.asset_id) for f in findings if f.asset_id}
+    
     triage_by_asset = {}
     for action in triage_actions:
-        if action.get('item_type') == 'asset':
-            triage_by_asset[action['item_id']] = action
+        item_id = action.get('item_id')
+        item_type = action.get('item_type')
+        
+        if item_type == 'asset':
+            triage_by_asset[item_id] = action
+        elif item_type == 'finding':
+            asset_id = finding_to_asset.get(item_id)
+            if asset_id and asset_id not in triage_by_asset:
+                triage_by_asset[asset_id] = action
     
     def get_tag(asset, key):
         """Get tag value from asset, handling both dict and list formats"""

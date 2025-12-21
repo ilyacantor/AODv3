@@ -32,6 +32,8 @@ from .output_contracts import (
     LensStatuses,
     AssetIdentifiers,
     Asset,
+    FindingType,
+    Severity,
     Finding,
     RunStatus,
     RunCounts,

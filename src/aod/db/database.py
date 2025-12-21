@@ -10,7 +10,8 @@ from uuid import UUID
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
-    AssetIdentifiers, ActivityEvidence, ArtifactType, VendorHypothesis
+    AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
+    VendorHypothesis, Confidence, Materiality, TriagePriority
 )
 
 
@@ -123,6 +124,19 @@ class Database:
             except Exception:
                 pass
             
+            try:
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'")
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'med'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS materiality TEXT NOT NULL DEFAULT 'med'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS triage_priority TEXT NOT NULL DEFAULT 'p2'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS conflict_field TEXT")
+            except Exception:
+                pass
+            
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
                     artifact_id TEXT PRIMARY KEY,
@@ -145,6 +159,9 @@ class Database:
                     asset_id TEXT,
                     tenant_id TEXT NOT NULL,
                     run_id TEXT NOT NULL,
+                    finding_type TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'governance_finding',
+                    severity TEXT NOT NULL,
                     explanation TEXT NOT NULL,
                     evidence_refs TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
@@ -471,17 +488,25 @@ class Database:
             await conn.execute(
                 """
                 INSERT INTO findings (
-                    finding_id, asset_id, tenant_id, run_id,
-                    explanation, evidence_refs, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    finding_id, asset_id, tenant_id, run_id, finding_type,
+                    category, severity, explanation, evidence_refs, created_at,
+                    confidence, materiality, triage_priority, conflict_field
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
                 str(finding.finding_id),
                 str(finding.asset_id) if finding.asset_id else None,
                 finding.tenant_id,
                 finding.run_id,
+                finding.finding_type.value,
+                finding.category.value,
+                finding.severity.value,
                 finding.explanation,
                 json.dumps(finding.evidence_refs),
-                finding.created_at.isoformat()
+                finding.created_at.isoformat(),
+                finding.confidence.value,
+                finding.materiality.value,
+                finding.triage_priority.value,
+                finding.conflict_field
             )
         return finding
     
@@ -491,7 +516,7 @@ class Database:
         
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM findings WHERE run_id = $1 ORDER BY created_at",
+                "SELECT * FROM findings WHERE run_id = $1 ORDER BY triage_priority ASC, finding_type",
                 run_id
             )
         
@@ -501,9 +526,16 @@ class Database:
                 asset_id=UUID(row["asset_id"]) if row["asset_id"] else None,
                 tenant_id=row["tenant_id"],
                 run_id=row["run_id"],
+                finding_type=FindingType(row["finding_type"]),
+                category=FindingCategory(row["category"]) if row.get("category") else FindingCategory.GOVERNANCE_FINDING,
+                severity=Severity(row["severity"]),
                 explanation=row["explanation"],
                 evidence_refs=json.loads(row["evidence_refs"]),
-                created_at=datetime.fromisoformat(row["created_at"])
+                created_at=datetime.fromisoformat(row["created_at"]),
+                confidence=Confidence(row["confidence"]) if row.get("confidence") else Confidence.MED,
+                materiality=Materiality(row["materiality"]) if row.get("materiality") else Materiality.MED,
+                triage_priority=TriagePriority(row["triage_priority"]) if row.get("triage_priority") else TriagePriority.P2,
+                conflict_field=row.get("conflict_field")
             )
             for row in rows
         ]
@@ -527,14 +559,7 @@ class Database:
                 INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                sample_id,
-                run_id,
-                name,
-                domain,
-                source,
-                category,
-                raw_preview,
-                created_at.isoformat()
+                sample_id, run_id, name, domain, source, category, raw_preview, created_at.isoformat()
             )
     
     async def create_ambiguous_match(
@@ -557,41 +582,10 @@ class Database:
                 INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
-                match_id,
-                run_id,
-                entity_key,
-                entity_name,
-                plane,
-                json.dumps(candidate_ids),
-                json.dumps(candidate_names),
-                json.dumps(match_keys),
+                match_id, run_id, entity_key, entity_name, plane,
+                json.dumps(candidate_ids), json.dumps(candidate_names), json.dumps(match_keys),
                 created_at.isoformat()
             )
-    
-    async def get_ambiguous_matches_by_run(self, run_id: str) -> list[dict]:
-        """Get all ambiguous matches for a run"""
-        pool = await self.get_pool()
-        
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM ambiguous_matches WHERE run_id = $1 ORDER BY entity_name",
-                run_id
-            )
-        
-        return [
-            {
-                "id": row["id"],
-                "run_id": row["run_id"],
-                "entity_key": row["entity_key"],
-                "entity_name": row["entity_name"],
-                "plane": row["plane"],
-                "candidate_ids": json.loads(row["candidate_ids"]),
-                "candidate_names": json.loads(row["candidate_names"]),
-                "match_keys": json.loads(row["match_keys"]),
-                "created_at": row["created_at"]
-            }
-            for row in rows
-        ]
     
     async def create_rejection(
         self,
@@ -612,30 +606,90 @@ class Database:
                 INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                rejection_id,
-                run_id,
-                entity_key,
-                entity_name,
-                reason_code,
-                reason_detail,
-                json.dumps(evidence_summary),
-                created_at.isoformat()
+                rejection_id, run_id, entity_key, entity_name, reason_code, reason_detail,
+                json.dumps(evidence_summary), created_at.isoformat()
             )
     
-    async def get_rejections_by_run(self, run_id: str) -> list[dict]:
-        """Get all rejections for a run"""
+    async def get_observation_samples_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
+        """Get observation samples for a run with pagination"""
         pool = await self.get_pool()
         
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM rejections WHERE run_id = $1 ORDER BY entity_name",
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM observation_samples WHERE run_id = $1",
                 run_id
             )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM observation_samples WHERE run_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
         
-        return [
+        items = [
             {
                 "id": row["id"],
-                "run_id": row["run_id"],
+                "name": row["name"],
+                "domain": row["domain"],
+                "source": row["source"],
+                "category": row["category"],
+                "raw_preview": row["raw_preview"],
+                "created_at": row["created_at"]
+            }
+            for row in rows
+        ]
+        return items, total
+    
+    async def get_ambiguous_matches_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
+        """Get ambiguous matches for a run with pagination"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM ambiguous_matches WHERE run_id = $1",
+                run_id
+            )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM ambiguous_matches WHERE run_id = $1 ORDER BY entity_name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
+        
+        items = [
+            {
+                "id": row["id"],
+                "entity_key": row["entity_key"],
+                "entity_name": row["entity_name"],
+                "plane": row["plane"],
+                "candidate_ids": json.loads(row["candidate_ids"]),
+                "candidate_names": json.loads(row["candidate_names"]),
+                "match_keys": json.loads(row["match_keys"]),
+                "created_at": row["created_at"]
+            }
+            for row in rows
+        ]
+        return items, total
+    
+    async def get_rejections_by_run(self, run_id: str, limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
+        """Get rejections for a run with pagination"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                "SELECT COUNT(*) as total FROM rejections WHERE run_id = $1",
+                run_id
+            )
+            total = count_row["total"] if count_row else 0
+            
+            rows = await conn.fetch(
+                "SELECT * FROM rejections WHERE run_id = $1 ORDER BY entity_name LIMIT $2 OFFSET $3",
+                run_id, limit, offset
+            )
+        
+        items = [
+            {
+                "id": row["id"],
                 "entity_key": row["entity_key"],
                 "entity_name": row["entity_name"],
                 "reason_code": row["reason_code"],
@@ -645,62 +699,173 @@ class Database:
             }
             for row in rows
         ]
+        return items, total
     
-    async def upsert_llm_fact(
-        self,
-        fact_id: str,
-        tenant_id: str,
-        entity_key: str,
-        asset_type: Optional[str],
-        entity_role: Optional[str],
-        canonical_vendor: Optional[str],
-        canonical_product: Optional[str],
-        cmdb_ci_id: Optional[str],
-        idp_object_id: Optional[str],
-        confidence: float,
-        reason: str,
-        llm_provider: str,
-        llm_model_id: str,
-        created_at: datetime
-    ) -> None:
-        """Upsert an LLM fact (insert or update on conflict)"""
+    async def create_observation_samples_batch(self, samples: list[tuple]) -> None:
+        """Batch insert observation samples. Each tuple: (id, run_id, name, domain, source, category, raw_preview, created_at)"""
+        if not samples:
+            return
         pool = await self.get_pool()
         async with pool.acquire() as conn:
-            await conn.execute(
+            await conn.executemany(
                 """
-                INSERT INTO llm_facts (
-                    fact_id, tenant_id, entity_key, asset_type, entity_role,
-                    canonical_vendor, canonical_product, cmdb_ci_id, idp_object_id,
-                    confidence, reason, llm_provider, llm_model_id, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                ON CONFLICT (tenant_id, entity_key) DO UPDATE SET
-                    fact_id = EXCLUDED.fact_id,
+                INSERT INTO observation_samples (id, run_id, name, domain, source, category, raw_preview, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                samples
+            )
+    
+    async def create_ambiguous_matches_batch(self, matches: list[tuple]) -> None:
+        """Batch insert ambiguous matches. Each tuple: (id, run_id, entity_key, entity_name, plane, candidate_ids_json, candidate_names_json, match_keys_json, created_at)"""
+        if not matches:
+            return
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO ambiguous_matches (id, run_id, entity_key, entity_name, plane, candidate_ids, candidate_names, match_keys, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """,
+                matches
+            )
+    
+    async def create_rejections_batch(self, rejections: list[tuple]) -> None:
+        """Batch insert rejections. Each tuple: (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary_json, created_at)"""
+        if not rejections:
+            return
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO rejections (id, run_id, entity_key, entity_name, reason_code, reason_detail, evidence_summary, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                rejections
+            )
+    
+    async def create_assets_batch(self, assets: list[Asset]) -> None:
+        """Batch insert assets"""
+        if not assets:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for asset in assets:
+            rows.append((
+                str(asset.asset_id),
+                asset.tenant_id,
+                asset.run_id,
+                asset.name,
+                asset.asset_type.value,
+                asset.identifiers.model_dump_json(),
+                asset.vendor,
+                asset.vendor_hypothesis.model_dump_json() if asset.vendor_hypothesis else None,
+                asset.environment.value,
+                json.dumps(asset.evidence_refs),
+                asset.lens_status.model_dump_json(),
+                asset.lens_coverage.model_dump_json(),
+                asset.activity_evidence.model_dump_json(),
+                json.dumps(asset.tags),
+                asset.admission_reason,
+                asset.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO assets (
+                    asset_id, tenant_id, run_id, name, asset_type, identifiers,
+                    vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
+                    activity_evidence, tags, admission_reason, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
-                    entity_role = EXCLUDED.entity_role,
-                    canonical_vendor = EXCLUDED.canonical_vendor,
-                    canonical_product = EXCLUDED.canonical_product,
-                    cmdb_ci_id = EXCLUDED.cmdb_ci_id,
-                    idp_object_id = EXCLUDED.idp_object_id,
-                    confidence = EXCLUDED.confidence,
-                    reason = EXCLUDED.reason,
-                    llm_provider = EXCLUDED.llm_provider,
-                    llm_model_id = EXCLUDED.llm_model_id,
+                    identifiers = EXCLUDED.identifiers,
+                    vendor = EXCLUDED.vendor,
+                    vendor_hypothesis = EXCLUDED.vendor_hypothesis,
+                    environment = EXCLUDED.environment,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    lens_status = EXCLUDED.lens_status,
+                    lens_coverage = EXCLUDED.lens_coverage,
+                    activity_evidence = EXCLUDED.activity_evidence,
+                    tags = EXCLUDED.tags,
+                    admission_reason = EXCLUDED.admission_reason,
                     created_at = EXCLUDED.created_at
                 """,
-                fact_id,
-                tenant_id,
-                entity_key,
-                asset_type,
-                entity_role,
-                canonical_vendor,
-                canonical_product,
-                cmdb_ci_id,
-                idp_object_id,
-                confidence,
-                reason,
-                llm_provider,
-                llm_model_id,
-                created_at.isoformat()
+                rows
+            )
+    
+    async def create_findings_batch(self, findings: list[Finding]) -> None:
+        """Batch insert findings"""
+        if not findings:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for f in findings:
+            rows.append((
+                str(f.finding_id),
+                str(f.asset_id) if f.asset_id else None,
+                f.tenant_id,
+                f.run_id,
+                f.finding_type.value,
+                f.category.value,
+                f.severity.value,
+                f.explanation,
+                json.dumps(f.evidence_refs),
+                f.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO findings (
+                    finding_id, asset_id, tenant_id, run_id, finding_type,
+                    category, severity, explanation, evidence_refs, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (finding_id) DO UPDATE SET
+                    asset_id = EXCLUDED.asset_id,
+                    finding_type = EXCLUDED.finding_type,
+                    category = EXCLUDED.category,
+                    severity = EXCLUDED.severity,
+                    explanation = EXCLUDED.explanation,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    created_at = EXCLUDED.created_at
+                """,
+                rows
+            )
+    
+    async def create_artifacts_batch(self, artifacts: list[Artifact]) -> None:
+        """Batch insert artifacts"""
+        if not artifacts:
+            return
+        pool = await self.get_pool()
+        rows = []
+        for artifact in artifacts:
+            rows.append((
+                str(artifact.artifact_id),
+                artifact.tenant_id,
+                artifact.run_id,
+                str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
+                artifact.name,
+                artifact.artifact_type.value,
+                artifact.source,
+                artifact.evidence_ref,
+                artifact.created_at.isoformat()
+            ))
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO artifacts (
+                    artifact_id, tenant_id, run_id, parent_asset_id, name,
+                    artifact_type, source, evidence_ref, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT (artifact_id) DO UPDATE SET
+                    parent_asset_id = EXCLUDED.parent_asset_id,
+                    name = EXCLUDED.name,
+                    artifact_type = EXCLUDED.artifact_type,
+                    source = EXCLUDED.source,
+                    evidence_ref = EXCLUDED.evidence_ref,
+                    created_at = EXCLUDED.created_at
+                """,
+                rows
             )
     
     async def get_llm_fact(self, tenant_id: str, entity_key: str) -> Optional[dict]:
@@ -710,8 +875,7 @@ class Database:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM llm_facts WHERE tenant_id = $1 AND entity_key = $2",
-                tenant_id,
-                entity_key
+                tenant_id, entity_key
             )
         
         if not row:
@@ -734,18 +898,69 @@ class Database:
             "created_at": row["created_at"]
         }
     
-    async def get_all_llm_facts(self, tenant_id: str) -> list[dict]:
-        """Get all LLM facts for a tenant"""
+    async def upsert_llm_fact(
+        self,
+        fact_id: str,
+        tenant_id: str,
+        entity_key: str,
+        asset_type: Optional[str],
+        entity_role: Optional[str],
+        canonical_vendor: Optional[str],
+        canonical_product: Optional[str],
+        cmdb_ci_id: Optional[str],
+        idp_object_id: Optional[str],
+        confidence: float,
+        reason: str,
+        llm_provider: str,
+        llm_model_id: str,
+        created_at: datetime
+    ) -> None:
+        """Insert or update an LLM fact"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO llm_facts (
+                    fact_id, tenant_id, entity_key, asset_type, entity_role,
+                    canonical_vendor, canonical_product, cmdb_ci_id, idp_object_id,
+                    confidence, reason, llm_provider, llm_model_id, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                ON CONFLICT (tenant_id, entity_key)
+                DO UPDATE SET
+                    asset_type = EXCLUDED.asset_type,
+                    entity_role = EXCLUDED.entity_role,
+                    canonical_vendor = EXCLUDED.canonical_vendor,
+                    canonical_product = EXCLUDED.canonical_product,
+                    cmdb_ci_id = EXCLUDED.cmdb_ci_id,
+                    idp_object_id = EXCLUDED.idp_object_id,
+                    confidence = EXCLUDED.confidence,
+                    reason = EXCLUDED.reason,
+                    llm_provider = EXCLUDED.llm_provider,
+                    llm_model_id = EXCLUDED.llm_model_id,
+                    created_at = EXCLUDED.created_at
+                """,
+                fact_id, tenant_id, entity_key, asset_type, entity_role,
+                canonical_vendor, canonical_product, cmdb_ci_id, idp_object_id,
+                confidence, reason, llm_provider, llm_model_id, created_at.isoformat()
+            )
+    
+    async def get_llm_facts_batch(self, tenant_id: str, entity_keys: list[str]) -> dict[str, dict]:
+        """Get LLM facts for multiple entity keys in a batch"""
+        if not entity_keys:
+            return {}
+        
         pool = await self.get_pool()
         
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM llm_facts WHERE tenant_id = $1 ORDER BY entity_key",
-                tenant_id
+                "SELECT * FROM llm_facts WHERE tenant_id = $1 AND entity_key = ANY($2)",
+                tenant_id, entity_keys
             )
         
-        return [
-            {
+        result = {}
+        for row in rows:
+            result[row["entity_key"]] = {
                 "fact_id": row["fact_id"],
                 "tenant_id": row["tenant_id"],
                 "entity_key": row["entity_key"],
@@ -761,5 +976,4 @@ class Database:
                 "llm_model_id": row["llm_model_id"],
                 "created_at": row["created_at"]
             }
-            for row in rows
-        ]
+        return result

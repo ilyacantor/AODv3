@@ -184,6 +184,27 @@ class FindingCategory(str, Enum):
     GOVERNANCE_FINDING = "governance_finding"
 
 
+class Confidence(str, Enum):
+    """Confidence level for findings"""
+    LOW = "low"
+    MED = "med"
+    HIGH = "high"
+
+
+class Materiality(str, Enum):
+    """Materiality level - business impact significance"""
+    LOW = "low"
+    MED = "med"
+    HIGH = "high"
+
+
+class TriagePriority(str, Enum):
+    """Triage priority for actionable findings"""
+    P0 = "p0"  # Immediate - high confidence + high materiality
+    P1 = "p1"  # High priority - actionable
+    P2 = "p2"  # Backlog / monitor
+
+
 class Finding(BaseModel):
     """Explainable finding"""
     finding_id: UUID
@@ -195,6 +216,10 @@ class Finding(BaseModel):
     severity: Severity
     explanation: str
     evidence_refs: list[str] = Field(default_factory=list)
+    confidence: Confidence = Confidence.MED
+    materiality: Materiality = Materiality.MED
+    triage_priority: TriagePriority = TriagePriority.P2
+    conflict_field: Optional[str] = None  # For DATA_CONFLICT deduplication
     created_at: datetime = Field(default_factory=now_pst)
 
 

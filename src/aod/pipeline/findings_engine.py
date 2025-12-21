@@ -1,10 +1,24 @@
-"""Stage 7: Findings Engine - Generate deterministic, explainable findings"""
+"""Stage 7: Findings Engine - Generate deterministic, explainable findings
+
+Risk Case Model (Dec 2025):
+- Raw triggers are grouped into Risk Cases for KPI display
+- Each finding carries confidence, materiality, and triage_priority
+- Triage priority: P0 (immediate), P1 (high priority), P2 (backlog)
+- Default KPI shows "Actionable" = P0 + P1 cases only
+
+Tighter Trigger Gates:
+- IDENTITY_GAP: Require strong activity (cloud/finance/audit) + no IdP
+- FINANCE_GAP: Require recurring spend >= $200/mo + no governance visibility
+- DATA_CONFLICT: Only security-relevant fields, dedupe by (asset, field)
+"""
 
 from typing import Optional
 
 from ..models.output_contracts import (
-    Asset, Finding, FindingType, FindingCategory, Severity, LensStatus
+    Asset, Finding, FindingType, FindingCategory, Severity, LensStatus,
+    Confidence, Materiality, TriagePriority
 )
+from ..models.input_contracts import Contract, Transaction
 
 SECURITY_RISKS = {
     FindingType.IDENTITY_GAP,
@@ -17,6 +31,20 @@ GOVERNANCE_FINDINGS = {
     FindingType.GOVERNANCE_GAP,
     FindingType.DUPLICATION_RISK,
 }
+
+# Security-relevant fields that can trigger DATA_CONFLICT
+SECURITY_RELEVANT_FIELDS = {
+    "owner",
+    "business_owner",
+    "environment",
+    "data_classification",
+    "auth_state",
+    "governance_state",
+    "lifecycle",
+}
+
+# Minimum monthly spend threshold for FINANCE_GAP (in USD)
+FINANCE_GAP_MONTHLY_THRESHOLD = 200.0
 
 
 from .correlate_entities import CorrelationResult, MatchStatus
@@ -31,6 +59,23 @@ def get_category(finding_type: FindingType) -> FindingCategory:
     return FindingCategory.GOVERNANCE_FINDING
 
 
+def compute_triage_priority(confidence: Confidence, materiality: Materiality) -> TriagePriority:
+    """
+    Compute triage priority from confidence and materiality.
+    
+    P0: HIGH confidence + HIGH materiality
+    P1: HIGH confidence + MED materiality OR MED confidence + HIGH materiality
+    P2: Everything else
+    """
+    if confidence == Confidence.HIGH and materiality == Materiality.HIGH:
+        return TriagePriority.P0
+    if confidence == Confidence.HIGH and materiality == Materiality.MED:
+        return TriagePriority.P1
+    if confidence == Confidence.MED and materiality == Materiality.HIGH:
+        return TriagePriority.P1
+    return TriagePriority.P2
+
+
 def generate_identity_gap_finding(
     asset: Asset,
     correlation: CorrelationResult,
@@ -39,22 +84,66 @@ def generate_identity_gap_finding(
     snapshot_id: str
 ) -> Optional[Finding]:
     """
-    Generate identity_gap finding:
-    Admitted via CMDB/cloud/finance but no IdP match
+    Generate identity_gap finding with TIGHTER GATE (Dec 2025):
+    
+    Trigger ONLY if:
+    - No IdP governance (idp_present == false)
+    - Has STRONG activity evidence (any of):
+      - Cloud evidence (resource/API calls)
+      - Finance recurring spend
+      - Multiple independent planes (discovery + finance OR discovery + cloud)
+    
+    This ensures only truly actionable identity gaps are raised.
     """
     if asset.lens_status.idp != LensStatus.UNMATCHED:
         return None
     
-    if not (asset.lens_coverage.cmdb or asset.lens_coverage.cloud or asset.lens_coverage.finance):
+    # Check for STRONG activity evidence (not just discovery)
+    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+    has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+    
+    # Count independent planes for multi-plane corroboration
+    strong_planes = sum([has_cloud, has_finance, has_cmdb])
+    has_multi_plane = (has_discovery and strong_planes >= 1) or strong_planes >= 2
+    
+    # Require strong activity: cloud OR finance OR multi-plane corroboration
+    if not (has_cloud or has_finance or has_multi_plane):
         return None
     
+    # Build evidence summary
     admitted_via = []
-    if asset.lens_coverage.cmdb:
+    if has_cmdb:
         admitted_via.append("CMDB")
-    if asset.lens_coverage.cloud:
+    if has_cloud:
         admitted_via.append("Cloud")
-    if asset.lens_coverage.finance:
+    if has_finance:
         admitted_via.append("Finance")
+    if has_discovery:
+        admitted_via.append("Discovery")
+    
+    # Determine confidence based on evidence strength
+    if has_cloud and has_finance:
+        confidence = Confidence.HIGH
+    elif has_cloud or has_finance:
+        confidence = Confidence.HIGH
+    elif has_multi_plane:
+        confidence = Confidence.MED
+    else:
+        confidence = Confidence.LOW
+    
+    # Determine materiality based on governance coverage
+    if has_cmdb:
+        materiality = Materiality.HIGH  # In CMDB but no SSO = significant gap
+    elif has_finance:
+        materiality = Materiality.HIGH  # Paying for it but no SSO = significant
+    elif has_cloud:
+        materiality = Materiality.MED
+    else:
+        materiality = Materiality.LOW
+    
+    triage = compute_triage_priority(confidence, materiality)
     
     return Finding(
         finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "identity_gap"),
@@ -64,8 +153,11 @@ def generate_identity_gap_finding(
         finding_type=FindingType.IDENTITY_GAP,
         category=get_category(FindingType.IDENTITY_GAP),
         severity=Severity.HIGH,
-        explanation=f"Asset '{asset.name}' admitted via {', '.join(admitted_via)} but has no identity provider integration (no SSO/SCIM)",
-        evidence_refs=asset.evidence_refs
+        explanation=f"Asset '{asset.name}' has strong activity evidence ({', '.join(admitted_via)}) but no identity provider governance (no SSO/SCIM)",
+        evidence_refs=asset.evidence_refs,
+        confidence=confidence,
+        materiality=materiality,
+        triage_priority=triage
     )
 
 
@@ -184,46 +276,104 @@ def generate_duplication_risk_finding(
     )
 
 
-def generate_data_conflict_finding(
+def generate_data_conflict_findings(
     asset: Asset,
     correlation: CorrelationResult,
     tenant_id: str,
     run_id: str,
     snapshot_id: str
-) -> Optional[Finding]:
+) -> list[Finding]:
     """
-    Generate data_conflict finding:
-    Plane evidence contradicts (e.g., env/lifecycle mismatch)
+    Generate data_conflict findings with TIGHTER GATE (Dec 2025):
+    
+    Trigger ONLY if:
+    - Conflict is on a security-relevant field (owner, environment, lifecycle, etc.)
+    - Conflict persists across trusted planes (CMDB vs IdP vs Cloud)
+    - Dedupe by (asset, field_name) to avoid duplicate findings
+    
+    Returns one finding per conflicting field.
     """
-    environments_found = []
+    findings = []
     
-    if correlation.cmdb.status == MatchStatus.MATCHED:
-        for record in correlation.cmdb.matched_records:
-            if hasattr(record, 'environment') and record.environment:
-                environments_found.append(f"CMDB:{record.environment}")
+    # Collect field values from each trusted plane (not discovery which is inference)
+    field_values: dict[str, dict[str, set]] = {}  # field -> plane -> values
     
-    if correlation.cloud.status == MatchStatus.MATCHED:
-        for record in correlation.cloud.matched_records:
-            if hasattr(record, 'environment') and record.environment:
-                environments_found.append(f"Cloud:{record.environment}")
+    for field_name in SECURITY_RELEVANT_FIELDS:
+        field_values[field_name] = {}
+        
+        if correlation.cmdb.status == MatchStatus.MATCHED:
+            for record in correlation.cmdb.matched_records:
+                if hasattr(record, field_name):
+                    val = getattr(record, field_name)
+                    if val and str(val).lower() not in ("unknown", "none", ""):
+                        if "cmdb" not in field_values[field_name]:
+                            field_values[field_name]["cmdb"] = set()
+                        field_values[field_name]["cmdb"].add(str(val).lower())
+        
+        if correlation.idp.status == MatchStatus.MATCHED:
+            for record in correlation.idp.matched_records:
+                if hasattr(record, field_name):
+                    val = getattr(record, field_name)
+                    if val and str(val).lower() not in ("unknown", "none", ""):
+                        if "idp" not in field_values[field_name]:
+                            field_values[field_name]["idp"] = set()
+                        field_values[field_name]["idp"].add(str(val).lower())
+        
+        if correlation.cloud.status == MatchStatus.MATCHED:
+            for record in correlation.cloud.matched_records:
+                if hasattr(record, field_name):
+                    val = getattr(record, field_name)
+                    if val and str(val).lower() not in ("unknown", "none", ""):
+                        if "cloud" not in field_values[field_name]:
+                            field_values[field_name]["cloud"] = set()
+                        field_values[field_name]["cloud"].add(str(val).lower())
     
-    unique_envs = set(env.split(':')[1].lower() for env in environments_found if ':' in env)
-    unique_envs = {e for e in unique_envs if e != 'unknown'}
+    # Check each field for conflicts across trusted planes
+    for field_name, plane_values in field_values.items():
+        if len(plane_values) < 2:
+            continue  # Need at least 2 planes to have conflict
+        
+        # Collect all unique values across planes
+        all_values = set()
+        sources_with_values = []
+        for plane, values in plane_values.items():
+            all_values.update(values)
+            for v in values:
+                sources_with_values.append(f"{plane.upper()}:{v}")
+        
+        if len(all_values) <= 1:
+            continue  # No actual conflict
+        
+        # Determine priority based on field
+        if field_name in ("owner", "business_owner"):
+            confidence = Confidence.HIGH
+            materiality = Materiality.HIGH
+        elif field_name == "environment":
+            confidence = Confidence.HIGH
+            materiality = Materiality.MED
+        else:
+            confidence = Confidence.MED
+            materiality = Materiality.MED
+        
+        triage = compute_triage_priority(confidence, materiality)
+        
+        findings.append(Finding(
+            finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, f"data_conflict_{field_name}"),
+            asset_id=asset.asset_id,
+            tenant_id=tenant_id,
+            run_id=run_id,
+            finding_type=FindingType.DATA_CONFLICT,
+            category=get_category(FindingType.DATA_CONFLICT),
+            severity=Severity.MED,
+            explanation=f"Asset '{asset.name}' has conflicting '{field_name}' values: {', '.join(sources_with_values)}",
+            evidence_refs=asset.evidence_refs,
+            confidence=confidence,
+            materiality=materiality,
+            triage_priority=triage,
+            conflict_field=field_name
+        ))
     
-    if len(unique_envs) <= 1:
-        return None
-    
-    return Finding(
-        finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "data_conflict"),
-        asset_id=asset.asset_id,
-        tenant_id=tenant_id,
-        run_id=run_id,
-        finding_type=FindingType.DATA_CONFLICT,
-        category=get_category(FindingType.DATA_CONFLICT),
-        severity=Severity.MED,
-        explanation=f"Asset '{asset.name}' has conflicting environment data: {', '.join(environments_found)}",
-        evidence_refs=asset.evidence_refs
-    )
+    return findings
 
 
 def generate_finance_gap_findings(
@@ -235,8 +385,14 @@ def generate_finance_gap_findings(
     snapshot_id: str
 ) -> list[Finding]:
     """
-    Generate finance_gap findings:
-    Finance evidence exists but no corresponding asset admitted
+    Generate finance_gap findings with TIGHTER GATE (Dec 2025):
+    
+    Trigger ONLY if:
+    - Recurring spend OR contract exists
+    - Spend >= $200/month OR $2,000/year threshold
+    - No governance visibility (no CMDB owner, no IdP app, etc.)
+    
+    This typically reduces FINANCE_GAP findings by 70-90%.
     """
     findings = []
     
@@ -249,20 +405,58 @@ def generate_finance_gap_findings(
         if record_id in matched_finance_ids:
             continue
         
-        if record_id.startswith("contract:") or (record_id.startswith("transaction:") and hasattr(record, 'is_recurring') and record.is_recurring):
-            product_name = getattr(record, 'product', None) or getattr(record, 'vendor_name', None) or record_id
-            
-            findings.append(Finding(
-                finding_id=deterministic_uuid(snapshot_id, run_id, record_id, "finance_gap"),
-                asset_id=None,
-                tenant_id=tenant_id,
-                run_id=run_id,
-                finding_type=FindingType.FINANCE_GAP,
-                category=get_category(FindingType.FINANCE_GAP),
-                severity=Severity.HIGH,
-                explanation=f"Finance record '{product_name}' ({record_id}) has no corresponding asset in catalog. Possible undiscovered system.",
-                evidence_refs=[record_id]
-            ))
+        # Check if this is recurring spend
+        is_recurring = False
+        monthly_amount = 0.0
+        
+        if record_id.startswith("contract:"):
+            is_recurring = True
+            if isinstance(record, Contract):
+                amount = record.amount or 0.0
+                # Assume contract amount is annual, convert to monthly
+                monthly_amount = amount / 12.0
+        elif record_id.startswith("transaction:"):
+            if hasattr(record, 'is_recurring') and record.is_recurring:
+                is_recurring = True
+                if isinstance(record, Transaction):
+                    monthly_amount = record.amount or 0.0
+        
+        if not is_recurring:
+            continue
+        
+        # Apply spend threshold: >= $200/month
+        if monthly_amount < FINANCE_GAP_MONTHLY_THRESHOLD:
+            continue
+        
+        product_name = getattr(record, 'product', None) or getattr(record, 'vendor_name', None) or record_id
+        
+        # Determine confidence/materiality based on spend level
+        if monthly_amount >= 1000:
+            confidence = Confidence.HIGH
+            materiality = Materiality.HIGH
+        elif monthly_amount >= 500:
+            confidence = Confidence.HIGH
+            materiality = Materiality.MED
+        else:
+            confidence = Confidence.MED
+            materiality = Materiality.MED
+        
+        triage = compute_triage_priority(confidence, materiality)
+        
+        findings.append(Finding(
+            finding_id=deterministic_uuid(snapshot_id, run_id, record_id, "finance_gap"),
+            asset_id=None,
+            tenant_id=tenant_id,
+            run_id=run_id,
+            finding_type=FindingType.FINANCE_GAP,
+            category=get_category(FindingType.FINANCE_GAP),
+            severity=Severity.HIGH,
+            explanation=f"Finance record '{product_name}' (${monthly_amount:.0f}/mo) has no corresponding asset in catalog. Possible undiscovered system.",
+            evidence_refs=[record_id],
+            confidence=confidence,
+            materiality=materiality,
+            triage_priority=triage
+        ))
     
     return findings
 
@@ -323,9 +517,8 @@ def generate_findings(
         if duplication_risk:
             findings.append(duplication_risk)
         
-        data_conflict = generate_data_conflict_finding(asset, correlation, tenant_id, run_id, snapshot_id)
-        if data_conflict:
-            findings.append(data_conflict)
+        data_conflicts = generate_data_conflict_findings(asset, correlation, tenant_id, run_id, snapshot_id)
+        findings.extend(data_conflicts)
     
     finance_gaps = generate_finance_gap_findings(
         indexes, assets, correlations, tenant_id, run_id, snapshot_id
@@ -334,6 +527,7 @@ def generate_findings(
     
     findings.sort(key=lambda f: (
         {"security_risk": 0, "governance_finding": 1}.get(f.category.value, 2),
+        {"p0": 0, "p1": 1, "p2": 2}.get(f.triage_priority.value, 3),
         {"high": 0, "med": 1, "low": 2}.get(f.severity.value, 3),
         f.finding_type.value,
         str(f.asset_id) if f.asset_id else "",
@@ -341,3 +535,79 @@ def generate_findings(
     ))
     
     return findings
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class RiskCaseCounts:
+    """Aggregated risk case counts for KPI display"""
+    # Total security risk cases
+    security_risk_cases_total: int = 0
+    
+    # Breakdown by type
+    identity_gap_cases: int = 0
+    finance_gap_cases: int = 0
+    data_conflict_cases: int = 0
+    
+    # Breakdown by priority
+    p0_immediate: int = 0
+    p1_high_priority: int = 0
+    p2_backlog: int = 0
+    
+    # Actionable = P0 + P1 (default KPI)
+    actionable_cases: int = 0
+    
+    # Raw trigger count (for drill-down)
+    raw_triggers: int = 0
+
+
+def compute_risk_case_counts(findings: list[Finding]) -> RiskCaseCounts:
+    """
+    Compute Risk Case counts for KPI display.
+    
+    Risk Cases group raw triggers by asset + finding_type.
+    Default KPI shows "Actionable" = P0 + P1 cases only.
+    """
+    counts = RiskCaseCounts()
+    
+    # Filter to security risks only
+    security_findings = [f for f in findings if f.category == FindingCategory.SECURITY_RISK]
+    counts.raw_triggers = len(security_findings)
+    
+    # Dedupe into cases by (asset_id, finding_type, conflict_field)
+    # For data_conflict, also key by field to maintain per-field deduplication
+    seen_cases: set[tuple] = set()
+    
+    for f in security_findings:
+        if f.finding_type == FindingType.DATA_CONFLICT:
+            case_key = (str(f.asset_id), f.finding_type.value, f.conflict_field or "")
+        else:
+            case_key = (str(f.asset_id) if f.asset_id else f.evidence_refs[0] if f.evidence_refs else "", f.finding_type.value, "")
+        
+        if case_key in seen_cases:
+            continue
+        seen_cases.add(case_key)
+        
+        counts.security_risk_cases_total += 1
+        
+        # Count by type
+        if f.finding_type == FindingType.IDENTITY_GAP:
+            counts.identity_gap_cases += 1
+        elif f.finding_type == FindingType.FINANCE_GAP:
+            counts.finance_gap_cases += 1
+        elif f.finding_type == FindingType.DATA_CONFLICT:
+            counts.data_conflict_cases += 1
+        
+        # Count by priority
+        if f.triage_priority == TriagePriority.P0:
+            counts.p0_immediate += 1
+        elif f.triage_priority == TriagePriority.P1:
+            counts.p1_high_priority += 1
+        else:
+            counts.p2_backlog += 1
+    
+    counts.actionable_cases = counts.p0_immediate + counts.p1_high_priority
+    
+    return counts

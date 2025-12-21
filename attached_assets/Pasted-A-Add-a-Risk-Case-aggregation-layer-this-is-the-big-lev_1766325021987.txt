@@ -1,0 +1,107 @@
+A) Add a “Risk Case” aggregation layer (this is the big lever)
+
+Emit raw triggers as you do today, but the KPI and default UI should use:
+
+security_risk_cases_total
+
+plus a breakdown by type:
+
+identity_gap_cases
+
+finance_gap_cases
+
+data_conflict_cases
+
+Then show “raw triggers” only in drill-down.
+
+B) Add confidence + materiality fields to each emitted risk
+
+Every risk should carry:
+
+confidence: HIGH | MED | LOW
+
+materiality: HIGH | MED | LOW
+
+triage_priority: derived (e.g., P0/P1/P2)
+
+Default KPI = count of cases where:
+
+triage_priority in (P0, P1)
+not “all cases”.
+
+This keeps your “security risks” headline honest.
+
+C) Tighten the trigger gates per finding type (pragmatic defaults)
+IDENTITY_GAP (HIGH)
+
+Keep it strict and defensible:
+Trigger only if:
+
+asset has strong activity evidence (any of):
+
+cloud evidence (resource/API calls)
+
+finance recurring contract OR recurring transactions
+
+audit-log/SSO-like evidence (if present)
+
+AND idp_present == false (no SSO/SCIM governance)
+
+Optional but powerful:
+
+require 2 independent planes (e.g., discovery + finance OR discovery + cloud) to call it “actionable”.
+
+FINANCE_GAP (HIGH)
+
+Trigger only if:
+
+recurring spend or a contract exists
+
+AND spend over threshold (per month or annualized), e.g.:
+
+>= $200/month OR >= $2,000/year (pick what matches your ICP)
+
+AND no governance visibility (no CMDB owner, no IdP app, etc.)
+
+This alone usually cuts FINANCE_GAP by 70–90%.
+
+DATA_CONFLICT (MEDIUM)
+
+Trigger only if:
+
+conflict is on a security-relevant field (you can start with a small whitelist):
+
+owner / business_owner
+
+environment (prod/staging)
+
+data classification
+
+auth/governance state
+
+AND conflict persists across trusted planes (CMDB vs IdP vs Cloud)
+(avoid “discovery guessed X” causing conflicts)
+
+Also: dedupe by (asset, field_name).
+
+How the UI should present this (so it doesn’t look insane)
+
+Top-level tile should be:
+
+“Security Risks (Actionable)” = P0+P1 case count
+
+Under it, show:
+
+P0: “Immediate” (e.g., Identity gaps with high confidence + meaningful activity)
+
+P1: “High priority”
+
+P2: “Backlog / monitor”
+
+And a second, smaller stat:
+
+“All security risk cases” (includes P2)
+
+optionally “raw triggers” hidden behind tooltip
+
+This preserves your “standalone KPI” concept without panicking users.

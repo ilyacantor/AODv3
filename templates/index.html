@@ -1728,13 +1728,44 @@
             return renderSingleItemDetail(items[0], rootType, 0, items.length);
         }
         
+        const REASON_EXPLANATIONS = {
+            'admission_failed': 'Did not meet minimum evidence requirements for asset classification.',
+            'no_admission_evidence': 'Insufficient evidence from authoritative sources (CMDB, IdP, cloud, or finance) to confirm this is a real asset.',
+            'infrastructure_domain': 'This is an infrastructure or internal domain that is excluded from asset classification.',
+            'corporate_root_domain': 'This is a corporate root domain (e.g., company.com) which represents the organization, not a specific application.',
+            'internal_service': 'This appears to be an internal service or infrastructure component, not an end-user application.',
+            'duplicate_entity': 'This entity was merged with another asset due to matching identifiers.',
+            'insufficient_activity': 'No recent usage or activity detected for this entity.',
+            'excluded_vendor': 'This vendor or domain is on the exclusion list.',
+            'test_environment': 'Identified as a test or sandbox environment, excluded from production asset catalog.',
+            'unknown': 'This item was rejected during processing. Check the raw data for more details.'
+        };
+        
+        function getPlainEnglishReason(reasonCode, reasonDetail) {
+            let explanation = REASON_EXPLANATIONS[reasonCode] || REASON_EXPLANATIONS['unknown'];
+            
+            if (reasonDetail) {
+                const detail = reasonDetail.toLowerCase();
+                if (detail.includes('corporate root domain') || detail.includes('root domain')) {
+                    explanation = `This domain belongs to a corporate root (${reasonDetail.split(':').pop()?.trim() || 'company domain'}). Root domains represent organizations, not individual applications, so they are excluded from the asset catalog.`;
+                } else if (detail.includes('infrastructure')) {
+                    explanation = `This is an infrastructure component (${reasonDetail}). Infrastructure services are tracked separately from end-user applications.`;
+                } else if (detail.includes('no admission')) {
+                    explanation = `We couldn't find enough evidence to confirm this is a real asset. It wasn't found in your CMDB, IdP, cloud inventory, or finance records.`;
+                } else if (detail.includes('duplicate')) {
+                    explanation = `This item was identified as a duplicate and merged with another asset in the catalog.`;
+                }
+            }
+            return explanation;
+        }
+        
         function renderSingleItemDetail(item, rootType, index, total) {
             const schema = DRILL_SCHEMA.entities[rootType];
             const name = item.name || item.entity_name || item.finding_type || item.artifact_type || 'Item';
             const plane = item.plane || item.source_lens || item.source || null;
             const itemType = item.asset_type || item.artifact_type || item.finding_type || item.reason_code || null;
             
-            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'triage_priority', 'reason', 'reason_detail', 'explanation'];
+            const keyFactFields = ['vendor', 'product', 'domain', 'environment', 'triage_priority', 'reason', 'explanation'];
             const keyFacts = [];
             keyFactFields.forEach(field => {
                 if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'object') {
@@ -1758,6 +1789,11 @@
                         value: `Likely ${hyp.value} (${conf}% confidence, based on ${hyp.basis})` 
                     });
                 }
+            }
+            
+            if (rootType === 'rejections' && item.reason_code) {
+                const plainExplanation = getPlainEnglishReason(item.reason_code, item.reason_detail);
+                keyFacts.unshift({ label: 'Why Rejected', value: plainExplanation });
             }
             
             if (item.lens_status && typeof item.lens_status === 'object') {
@@ -1786,8 +1822,9 @@
             if (keyFacts.length > 0) {
                 html += `<div class="key-facts-grid">`;
                 keyFacts.forEach(fact => {
-                    const maxLen = (fact.label.toLowerCase() === 'explanation') ? 1000 : 200;
-                    html += `<div class="key-fact" ${fact.label.toLowerCase() === 'explanation' ? 'style="grid-column: 1 / -1;"' : ''}><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, maxLen)}</div></div>`;
+                    const isFullWidth = ['explanation', 'why rejected'].includes(fact.label.toLowerCase());
+                    const maxLen = isFullWidth ? 1000 : 200;
+                    html += `<div class="key-fact" ${isFullWidth ? 'style="grid-column: 1 / -1;"' : ''}><div class="key-fact-label">${fact.label}</div><div class="key-fact-value">${safeStr(fact.value, maxLen)}</div></div>`;
                 });
                 html += `</div>`;
             }

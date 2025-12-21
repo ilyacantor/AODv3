@@ -603,6 +603,23 @@ async def view_catalog(run_id: str):
     zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
     governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
     
+    # Triage summary stats
+    triage_stats = {'acknowledged': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
+    triaged_asset_ids = set()
+    for action in triage_actions:
+        action_type = action.get('action_type', '')
+        item_id = action.get('item_id', '')
+        if action_type == 'acknowledge' or action.get('state') == 'acknowledged':
+            triage_stats['acknowledged'] += 1
+        elif action_type == 'assign':
+            triage_stats['assigned'] += 1
+        elif action_type == 'defer':
+            triage_stats['deferred'] += 1
+        elif action_type == 'ignore':
+            triage_stats['ignored'] += 1
+        triaged_asset_ids.add(item_id)
+    triage_stats['pending'] = len(assets) - len(triaged_asset_ids.intersection({str(a.asset_id) for a in assets}))
+    
     triaged_finding_ids = {action['item_id'] for action in triage_actions if action.get('item_type') == 'finding'}
     orphan_findings = [f for f in findings if not f.asset_id and str(f.finding_id) in triaged_finding_ids]
     
@@ -702,6 +719,36 @@ async def view_catalog(run_id: str):
                 </tbody>
             </table>
         '''
+    
+    # Triage summary section
+    triage_summary_section = f'''
+        <div id="triageSummary" class="section-header" style="border-left-color: #06b6d4;">
+            <div class="section-title" style="color: #06b6d4;">Triage Summary</div>
+            <div class="section-subtitle">Overview of triage actions taken on assets in this run</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+            <div class="stat">
+                <div class="stat-value" style="color: #f59e0b;">{triage_stats['pending']}</div>
+                <div class="stat-label">Pending Review</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #0ea5e9;">{triage_stats['acknowledged']}</div>
+                <div class="stat-label">Acknowledged</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #3b82f6;">{triage_stats['assigned']}</div>
+                <div class="stat-label">Assigned</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #8b5cf6;">{triage_stats['deferred']}</div>
+                <div class="stat-label">Deferred</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #64748b;">{triage_stats['ignored']}</div>
+                <div class="stat-label">Ignored</div>
+            </div>
+        </div>
+    '''
     
     sort_icon = "&#8597;"
     html = f'''
@@ -831,7 +878,7 @@ async def view_catalog(run_id: str):
                         <th onclick="sortTable('assetsTable', 4)">Status <span class="sort-icon">{sort_icon}</span></th>
                         <th onclick="sortTable('assetsTable', 5)">Data Sources <span class="sort-icon">{sort_icon}</span></th>
                         <th onclick="sortTable('assetsTable', 6)">Admission Reason <span class="sort-icon">{sort_icon}</span></th>
-                        <th onclick="sortTable('assetsTable', 7)">Triage <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="scrollToTriageSummary()" style="color: #06b6d4; cursor: pointer;" title="Click to view triage summary">Triage ↓</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -840,8 +887,16 @@ async def view_catalog(run_id: str):
             </table>
             
             {orphan_section}
+            
+            {triage_summary_section}
         </div>
         <script>
+            function scrollToTriageSummary() {{
+                const el = document.getElementById('triageSummary');
+                if (el) {{
+                    el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }}
+            }}
             let sortDirections = {{}};
             function sortTable(tableId, colIndex) {{
                 const table = document.getElementById(tableId);

@@ -2575,8 +2575,9 @@
                 
                 document.getElementById('statSecurityRisks').textContent = securityRisks.length;
                 const breakdownEl = document.getElementById('riskBreakdown');
-                if (securityRisks.length > 0) {
-                    breakdownEl.textContent = `P0: ${p0Count} | P1: ${p1Count} | P2: ${p2Count}`;
+                const actionableCount = p0Count + p1Count;
+                if (securityRisks.length > 0 && actionableCount > 0) {
+                    breakdownEl.textContent = `${actionableCount} actionable`;
                 } else {
                     breakdownEl.textContent = '';
                 }

@@ -11,7 +11,7 @@ from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
     AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
-    VendorHypothesis
+    VendorHypothesis, Confidence, Materiality, TriagePriority
 )
 
 
@@ -126,6 +126,14 @@ class Database:
             
             try:
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'")
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'med'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS materiality TEXT NOT NULL DEFAULT 'med'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS triage_priority TEXT NOT NULL DEFAULT 'p2'")
+                await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS conflict_field TEXT")
             except Exception:
                 pass
             
@@ -481,8 +489,9 @@ class Database:
                 """
                 INSERT INTO findings (
                     finding_id, asset_id, tenant_id, run_id, finding_type,
-                    category, severity, explanation, evidence_refs, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    category, severity, explanation, evidence_refs, created_at,
+                    confidence, materiality, triage_priority, conflict_field
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
                 str(finding.finding_id),
                 str(finding.asset_id) if finding.asset_id else None,
@@ -493,7 +502,11 @@ class Database:
                 finding.severity.value,
                 finding.explanation,
                 json.dumps(finding.evidence_refs),
-                finding.created_at.isoformat()
+                finding.created_at.isoformat(),
+                finding.confidence.value,
+                finding.materiality.value,
+                finding.triage_priority.value,
+                finding.conflict_field
             )
         return finding
     
@@ -518,7 +531,11 @@ class Database:
                 severity=Severity(row["severity"]),
                 explanation=row["explanation"],
                 evidence_refs=json.loads(row["evidence_refs"]),
-                created_at=datetime.fromisoformat(row["created_at"])
+                created_at=datetime.fromisoformat(row["created_at"]),
+                confidence=Confidence(row["confidence"]) if row.get("confidence") else Confidence.MED,
+                materiality=Materiality(row["materiality"]) if row.get("materiality") else Materiality.MED,
+                triage_priority=TriagePriority(row["triage_priority"]) if row.get("triage_priority") else TriagePriority.P2,
+                conflict_field=row.get("conflict_field")
             )
             for row in rows
         ]

@@ -349,6 +349,15 @@
         .triage-btn.primary:hover { background: var(--cyan-500); }
         .triage-btn.secondary { background: var(--slate-700); color: var(--slate-300); }
         .triage-btn.secondary:hover { background: var(--slate-600); color: white; }
+        .triage-status-badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; white-space: nowrap; }
+        .triage-status-badge.acknowledged { background: var(--cyan-900); color: var(--cyan-300); border: 1px solid var(--cyan-700); }
+        .triage-status-badge.assigned { background: var(--purple-900, #4c1d95); color: var(--purple-300, #c4b5fd); border: 1px solid var(--purple-700, #7c3aed); }
+        .triage-status-badge.deferred { background: var(--yellow-900, #713f12); color: var(--yellow-300, #fcd34d); border: 1px solid var(--yellow-700, #a16207); }
+        .triage-status-badge.ignored { background: var(--slate-800); color: var(--slate-400); border: 1px solid var(--slate-600); }
+        .triage-row.triaged { opacity: 0.7; }
+        .triage-row.triaged:hover { opacity: 1; }
+        .triage-row.triaged-ignored { opacity: 0.5; }
+        .triage-row.triaged-ignored:hover { opacity: 0.8; }
         .triage-more { position: relative; }
         .triage-more-btn { background: transparent; border: none; color: var(--slate-400); cursor: pointer; padding: 0.25rem; font-size: 1rem; line-height: 1; border-radius: 4px; }
         .triage-more-btn:hover { background: var(--slate-700); color: white; }
@@ -791,10 +800,35 @@
                 });
                 
                 if (response.ok) {
-                    const row = document.querySelector(`.triage-row td [data-item-id="${itemId}"]`)?.closest('.triage-row');
-                    if (row) {
-                        row.style.opacity = '0.5';
-                        row.style.transition = 'opacity 0.3s';
+                    const result = await response.json();
+                    const key = `${itemType}:${itemId}`;
+                    triageActionsMap[key] = {
+                        item_id: itemId,
+                        item_type: itemType,
+                        action: action,
+                        state: result.state,
+                        owner: extra.owner || null,
+                        defer_until: result.defer_until || null,
+                        ignore_reason: extra.ignore_reason || null
+                    };
+                    
+                    for (const tier of [1, 2, 3]) {
+                        const items = triageTierData[tier];
+                        const idx = items.findIndex(item => {
+                            const id = item.finding_id || item.asset_id || item.id;
+                            return id === itemId && item.itemType === itemType;
+                        });
+                        if (idx !== -1) {
+                            items[idx].triageState = result.state;
+                            items[idx].triageAction = action;
+                            items[idx].triageOwner = extra.owner || null;
+                            items[idx].triageDeferUntil = result.defer_until || null;
+                            items[idx].triageIgnoreReason = extra.ignore_reason || null;
+                            
+                            const container = document.getElementById(`triageTier${tier}Content`);
+                            renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
+                            break;
+                        }
                     }
                 }
             } catch (err) {
@@ -904,6 +938,7 @@
         
         let triageTierData = { 1: [], 2: [], 3: [] };
         let triageSortState = { 1: 'name', 2: 'name', 3: 'name' };
+        let triageActionsMap = {};
         
         async function loadTriageData() {
             const runId = document.getElementById('triageRunSelect').value;
@@ -918,13 +953,24 @@
             tier3Content.innerHTML = '<div class="triage-empty">Loading...</div>';
             
             try {
-                const [findingsRes, derivedRes] = await Promise.all([
+                const [findingsRes, derivedRes, actionsRes] = await Promise.all([
                     fetch(`/api/findings?run_id=${runId}`),
-                    fetch(`/api/runs/${runId}/derived`)
+                    fetch(`/api/runs/${runId}/derived`),
+                    fetch(`/api/triage/actions/${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();
                 const derivedData = await derivedRes.json();
+                
+                triageActionsMap = {};
+                if (actionsRes.ok) {
+                    const actionsData = await actionsRes.json();
+                    const actions = actionsData.actions || actionsData || [];
+                    actions.forEach(a => {
+                        const key = `${a.item_type}:${a.item_id}`;
+                        triageActionsMap[key] = a;
+                    });
+                }
                 
                 const findings = findingsData.findings || [];
                 const shadowAssets = derivedData.shadow_assets || [];
@@ -935,7 +981,17 @@
                 const tier3Items = [];
                 
                 findings.forEach(f => {
-                    const item = { ...f, itemType: 'finding' };
+                    const itemId = f.finding_id || f.id;
+                    const savedAction = triageActionsMap[`finding:${itemId}`];
+                    const item = { 
+                        ...f, 
+                        itemType: 'finding',
+                        triageState: savedAction?.state || 'pending',
+                        triageAction: savedAction?.action || null,
+                        triageOwner: savedAction?.owner || null,
+                        triageDeferUntil: savedAction?.defer_until || null,
+                        triageIgnoreReason: savedAction?.ignore_reason || null
+                    };
                     const priority = (f.triage_priority || 'p2').toLowerCase();
                     const TIER1_TYPES = ['identity_gap', 'finance_gap'];
                     const TIER2_TYPES = ['data_conflict'];
@@ -950,7 +1006,17 @@
                 });
                 
                 shadowAssets.forEach(a => {
-                    const item = { ...a, itemType: 'shadow' };
+                    const assetId = a.asset_id || a.id;
+                    const savedAction = triageActionsMap[`shadow:${assetId}`];
+                    const item = { 
+                        ...a, 
+                        itemType: 'shadow',
+                        triageState: savedAction?.state || 'pending',
+                        triageAction: savedAction?.action || null,
+                        triageOwner: savedAction?.owner || null,
+                        triageDeferUntil: savedAction?.defer_until || null,
+                        triageIgnoreReason: savedAction?.ignore_reason || null
+                    };
                     const agg = a.aggregated_evidence || {};
                     const lens = a.lens_status || {};
                     
@@ -976,7 +1042,17 @@
                 });
                 
                 zombieAssets.forEach(a => {
-                    const item = { ...a, itemType: 'zombie' };
+                    const assetId = a.asset_id || a.id;
+                    const savedAction = triageActionsMap[`zombie:${assetId}`];
+                    const item = { 
+                        ...a, 
+                        itemType: 'zombie',
+                        triageState: savedAction?.state || 'pending',
+                        triageAction: savedAction?.action || null,
+                        triageOwner: savedAction?.owner || null,
+                        triageDeferUntil: savedAction?.defer_until || null,
+                        triageIgnoreReason: savedAction?.ignore_reason || null
+                    };
                     const lens = a.lens_status || {};
                     const hasAmbiguousLens = Object.values(lens).some(v => v === 'ambiguous');
                     
@@ -1141,6 +1217,10 @@
                 const itemId = item.finding_id || item.asset_id || '';
                 const checkboxCell = tier === 3 ? `<td><input type="checkbox" class="triage-item-checkbox" data-item-id="${itemId}" data-item-type="${itemType}" onclick="event.stopPropagation()"></td>` : '';
                 
+                const triageState = item.triageState || 'pending';
+                const isTriaged = triageState !== 'pending';
+                const rowStateClass = isTriaged ? `triaged triaged-${triageState}` : '';
+                
                 let assetName, issue, category, categoryClass;
                 
                 if (itemType === 'finding') {
@@ -1156,8 +1236,29 @@
                 }
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
-                let primaryBtn, moreOptions;
-                if (tier === 1) {
+                let primaryBtn, moreOptions, statusBadge = '';
+                
+                if (isTriaged) {
+                    const stateLabels = {
+                        'acknowledged': '✓ Acknowledged',
+                        'assigned': '→ Assigned',
+                        'deferred': '⏳ Deferred',
+                        'ignored': '✗ Ignored'
+                    };
+                    const stateLabel = stateLabels[triageState] || triageState;
+                    let extraInfo = '';
+                    if (item.triageOwner) extraInfo = ` to ${item.triageOwner}`;
+                    if (item.triageDeferUntil) extraInfo = ` until ${new Date(item.triageDeferUntil).toLocaleDateString()}`;
+                    if (item.triageIgnoreReason) extraInfo = `: ${item.triageIgnoreReason}`;
+                    
+                    statusBadge = `<span class="triage-status-badge ${triageState}">${stateLabel}${extraInfo}</span>`;
+                    primaryBtn = '';
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Re-Acknowledge</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Re-Assign</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Re-Ignore</button>`;
+                } else if (tier === 1) {
                     primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
                     moreOptions = `
                         <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>
@@ -1176,6 +1277,7 @@
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>`;
                 }
                 const actionBtns = `
+                    ${statusBadge}
                     ${primaryBtn}
                     <div class="triage-more">
                         <button class="triage-more-btn" onclick="toggleTriageMenu(this, event);">&#8942;</button>
@@ -1186,7 +1288,7 @@
                 const colSpan = tier === 3 ? 5 : 4;
                 
                 tableHtml += `
-                    <tr class="triage-row" data-item-idx="${idx}" data-tier="${tier}">
+                    <tr class="triage-row ${rowStateClass}" data-item-idx="${idx}" data-tier="${tier}">
                         ${checkboxCell}
                         <td class="triage-cell-asset">${assetName}</td>
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>

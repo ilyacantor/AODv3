@@ -1,6 +1,13 @@
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { Info, ArrowDown, ScanLine, Search, Play, BookOpen } from "lucide-react";
+import {
+  Info,
+  ArrowDown,
+  ScanLine,
+  Search,
+  Play,
+  BookOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Overview() {
@@ -76,23 +83,42 @@ export default function Overview() {
             <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
           </div>
 
-          <div className="space-y-6 text-sm text-slate-400 leading-relaxed">
+          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
             <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
-            
+
             <div className="space-y-4">
               <div>
-                <h3 className="font-bold text-cyan-400 mb-1">Discovery (This Demo)</h3>
-                <p>Signals are collected from enterprise systems—identity, finance, cloud, endpoints, DNS, and systems of record—and resolved into assets. This stage establishes what actually exists.</p>
+                <h3 className="font-bold text-cyan-400 mb-1">
+                  Discovery (AOD, this Demo)
+                </h3>
+                <p>
+                  Signals are collected from enterprise systems—identity,
+                  finance, cloud, endpoints, DNS, and systems of record—and
+                  resolved into assets.
+                </p>
               </div>
-              
+
               <div>
-                <h3 className="font-bold text-blue-400 mb-1">Connection & Unification</h3>
-                <p>Discovered assets are connected and unified into a shared enterprise ontology, creating consistent identity, structure, and meaning across systems.</p>
+                <h3 className="font-bold text-blue-400 mb-1">
+                  Connection (AAM) & Unification (DCL)
+                </h3>
+                <p>
+                  Discovered assets are connected and unified into a shared
+                  enterprise ontology, creating consistent identity, structure,
+                  and meaning across systems.
+                </p>
               </div>
-              
+
               <div>
-                <h3 className="font-bold text-purple-400 mb-1">Logic & Action</h3>
-                <p>Business logic and intelligent agents operate on this trusted foundation to answer questions, drive automation, and execute actions.</p>
+                <h3 className="font-bold text-purple-400 mb-1">
+                  Logic (BLL) & Action (Agents)
+                </h3>
+                <p>
+                  Business Logic Layer (BLL) turns unified data into governed
+                  business metrics, rules, and decisions. Intelligent agents
+                  operate on this trusted foundation to answer questions, drive
+                  automation, and execute actions.
+                </p>
               </div>
             </div>
           </div>
@@ -236,7 +262,7 @@ export default function Overview() {
               className="bg-white text-blue-600 hover:bg-slate-100 border-none font-bold text-base px-8 h-14 rounded-full shadow-lg hover:translate-y-[-2px] transition-transform"
               onClick={() => {
                 if (window.parent && window.parent !== window) {
-                  window.parent.postMessage({ action: 'startGuidedTour' }, '*');
+                  window.parent.postMessage({ action: "startGuidedTour" }, "*");
                 }
               }}
             >
@@ -250,7 +276,7 @@ export default function Overview() {
               className="bg-blue-600/50 border-white/30 text-white hover:bg-blue-600 hover:text-white hover:border-white font-medium text-base px-8 h-14 rounded-full backdrop-blur-sm"
               onClick={() => {
                 if (window.parent && window.parent !== window) {
-                  window.parent.postMessage({ action: 'switchToConsole' }, '*');
+                  window.parent.postMessage({ action: "switchToConsole" }, "*");
                 }
               }}
             >

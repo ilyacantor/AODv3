@@ -704,12 +704,13 @@ class Database:
         rejections = []
         for row in rejection_rows:
             rejections.append({
-                "rejection_id": row["rejection_id"],
+                "rejection_id": row["id"],
                 "run_id": row["run_id"],
                 "entity_key": row["entity_key"],
                 "entity_name": row["entity_name"],
-                "reason": row["reason"],
-                "details": row["details"],
+                "reason": row["reason_code"],
+                "details": row["reason_detail"],
+                "evidence_summary": row.get("evidence_summary"),
                 "created_at": row["created_at"]
             })
 

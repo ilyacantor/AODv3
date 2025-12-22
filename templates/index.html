@@ -3192,5 +3192,45 @@
         </div>
     </div>
     
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const discoveryReviewBtn = document.getElementById('discoveryReviewBtn');
+            const discoveryFarmBtn = document.getElementById('discoveryFarmBtn');
+            const discoveryCancelBtn = document.getElementById('discoveryCancelBtn');
+            
+            if (discoveryReviewBtn) {
+                discoveryReviewBtn.addEventListener('click', async function() {
+                    const modal = document.getElementById('discoveryCompleteModal');
+                    const runId = modal.dataset.runId;
+                    modal.classList.remove('active');
+                    if (runId && typeof selectRun === 'function') {
+                        await selectRun(runId);
+                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                    }
+                });
+            }
+            
+            if (discoveryFarmBtn) {
+                discoveryFarmBtn.addEventListener('click', async function() {
+                    document.getElementById('discoveryCompleteModal').classList.remove('active');
+                    try {
+                        const r = await fetch('/api/farm/url');
+                        const data = await r.json();
+                        if (data.farm_url) {
+                            window.open(data.farm_url, '_blank');
+                        }
+                    } catch (e) {
+                        console.error('Failed to get Farm URL:', e);
+                    }
+                });
+            }
+            
+            if (discoveryCancelBtn) {
+                discoveryCancelBtn.addEventListener('click', function() {
+                    document.getElementById('discoveryCompleteModal').classList.remove('active');
+                });
+            }
+        });
+    </script>
 </body>
 </html>

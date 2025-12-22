@@ -10,6 +10,7 @@ Run with: pytest tests/test_database_performance.py -v -s
 """
 
 import pytest
+import pytest_asyncio
 import time
 from typing import Optional
 from datetime import datetime
@@ -198,7 +199,7 @@ class TestDatabasePerformance:
 # Test Fixtures
 # ============================================================================
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_with_test_data():
     """
     Create database with test runs for different tenants.
@@ -260,7 +261,7 @@ async def db_with_test_data():
     await db.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_with_run_data():
     """
     Create database with a run containing assets, findings, and rejections.
@@ -338,7 +339,7 @@ async def db_with_run_data():
     await db.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_with_empty_run():
     """Create database with a run that has no assets/findings/rejections."""
     from aod.db.database import Database, get_database_url
@@ -369,7 +370,7 @@ async def db_with_empty_run():
     await db.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_with_many_runs():
     """Create database with many runs to test filtering performance."""
     from aod.db.database import Database, get_database_url

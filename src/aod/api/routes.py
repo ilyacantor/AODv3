@@ -2433,6 +2433,20 @@ async def run_performance_tests(request: TestRunRequest) -> TestRunResponse:
 
         output = result.stdout + result.stderr
 
+        # Check for database configuration errors
+        if "No database configured" in output and request.testType == 'database':
+            return TestRunResponse(
+                success=False,
+                passed=0,
+                failed=0,
+                duration="0.00s",
+                output="⚠️ Database tests require a database connection.\n\n"
+                      "Please set the SUPABASE_DB_URL or DATABASE_URL environment variable.\n\n"
+                      "These tests verify database query optimizations (batched queries, WHERE clause filtering, etc.) "
+                      "and need a live PostgreSQL database to run.\n\n"
+                      "The correlation performance tests can run without a database connection."
+            )
+
         # Parse test results
         passed_count = 0
         failed_count = 0

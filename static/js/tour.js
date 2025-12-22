@@ -281,8 +281,9 @@ const TourManager = (function() {
             if (aborted) return;
             const data = await r.json();
             if (data.farm_url) {
+                const returnUrl = encodeURIComponent(window.location.origin + '/?guided=1&phase=3');
                 const separator = data.farm_url.includes('?') ? '&' : '?';
-                const farmUrlWithGuided = `${data.farm_url}${separator}guided=1`;
+                const farmUrlWithGuided = `${data.farm_url}${separator}guided=1&tour_phase=1&return_url=${returnUrl}`;
                 window.open(farmUrlWithGuided, 'aos_farm');
                 
                 showOverlay(TOUR_COPY['waiting'], {

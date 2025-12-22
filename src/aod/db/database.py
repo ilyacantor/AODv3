@@ -672,7 +672,7 @@ class Database:
                 vendor_hypothesis=vendor_hypothesis,
                 environment=Environment(row["environment"]),
                 evidence_refs=json.loads(row["evidence_refs"]),
-                lens_status=LensStatus.model_validate_json(row["lens_status"]),
+                lens_status=LensStatuses.model_validate_json(row["lens_status"]),
                 lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
                 activity_evidence=ActivityEvidence.model_validate_json(row["activity_evidence"]),
                 tags=json.loads(row["tags"]) if row["tags"] else [],

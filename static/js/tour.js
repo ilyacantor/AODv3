@@ -6,7 +6,8 @@ const TourManager = (function() {
     
     const TOUR_COPY = {
         0: "AOD discovers what actually exists in an enterprise environment.\nThis run shows how discovery is executed, inspected, and verified.",
-        3: "AOD ingests signals, resolves entities, scores evidence, and classifies assets.\nEvery result is traceable to source data.",
+        3: "Welcome back to AOD.\n\nThe tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below.",
+        '3b': "AOD ingests signals, resolves entities, scores evidence, and classifies assets.\nEvery result is traceable to source data.",
         4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
         4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
         5: "Triage simulates decisions AOD can support or automate.\nActions change asset state and downstream eligibility.",
@@ -305,48 +306,44 @@ const TourManager = (function() {
         if (aborted) return;
         
         showOverlay(TOUR_COPY[3], {
-            highlightElement: '#lifecycleStats',
-            position: { top: '200px', left: '50%', transform: 'translateX(-50%)' },
-            onContinue: () => {
-                autoStartRun();
-            }
+            highlightElement: '#fetchFromFarm',
+            position: { top: '60%', left: '50%', transform: 'translateX(-50%)' },
+            primaryButton: false
         });
+        
+        waitForUserRunAndContinue();
     }
     
-    async function autoStartRun() {
+    async function waitForUserRunAndContinue() {
         if (aborted) return;
-        
-        const state = getState();
-        removeOverlay();
-        
-        const tenantSelect = document.getElementById('tenantSelect');
-        const snapshotSelect = document.getElementById('snapshotSelect');
-        
-        if (tenantSelect && tenantSelect.options.length > 1 && !tenantSelect.value) {
-            tenantSelect.value = tenantSelect.options[1].value;
-            tenantSelect.dispatchEvent(new Event('change'));
-            await trackedDelay(1000);
-            if (aborted) return;
-        }
-        
-        const selectedSnapshot = snapshotSelect ? snapshotSelect.value : null;
-        
-        if (snapshotSelect && snapshotSelect.options.length > 1 && !snapshotSelect.value) {
-            snapshotSelect.value = snapshotSelect.options[1].value;
-            snapshotSelect.dispatchEvent(new Event('change'));
-            await trackedDelay(500);
-            if (aborted) return;
-        }
         
         const fetchBtn = document.getElementById('fetchFromFarm');
-        if (fetchBtn && !fetchBtn.disabled) {
-            fetchBtn.click();
-            
-            await waitForRunCompletion(snapshotSelect ? snapshotSelect.value : null);
-        }
+        if (!fetchBtn) return;
         
-        if (aborted) return;
-        advance();
+        const clickHandler = async () => {
+            fetchBtn.removeEventListener('click', clickHandler);
+            removeOverlay();
+            
+            await trackedDelay(500);
+            if (aborted) return;
+            
+            const snapshotSelect = document.getElementById('snapshotSelect');
+            await waitForRunCompletion(snapshotSelect ? snapshotSelect.value : null);
+            
+            if (aborted) return;
+            
+            const resultsSection = document.getElementById('resultsSection');
+            if (resultsSection) {
+                resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            await trackedDelay(500);
+            if (aborted) return;
+            
+            advance();
+        };
+        
+        fetchBtn.addEventListener('click', clickHandler);
     }
     
     async function waitForRunCompletion(snapshotId) {

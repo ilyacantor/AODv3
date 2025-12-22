@@ -21,7 +21,13 @@ The system utilizes a 7-stage sequential pipeline:
 7.  `findings_engine.py`: Deterministic findings generation.
 
 ### UI/UX Decisions
-The UI features a single-page application using the AutonomOS color palette and Quicksand font. It provides a dropdown snapshot picker and drillable KPI cards organized into two rows:
+The UI features a single-page application using the AutonomOS color palette and Quicksand font. Frontend assets are organized as:
+- `templates/index.html`: HTML structure with modals (~420 lines)
+- `static/css/main.css`: Extracted CSS styles (~395 lines)
+- `static/js/app.js`: Extracted JavaScript (~2,270 lines)
+- Static assets use cache-busting version params (?v=N)
+
+It provides a dropdown snapshot picker and drillable KPI cards organized into two rows:
 *   **Lifecycle Row**: Ingested (observations) → Validated (passed processing) → Rejected → Cataloged (assets)
 *   **Classifications Row**: Shadow, Zombie, Security Risks, Governance
 

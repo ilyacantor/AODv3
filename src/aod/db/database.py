@@ -708,8 +708,8 @@ class Database:
                 "run_id": row["run_id"],
                 "entity_key": row["entity_key"],
                 "entity_name": row["entity_name"],
-                "reason": row["reason_code"],
-                "details": row["reason_detail"],
+                "reason_code": row["reason_code"],
+                "reason_detail": row["reason_detail"],
                 "evidence_summary": row.get("evidence_summary"),
                 "created_at": row["created_at"]
             })

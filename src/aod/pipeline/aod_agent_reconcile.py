@@ -556,9 +556,22 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
     why the candidate was not admitted.
     """
     reasons = []
-    reason_code = rejection.get("reason_code", "").lower()
-    reason_detail = rejection.get("reason_detail", "").lower()
-    evidence = rejection.get("evidence_summary", {})
+    reason_code = rejection.get("reason_code", "") or ""
+    reason_detail = rejection.get("reason_detail", "") or ""
+    reason_code = reason_code.lower()
+    reason_detail = reason_detail.lower()
+    evidence_raw = rejection.get("evidence_summary", {})
+    # Parse evidence_summary if it's a JSON string
+    if isinstance(evidence_raw, str):
+        try:
+            import json
+            evidence = json.loads(evidence_raw)
+        except (json.JSONDecodeError, TypeError):
+            evidence = {}
+    elif evidence_raw is None:
+        evidence = {}
+    else:
+        evidence = evidence_raw
     
     if "discovery" in reason_code or "source" in reason_detail:
         reasons.append("DISCOVERY_SOURCE_COUNT_LT_2")

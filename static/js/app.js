@@ -2251,6 +2251,14 @@
         loadTenants();
         setInterval(checkHealth, 30000);
         
+        if (typeof TourManager !== 'undefined') {
+            TourManager.checkResume();
+            const guidedTourBtn = document.getElementById('guidedTourBtn');
+            if (guidedTourBtn) {
+                guidedTourBtn.addEventListener('click', () => TourManager.start());
+            }
+        }
+        
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => window.location.reload());

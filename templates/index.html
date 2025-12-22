@@ -2454,13 +2454,7 @@
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
                     select.disabled = true;
                 } else {
-                    // Sort by created_at descending (most recent first)
-                    loadedSnapshots.sort((a, b) => {
-                        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-                        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-                        return dateB - dateA;
-                    });
-                    
+                    // Farm returns snapshots with most recent first - preserve that order
                     select.innerHTML = loadedSnapshots.map((s, i) => {
                         const id = s.snapshot_id || s.id || 'unknown';
                         const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';

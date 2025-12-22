@@ -6,7 +6,6 @@ const TourManager = (function() {
     
     const TOUR_COPY = {
         0: "AOD discovers what actually exists in an enterprise environment.\nThis run shows how discovery is executed, inspected, and verified.",
-        'waiting': "Farm has opened in a new window.\nGenerate a snapshot there, then return here to continue the validation.",
         3: "AOD ingests signals, resolves entities, scores evidence, and classifies assets.\nEvery result is traceable to source data.",
         4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
         4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
@@ -286,15 +285,10 @@ const TourManager = (function() {
                 const farmUrlWithGuided = `${data.farm_url}${separator}guided=1&tour_phase=1&return_url=${returnUrl}`;
                 window.open(farmUrlWithGuided, 'aos_farm');
                 
-                showOverlay(TOUR_COPY['waiting'], {
-                    primaryButtonText: 'Continue When Ready',
-                    onContinue: () => {
-                        const state = getState();
-                        state.phase = 3;
-                        setState(state);
-                        executePhase(3);
-                    }
-                });
+                const state = getState();
+                state.phase = 3;
+                setState(state);
+                removeOverlay();
             }
         } catch (e) {
             console.error('TourManager: Failed to get Farm URL', e);

@@ -2454,14 +2454,14 @@
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
                     select.disabled = true;
                 } else {
-                    const sorted = [...loadedSnapshots].sort((a, b) => {
+                    // Sort by created_at descending (most recent first)
+                    loadedSnapshots.sort((a, b) => {
                         const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
                         const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
                         return dateB - dateA;
                     });
-                    const mostRecentId = sorted[0]?.snapshot_id || sorted[0]?.id || '';
                     
-                    select.innerHTML = loadedSnapshots.map(s => {
+                    select.innerHTML = loadedSnapshots.map((s, i) => {
                         const id = s.snapshot_id || s.id || 'unknown';
                         const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';
                         const profile = (s.enterprise_profile && s.realism_profile) 
@@ -2470,9 +2470,11 @@
                         let label = id;
                         if (profile) label += ` — ${profile}`;
                         if (created) label += ` — ${created}`;
-                        return `<option value="${id}"${id === mostRecentId ? ' selected' : ''}>${label}</option>`;
+                        if (i === 0) label = `★ ${label} (Latest)`;
+                        return `<option value="${id}"${i === 0 ? ' selected' : ''}>${label}</option>`;
                     }).join('');
                     select.disabled = false;
+                    select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
                 }
                 msg.className = 'success-message';
                 msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;

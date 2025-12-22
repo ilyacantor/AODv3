@@ -845,11 +845,9 @@
         function updateTriageItemInTiers(itemId, itemType, updates) {
             for (const tier of [1, 2, 3]) {
                 const items = triageTierData[tier];
-                const idx = items.findIndex(item => {
-                    const id = item.finding_id || item.asset_id || item.id;
-                    const type = item.itemType || (item.finding_id ? 'finding' : 'shadow');
-                    return id === itemId && type === itemType;
-                });
+                const idx = items.findIndex(item => 
+                    getTriageItemId(item) === itemId && getTriageItemType(item) === itemType
+                );
                 if (idx !== -1) {
                     Object.assign(items[idx], updates);
                     const container = document.getElementById(`triageTier${tier}Content`);
@@ -1104,6 +1102,18 @@
                 tier2Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
                 tier3Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
             }
+        }
+        
+        function getTriageItemId(item) {
+            return item.finding_id || item.asset_id || item.id || '';
+        }
+        
+        function getTriageItemType(item) {
+            return item.itemType || (item.finding_id ? 'finding' : 'shadow');
+        }
+        
+        function getTriageKey(item) {
+            return `${getTriageItemType(item)}:${getTriageItemId(item)}`;
         }
         
         function getItemName(item) {

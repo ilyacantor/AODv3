@@ -49,8 +49,11 @@ SECURITY_RELEVANT_FIELDS = {
     "lifecycle",
 }
 
+# Import centralized policy config
+from ..config import policy
+
 # Minimum monthly spend threshold for FINANCE_GAP (in USD)
-FINANCE_GAP_MONTHLY_THRESHOLD = 200.0
+FINANCE_GAP_MONTHLY_THRESHOLD = policy.FINANCE_GAP_MONTHLY_THRESHOLD
 
 
 from .correlate_entities import CorrelationResult, MatchStatus

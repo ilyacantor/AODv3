@@ -1,9 +1,12 @@
 """Stage 4: CorrelateEntitiesToPlanes - Real-world simple matcher with disambiguation"""
 
+import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
@@ -913,7 +916,17 @@ def correlate_entities_to_planes(
     Returns:
         List of correlation results for each entity
     """
+    logger.info("correlate_entities.start", extra={
+        "entity_count": len(entities),
+        "idp_records": len(indexes.idp.by_canonical_name),
+        "cmdb_records": len(indexes.cmdb.by_canonical_name),
+        "cloud_records": len(indexes.cloud.by_canonical_name),
+        "finance_records": len(indexes.finance.by_canonical_name)
+    })
+    
     results = []
+    matched_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
+    ambiguous_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
     
     for entity in sorted(entities, key=lambda e: e.entity_id):
         result = CorrelationResult(entity=entity)
@@ -923,6 +936,34 @@ def correlate_entities_to_planes(
         result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
         result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)
         
+        if result.idp.status == MatchStatus.MATCHED:
+            matched_counts["idp"] += 1
+        elif result.idp.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["idp"] += 1
+            
+        if result.cmdb.status == MatchStatus.MATCHED:
+            matched_counts["cmdb"] += 1
+        elif result.cmdb.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["cmdb"] += 1
+            
+        if result.cloud.status == MatchStatus.MATCHED:
+            matched_counts["cloud"] += 1
+        elif result.cloud.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["cloud"] += 1
+            
+        if result.finance.status == MatchStatus.MATCHED:
+            matched_counts["finance"] += 1
+        elif result.finance.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["finance"] += 1
+        
         results.append(result)
+    
+    logger.info("correlate_entities.complete", extra={
+        "entity_count": len(entities), "result_count": len(results),
+        "matched_idp": matched_counts["idp"], "matched_cmdb": matched_counts["cmdb"],
+        "matched_cloud": matched_counts["cloud"], "matched_finance": matched_counts["finance"],
+        "ambiguous_idp": ambiguous_counts["idp"], "ambiguous_cmdb": ambiguous_counts["cmdb"],
+        "ambiguous_cloud": ambiguous_counts["cloud"], "ambiguous_finance": ambiguous_counts["finance"]
+    })
     
     return results

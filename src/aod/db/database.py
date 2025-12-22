@@ -253,6 +253,8 @@ class Database:
             
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_run_id ON triage_actions(run_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_item ON triage_actions(item_id, item_type)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_tenant ON triage_actions(tenant_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_tenant_run ON triage_actions(tenant_id, run_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_run_id ON assets(run_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_run_id ON findings(run_id)")

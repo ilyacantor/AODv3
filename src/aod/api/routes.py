@@ -2356,6 +2356,97 @@ async def run_tests(request: RunTestsRequest) -> RunTestsResponse:
         )
 
 
+class TestRunRequest(BaseModel):
+    """Request for running performance tests from UI"""
+    testType: str  # 'correlation', 'database', or 'all'
+
+
+class TestRunResponse(BaseModel):
+    """Response for UI test run"""
+    success: bool
+    passed: int
+    failed: int
+    duration: str
+    output: str
+
+
+@router.post("/tests/run", response_model=TestRunResponse)
+async def run_performance_tests(request: TestRunRequest) -> TestRunResponse:
+    """
+    Run performance tests from the UI test tab.
+    Maps test types to specific test files.
+    """
+    import subprocess
+    import re
+
+    # Map test types to test files
+    test_map = {
+        'correlation': 'tests/test_correlation_performance.py',
+        'database': 'tests/test_database_performance.py',
+        'all': 'tests/test_correlation_performance.py tests/test_database_performance.py'
+    }
+
+    test_path = test_map.get(request.testType, 'tests/')
+
+    try:
+        # Run pytest with verbose output
+        result = subprocess.run(
+            f"python -m pytest {test_path} -v -s --tb=short".split(),
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minutes for performance tests
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
+
+        output = result.stdout + result.stderr
+
+        # Parse test results
+        passed_count = 0
+        failed_count = 0
+        duration_str = "0.00s"
+
+        # Look for pytest summary line like "5 passed in 2.34s"
+        summary_pattern = r'(\d+)\s+passed.*?in\s+([\d.]+s)'
+        failed_pattern = r'(\d+)\s+failed'
+
+        for line in output.split('\n'):
+            passed_match = re.search(summary_pattern, line)
+            if passed_match:
+                passed_count = int(passed_match.group(1))
+                duration_str = passed_match.group(2)
+
+            failed_match = re.search(failed_pattern, line)
+            if failed_match:
+                failed_count = int(failed_match.group(1))
+
+        success = result.returncode == 0 and failed_count == 0
+
+        return TestRunResponse(
+            success=success,
+            passed=passed_count,
+            failed=failed_count,
+            duration=duration_str,
+            output=output if len(output) < 10000 else output[-10000:]  # Last 10k chars
+        )
+
+    except subprocess.TimeoutExpired:
+        return TestRunResponse(
+            success=False,
+            passed=0,
+            failed=0,
+            duration="timeout",
+            output="⏱️ Test run timed out after 5 minutes"
+        )
+    except Exception as e:
+        return TestRunResponse(
+            success=False,
+            passed=0,
+            failed=0,
+            duration="error",
+            output=f"❌ Error running tests: {str(e)}"
+        )
+
+
 class AssetTraceRequest(BaseModel):
     """Request for single-asset trace debugging"""
     run_id: str

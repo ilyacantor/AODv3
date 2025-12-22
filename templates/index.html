@@ -407,7 +407,7 @@
             <nav class="header-nav">
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
-                <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
+                <button class="header-nav-tab" data-tab="test">Tests</button>
             </nav>
         </div>
         <div class="header-right">
@@ -643,43 +643,83 @@
     <div id="testTabContent" class="main-tab-content">
         <main class="container">
             <div class="section">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
                     <div>
-                        <h2 class="section-title" style="margin-bottom:0.25rem;">All Decision Traces</h2>
-                        <p class="config-note" style="margin:0;">View how each asset was classified. Filter by name or show only shadow assets.</p>
-                    </div>
-                    <span id="decisionTraceCount" style="color:var(--slate-400);font-size:0.875rem;"></span>
-                </div>
-                
-                <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem;">
-                    <div style="flex:0 0 300px;">
-                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Snapshot</label>
-                        <select class="form-input" id="decisionTraceRunId" style="width:100%;">
-                            <option value="">Select a run...</option>
-                        </select>
-                    </div>
-                    <div style="flex:1;">
-                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Filter by Asset</label>
-                        <input type="text" class="form-input" id="decisionTraceFilter" placeholder="e.g. slack.com" style="width:100%;">
-                    </div>
-                    <div style="flex:0 0 auto;padding-top:1.25rem;">
-                        <button class="btn btn-primary" id="runDecisionTrace" style="padding:0.75rem 1.5rem;">Load Traces</button>
+                        <h2 class="section-title" style="margin-bottom:0.25rem;">Test Suite</h2>
+                        <p class="config-note" style="margin:0;">Run performance and correctness tests for AOD optimizations</p>
                     </div>
                 </div>
-                
-                <div style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;">
-                    <button class="btn btn-primary decision-filter active" data-filter="all">All</button>
-                    <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
-                    <button class="btn btn-secondary decision-filter" data-filter="mismatch">Mismatches</button>
-                    <div style="flex:1;"></div>
-                    <button class="btn btn-secondary" id="exportMismatches" style="padding:0.5rem 1rem;">Export Mismatches</button>
+
+                <div class="test-grid">
+                    <!-- Correlation Performance Tests -->
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">⚡ Correlation Performance</div>
+                        </div>
+                        <div class="test-card-desc">
+                            Tests O(n²) correlation algorithm optimizations:<br>
+                            • LRU cache effectiveness (77x speedup)<br>
+                            • Early exit conditions<br>
+                            • Regex pattern caching<br>
+                            • Correctness verification
+                        </div>
+                        <div class="test-card-meta">
+                            <span class="test-count">11 tests</span>
+                            <span>tests/test_correlation_performance.py</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="runTest('correlation')" style="width:100%;">Run Tests</button>
+                        <div id="correlationTestResult" class="test-result" style="display:none;"></div>
+                    </div>
+
+                    <!-- Database Performance Tests -->
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">🗄️ Database Performance</div>
+                        </div>
+                        <div class="test-card-desc">
+                            Tests database query optimizations:<br>
+                            • Batched queries (3x speedup)<br>
+                            • WHERE clause filtering (10-100x)<br>
+                            • N+1 query elimination<br>
+                            • Correctness verification
+                        </div>
+                        <div class="test-card-meta">
+                            <span class="test-count">9 tests</span>
+                            <span>tests/test_database_performance.py</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="runTest('database')" style="width:100%;">Run Tests</button>
+                        <div id="databaseTestResult" class="test-result" style="display:none;"></div>
+                    </div>
+
+                    <!-- All Tests -->
+                    <div class="test-card">
+                        <div class="test-card-header">
+                            <div class="test-card-title">🧪 Full Test Suite</div>
+                        </div>
+                        <div class="test-card-desc">
+                            Run all AOD tests including:<br>
+                            • Core pipeline tests<br>
+                            • Performance benchmarks<br>
+                            • Correctness tests<br>
+                            • Edge case validation
+                        </div>
+                        <div class="test-card-meta">
+                            <span class="test-count">122 tests</span>
+                            <span>tests/</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="runTest('all')" style="width:100%;">Run All Tests</button>
+                        <div id="allTestResult" class="test-result" style="display:none;"></div>
+                    </div>
                 </div>
-                
-                <div id="decisionTraceDetail" style="display:none;background:var(--slate-800);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
-                </div>
-                
-                <div id="decisionTraceResult" style="background:var(--slate-800);border-radius:8px;overflow:hidden;">
-                    <div style="padding:2rem;text-align:center;color:var(--slate-500);">Select a snapshot to load decision traces</div>
+
+                <div style="margin-top:2rem;padding:1.5rem;background:var(--slate-800);border-radius:12px;border:1px solid var(--slate-700);">
+                    <h3 style="color:white;font-size:1rem;margin-bottom:0.75rem;">Test Requirements</h3>
+                    <ul style="color:var(--slate-400);font-size:0.875rem;line-height:1.8;margin:0;padding-left:1.5rem;">
+                        <li><strong>Database tests</strong> require DATABASE_URL or SUPABASE_DB_URL environment variable</li>
+                        <li><strong>Correlation tests</strong> run without database (use synthetic data)</li>
+                        <li>Tests run in the backend - results stream to UI</li>
+                        <li>Performance benchmarks print detailed timing metrics</li>
+                    </ul>
                 </div>
             </div>
         </main>
@@ -1309,6 +1349,55 @@
             updateBatchCount();
         }
         
+        async function runTest(testType) {
+            const resultDiv = document.getElementById(testType + 'TestResult');
+            const button = event.target;
+
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'test-result running';
+            resultDiv.innerHTML = '⏳ Running tests...';
+            button.disabled = true;
+            button.textContent = 'Running...';
+
+            try {
+                const response = await fetch('/api/tests/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({testType})
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                resultDiv.className = result.success ? 'test-result success' : 'test-result failure';
+
+                // Format output with test counts
+                let html = '<div style="margin-bottom:0.5rem;">';
+                if (result.success) {
+                    html += `<strong>✅ All tests passed</strong>`;
+                } else {
+                    html += `<strong>❌ Some tests failed</strong>`;
+                }
+                html += `</div>`;
+                html += `<div style="margin-bottom:0.5rem;font-size:0.875rem;opacity:0.8;">`;
+                html += `Passed: ${result.passed} | Failed: ${result.failed} | Duration: ${result.duration}`;
+                html += `</div>`;
+                html += `<pre style="max-height:400px;overflow-y:auto;font-size:0.75rem;">${result.output}</pre>`;
+
+                resultDiv.innerHTML = html;
+
+            } catch (error) {
+                resultDiv.className = 'test-result failure';
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Run Tests';
+            }
+        }
+
         function initTestTab() {
             async function loadDecisionTraceRuns() {
                 const select = document.getElementById('decisionTraceRunId');

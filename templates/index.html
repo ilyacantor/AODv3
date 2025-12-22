@@ -19,7 +19,6 @@
             <div class="module-name">AOS Discover</div>
             <div class="header-divider"></div>
             <nav class="header-nav">
-                <button class="header-nav-tab" data-tab="overview">Overview</button>
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
                 <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
@@ -37,68 +36,6 @@
             <button class="btn-refresh" id="refreshBtn" title="Refresh page"><span>↻</span> Refresh</button>
         </div>
     </header>
-    
-    <div id="overviewTabContent" class="main-tab-content">
-        <div class="overview-container">
-            <div class="overview-header">
-                <h1 class="overview-title">AOS Discover Overview</h1>
-                <p class="overview-subtitle">Understanding the Discovery Pipeline</p>
-            </div>
-            <div class="overview-content">
-                <div class="pipeline-summary">
-                    <h2>Pipeline Lifecycle</h2>
-                    <p>AOS Discover processes enterprise evidence through a deterministic, evidence-only pipeline that transforms raw observations into a curated asset catalog with explainable findings.</p>
-                    <div class="lifecycle-stages">
-                        <div class="lifecycle-stage">
-                            <div class="stage-icon ingested">1</div>
-                            <div class="stage-info">
-                                <h3>Ingested</h3>
-                                <p>Raw evidence is received and schema-validated. Banned fields are stripped, observations are counted.</p>
-                                <div class="stage-detail">Includes: Snapshot validation, schema checks</div>
-                            </div>
-                        </div>
-                        <div class="lifecycle-arrow">→</div>
-                        <div class="lifecycle-stage">
-                            <div class="stage-icon validated">2</div>
-                            <div class="stage-info">
-                                <h3>Validated</h3>
-                                <p>Observations are normalized, indexed by data plane, and correlated across sources.</p>
-                                <div class="stage-detail">Includes: Normalization, plane indexing, entity correlation, vendor matching</div>
-                            </div>
-                        </div>
-                        <div class="lifecycle-arrow">→</div>
-                        <div class="lifecycle-stage">
-                            <div class="stage-icon rejected">3</div>
-                            <div class="stage-info">
-                                <h3>Rejected</h3>
-                                <p>Entities that fail admission criteria or are identified as artifacts (internal objects).</p>
-                                <div class="stage-detail">Includes: Artifact separation, admission filtering</div>
-                            </div>
-                        </div>
-                        <div class="lifecycle-arrow">→</div>
-                        <div class="lifecycle-stage">
-                            <div class="stage-icon cataloged">4</div>
-                            <div class="stage-info">
-                                <h3>Cataloged</h3>
-                                <p>Admitted assets with derived classifications (Shadow, Zombie) and explainable findings.</p>
-                                <div class="stage-detail">Includes: Classification derivation, findings generation</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="overview-iframe-wrapper">
-                    <h2>Interactive Architecture View</h2>
-                    <p class="iframe-note">Explore the detailed pipeline architecture below. The visualization shows how evidence flows through each processing stage.</p>
-                    <iframe 
-                        src="https://overview.autonomos.software/aod" 
-                        class="overview-iframe"
-                        title="AOS Discover Architecture"
-                        loading="lazy"
-                    ></iframe>
-                </div>
-            </div>
-        </div>
-    </div>
     
     <div id="discoveryTabContent" class="main-tab-content active">
     <main class="container">

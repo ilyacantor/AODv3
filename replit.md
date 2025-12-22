@@ -69,6 +69,7 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Triage Persistence**: Triage actions (acknowledge, assign, defer, ignore) are saved to the database and restored when viewing the Triage tab. Status badges show current state with visual distinction for triaged items.
 *   **Smart Snapshot Selection**: On page load, the tenant with the most recent snapshot is automatically selected, marked with ★ (Latest).
 *   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
+*   **Overview Tab**: React-based landing page built with Vite, Tailwind CSS, and framer-motion. Source in `client/`, builds to `static/overview/`. Displays AutonomOS platform introduction, AOD gateway explanation, interactive architecture iframe from overview.autonomos.software, and call-to-action buttons for Guided Validation.
 *   **Guided Validation Run**: Narrated walkthrough of AOD discovery and verification. Phases: Entry framing (0), Discovery run (3), Shadows inspection (4), Triage demonstration (5), Catalog review (6), Free exploration (8). Features auto-navigation, factual overlays, Farm handoff via URL params, and deterministic example selection with fallback handling. Tour state persisted in localStorage (`aod_guided_tour`). Implemented in `static/js/tour.js`.
 
 ## External Dependencies

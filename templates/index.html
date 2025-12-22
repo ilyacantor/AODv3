@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=3">
+    <link rel="stylesheet" href="/static/css/main.css?v=4">
 </head>
 <body>
     <header>
@@ -19,6 +19,7 @@
             <div class="module-name">AOS Discover</div>
             <div class="header-divider"></div>
             <nav class="header-nav">
+                <button class="header-nav-tab" data-tab="overview">Overview</button>
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
                 <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
@@ -36,6 +37,14 @@
             <button class="btn-refresh" id="refreshBtn" title="Refresh page"><span>↻</span> Refresh</button>
         </div>
     </header>
+    
+    <div id="overviewTabContent" class="main-tab-content">
+        <iframe 
+            src="/static/overview/index.html" 
+            class="overview-iframe"
+            title="AutonomOS Overview"
+        ></iframe>
+    </div>
     
     <div id="discoveryTabContent" class="main-tab-content active">
     <main class="container">

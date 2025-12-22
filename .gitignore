@@ -52,3 +52,9 @@ Thumbs.db
 
 *.pyc
 *.pyo
+
+# Node.js
+node_modules/
+client/node_modules/
+.npm
+npm-debug.log*

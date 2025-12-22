@@ -605,18 +605,17 @@ async def view_catalog(run_id: str):
         if not action:
             return ''
         
-        action_type = action.get('action_type', '')
+        action_val = action.get('action', '')
         state = action.get('state', '')
         
-        if action_type == 'assign':
-            owner = action.get('metadata', {}).get('assigned_to', '')
+        if action_val == 'assign':
+            owner = action.get('owner', '')
             return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
-        elif action_type == 'defer':
-            days = action.get('metadata', {}).get('defer_days', '')
-            return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred {days}d</span>'
-        elif action_type == 'ignore':
+        elif action_val == 'defer':
+            return '<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred</span>'
+        elif action_val == 'ignore':
             return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
-        elif state == 'acknowledged':
+        elif action_val == 'acknowledge' or state == 'acknowledged':
             return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
         return ''
     
@@ -628,15 +627,15 @@ async def view_catalog(run_id: str):
     triage_stats = {'acknowledged': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
     triaged_asset_ids = set()
     for action in triage_actions:
-        action_type = action.get('action_type', '')
+        action_val = action.get('action', '')
         item_id = action.get('item_id', '')
-        if action_type == 'acknowledge' or action.get('state') == 'acknowledged':
+        if action_val == 'acknowledge' or action.get('state') == 'acknowledged':
             triage_stats['acknowledged'] += 1
-        elif action_type == 'assign':
+        elif action_val == 'assign':
             triage_stats['assigned'] += 1
-        elif action_type == 'defer':
+        elif action_val == 'defer':
             triage_stats['deferred'] += 1
-        elif action_type == 'ignore':
+        elif action_val == 'ignore':
             triage_stats['ignored'] += 1
         triaged_asset_ids.add(item_id)
     triage_stats['pending'] = len(assets) - len(triaged_asset_ids.intersection({str(a.asset_id) for a in assets}))

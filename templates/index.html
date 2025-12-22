@@ -959,17 +959,25 @@
             tier3Content.innerHTML = '<div class="triage-empty">Loading...</div>';
             
             try {
-                const [findingsRes, derivedRes] = await Promise.all([
+                const [findingsRes, derivedRes, triageActionsRes] = await Promise.all([
                     fetch(`/api/findings?run_id=${runId}`),
-                    fetch(`/api/runs/${runId}/derived`)
+                    fetch(`/api/runs/${runId}/derived`),
+                    fetch(`/api/triage/actions?run_id=${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();
                 const derivedData = await derivedRes.json();
+                const triageActionsData = triageActionsRes.ok ? await triageActionsRes.json() : { actions: [] };
                 
-                const findings = findingsData.findings || [];
-                const shadowAssets = derivedData.shadow_assets || [];
-                const zombieAssets = derivedData.zombie_assets || [];
+                const actionedItemIds = new Set((triageActionsData.actions || []).map(a => a.item_id));
+                
+                const allFindings = findingsData.findings || [];
+                const allShadowAssets = derivedData.shadow_assets || [];
+                const allZombieAssets = derivedData.zombie_assets || [];
+                
+                const findings = allFindings.filter(f => !actionedItemIds.has(f.finding_id));
+                const shadowAssets = allShadowAssets.filter(a => !actionedItemIds.has(a.asset_id));
+                const zombieAssets = allZombieAssets.filter(a => !actionedItemIds.has(a.asset_id));
                 
                 const tier1Items = [];
                 const tier2Items = [];

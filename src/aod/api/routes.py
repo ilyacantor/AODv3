@@ -136,7 +136,9 @@ async def list_farm_tenants():
 async def list_all_farm_snapshots():
     """
     List all available snapshots from Farm (no tenant filter).
-    Returns all snapshots as returned by Farm (most recent first).
+    
+    Returns all snapshots sorted by created_at descending (most recent first).
+    Used to find the latest snapshot across all tenants.
     """
     farm_url = os.environ.get("FARM_URL")
     if not farm_url:
@@ -146,9 +148,13 @@ async def list_all_farm_snapshots():
     result = await farm_client.list_snapshots("", limit=100)
     
     if not result.success:
-        raise HTTPException(status_code=502, detail=f"{result.error_type}: {result.error}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
+        )
     
-    return result.snapshots or []
+    snapshots = result.snapshots or []
+    return snapshots
 
 
 @router.get("/farm/snapshots", response_model=SnapshotListResponse)
@@ -318,13 +324,11 @@ async def create_run_from_farm(request: FarmRunRequest):
     if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
         result.run_log.sync_status = SyncStatus.PENDING
         await db.update_run(result.run_log)
-
-        # Performance: Batch database queries in single transaction (3x faster)
-        run_data = await db.get_run_data_batch(run_id)
-        assets = run_data["assets"]
-        findings = run_data["findings"]
-        rejections = run_data["rejections"]
-
+        
+        assets = await db.get_assets_by_run(run_id)
+        findings = await db.get_findings_by_run(run_id)
+        rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
+        
         success, error = await reconcile_to_farm(
             run_log=result.run_log,
             assets=assets,
@@ -395,13 +399,11 @@ async def resync_run_to_farm(request: ResyncRequest):
     snapshot_id = run.input_meta.get("snapshot_id")
     if not snapshot_id:
         raise HTTPException(status_code=400, detail="Run has no snapshot_id in metadata")
-
-    # Performance: Batch database queries in single transaction (3x faster)
-    run_data = await db.get_run_data_batch(request.run_id)
-    assets = run_data["assets"]
-    findings = run_data["findings"]
-    rejections = run_data["rejections"]
-
+    
+    assets = await db.get_assets_by_run(request.run_id)
+    findings = await db.get_findings_by_run(request.run_id)
+    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=1000)
+    
     mode = request.mode or "sprawl"
     
     success, error = await reconcile_to_farm(
@@ -446,17 +448,20 @@ async def resync_run_to_farm(request: ResyncRequest):
 async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
     """
     Get the latest run for a tenant and optionally a specific snapshot.
-
+    
     Returns HTTP 404 if no matching run exists.
     """
     db = await get_db()
-    # Performance: Use database filtering instead of loading all runs
-    runs = await db.get_runs_by_tenant(tenant_id, snapshot_id)
-
-    if not runs:
+    runs = await db.get_all_runs()
+    
+    matching = [r for r in runs if r.tenant_id == tenant_id]
+    if snapshot_id:
+        matching = [r for r in matching if r.input_meta.get("snapshot_id") == snapshot_id]
+    
+    if not matching:
         raise HTTPException(status_code=404, detail=f"No run found for tenant {tenant_id}" + (f" and snapshot {snapshot_id}" if snapshot_id else ""))
-
-    run = runs[0]
+    
+    run = matching[0]
     return RunDetailResponse(
         run_id=run.run_id,
         tenant_id=run.tenant_id,
@@ -475,12 +480,11 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
 async def list_runs(tenant_id: Optional[str] = None):
     """List all discovery runs, optionally filtered by tenant_id"""
     db = await get_db()
-    # Performance: Use database filtering when tenant_id specified
+    runs = await db.get_all_runs()
+    
     if tenant_id:
-        runs = await db.get_runs_by_tenant(tenant_id)
-    else:
-        runs = await db.get_all_runs()
-
+        runs = [r for r in runs if r.tenant_id == tenant_id]
+    
     return [
         RunDetailResponse(
             run_id=run.run_id,
@@ -605,17 +609,18 @@ async def view_catalog(run_id: str):
         if not action:
             return ''
         
-        action_val = action.get('action', '')
+        action_type = action.get('action_type', '')
         state = action.get('state', '')
         
-        if action_val == 'assign':
-            owner = action.get('owner', '')
+        if action_type == 'assign':
+            owner = action.get('metadata', {}).get('assigned_to', '')
             return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
-        elif action_val == 'defer':
-            return '<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred</span>'
-        elif action_val == 'ignore':
+        elif action_type == 'defer':
+            days = action.get('metadata', {}).get('defer_days', '')
+            return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred {days}d</span>'
+        elif action_type == 'ignore':
             return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
-        elif action_val == 'acknowledge' or state == 'acknowledged':
+        elif state == 'acknowledged':
             return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
         return ''
     
@@ -627,15 +632,15 @@ async def view_catalog(run_id: str):
     triage_stats = {'acknowledged': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
     triaged_asset_ids = set()
     for action in triage_actions:
-        action_val = action.get('action', '')
+        action_type = action.get('action_type', '')
         item_id = action.get('item_id', '')
-        if action_val == 'acknowledge' or action.get('state') == 'acknowledged':
+        if action_type == 'acknowledge' or action.get('state') == 'acknowledged':
             triage_stats['acknowledged'] += 1
-        elif action_val == 'assign':
+        elif action_type == 'assign':
             triage_stats['assigned'] += 1
-        elif action_val == 'defer':
+        elif action_type == 'defer':
             triage_stats['deferred'] += 1
-        elif action_val == 'ignore':
+        elif action_type == 'ignore':
             triage_stats['ignored'] += 1
         triaged_asset_ids.add(item_id)
     triage_stats['pending'] = len(assets) - len(triaged_asset_ids.intersection({str(a.asset_id) for a in assets}))
@@ -972,10 +977,7 @@ async def get_findings(run_id: str):
                 "severity": f.severity.value,
                 "explanation": f.explanation,
                 "evidence_refs": f.evidence_refs,
-                "created_at": f.created_at.isoformat(),
-                "triage_priority": f.triage_priority.value if f.triage_priority else "p2",
-                "confidence": f.confidence.value if f.confidence else "med",
-                "materiality": f.materiality.value if f.materiality else "med"
+                "created_at": f.created_at.isoformat()
             }
             for f in findings
         ],
@@ -1253,13 +1255,11 @@ async def get_reconcile_payload(run_id: str):
     run = await db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-
-    # Performance: Batch database queries in single transaction (3x faster)
-    run_data = await db.get_run_data_batch(run_id)
-    assets = run_data["assets"]
-    findings = run_data["findings"]
-    rejections = run_data["rejections"]
-
+    
+    assets = await db.get_assets_by_run(run_id)
+    findings = await db.get_findings_by_run(run_id)
+    rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
+    
     snapshot_id = run.input_meta.get("snapshot_id") if run.input_meta else None
     
     return build_reconcile_payload(
@@ -2374,144 +2374,6 @@ async def run_tests(request: RunTestsRequest) -> RunTestsResponse:
             failed_count=0,
             summary=str(e),
             output=str(e)
-        )
-
-
-class TestRunRequest(BaseModel):
-    """Request for running performance tests from UI"""
-    testType: str  # 'correlation', 'database', or 'all'
-
-
-class TestRunResponse(BaseModel):
-    """Response for UI test run"""
-    success: bool
-    passed: int
-    failed: int
-    duration: str
-    output: str
-
-
-@router.post("/tests/run", response_model=TestRunResponse)
-async def run_performance_tests(request: TestRunRequest) -> TestRunResponse:
-    """
-    Run performance tests from the UI test tab.
-    Maps test types to specific test files.
-    """
-    import subprocess
-    import re
-
-    # Map test types to test files
-    test_map = {
-        'correlation': 'tests/test_correlation_performance.py',
-        'database': 'tests/test_database_performance.py',
-        'all': 'tests/test_correlation_performance.py tests/test_database_performance.py'
-    }
-
-    test_path = test_map.get(request.testType, 'tests/')
-
-    try:
-        # Try multiple possible project root paths (Replit, local dev, etc.)
-        possible_roots = [
-            '/home/user/AODv3',  # Replit development directory
-            '/home/runner/workspace',  # Replit runtime directory
-            os.getcwd(),  # Current working directory
-        ]
-
-        # Also try finding by pyproject.toml
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        search_dir = current_dir
-        while search_dir != '/':
-            if os.path.exists(os.path.join(search_dir, 'pyproject.toml')):
-                possible_roots.insert(0, search_dir)
-                break
-            search_dir = os.path.dirname(search_dir)
-
-        # Find first path that has the test files
-        project_root = None
-        for root in possible_roots:
-            if os.path.exists(root) and os.path.exists(os.path.join(root, 'tests')):
-                project_root = root
-                break
-
-        # Fallback to first existing path
-        if not project_root:
-            for root in possible_roots:
-                if os.path.exists(root):
-                    project_root = root
-                    break
-
-        if not project_root:
-            project_root = os.getcwd()
-
-        # Run pytest with verbose output
-        result = subprocess.run(
-            f"python -m pytest {test_path} -v -s --tb=short".split(),
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minutes for performance tests
-            cwd=project_root
-        )
-
-        output = result.stdout + result.stderr
-
-        # Check for database configuration errors
-        if "No database configured" in output and request.testType == 'database':
-            return TestRunResponse(
-                success=False,
-                passed=0,
-                failed=0,
-                duration="0.00s",
-                output="⚠️ Database tests require a database connection.\n\n"
-                      "Please set the SUPABASE_DB_URL or DATABASE_URL environment variable.\n\n"
-                      "These tests verify database query optimizations (batched queries, WHERE clause filtering, etc.) "
-                      "and need a live PostgreSQL database to run.\n\n"
-                      "The correlation performance tests can run without a database connection."
-            )
-
-        # Parse test results
-        passed_count = 0
-        failed_count = 0
-        duration_str = "0.00s"
-
-        # Look for pytest summary line like "5 passed in 2.34s"
-        summary_pattern = r'(\d+)\s+passed.*?in\s+([\d.]+s)'
-        failed_pattern = r'(\d+)\s+failed'
-
-        for line in output.split('\n'):
-            passed_match = re.search(summary_pattern, line)
-            if passed_match:
-                passed_count = int(passed_match.group(1))
-                duration_str = passed_match.group(2)
-
-            failed_match = re.search(failed_pattern, line)
-            if failed_match:
-                failed_count = int(failed_match.group(1))
-
-        success = result.returncode == 0 and failed_count == 0
-
-        return TestRunResponse(
-            success=success,
-            passed=passed_count,
-            failed=failed_count,
-            duration=duration_str,
-            output=output if len(output) < 10000 else output[-10000:]  # Last 10k chars
-        )
-
-    except subprocess.TimeoutExpired:
-        return TestRunResponse(
-            success=False,
-            passed=0,
-            failed=0,
-            duration="timeout",
-            output="⏱️ Test run timed out after 5 minutes"
-        )
-    except Exception as e:
-        return TestRunResponse(
-            success=False,
-            passed=0,
-            failed=0,
-            duration="error",
-            output=f"❌ Error running tests: {str(e)}"
         )
 
 

@@ -407,7 +407,7 @@
             <nav class="header-nav">
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
-                <button class="header-nav-tab" data-tab="test">Tests</button>
+                <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
             </nav>
         </div>
         <div class="header-right">
@@ -643,84 +643,43 @@
     <div id="testTabContent" class="main-tab-content">
         <main class="container">
             <div class="section">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
                     <div>
-                        <h2 class="section-title" style="margin-bottom:0.25rem;">Test Suite</h2>
-                        <p class="config-note" style="margin:0;">Run performance and correctness tests for AOD optimizations</p>
+                        <h2 class="section-title" style="margin-bottom:0.25rem;">All Decision Traces</h2>
+                        <p class="config-note" style="margin:0;">View how each asset was classified. Filter by name or show only shadow assets.</p>
+                    </div>
+                    <span id="decisionTraceCount" style="color:var(--slate-400);font-size:0.875rem;"></span>
+                </div>
+                
+                <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem;">
+                    <div style="flex:0 0 300px;">
+                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Snapshot</label>
+                        <select class="form-input" id="decisionTraceRunId" style="width:100%;">
+                            <option value="">Select a run...</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block;font-size:0.75rem;color:var(--slate-400);margin-bottom:0.25rem;">Filter by Asset</label>
+                        <input type="text" class="form-input" id="decisionTraceFilter" placeholder="e.g. slack.com" style="width:100%;">
+                    </div>
+                    <div style="flex:0 0 auto;padding-top:1.25rem;">
+                        <button class="btn btn-primary" id="runDecisionTrace" style="padding:0.75rem 1.5rem;">Load Traces</button>
                     </div>
                 </div>
-
-                <div class="test-grid">
-                    <!-- Correlation Performance Tests -->
-                    <div class="test-card">
-                        <div class="test-card-header">
-                            <div class="test-card-title">⚡ Correlation Performance</div>
-                        </div>
-                        <div class="test-card-desc">
-                            Tests O(n²) correlation algorithm optimizations:<br>
-                            • LRU cache effectiveness (77x speedup)<br>
-                            • Early exit conditions<br>
-                            • Regex pattern caching<br>
-                            • Correctness verification
-                        </div>
-                        <div class="test-card-meta">
-                            <span class="test-count">11 tests</span>
-                            <span>tests/test_correlation_performance.py</span>
-                        </div>
-                        <button class="btn btn-primary" onclick="runTest('correlation')" style="width:100%;">Run Tests</button>
-                        <div id="correlationTestResult" class="test-result" style="display:none;"></div>
-                    </div>
-
-                    <!-- Database Performance Tests -->
-                    <div class="test-card">
-                        <div class="test-card-header">
-                            <div class="test-card-title">🗄️ Database Performance</div>
-                        </div>
-                        <div class="test-card-desc">
-                            Tests database query optimizations:<br>
-                            • Batched queries (3x speedup)<br>
-                            • WHERE clause filtering (10-100x)<br>
-                            • N+1 query elimination<br>
-                            • Correctness verification<br>
-                            <span style="color:var(--amber-400);font-size:0.8rem;">⚠️ Requires database connection (SUPABASE_DB_URL)</span>
-                        </div>
-                        <div class="test-card-meta">
-                            <span class="test-count">9 tests</span>
-                            <span>tests/test_database_performance.py</span>
-                        </div>
-                        <button class="btn btn-primary" onclick="runTest('database')" style="width:100%;">Run Tests</button>
-                        <div id="databaseTestResult" class="test-result" style="display:none;"></div>
-                    </div>
-
-                    <!-- All Tests -->
-                    <div class="test-card">
-                        <div class="test-card-header">
-                            <div class="test-card-title">🧪 Full Test Suite</div>
-                        </div>
-                        <div class="test-card-desc">
-                            Run all AOD tests including:<br>
-                            • Core pipeline tests<br>
-                            • Performance benchmarks<br>
-                            • Correctness tests<br>
-                            • Edge case validation
-                        </div>
-                        <div class="test-card-meta">
-                            <span class="test-count">122 tests</span>
-                            <span>tests/</span>
-                        </div>
-                        <button class="btn btn-primary" onclick="runTest('all')" style="width:100%;">Run All Tests</button>
-                        <div id="allTestResult" class="test-result" style="display:none;"></div>
-                    </div>
+                
+                <div style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;">
+                    <button class="btn btn-primary decision-filter active" data-filter="all">All</button>
+                    <button class="btn btn-secondary decision-filter" data-filter="shadow">Shadows Only</button>
+                    <button class="btn btn-secondary decision-filter" data-filter="mismatch">Mismatches</button>
+                    <div style="flex:1;"></div>
+                    <button class="btn btn-secondary" id="exportMismatches" style="padding:0.5rem 1rem;">Export Mismatches</button>
                 </div>
-
-                <div style="margin-top:2rem;padding:1.5rem;background:var(--slate-800);border-radius:12px;border:1px solid var(--slate-700);">
-                    <h3 style="color:white;font-size:1rem;margin-bottom:0.75rem;">Test Requirements</h3>
-                    <ul style="color:var(--slate-400);font-size:0.875rem;line-height:1.8;margin:0;padding-left:1.5rem;">
-                        <li><strong>Database tests</strong> require DATABASE_URL or SUPABASE_DB_URL environment variable</li>
-                        <li><strong>Correlation tests</strong> run without database (use synthetic data)</li>
-                        <li>Tests run in the backend - results stream to UI</li>
-                        <li>Performance benchmarks print detailed timing metrics</li>
-                    </ul>
+                
+                <div id="decisionTraceDetail" style="display:none;background:var(--slate-800);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
+                </div>
+                
+                <div id="decisionTraceResult" style="background:var(--slate-800);border-radius:8px;overflow:hidden;">
+                    <div style="padding:2rem;text-align:center;color:var(--slate-500);">Select a snapshot to load decision traces</div>
                 </div>
             </div>
         </main>
@@ -959,25 +918,17 @@
             tier3Content.innerHTML = '<div class="triage-empty">Loading...</div>';
             
             try {
-                const [findingsRes, derivedRes, triageActionsRes] = await Promise.all([
+                const [findingsRes, derivedRes] = await Promise.all([
                     fetch(`/api/findings?run_id=${runId}`),
-                    fetch(`/api/runs/${runId}/derived`),
-                    fetch(`/api/triage/actions/${runId}`)
+                    fetch(`/api/runs/${runId}/derived`)
                 ]);
                 
                 const findingsData = await findingsRes.json();
                 const derivedData = await derivedRes.json();
-                const triageActionsData = triageActionsRes.ok ? await triageActionsRes.json() : { actions: [] };
                 
-                const actionedItemIds = new Set((triageActionsData.actions || []).map(a => a.item_id));
-                
-                const allFindings = findingsData.findings || [];
-                const allShadowAssets = derivedData.shadow_assets || [];
-                const allZombieAssets = derivedData.zombie_assets || [];
-                
-                const findings = allFindings.filter(f => !actionedItemIds.has(f.finding_id));
-                const shadowAssets = allShadowAssets.filter(a => !actionedItemIds.has(a.asset_id));
-                const zombieAssets = allZombieAssets.filter(a => !actionedItemIds.has(a.asset_id));
+                const findings = findingsData.findings || [];
+                const shadowAssets = derivedData.shadow_assets || [];
+                const zombieAssets = derivedData.zombie_assets || [];
                 
                 const tier1Items = [];
                 const tier2Items = [];
@@ -1358,68 +1309,13 @@
             updateBatchCount();
         }
         
-        async function runTest(testType) {
-            const resultDiv = document.getElementById(testType + 'TestResult');
-            const button = event.target;
-
-            resultDiv.style.display = 'block';
-            resultDiv.className = 'test-result running';
-            resultDiv.innerHTML = '⏳ Running tests...';
-            button.disabled = true;
-            button.textContent = 'Running...';
-
-            try {
-                const response = await fetch('/api/tests/run', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({testType})
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-
-                resultDiv.className = result.success ? 'test-result success' : 'test-result failure';
-
-                // Format output with test counts
-                let html = '<div style="margin-bottom:0.5rem;">';
-                if (result.success) {
-                    html += `<strong>✅ All tests passed</strong>`;
-                } else {
-                    html += `<strong>❌ Some tests failed</strong>`;
-                }
-                html += `</div>`;
-                html += `<div style="margin-bottom:0.5rem;font-size:0.875rem;opacity:0.8;">`;
-                html += `Passed: ${result.passed} | Failed: ${result.failed} | Duration: ${result.duration}`;
-                html += `</div>`;
-                html += `<pre style="max-height:400px;overflow-y:auto;font-size:0.75rem;">${result.output}</pre>`;
-
-                resultDiv.innerHTML = html;
-
-            } catch (error) {
-                resultDiv.className = 'test-result failure';
-                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
-            } finally {
-                button.disabled = false;
-                button.textContent = 'Run Tests';
-            }
-        }
-
         function initTestTab() {
-            const decisionTraceSelect = document.getElementById('decisionTraceRunId');
-            const runDecisionTraceBtn = document.getElementById('runDecisionTrace');
-            
-            if (!decisionTraceSelect || !runDecisionTraceBtn) {
-                return;
-            }
-            
             async function loadDecisionTraceRuns() {
+                const select = document.getElementById('decisionTraceRunId');
                 try {
                     const response = await fetch('/api/runs');
                     const runs = await response.json();
-                    decisionTraceSelect.innerHTML = '<option value="">Select a run...</option>';
+                    select.innerHTML = '<option value="">Select a run...</option>';
                     runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS')
                         .forEach(run => {
                             const opt = document.createElement('option');
@@ -1428,7 +1324,7 @@
                             const dateStr = run.started_at || run.created_at;
                             const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
                             opt.textContent = `${tenant} - ${date}`;
-                            decisionTraceSelect.appendChild(opt);
+                            select.appendChild(opt);
                         });
                 } catch (err) {
                     console.error('Failed to load runs:', err);
@@ -1451,11 +1347,10 @@
                 });
             });
             
-            runDecisionTraceBtn.addEventListener('click', loadDecisionTraces);
-            decisionTraceSelect.addEventListener('change', loadDecisionTraces);
+            document.getElementById('runDecisionTrace').addEventListener('click', loadDecisionTraces);
+            document.getElementById('decisionTraceRunId').addEventListener('change', loadDecisionTraces);
             
-            const exportBtn = document.getElementById('exportMismatches');
-            if (exportBtn) exportBtn.addEventListener('click', exportMismatches);
+            document.getElementById('exportMismatches').addEventListener('click', exportMismatches);
             
             function exportMismatches() {
                 if (!decisionTracesCache) {
@@ -2582,14 +2477,8 @@
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
                     select.disabled = true;
                 } else {
-                    const sorted = [...loadedSnapshots].sort((a, b) => {
-                        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-                        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-                        return dateB - dateA;
-                    });
-                    const mostRecentId = sorted[0]?.snapshot_id || sorted[0]?.id || '';
-                    
-                    select.innerHTML = loadedSnapshots.map(s => {
+                    // Farm returns snapshots with most recent first - preserve that order
+                    select.innerHTML = loadedSnapshots.map((s, i) => {
                         const id = s.snapshot_id || s.id || 'unknown';
                         const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';
                         const profile = (s.enterprise_profile && s.realism_profile) 
@@ -2598,9 +2487,11 @@
                         let label = id;
                         if (profile) label += ` — ${profile}`;
                         if (created) label += ` — ${created}`;
-                        return `<option value="${id}"${id === mostRecentId ? ' selected' : ''}>${label}</option>`;
+                        if (i === 0) label = `★ ${label} (Latest)`;
+                        return `<option value="${id}"${i === 0 ? ' selected' : ''}>${label}</option>`;
                     }).join('');
                     select.disabled = false;
+                    select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
                 }
                 msg.className = 'success-message';
                 msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
@@ -2855,8 +2746,8 @@
                 
                 showOutcome(result.status, result.message);
                 currentRunId = result.run_id; 
-                await loadRuns(); 
-                showDiscoveryCompleteModal(result.run_id);
+                await loadRuns();
+                await selectRun(result.run_id);
             } catch (e) { 
                 showOutcome('upstream_error', e.message);
             } finally { 
@@ -2865,54 +2756,7 @@
             }
         });
         
-        function showDiscoveryCompleteModal(runId) {
-            const modal = document.getElementById('discoveryCompleteModal');
-            modal.dataset.runId = runId;
-            modal.classList.add('active');
-        }
-        
-        function hideDiscoveryCompleteModal() {
-            document.getElementById('discoveryCompleteModal').classList.remove('active');
-        }
-        
         setTimeout(() => {
-            const discoveryReviewBtn = document.getElementById('discoveryReviewBtn');
-            const discoveryFarmBtn = document.getElementById('discoveryFarmBtn');
-            const discoveryCancelBtn = document.getElementById('discoveryCancelBtn');
-            
-            if (discoveryReviewBtn) {
-                discoveryReviewBtn.addEventListener('click', async () => {
-                    const modal = document.getElementById('discoveryCompleteModal');
-                    const runId = modal.dataset.runId;
-                    hideDiscoveryCompleteModal();
-                    if (runId) {
-                        await selectRun(runId);
-                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-            }
-            
-            if (discoveryFarmBtn) {
-                discoveryFarmBtn.addEventListener('click', async () => {
-                    hideDiscoveryCompleteModal();
-                    try {
-                        const r = await fetch('/api/farm/url');
-                        const data = await r.json();
-                        if (data.farm_url) {
-                            window.open(data.farm_url, '_blank');
-                        }
-                    } catch (e) {
-                        console.error('Failed to get Farm URL:', e);
-                    }
-                });
-            }
-            
-            if (discoveryCancelBtn) {
-                discoveryCancelBtn.addEventListener('click', () => {
-                    hideDiscoveryCompleteModal();
-                });
-            }
-            
             const goToFarmBtn = document.getElementById('goToFarmBtn');
             if (goToFarmBtn) {
                 goToFarmBtn.addEventListener('click', async () => {
@@ -2920,7 +2764,7 @@
                         const r = await fetch('/api/farm/url');
                         const data = await r.json();
                         if (data.farm_url) {
-                            window.open(data.farm_url, '_blank');
+                            window.open(data.farm_url, 'aos_farm');
                         }
                     } catch (e) {
                         console.error('Failed to get Farm URL:', e);
@@ -2935,7 +2779,7 @@
                         const r = await fetch('/api/farm/url');
                         const data = await r.json();
                         if (data.farm_url) {
-                            window.open(data.farm_url, '_blank');
+                            window.open(data.farm_url, 'aos_farm');
                         }
                     } catch (e) {
                         console.error('Failed to get Farm URL:', e);
@@ -3053,22 +2897,6 @@
                         <li><strong>Click "Fetch & Run Discovery"</strong> to analyze the data</li>
                         <li><strong>Review the results</strong> - explore assets, findings, and drill into the numbers</li>
                     </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="modal-overlay" id="discoveryCompleteModal">
-        <div class="modal" style="max-width: 400px;">
-            <div class="modal-header">
-                <span class="modal-title">Discovery Complete</span>
-            </div>
-            <div class="modal-body" style="text-align: center; padding: 1.5rem;">
-                <p style="color: var(--slate-300); margin-bottom: 1.5rem;">What would you like to do next?</p>
-                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    <button class="btn btn-primary" id="discoveryReviewBtn" style="width: 100%;">Review Results</button>
-                    <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm for Grading</button>
-                    <button class="btn" id="discoveryCancelBtn" style="width: 100%; background: var(--slate-700);">Cancel</button>
                 </div>
             </div>
         </div>
@@ -3192,45 +3020,5 @@
         </div>
     </div>
     
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const discoveryReviewBtn = document.getElementById('discoveryReviewBtn');
-            const discoveryFarmBtn = document.getElementById('discoveryFarmBtn');
-            const discoveryCancelBtn = document.getElementById('discoveryCancelBtn');
-            
-            if (discoveryReviewBtn) {
-                discoveryReviewBtn.addEventListener('click', async function() {
-                    const modal = document.getElementById('discoveryCompleteModal');
-                    const runId = modal.dataset.runId;
-                    modal.classList.remove('active');
-                    if (runId && typeof selectRun === 'function') {
-                        await selectRun(runId);
-                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-            }
-            
-            if (discoveryFarmBtn) {
-                discoveryFarmBtn.addEventListener('click', async function() {
-                    document.getElementById('discoveryCompleteModal').classList.remove('active');
-                    try {
-                        const r = await fetch('/api/farm/url');
-                        const data = await r.json();
-                        if (data.farm_url) {
-                            window.open(data.farm_url, '_blank');
-                        }
-                    } catch (e) {
-                        console.error('Failed to get Farm URL:', e);
-                    }
-                });
-            }
-            
-            if (discoveryCancelBtn) {
-                discoveryCancelBtn.addEventListener('click', function() {
-                    document.getElementById('discoveryCompleteModal').classList.remove('active');
-                });
-            }
-        });
-    </script>
 </body>
 </html>

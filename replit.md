@@ -70,6 +70,7 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Smart Snapshot Selection**: On page load, the tenant with the most recent snapshot is automatically selected, marked with ★ (Latest).
 *   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
 *   **User Guide / Overview Tab**: Investor/partner-friendly overview explaining the pipeline lifecycle (Ingested → Validated → Rejected → Cataloged) with embedded architecture visualization at https://overview.autonomos.software/aod. Maps detailed stages to simplified lifecycle milestones.
+*   **Guided Validation Run**: Narrated walkthrough of AOD discovery and verification. Phases: Entry framing (0), Discovery run (3), Shadows inspection (4), Triage demonstration (5), Catalog review (6), Free exploration (8). Features auto-navigation, factual overlays, Farm handoff via URL params, and deterministic example selection with fallback handling. Tour state persisted in localStorage (`aod_guided_tour`). Implemented in `static/js/tour.js`.
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and recipient of reconciliation results.

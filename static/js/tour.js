@@ -1,14 +1,39 @@
 const TourManager = (function() {
     const STORAGE_KEY = 'aod_guided_tour';
     
+    let aborted = false;
+    let pendingTimeouts = [];
+    
     const TOUR_COPY = {
         0: "AOD discovers what actually exists in an enterprise environment.\nThis run shows how discovery is executed, inspected, and verified.",
         3: "AOD ingests signals, resolves entities, scores evidence, and classifies assets.\nEvery result is traceable to source data.",
         4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
+        4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
         5: "Triage simulates decisions AOD can support or automate.\nActions change asset state and downstream eligibility.",
         6: "The catalog is the trusted output of discovery.\nOnly cataloged assets are eligible for integration and automation.",
+        6.5: "No assets found in the catalog for this run.\nThis may indicate the run is still processing or no assets were discovered.",
         8: "The guided run is complete.\nYou may now explore freely or restart the validation."
     };
+    
+    function trackedTimeout(fn, delay) {
+        const id = setTimeout(() => {
+            pendingTimeouts = pendingTimeouts.filter(t => t !== id);
+            if (!aborted) fn();
+        }, delay);
+        pendingTimeouts.push(id);
+        return id;
+    }
+    
+    function trackedDelay(delay) {
+        return new Promise(resolve => {
+            trackedTimeout(resolve, delay);
+        });
+    }
+    
+    function clearAllTimeouts() {
+        pendingTimeouts.forEach(id => clearTimeout(id));
+        pendingTimeouts = [];
+    }
     
     function getState() {
         try {
@@ -46,6 +71,51 @@ const TourManager = (function() {
         document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
     }
     
+    function getStatCount(drillType) {
+        const card = document.querySelector(`.stat-card[data-drill-type="${drillType}"]`);
+        if (!card) return 0;
+        const valueEl = card.querySelector('.stat-value');
+        if (!valueEl) return 0;
+        const val = parseInt(valueEl.textContent, 10);
+        return isNaN(val) ? 0 : val;
+    }
+    
+    function positionOverlayNearElement(overlay, element) {
+        if (!element) return;
+        
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        const rect = element.getBoundingClientRect();
+        const overlayHeight = 200;
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        
+        overlay.style.position = 'fixed';
+        overlay.style.transform = 'none';
+        
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        
+        if (spaceBelow >= overlayHeight + 20) {
+            overlay.style.top = (rect.bottom + 20) + 'px';
+        } else if (spaceAbove >= overlayHeight + 20) {
+            overlay.style.top = (rect.top - overlayHeight - 20) + 'px';
+        } else {
+            overlay.style.top = '50%';
+            overlay.style.transform = 'translateY(-50%)';
+        }
+        
+        const overlayWidth = 400;
+        if (rect.left + overlayWidth / 2 < viewportWidth && rect.left > overlayWidth / 2) {
+            overlay.style.left = Math.max(20, rect.left + rect.width / 2 - overlayWidth / 2) + 'px';
+        } else if (rect.right > viewportWidth / 2) {
+            overlay.style.right = '20px';
+            overlay.style.left = 'auto';
+        } else {
+            overlay.style.left = '20px';
+        }
+    }
+    
     function showOverlay(copy, options = {}) {
         removeOverlay();
         
@@ -56,6 +126,16 @@ const TourManager = (function() {
         const overlay = document.createElement('div');
         overlay.className = 'tour-overlay';
         
+        let highlightEl = null;
+        if (options.highlightElement) {
+            highlightEl = typeof options.highlightElement === 'string' 
+                ? document.querySelector(options.highlightElement) 
+                : options.highlightElement;
+            if (highlightEl) {
+                highlightEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        
         if (options.position) {
             overlay.style.position = 'fixed';
             overlay.style.top = options.position.top || 'auto';
@@ -63,6 +143,9 @@ const TourManager = (function() {
             overlay.style.right = options.position.right || 'auto';
             overlay.style.bottom = options.position.bottom || 'auto';
             overlay.style.transform = 'none';
+        } else if (highlightEl) {
+            document.body.appendChild(overlay);
+            positionOverlayNearElement(overlay, highlightEl);
         }
         
         const header = document.createElement('div');
@@ -104,28 +187,36 @@ const TourManager = (function() {
         }
         
         overlay.appendChild(buttonsDiv);
-        document.body.appendChild(overlay);
         
-        if (options.highlightElement) {
-            const el = typeof options.highlightElement === 'string' 
-                ? document.querySelector(options.highlightElement) 
-                : options.highlightElement;
-            if (el) el.classList.add('tour-highlight');
+        if (!options.position && !highlightEl) {
+            document.body.appendChild(overlay);
+        } else if (options.position) {
+            document.body.appendChild(overlay);
+        }
+        
+        if (highlightEl) {
+            highlightEl.classList.add('tour-highlight');
         }
     }
     
     function start() {
+        aborted = false;
+        clearAllTimeouts();
         const state = { active: true, phase: 0, runId: null };
         setState(state);
         executePhase(0);
     }
     
     function exit() {
+        aborted = true;
+        clearAllTimeouts();
         removeOverlay();
         clearState();
     }
     
     function advance() {
+        if (aborted) return;
+        
         const state = getState();
         if (!state.active) return;
         
@@ -144,6 +235,8 @@ const TourManager = (function() {
     }
     
     function executePhase(phase) {
+        if (aborted) return;
+        
         const state = getState();
         
         switch (phase) {
@@ -181,8 +274,11 @@ const TourManager = (function() {
     }
     
     async function navigateToFarmWithGuided() {
+        if (aborted) return;
+        
         try {
             const r = await fetch('/api/farm/url');
+            if (aborted) return;
             const data = await r.json();
             if (data.farm_url) {
                 const separator = data.farm_url.includes('?') ? '&' : '?';
@@ -195,10 +291,13 @@ const TourManager = (function() {
     }
     
     async function executePhase3() {
+        if (aborted) return;
+        
         const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
         if (consoleTab) consoleTab.click();
         
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await trackedDelay(200);
+        if (aborted) return;
         
         showOverlay(TOUR_COPY[3], {
             highlightElement: '#lifecycleStats',
@@ -210,6 +309,8 @@ const TourManager = (function() {
     }
     
     async function autoStartRun() {
+        if (aborted) return;
+        
         const state = getState();
         removeOverlay();
         
@@ -219,68 +320,134 @@ const TourManager = (function() {
         if (tenantSelect && tenantSelect.options.length > 1 && !tenantSelect.value) {
             tenantSelect.value = tenantSelect.options[1].value;
             tenantSelect.dispatchEvent(new Event('change'));
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await trackedDelay(1000);
+            if (aborted) return;
         }
+        
+        const selectedSnapshot = snapshotSelect ? snapshotSelect.value : null;
         
         if (snapshotSelect && snapshotSelect.options.length > 1 && !snapshotSelect.value) {
             snapshotSelect.value = snapshotSelect.options[1].value;
             snapshotSelect.dispatchEvent(new Event('change'));
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await trackedDelay(500);
+            if (aborted) return;
         }
         
         const fetchBtn = document.getElementById('fetchFromFarm');
         if (fetchBtn && !fetchBtn.disabled) {
             fetchBtn.click();
             
-            await waitForRunCompletion();
+            await waitForRunCompletion(snapshotSelect ? snapshotSelect.value : null);
         }
         
+        if (aborted) return;
         advance();
     }
     
-    async function waitForRunCompletion() {
-        for (let i = 0; i < 60; i++) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+    async function waitForRunCompletion(snapshotId) {
+        const maxAttempts = 120;
+        const pollInterval = 300;
+        
+        for (let i = 0; i < maxAttempts; i++) {
+            if (aborted) return;
+            
+            await trackedDelay(pollInterval);
+            if (aborted) return;
+            
+            const totalAssetsEl = document.getElementById('totalAssets');
+            if (totalAssetsEl) {
+                const val = parseInt(totalAssetsEl.textContent, 10);
+                if (!isNaN(val) && val > 0) {
+                    return;
+                }
+            }
+            
+            const runsList = document.getElementById('runsList');
+            if (runsList) {
+                const runCards = runsList.querySelectorAll('.run-card');
+                if (runCards.length > 0) {
+                    const latestCard = runCards[0];
+                    const statusBadge = latestCard.querySelector('.badge');
+                    if (statusBadge && statusBadge.textContent.toLowerCase().includes('complete')) {
+                        return;
+                    }
+                    if (snapshotId) {
+                        const cardText = latestCard.textContent || '';
+                        if (cardText.includes(snapshotId) && statusBadge) {
+                            const status = statusBadge.textContent.toLowerCase();
+                            if (status.includes('complete') || status.includes('success')) {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            
             const resultSection = document.getElementById('resultsSection');
             if (resultSection && !resultSection.classList.contains('hidden')) {
-                return;
+                const statsLoaded = getStatCount('assets') > 0 || getStatCount('shadow') > 0 || getStatCount('zombie') > 0;
+                if (statsLoaded) {
+                    return;
+                }
             }
         }
     }
     
     async function executePhase4() {
+        if (aborted) return;
+        
         const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
         if (consoleTab) consoleTab.click();
         
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await trackedDelay(300);
+        if (aborted) return;
         
+        const shadowCount = getStatCount('shadow');
         const shadowCard = document.querySelector('.stat-card[data-drill-type="shadow"]');
+        
+        if (shadowCount === 0) {
+            showOverlay(TOUR_COPY[4.5], {
+                highlightElement: shadowCard,
+                primaryButtonText: 'Continue',
+                onContinue: () => {
+                    if (aborted) return;
+                    removeOverlay();
+                    advance();
+                }
+            });
+            return;
+        }
         
         showOverlay(TOUR_COPY[4], {
             highlightElement: shadowCard,
-            position: { top: '250px', right: '100px' },
             onContinue: async () => {
+                if (aborted) return;
                 removeOverlay();
                 if (shadowCard) {
                     shadowCard.click();
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await trackedDelay(500);
                 }
+                if (aborted) return;
                 advance();
             }
         });
     }
     
     async function executePhase5() {
+        if (aborted) return;
+        
         const triageTab = document.querySelector('.header-nav-tab[data-tab="triage"]');
         if (triageTab) triageTab.click();
         
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await trackedDelay(500);
+        if (aborted) return;
         
         const triageSelect = document.getElementById('triageRunSelect');
         if (triageSelect && triageSelect.options.length > 1 && !triageSelect.value) {
             triageSelect.value = triageSelect.options[1].value;
             triageSelect.dispatchEvent(new Event('change'));
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await trackedDelay(500);
+            if (aborted) return;
         }
         
         showOverlay(TOUR_COPY[5], {
@@ -290,28 +457,48 @@ const TourManager = (function() {
     }
     
     async function executePhase6() {
+        if (aborted) return;
+        
         const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
         if (consoleTab) consoleTab.click();
         
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await trackedDelay(300);
+        if (aborted) return;
         
+        const assetCount = getStatCount('assets');
         const catalogCard = document.querySelector('.stat-card[data-drill-type="assets"]');
+        
+        if (assetCount === 0) {
+            showOverlay(TOUR_COPY[6.5], {
+                highlightElement: catalogCard,
+                primaryButtonText: 'Continue',
+                onContinue: () => {
+                    if (aborted) return;
+                    removeOverlay();
+                    advance();
+                }
+            });
+            return;
+        }
         
         showOverlay(TOUR_COPY[6], {
             highlightElement: catalogCard,
-            position: { top: '250px', right: '100px' },
             onContinue: async () => {
+                if (aborted) return;
                 removeOverlay();
                 if (catalogCard) {
                     catalogCard.click();
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await trackedDelay(500);
                 }
+                if (aborted) return;
                 advance();
             }
         });
     }
     
     function executePhase8() {
+        if (aborted) return;
+        
         showOverlay(TOUR_COPY[8], {
             primaryButtonText: 'Finish',
             onContinue: () => {
@@ -328,13 +515,15 @@ const TourManager = (function() {
         if (guided === '1' && phase) {
             const phaseNum = parseInt(phase, 10);
             if (!isNaN(phaseNum)) {
+                aborted = false;
+                clearAllTimeouts();
                 const state = { active: true, phase: phaseNum, runId: null };
                 setState(state);
                 
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
                 
-                setTimeout(() => executePhase(phaseNum), 500);
+                trackedTimeout(() => executePhase(phaseNum), 500);
                 return;
             }
         }
@@ -345,7 +534,9 @@ const TourManager = (function() {
             
             const state = getState();
             if (state.active) {
-                setTimeout(() => executePhase(state.phase), 500);
+                aborted = false;
+                clearAllTimeouts();
+                trackedTimeout(() => executePhase(state.phase), 500);
             }
         }
     }

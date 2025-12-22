@@ -2394,19 +2394,42 @@
             msg.classList.add('hidden');
             
             try {
-                const r = await fetch('/api/farm/tenants');
-                if (!r.ok) {
-                    const e = await r.json();
+                // Fetch tenants and all snapshots to find the most recent
+                const [tenantsRes, snapshotsRes] = await Promise.all([
+                    fetch('/api/farm/tenants'),
+                    fetch('/api/farm/all-snapshots')
+                ]);
+                
+                if (!tenantsRes.ok) {
+                    const e = await tenantsRes.json();
                     throw new Error(e.detail || 'Failed to load tenants');
                 }
-                const data = await r.json();
-                const tenants = data.tenants || [];
+                const tenantsData = await tenantsRes.json();
+                const tenants = tenantsData.tenants || [];
+                
+                // Find tenant with most recent snapshot
+                let latestTenantId = tenants[0] || '';
+                if (snapshotsRes.ok) {
+                    try {
+                        const allSnapshots = await snapshotsRes.json();
+                        if (Array.isArray(allSnapshots) && allSnapshots.length > 0) {
+                            // Farm returns most recent first
+                            latestTenantId = allSnapshots[0].tenant_id || latestTenantId;
+                        }
+                    } catch (e) {
+                        console.warn('Could not parse all-snapshots response', e);
+                    }
+                }
                 
                 if (tenants.length === 0) {
                     select.innerHTML = '<option value="">No tenants found in Farm</option>';
                     select.disabled = true;
                 } else {
-                    select.innerHTML = tenants.map((t, i) => `<option value="${t}"${i === 0 ? ' selected' : ''}>${t}</option>`).join('');
+                    select.innerHTML = tenants.map(t => {
+                        const isLatest = t === latestTenantId;
+                        return `<option value="${t}"${isLatest ? ' selected' : ''}>${isLatest ? '★ ' : ''}${t}${isLatest ? ' (Latest)' : ''}</option>`;
+                    }).join('');
+                    select.value = latestTenantId;
                     select.disabled = false;
                     loadSnapshots();
                 }

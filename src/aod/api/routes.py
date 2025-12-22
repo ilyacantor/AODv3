@@ -132,6 +132,31 @@ async def list_farm_tenants():
     return TenantListResponse(tenants=tenants, count=len(tenants))
 
 
+@router.get("/farm/all-snapshots")
+async def list_all_farm_snapshots():
+    """
+    List all available snapshots from Farm (no tenant filter).
+    
+    Returns all snapshots sorted by created_at descending (most recent first).
+    Used to find the latest snapshot across all tenants.
+    """
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
+    
+    farm_client = FarmClient(farm_url)
+    result = await farm_client.list_snapshots("", limit=100)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
+        )
+    
+    snapshots = result.snapshots or []
+    return snapshots
+
+
 @router.get("/farm/snapshots", response_model=SnapshotListResponse)
 async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
     """

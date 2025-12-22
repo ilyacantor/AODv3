@@ -410,3 +410,13 @@ main { padding: 2rem; }
 
 /* Overview Tab Styles */
 .overview-iframe { width: 100%; height: calc(100vh - 60px); border: none; display: block; }
+
+/* Tour bottom-positioned overlay - doesn't cover KPIs */
+.tour-overlay-bottom { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); top: auto; background: var(--slate-900); border: 1px solid var(--cyan-600); border-radius: 12px; padding: 1.25rem 1.5rem; min-width: 400px; max-width: 500px; z-index: 9999; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(6, 182, 212, 0.2); }
+.tour-overlay-bottom p { color: white; font-size: 1rem; line-height: 1.6; }
+.tour-overlay-bottom .tour-buttons { display: flex; gap: 0.75rem; justify-content: flex-end; }
+.tour-overlay-bottom .tour-btn { padding: 0.6rem 1.25rem; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; border: none; }
+.tour-overlay-bottom .tour-btn-primary { background: var(--cyan-600); color: white; }
+.tour-overlay-bottom .tour-btn-primary:hover { background: var(--cyan-500); }
+.tour-overlay-bottom .tour-btn-secondary { background: transparent; border: 1px solid var(--slate-600); color: var(--slate-400); }
+.tour-overlay-bottom .tour-btn-secondary:hover { border-color: var(--red-400); color: var(--red-400); }

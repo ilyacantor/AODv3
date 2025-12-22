@@ -7,11 +7,11 @@ const TourManager = (function() {
     const TOUR_COPY = {
         0: "AOD discovers what actually exists in an enterprise environment.\nThis run shows how discovery is executed, inspected, and verified.",
         3: "Welcome back to AOD.\n\nThe tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below.",
-        '3b': "AOD ingests signals, resolves entities, scores evidence, and classifies assets.\nEvery result is traceable to source data.",
+        '3b': "The snapshot has been scanned. These are the results.\n\nClick through to any KPI to see the details.",
         4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
         4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
-        5: "Triage simulates decisions AOD can support or automate.\nActions change asset state and downstream eligibility.",
-        6: "The catalog is the trusted output of discovery.\nOnly cataloged assets are eligible for integration and automation.",
+        5: "Current configuration is three tiers - action recommended, needs judgment, and informational.\n\nThe system is now configured as an information plane. It can also be configured as a control plane.\n\nFeel free to click on Actions to dispose of the issues.",
+        6: "The catalog is the trusted output of discovery.\n\nClick through to explore assets, then click View Full Catalog to see all cataloged assets including your triage actions.",
         6.5: "No assets found in the catalog for this run.\nThis may indicate the run is still processing or no assets were discovered.",
         7: "Now let's verify AOD's accuracy.\n\nFarm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
         8: "The guided validation is complete.\n\nYou've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely."
@@ -344,10 +344,37 @@ const TourManager = (function() {
             await trackedDelay(500);
             if (aborted) return;
             
-            advance();
+            showPhase3bResultsDialog();
         };
         
         fetchBtn.addEventListener('click', clickHandler);
+    }
+    
+    function showPhase3bResultsDialog() {
+        if (aborted) return;
+        
+        removeOverlay();
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'tour-overlay tour-overlay-bottom';
+        overlay.innerHTML = `
+            <p style="white-space: pre-line; margin: 0 0 16px 0;">${TOUR_COPY['3b']}</p>
+            <div class="tour-buttons">
+                <button class="tour-btn tour-btn-secondary tour-exit-btn">Exit Tour</button>
+                <button class="tour-btn tour-btn-primary tour-continue-btn">Continue</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        overlay.querySelector('.tour-exit-btn').addEventListener('click', () => {
+            exit();
+        });
+        
+        overlay.querySelector('.tour-continue-btn').addEventListener('click', () => {
+            if (aborted) return;
+            removeOverlay();
+            advance();
+        });
     }
     
     async function waitForRunCompletion(snapshotId) {

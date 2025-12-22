@@ -7,7 +7,7 @@ services:
     startCommand: cd src && uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.11"
       - key: DATABASE_URL
         sync: false
       - key: AOS_FARM_URL

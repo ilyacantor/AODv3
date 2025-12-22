@@ -2279,3 +2279,19 @@
             });
         }
         
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.action) {
+                if (event.data.action === 'startGuidedTour') {
+                    if (typeof TourManager !== 'undefined') {
+                        TourManager.start();
+                    }
+                } else if (event.data.action === 'switchToConsole') {
+                    document.querySelectorAll('.header-nav-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+                    const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
+                    if (consoleTab) consoleTab.classList.add('active');
+                    document.getElementById('discoveryTabContent').classList.add('active');
+                }
+            }
+        });
+        

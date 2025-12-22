@@ -54,36 +54,7 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 2: AOD INTRODUCTION ("The Gateway") --- */}
-      <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
-        <div className="flex flex-col gap-8 text-center md:text-left">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold tracking-widest uppercase w-fit mx-auto md:mx-0">
-            <ScanLine className="w-3 h-3" />
-            Foundation Layer
-          </div>
-
-          <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">
-            AOD is the gateway to AutonomOS.
-          </h2>
-
-          <div className="mt-4">
-            <div className="space-y-6 text-lg text-slate-400 leading-relaxed font-medium">
-              <p>
-                <strong className="text-white block mb-2 text-xl">
-                  Before AI systems can integrate, automate, or act, they must
-                  know what actually exists.
-                </strong>
-                AOD is responsible for discovering assets, resolving ambiguity
-                across data sources, scoring evidence, and producing a trusted
-                catalog.
-              </p>
-              <p></p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- SECTION 3: HOW TO READ THIS --- */}
+      {/* --- SECTION 2: HOW TO READ THIS --- */}
       <section className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">
@@ -123,6 +94,34 @@ export default function Overview() {
                 <h3 className="font-bold text-purple-400 mb-1">Logic & Action</h3>
                 <p>Business logic and intelligent agents operate on this trusted foundation to answer questions, drive automation, and execute actions.</p>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- SECTION 3: AOD INTRODUCTION ("The Gateway") --- */}
+      <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+        <div className="flex flex-col gap-8 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold tracking-widest uppercase w-fit mx-auto md:mx-0">
+            <ScanLine className="w-3 h-3" />
+            Foundation Layer
+          </div>
+
+          <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">
+            AOD is the gateway to AutonomOS.
+          </h2>
+
+          <div className="mt-4">
+            <div className="space-y-6 text-lg text-slate-400 leading-relaxed font-medium">
+              <p>
+                <strong className="text-white block mb-2 text-xl">
+                  Before AI systems can integrate, automate, or act, they must
+                  know what actually exists.
+                </strong>
+                AOD is responsible for discovering assets, resolving ambiguity
+                across data sources, scoring evidence, and producing a trusted
+                catalog.
+              </p>
             </div>
           </div>
         </div>
@@ -235,6 +234,11 @@ export default function Overview() {
             <Button
               size="lg"
               className="bg-white text-blue-600 hover:bg-slate-100 border-none font-bold text-base px-8 h-14 rounded-full shadow-lg hover:translate-y-[-2px] transition-transform"
+              onClick={() => {
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage({ action: 'startGuidedTour' }, '*');
+                }
+              }}
             >
               <Play className="w-4 h-4 mr-2 fill-current" />
               Run Guided Validation
@@ -244,6 +248,11 @@ export default function Overview() {
               size="lg"
               variant="outline"
               className="bg-blue-600/50 border-white/30 text-white hover:bg-blue-600 hover:text-white hover:border-white font-medium text-base px-8 h-14 rounded-full backdrop-blur-sm"
+              onClick={() => {
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage({ action: 'switchToConsole' }, '*');
+                }
+              }}
             >
               <Search className="w-4 h-4 mr-2" />
               Explore Freely

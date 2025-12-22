@@ -2741,7 +2741,7 @@
                         const r = await fetch('/api/farm/url');
                         const data = await r.json();
                         if (data.farm_url) {
-                            window.location.href = data.farm_url;
+                            window.open(data.farm_url, '_blank');
                         }
                     } catch (e) {
                         console.error('Failed to get Farm URL:', e);
@@ -2756,7 +2756,7 @@
                         const r = await fetch('/api/farm/url');
                         const data = await r.json();
                         if (data.farm_url) {
-                            window.location.href = data.farm_url;
+                            window.open(data.farm_url, '_blank');
                         }
                     } catch (e) {
                         console.error('Failed to get Farm URL:', e);

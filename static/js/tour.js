@@ -13,7 +13,8 @@ const TourManager = (function() {
         5: "Triage simulates decisions AOD can support or automate.\nActions change asset state and downstream eligibility.",
         6: "The catalog is the trusted output of discovery.\nOnly cataloged assets are eligible for integration and automation.",
         6.5: "No assets found in the catalog for this run.\nThis may indicate the run is still processing or no assets were discovered.",
-        8: "The guided run is complete.\nYou may now explore freely or restart the validation."
+        7: "Now let's verify AOD's accuracy.\n\nFarm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
+        8: "The guided validation is complete.\n\nYou've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely."
     };
     
     function trackedTimeout(fn, delay) {
@@ -221,7 +222,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = [0, 3, 4, 5, 6, 8];
+        const phaseOrder = [0, 3, 4, 5, 6, 7, 8];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -255,6 +256,9 @@ const TourManager = (function() {
                 break;
             case 6:
                 executePhase6();
+                break;
+            case 7:
+                executePhase7();
                 break;
             case 8:
                 executePhase8();
@@ -496,6 +500,41 @@ const TourManager = (function() {
                 advance();
             }
         });
+    }
+    
+    async function executePhase7() {
+        if (aborted) return;
+        
+        showOverlay(TOUR_COPY[7], {
+            primaryButtonText: 'Verify in Farm',
+            onContinue: async () => {
+                if (aborted) return;
+                removeOverlay();
+                await navigateToFarmForVerification();
+            }
+        });
+    }
+    
+    async function navigateToFarmForVerification() {
+        if (aborted) return;
+        
+        try {
+            const r = await fetch('/api/farm/url');
+            if (aborted) return;
+            const data = await r.json();
+            if (data.farm_url) {
+                const returnUrl = encodeURIComponent(window.location.origin + '/?guided=1&phase=8');
+                const separator = data.farm_url.includes('?') ? '&' : '?';
+                const farmUrlWithGuided = `${data.farm_url}${separator}guided=1&tour_phase=7&return_url=${returnUrl}`;
+                window.open(farmUrlWithGuided, 'aos_farm');
+                
+                const state = getState();
+                state.phase = 8;
+                setState(state);
+            }
+        } catch (e) {
+            console.error('TourManager: Failed to get Farm URL for verification', e);
+        }
     }
     
     function executePhase8() {

@@ -2389,13 +2389,25 @@ async def run_performance_tests(request: TestRunRequest) -> TestRunResponse:
     test_path = test_map.get(request.testType, 'tests/')
 
     try:
+        # Find project root by looking for pyproject.toml
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = current_dir
+        while project_root != '/':
+            if os.path.exists(os.path.join(project_root, 'pyproject.toml')):
+                break
+            project_root = os.path.dirname(project_root)
+
+        # Fallback to current working directory if pyproject.toml not found
+        if not os.path.exists(os.path.join(project_root, 'pyproject.toml')):
+            project_root = os.getcwd()
+
         # Run pytest with verbose output
         result = subprocess.run(
             f"python -m pytest {test_path} -v -s --tb=short".split(),
             capture_output=True,
             text=True,
             timeout=300,  # 5 minutes for performance tests
-            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            cwd=project_root
         )
 
         output = result.stdout + result.stderr

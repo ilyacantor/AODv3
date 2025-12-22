@@ -2389,16 +2389,37 @@ async def run_performance_tests(request: TestRunRequest) -> TestRunResponse:
     test_path = test_map.get(request.testType, 'tests/')
 
     try:
-        # Find project root by looking for pyproject.toml
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = current_dir
-        while project_root != '/':
-            if os.path.exists(os.path.join(project_root, 'pyproject.toml')):
-                break
-            project_root = os.path.dirname(project_root)
+        # Try multiple possible project root paths (Replit, local dev, etc.)
+        possible_roots = [
+            '/home/user/AODv3',  # Replit development directory
+            '/home/runner/workspace',  # Replit runtime directory
+            os.getcwd(),  # Current working directory
+        ]
 
-        # Fallback to current working directory if pyproject.toml not found
-        if not os.path.exists(os.path.join(project_root, 'pyproject.toml')):
+        # Also try finding by pyproject.toml
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        search_dir = current_dir
+        while search_dir != '/':
+            if os.path.exists(os.path.join(search_dir, 'pyproject.toml')):
+                possible_roots.insert(0, search_dir)
+                break
+            search_dir = os.path.dirname(search_dir)
+
+        # Find first path that has the test files
+        project_root = None
+        for root in possible_roots:
+            if os.path.exists(root) and os.path.exists(os.path.join(root, 'tests')):
+                project_root = root
+                break
+
+        # Fallback to first existing path
+        if not project_root:
+            for root in possible_roots:
+                if os.path.exists(root):
+                    project_root = root
+                    break
+
+        if not project_root:
             project_root = os.getcwd()
 
         # Run pytest with verbose output

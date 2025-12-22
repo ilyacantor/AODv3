@@ -2454,14 +2454,8 @@
                     select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
                     select.disabled = true;
                 } else {
-                    const sorted = [...loadedSnapshots].sort((a, b) => {
-                        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-                        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-                        return dateB - dateA;
-                    });
-                    const mostRecentId = sorted[0]?.snapshot_id || sorted[0]?.id || '';
-                    
-                    select.innerHTML = loadedSnapshots.map(s => {
+                    // Farm returns snapshots with most recent first - preserve that order
+                    select.innerHTML = loadedSnapshots.map((s, i) => {
                         const id = s.snapshot_id || s.id || 'unknown';
                         const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';
                         const profile = (s.enterprise_profile && s.realism_profile) 
@@ -2470,9 +2464,11 @@
                         let label = id;
                         if (profile) label += ` — ${profile}`;
                         if (created) label += ` — ${created}`;
-                        return `<option value="${id}"${id === mostRecentId ? ' selected' : ''}>${label}</option>`;
+                        if (i === 0) label = `★ ${label} (Latest)`;
+                        return `<option value="${id}"${i === 0 ? ' selected' : ''}>${label}</option>`;
                     }).join('');
                     select.disabled = false;
+                    select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
                 }
                 msg.className = 'success-message';
                 msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
@@ -2727,8 +2723,8 @@
                 
                 showOutcome(result.status, result.message);
                 currentRunId = result.run_id; 
-                await loadRuns(); 
-                showDiscoveryCompleteModal(result.run_id);
+                await loadRuns();
+                await selectRun(result.run_id);
             } catch (e) { 
                 showOutcome('upstream_error', e.message);
             } finally { 
@@ -2737,54 +2733,7 @@
             }
         });
         
-        function showDiscoveryCompleteModal(runId) {
-            const modal = document.getElementById('discoveryCompleteModal');
-            modal.dataset.runId = runId;
-            modal.classList.add('active');
-        }
-        
-        function hideDiscoveryCompleteModal() {
-            document.getElementById('discoveryCompleteModal').classList.remove('active');
-        }
-        
         setTimeout(() => {
-            const discoveryReviewBtn = document.getElementById('discoveryReviewBtn');
-            const discoveryFarmBtn = document.getElementById('discoveryFarmBtn');
-            const discoveryCancelBtn = document.getElementById('discoveryCancelBtn');
-            
-            if (discoveryReviewBtn) {
-                discoveryReviewBtn.addEventListener('click', async () => {
-                    const modal = document.getElementById('discoveryCompleteModal');
-                    const runId = modal.dataset.runId;
-                    hideDiscoveryCompleteModal();
-                    if (runId) {
-                        await selectRun(runId);
-                        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-            }
-            
-            if (discoveryFarmBtn) {
-                discoveryFarmBtn.addEventListener('click', async () => {
-                    hideDiscoveryCompleteModal();
-                    try {
-                        const r = await fetch('/api/farm/url');
-                        const data = await r.json();
-                        if (data.farm_url) {
-                            window.open(data.farm_url, '_blank');
-                        }
-                    } catch (e) {
-                        console.error('Failed to get Farm URL:', e);
-                    }
-                });
-            }
-            
-            if (discoveryCancelBtn) {
-                discoveryCancelBtn.addEventListener('click', () => {
-                    hideDiscoveryCompleteModal();
-                });
-            }
-            
             const goToFarmBtn = document.getElementById('goToFarmBtn');
             if (goToFarmBtn) {
                 goToFarmBtn.addEventListener('click', async () => {
@@ -2925,22 +2874,6 @@
                         <li><strong>Click "Fetch & Run Discovery"</strong> to analyze the data</li>
                         <li><strong>Review the results</strong> - explore assets, findings, and drill into the numbers</li>
                     </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="modal-overlay" id="discoveryCompleteModal">
-        <div class="modal" style="max-width: 400px;">
-            <div class="modal-header">
-                <span class="modal-title">Discovery Complete</span>
-            </div>
-            <div class="modal-body" style="text-align: center; padding: 1.5rem;">
-                <p style="color: var(--slate-300); margin-bottom: 1.5rem;">What would you like to do next?</p>
-                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    <button class="btn btn-primary" id="discoveryReviewBtn" style="width: 100%;">Review Results</button>
-                    <button class="btn btn-secondary" id="discoveryFarmBtn" style="width: 100%;">Go to Farm for Grading</button>
-                    <button class="btn" id="discoveryCancelBtn" style="width: 100%; background: var(--slate-700);">Cancel</button>
                 </div>
             </div>
         </div>

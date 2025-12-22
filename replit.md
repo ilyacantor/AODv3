@@ -69,6 +69,7 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Triage Persistence**: Triage actions (acknowledge, assign, defer, ignore) are saved to the database and restored when viewing the Triage tab. Status badges show current state with visual distinction for triaged items.
 *   **Smart Snapshot Selection**: On page load, the tenant with the most recent snapshot is automatically selected, marked with ★ (Latest).
 *   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
+*   **User Guide / Overview Tab**: Investor/partner-friendly overview explaining the pipeline lifecycle (Ingested → Validated → Rejected → Cataloged) with embedded architecture visualization. Maps detailed stages to simplified lifecycle milestones.
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and recipient of reconciliation results.

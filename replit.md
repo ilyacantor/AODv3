@@ -48,7 +48,16 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **LLM Fringe Resolution**: For ambiguous assets, an LLM-based resolver provides classification assistance, persisting facts for reuse and excluding INFRA_TECH assets.
 *   **Risk Case Aggregation**: Security findings include confidence, materiality, and triage_priority fields. P0 = HIGH confidence + HIGH materiality; P1 = HIGH+MED or MED+HIGH; P2 = everything else. UI shows actionable (P0+P1) as headline.
 *   **Tighter Trigger Gates**: IDENTITY_GAP requires strong activity evidence (cloud/finance/multi-plane); FINANCE_GAP requires recurring spend ≥$200/mo; DATA_CONFLICT only fires for security-relevant fields (owner, environment, data_classification, etc.) with deduplication by (asset, field).
-*   **API Structure**: A FastAPI application exposes endpoints for triggering runs, retrieving details, and debug/reconciliation.
+*   **API Structure**: A FastAPI application with modular routing architecture:
+    - `src/aod/api/routes/health.py`: Health check endpoint
+    - `src/aod/api/routes/farm.py`: Farm integration endpoints (tenants, snapshots)
+    - `src/aod/api/routes/runs.py`: Run management endpoints (create, list, details)
+    - `src/aod/api/routes/catalog.py`: Asset catalog endpoints
+    - `src/aod/api/routes/findings.py`: Findings and artifacts endpoints
+    - `src/aod/api/routes/triage.py`: Triage action persistence endpoints
+    - `src/aod/api/routes/debug.py`: Debug and reconciliation endpoints
+    - `src/aod/api/schemas.py`: Shared Pydantic request/response models
+    - `src/aod/api/deps.py`: Shared dependencies and helpers
 *   **Run Status Semantics**: Explicit run statuses (e.g., `UPSTREAM_ERROR`, `COMPLETED_WITH_RESULTS`).
 *   **Database Design**: PostgreSQL persistence for `runs`, `assets`, `findings`, `artifacts`, `triage_actions`, and other related data.
 *   **Triage Persistence**: Triage actions (acknowledge, assign, defer, ignore) are saved to the database and restored when viewing the Triage tab. Status badges show current state with visual distinction for triaged items.

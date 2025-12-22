@@ -799,40 +799,65 @@
                     body: JSON.stringify({ run_id: runId, item_id: itemId, item_type: itemType, action, ...extra })
                 });
                 
-                if (response.ok) {
-                    const result = await response.json();
-                    const key = `${itemType}:${itemId}`;
-                    triageActionsMap[key] = {
-                        item_id: itemId,
-                        item_type: itemType,
-                        action: action,
-                        state: result.state,
-                        owner: extra.owner || null,
-                        defer_until: result.defer_until || null,
-                        ignore_reason: extra.ignore_reason || null
-                    };
-                    
-                    for (const tier of [1, 2, 3]) {
-                        const items = triageTierData[tier];
-                        const idx = items.findIndex(item => {
-                            const id = item.finding_id || item.asset_id || item.id;
-                            return id === itemId && item.itemType === itemType;
-                        });
-                        if (idx !== -1) {
-                            items[idx].triageState = result.state;
-                            items[idx].triageAction = action;
-                            items[idx].triageOwner = extra.owner || null;
-                            items[idx].triageDeferUntil = result.defer_until || null;
-                            items[idx].triageIgnoreReason = extra.ignore_reason || null;
-                            
-                            const container = document.getElementById(`triageTier${tier}Content`);
-                            renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
-                            break;
-                        }
-                    }
+                if (!response.ok) {
+                    console.error('Triage action failed:', response.status, response.statusText);
+                    return;
                 }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.warn('Triage action returned non-JSON response');
+                    return;
+                }
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (parseErr) {
+                    console.error('Failed to parse triage response:', parseErr);
+                    return;
+                }
+                
+                const state = result.state || action;
+                const key = `${itemType}:${itemId}`;
+                triageActionsMap[key] = {
+                    item_id: itemId,
+                    item_type: itemType,
+                    action: action,
+                    state: state,
+                    owner: extra.owner || result.owner || null,
+                    defer_until: result.defer_until || null,
+                    ignore_reason: extra.ignore_reason || null
+                };
+                
+                updateTriageItemInTiers(itemId, itemType, {
+                    triageState: state,
+                    triageAction: action,
+                    triageOwner: extra.owner || result.owner || null,
+                    triageDeferUntil: result.defer_until || null,
+                    triageIgnoreReason: extra.ignore_reason || null
+                });
             } catch (err) {
                 console.error('Triage action failed:', err);
+            }
+        }
+        
+        function updateTriageItemInTiers(itemId, itemType, updates) {
+            for (const tier of [1, 2, 3]) {
+                const items = triageTierData[tier];
+                const idx = items.findIndex(item => {
+                    const id = item.finding_id || item.asset_id || item.id;
+                    const type = item.itemType || (item.finding_id ? 'finding' : 'shadow');
+                    return id === itemId && type === itemType;
+                });
+                if (idx !== -1) {
+                    Object.assign(items[idx], updates);
+                    const container = document.getElementById(`triageTier${tier}Content`);
+                    if (container) {
+                        renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
+                    }
+                    break;
+                }
             }
         }
         

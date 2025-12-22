@@ -1,8 +1,11 @@
 """FarmClient - HTTP client for fetching snapshots from AOS Farm"""
 
 import httpx
+import logging
 from typing import Any
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -53,11 +56,16 @@ class FarmClient:
         if size:
             url += f"&size={size}"
         
+        logger.info("farm.list_snapshots.start", extra={"tenant_id": tenant_id, "limit": limit, "size": size})
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 
                 if response.status_code >= 400:
+                    logger.warning("farm.list_snapshots.http_error", extra={
+                        "tenant_id": tenant_id, "status_code": response.status_code
+                    })
                     return FarmListResult(
                         success=False,
                         error=f"Farm server returned HTTP {response.status_code}: {response.text[:200]}",
@@ -66,6 +74,9 @@ class FarmClient:
                 
                 content_type = response.headers.get("content-type", "")
                 if "json" not in content_type.lower():
+                    logger.warning("farm.list_snapshots.invalid_content_type", extra={
+                        "tenant_id": tenant_id, "content_type": content_type
+                    })
                     return FarmListResult(
                         success=False,
                         error=f"Farm server returned non-JSON content-type: {content_type}",
@@ -75,6 +86,9 @@ class FarmClient:
                 try:
                     data = response.json()
                 except Exception as e:
+                    logger.error("farm.list_snapshots.json_parse_error", extra={
+                        "tenant_id": tenant_id, "error": str(e)
+                    })
                     return FarmListResult(
                         success=False,
                         error=f"Farm server returned invalid JSON: {str(e)}",
@@ -82,25 +96,35 @@ class FarmClient:
                     )
                 
                 if isinstance(data, list):
-                    return FarmListResult(success=True, snapshots=data)
+                    result = FarmListResult(success=True, snapshots=data)
                 elif isinstance(data, dict) and "snapshots" in data:
-                    return FarmListResult(success=True, snapshots=data["snapshots"])
+                    result = FarmListResult(success=True, snapshots=data["snapshots"])
                 else:
-                    return FarmListResult(success=True, snapshots=[data] if isinstance(data, dict) else [])
+                    result = FarmListResult(success=True, snapshots=[data] if isinstance(data, dict) else [])
+                
+                logger.info("farm.list_snapshots.success", extra={
+                    "tenant_id": tenant_id, "snapshot_count": len(result.snapshots or [])
+                })
+                return result
                 
         except httpx.TimeoutException:
+            logger.error("farm.list_snapshots.timeout", extra={"tenant_id": tenant_id, "base_url": self.base_url})
             return FarmListResult(
                 success=False,
                 error=f"Timeout connecting to Farm server at {self.base_url}",
                 error_type="UPSTREAM_ERROR"
             )
         except httpx.ConnectError as e:
+            logger.error("farm.list_snapshots.connection_error", extra={
+                "tenant_id": tenant_id, "base_url": self.base_url, "error": str(e)
+            })
             return FarmListResult(
                 success=False,
                 error=f"Failed to connect to Farm server at {self.base_url}: {str(e)}",
                 error_type="UPSTREAM_ERROR"
             )
         except Exception as e:
+            logger.exception("farm.list_snapshots.unexpected_error", extra={"tenant_id": tenant_id})
             return FarmListResult(
                 success=False,
                 error=f"Unexpected error fetching from Farm: {str(e)}",
@@ -124,11 +148,14 @@ class FarmClient:
         """
         url = f"{self.base_url}/api/snapshots/{snapshot_id}"
         
+        logger.info("farm.fetch_snapshot.start", extra={"snapshot_id": snapshot_id})
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 
                 if response.status_code == 404:
+                    logger.warning("farm.fetch_snapshot.not_found", extra={"snapshot_id": snapshot_id})
                     return FarmFetchResult(
                         success=False,
                         error=f"Snapshot '{snapshot_id}' not found on Farm server (HTTP 404)",
@@ -136,6 +163,9 @@ class FarmClient:
                     )
                 
                 if response.status_code >= 400:
+                    logger.warning("farm.fetch_snapshot.http_error", extra={
+                        "snapshot_id": snapshot_id, "status_code": response.status_code
+                    })
                     return FarmFetchResult(
                         success=False,
                         error=f"Farm server returned HTTP {response.status_code}: {response.text[:200]}",
@@ -144,6 +174,9 @@ class FarmClient:
                 
                 content_type = response.headers.get("content-type", "")
                 if "json" not in content_type.lower():
+                    logger.warning("farm.fetch_snapshot.invalid_content_type", extra={
+                        "snapshot_id": snapshot_id, "content_type": content_type
+                    })
                     return FarmFetchResult(
                         success=False,
                         error=f"Farm server returned non-JSON content-type: {content_type}. Expected application/json.",
@@ -152,6 +185,7 @@ class FarmClient:
                 
                 body = response.text.strip()
                 if not body:
+                    logger.warning("farm.fetch_snapshot.empty_response", extra={"snapshot_id": snapshot_id})
                     return FarmFetchResult(
                         success=False,
                         error="Farm server returned empty response body",
@@ -161,6 +195,9 @@ class FarmClient:
                 try:
                     data = response.json()
                 except Exception as e:
+                    logger.error("farm.fetch_snapshot.json_parse_error", extra={
+                        "snapshot_id": snapshot_id, "error": str(e)
+                    })
                     return FarmFetchResult(
                         success=False,
                         error=f"Farm server returned invalid JSON: {str(e)}",
@@ -168,27 +205,41 @@ class FarmClient:
                     )
                 
                 if not isinstance(data, dict):
+                    logger.warning("farm.fetch_snapshot.invalid_json_type", extra={
+                        "snapshot_id": snapshot_id, "type": type(data).__name__
+                    })
                     return FarmFetchResult(
                         success=False,
                         error=f"Farm server returned non-object JSON (got {type(data).__name__})",
                         error_type="FARM_INVALID_JSON"
                     )
                 
+                tenant_id = data.get("meta", {}).get("tenant_id", "unknown")
+                logger.info("farm.fetch_snapshot.success", extra={
+                    "snapshot_id": snapshot_id, "tenant_id": tenant_id
+                })
                 return FarmFetchResult(success=True, data=data)
                 
         except httpx.TimeoutException:
+            logger.error("farm.fetch_snapshot.timeout", extra={
+                "snapshot_id": snapshot_id, "base_url": self.base_url
+            })
             return FarmFetchResult(
                 success=False,
                 error=f"Timeout connecting to Farm server at {self.base_url}",
                 error_type="FARM_TIMEOUT"
             )
         except httpx.ConnectError as e:
+            logger.error("farm.fetch_snapshot.connection_error", extra={
+                "snapshot_id": snapshot_id, "base_url": self.base_url, "error": str(e)
+            })
             return FarmFetchResult(
                 success=False,
                 error=f"Failed to connect to Farm server at {self.base_url}: {str(e)}",
                 error_type="FARM_CONNECTION_ERROR"
             )
         except Exception as e:
+            logger.exception("farm.fetch_snapshot.unexpected_error", extra={"snapshot_id": snapshot_id})
             return FarmFetchResult(
                 success=False,
                 error=f"Unexpected error fetching from Farm: {str(e)}",

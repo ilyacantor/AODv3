@@ -12,7 +12,10 @@ Tighter Trigger Gates:
 - DATA_CONFLICT: Only security-relevant fields, dedupe by (asset, field)
 """
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from ..models.output_contracts import (
     Asset, Finding, FindingType, FindingCategory, Severity, LensStatus,
@@ -547,9 +550,20 @@ def generate_findings(
     Returns:
         List of findings, deterministically sorted
     """
+    logger.info("findings_engine.generate.start", extra={
+        "tenant_id": tenant_id, "run_id": run_id, "asset_count": len(assets),
+        "correlation_count": len(correlations)
+    })
+    
     findings = []
     
     correlation_by_name = {c.entity.original_name: c for c in correlations}
+    
+    identity_gap_count = 0
+    cmdb_gap_count = 0
+    governance_gap_count = 0
+    duplication_risk_count = 0
+    data_conflict_count = 0
     
     for asset in assets:
         correlation = correlation_by_name.get(asset.name)
@@ -559,21 +573,26 @@ def generate_findings(
         identity_gap = generate_identity_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if identity_gap:
             findings.append(identity_gap)
+            identity_gap_count += 1
         
         cmdb_gap = generate_cmdb_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if cmdb_gap:
             findings.append(cmdb_gap)
+            cmdb_gap_count += 1
         
         governance_gap = generate_governance_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if governance_gap:
             findings.append(governance_gap)
+            governance_gap_count += 1
         
         duplication_risk = generate_duplication_risk_finding(asset, correlation, tenant_id, run_id, snapshot_id)
         if duplication_risk:
             findings.append(duplication_risk)
+            duplication_risk_count += 1
         
         data_conflicts = generate_data_conflict_findings(asset, correlation, tenant_id, run_id, snapshot_id)
         findings.extend(data_conflicts)
+        data_conflict_count += len(data_conflicts)
     
     finance_gaps = generate_finance_gap_findings(
         indexes, assets, correlations, tenant_id, run_id, snapshot_id
@@ -587,6 +606,13 @@ def generate_findings(
         str(f.asset_id) if f.asset_id else "",
         f.explanation
     ))
+    
+    logger.info("findings_engine.generate.complete", extra={
+        "tenant_id": tenant_id, "run_id": run_id, "total_findings": len(findings),
+        "identity_gap": identity_gap_count, "cmdb_gap": cmdb_gap_count,
+        "governance_gap": governance_gap_count, "duplication_risk": duplication_risk_count,
+        "data_conflict": data_conflict_count, "finance_gap": len(finance_gaps)
+    })
     
     return findings
 

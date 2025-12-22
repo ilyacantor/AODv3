@@ -50,7 +50,10 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Tighter Trigger Gates**: IDENTITY_GAP requires strong activity evidence (cloud/finance/multi-plane); FINANCE_GAP requires recurring spend ≥$200/mo; DATA_CONFLICT only fires for security-relevant fields (owner, environment, data_classification, etc.) with deduplication by (asset, field).
 *   **API Structure**: A FastAPI application exposes endpoints for triggering runs, retrieving details, and debug/reconciliation.
 *   **Run Status Semantics**: Explicit run statuses (e.g., `UPSTREAM_ERROR`, `COMPLETED_WITH_RESULTS`).
-*   **Database Design**: PostgreSQL persistence for `runs`, `assets`, `findings`, `artifacts`, and other related data.
+*   **Database Design**: PostgreSQL persistence for `runs`, `assets`, `findings`, `artifacts`, `triage_actions`, and other related data.
+*   **Triage Persistence**: Triage actions (acknowledge, assign, defer, ignore) are saved to the database and restored when viewing the Triage tab. Status badges show current state with visual distinction for triaged items.
+*   **Smart Snapshot Selection**: On page load, the tenant with the most recent snapshot is automatically selected, marked with ★ (Latest).
+*   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and recipient of reconciliation results.

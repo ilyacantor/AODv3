@@ -12,4 +12,4 @@ services:
         sync: false
       - key: AOS_FARM_URL
         sync: false
-    healthCheckPath: /health
+    healthCheckPath: /api/health

@@ -973,7 +973,10 @@ async def get_findings(run_id: str):
                 "severity": f.severity.value,
                 "explanation": f.explanation,
                 "evidence_refs": f.evidence_refs,
-                "created_at": f.created_at.isoformat()
+                "created_at": f.created_at.isoformat(),
+                "triage_priority": f.triage_priority.value if f.triage_priority else "p2",
+                "confidence": f.confidence.value if f.confidence else "med",
+                "materiality": f.materiality.value if f.materiality else "med"
             }
             for f in findings
         ],

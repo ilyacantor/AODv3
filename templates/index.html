@@ -962,7 +962,7 @@
                 const [findingsRes, derivedRes, triageActionsRes] = await Promise.all([
                     fetch(`/api/findings?run_id=${runId}`),
                     fetch(`/api/runs/${runId}/derived`),
-                    fetch(`/api/triage/actions?run_id=${runId}`)
+                    fetch(`/api/triage/actions/${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();

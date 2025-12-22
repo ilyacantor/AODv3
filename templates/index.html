@@ -1400,12 +1400,18 @@
         }
 
         function initTestTab() {
+            const decisionTraceSelect = document.getElementById('decisionTraceRunId');
+            const runDecisionTraceBtn = document.getElementById('runDecisionTrace');
+            
+            if (!decisionTraceSelect || !runDecisionTraceBtn) {
+                return;
+            }
+            
             async function loadDecisionTraceRuns() {
-                const select = document.getElementById('decisionTraceRunId');
                 try {
                     const response = await fetch('/api/runs');
                     const runs = await response.json();
-                    select.innerHTML = '<option value="">Select a run...</option>';
+                    decisionTraceSelect.innerHTML = '<option value="">Select a run...</option>';
                     runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS')
                         .forEach(run => {
                             const opt = document.createElement('option');
@@ -1414,7 +1420,7 @@
                             const dateStr = run.started_at || run.created_at;
                             const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
                             opt.textContent = `${tenant} - ${date}`;
-                            select.appendChild(opt);
+                            decisionTraceSelect.appendChild(opt);
                         });
                 } catch (err) {
                     console.error('Failed to load runs:', err);
@@ -1437,10 +1443,11 @@
                 });
             });
             
-            document.getElementById('runDecisionTrace').addEventListener('click', loadDecisionTraces);
-            document.getElementById('decisionTraceRunId').addEventListener('change', loadDecisionTraces);
+            runDecisionTraceBtn.addEventListener('click', loadDecisionTraces);
+            decisionTraceSelect.addEventListener('change', loadDecisionTraces);
             
-            document.getElementById('exportMismatches').addEventListener('click', exportMismatches);
+            const exportBtn = document.getElementById('exportMismatches');
+            if (exportBtn) exportBtn.addEventListener('click', exportMismatches);
             
             function exportMismatches() {
                 if (!decisionTracesCache) {

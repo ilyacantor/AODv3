@@ -74,8 +74,8 @@ export default function Overview() {
         </div>
 
         {/* Fixed Side Panel */}
-        <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
-          <div className="mb-8">
+        <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)] overflow-y-auto">
+          <div className="mb-8 shrink-0">
             <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
               <BookOpen className="w-5 h-5 text-purple-400" />
               How to Read This
@@ -83,7 +83,7 @@ export default function Overview() {
             <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
           </div>
 
-          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
+          <div className="space-y-6 text-m text-slate-400 leading-relaxed flex-1">
             <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
 
             <div className="space-y-4">

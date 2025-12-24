@@ -79,6 +79,37 @@ const TourManager = (function() {
         pendingTimeouts = [];
     }
     
+    function waitForElement(selector, timeout = 5000) {
+        return new Promise((resolve) => {
+            const el = document.querySelector(selector);
+            if (el) {
+                resolve(el);
+                return;
+            }
+            
+            const startTime = Date.now();
+            const checkInterval = setInterval(() => {
+                if (aborted) {
+                    clearInterval(checkInterval);
+                    resolve(null);
+                    return;
+                }
+                
+                const el = document.querySelector(selector);
+                if (el) {
+                    clearInterval(checkInterval);
+                    resolve(el);
+                    return;
+                }
+                
+                if (Date.now() - startTime > timeout) {
+                    clearInterval(checkInterval);
+                    resolve(null);
+                }
+            }, 100);
+        });
+    }
+    
     function getState() {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
@@ -160,13 +191,13 @@ const TourManager = (function() {
         }
     }
     
-    function showOverlay(phaseKey, options = {}) {
+    async function showOverlay(phaseKey, options = {}) {
         removeOverlay();
         
         const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'Guided Validation', content: String(phaseKey), step: 1 };
         const title = options.title || phaseConfig.title;
         const content = options.content || phaseConfig.content;
-        const currentStep = options.step || phaseConfig.step;
+        const currentStep = Number(options.step || phaseConfig.step) || 1;
         const isLastStep = currentStep === TOTAL_STEPS;
         
         const scrim = document.createElement('div');
@@ -179,9 +210,11 @@ const TourManager = (function() {
         
         let highlightEl = null;
         if (options.highlightElement) {
-            highlightEl = typeof options.highlightElement === 'string' 
-                ? document.querySelector(options.highlightElement) 
-                : options.highlightElement;
+            if (typeof options.highlightElement === 'string') {
+                highlightEl = await waitForElement(options.highlightElement, 3000);
+            } else {
+                highlightEl = options.highlightElement;
+            }
             if (highlightEl) {
                 highlightEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
@@ -302,11 +335,20 @@ const TourManager = (function() {
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
+            
             const rect = element.getBoundingClientRect();
-            initialX = rect.left;
-            initialY = rect.top;
+            const computedWidth = rect.width;
+            
+            element.style.width = computedWidth + 'px';
+            element.style.right = 'auto';
+            element.style.bottom = 'auto';
             element.style.transform = 'none';
             element.style.transition = 'none';
+            element.style.left = rect.left + 'px';
+            element.style.top = rect.top + 'px';
+            
+            initialX = rect.left;
+            initialY = rect.top;
         });
         
         document.addEventListener('mousemove', (e) => {
@@ -345,7 +387,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = [0, 3, 5, 6, 7, 8];
+        const phaseOrder = [0, 3, 4, 5, 6, 7, 8];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -391,8 +433,8 @@ const TourManager = (function() {
         }
     }
     
-    function executePhase0() {
-        showOverlay(0, {
+    async function executePhase0() {
+        await showOverlay(0, {
             primaryButtonText: 'Run Guided Validation',
             showBack: false,
             onContinue: () => {
@@ -433,7 +475,7 @@ const TourManager = (function() {
         await trackedDelay(200);
         if (aborted) return;
         
-        showOverlay(3, {
+        await showOverlay(3, {
             highlightElement: '#fetchFromFarm',
             position: { top: '60%', left: '50%', transform: 'translateX(-50%)' },
             primaryButton: false,
@@ -471,7 +513,7 @@ const TourManager = (function() {
             await trackedDelay(500);
             if (aborted) return;
             
-            showPhase3bResultsDialog();
+            await showPhase3bResultsDialog();
         };
         
         fetchBtn.addEventListener('click', clickHandler);
@@ -514,8 +556,25 @@ const TourManager = (function() {
         makeDraggable(overlay);
     }
     
-    function showPhase3bResultsDialog() {
+    async function showPhase3bResultsDialog() {
         if (aborted) return;
+        
+        let lastIngested = -1;
+        let stableCount = 0;
+        const maxWaitCycles = 30;
+        
+        for (let i = 0; i < maxWaitCycles && stableCount < 3; i++) {
+            await trackedDelay(200);
+            if (aborted) return;
+            
+            const currentIngested = getStatCount('observations') || 0;
+            if (currentIngested === lastIngested && currentIngested > 0) {
+                stableCount++;
+            } else {
+                stableCount = 0;
+                lastIngested = currentIngested;
+            }
+        }
         
         const ingested = getStatCount('observations') || 0;
         const validated = getStatCount('validated') || 0;
@@ -526,7 +585,7 @@ const TourManager = (function() {
         
         const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
         
-        showOverlay('3b', {
+        await showOverlay('3b', {
             title: 'Discovery Results',
             content: message,
             step: 3,
@@ -597,7 +656,7 @@ const TourManager = (function() {
         const shadowCard = document.querySelector('.stat-card[data-drill-type="shadow"]');
         
         if (shadowCount === 0) {
-            showOverlay(4.5, {
+            await showOverlay(4.5, {
                 highlightElement: shadowCard,
                 primaryButtonText: 'Continue',
                 onContinue: () => {
@@ -609,7 +668,7 @@ const TourManager = (function() {
             return;
         }
         
-        showOverlay(4, {
+        await showOverlay(4, {
             highlightElement: shadowCard,
             onContinue: async () => {
                 if (aborted) return;
@@ -641,7 +700,7 @@ const TourManager = (function() {
             if (aborted) return;
         }
         
-        showOverlay(5, {
+        await showOverlay(5, {
             highlightElement: '#triageSections',
             position: { top: '200px', left: '50%' }
         });
@@ -660,7 +719,7 @@ const TourManager = (function() {
         const catalogCard = document.querySelector('.stat-card[data-drill-type="assets"]');
         
         if (assetCount === 0) {
-            showOverlay(6.5, {
+            await showOverlay(6.5, {
                 primaryButtonText: 'Continue',
                 onContinue: () => {
                     if (aborted) return;
@@ -671,7 +730,7 @@ const TourManager = (function() {
             return;
         }
         
-        showOverlay(6, {
+        await showOverlay(6, {
             highlightElement: catalogCard,
             onContinue: async () => {
                 if (aborted) return;
@@ -689,7 +748,7 @@ const TourManager = (function() {
     async function executePhase7() {
         if (aborted) return;
         
-        showOverlay(7, {
+        await showOverlay(7, {
             primaryButtonText: 'Verify in Farm',
             onContinue: async () => {
                 if (aborted) return;
@@ -721,10 +780,10 @@ const TourManager = (function() {
         }
     }
     
-    function executePhase8() {
+    async function executePhase8() {
         if (aborted) return;
         
-        showOverlay(8, {
+        await showOverlay(8, {
             primaryButtonText: 'Finish',
             onContinue: () => {
                 exit();

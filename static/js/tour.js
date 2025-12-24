@@ -222,7 +222,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = [0, 3, 4, 5, 6, 7, 8];
+        const phaseOrder = [0, 3, 5, 6, 7, 8];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -331,6 +331,8 @@ const TourManager = (function() {
             await trackedDelay(500);
             if (aborted) return;
             
+            showProcessingDialog();
+            
             const snapshotSelect = document.getElementById('snapshotSelect');
             await waitForRunCompletion(snapshotSelect ? snapshotSelect.value : null);
             
@@ -350,15 +352,46 @@ const TourManager = (function() {
         fetchBtn.addEventListener('click', clickHandler);
     }
     
+    function showProcessingDialog() {
+        removeOverlay();
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'tour-overlay tour-overlay-bottom';
+        overlay.id = 'tour-processing-overlay';
+        overlay.innerHTML = `
+            <p style="white-space: pre-line; margin: 0;">Discovery in progress ...</p>
+        `;
+        document.body.appendChild(overlay);
+    }
+    
     function showPhase3bResultsDialog() {
         if (aborted) return;
         
         removeOverlay();
         
+        const ingested = getStatCount('observations') || 0;
+        const validated = getStatCount('validated') || 0;
+        const rejected = getStatCount('rejected') || 0;
+        const cataloged = getStatCount('assets') || 0;
+        const shadow = getStatCount('shadow') || 0;
+        const zombie = getStatCount('zombie') || 0;
+        
+        let message = `Discovery complete!\n\nAOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged} assets.`;
+        
+        if (shadow > 0 || zombie > 0) {
+            message += `\n\nIn addition, AOD discovered ${shadow} Shadow assets`;
+            if (zombie > 0) {
+                message += `, and identified savings opportunities by discovering ${zombie} Zombie assets`;
+            }
+            message += '.';
+        }
+        
+        message += '\n\nFeel free to click through to the details.';
+        
         const overlay = document.createElement('div');
         overlay.className = 'tour-overlay tour-overlay-bottom';
         overlay.innerHTML = `
-            <p style="white-space: pre-line; margin: 0 0 16px 0;">${TOUR_COPY['3b']}</p>
+            <p style="white-space: pre-line; margin: 0 0 16px 0;">${message}</p>
             <div class="tour-buttons">
                 <button class="tour-btn tour-btn-secondary tour-exit-btn">Exit Tour</button>
                 <button class="tour-btn tour-btn-primary tour-continue-btn">Continue</button>

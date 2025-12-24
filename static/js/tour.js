@@ -579,11 +579,11 @@ const TourManager = (function() {
                 const runData = await runResp.json();
                 const derivedData = await derivedResp.json();
                 
-                if (runData) {
-                    ingested = runData.observations_ingested || 0;
-                    validated = runData.observations_validated || 0;
-                    rejected = runData.observations_rejected || 0;
-                    cataloged = runData.assets_cataloged || 0;
+                if (runData && runData.counts) {
+                    ingested = runData.counts.observations_in || 0;
+                    validated = runData.counts.candidates_out || 0;
+                    rejected = runData.counts.rejected || 0;
+                    cataloged = runData.counts.assets_admitted || 0;
                 }
                 if (derivedData) {
                     shadow = derivedData.shadow_count || 0;

@@ -20,34 +20,44 @@ const TourManager = (function() {
             content: "",
             step: 3
         },
+        4: { 
+            title: "Inspect Shadow Assets",
+            content: "Shadow assets are systems that exist in your environment but lack proper governance. Click on the Shadow card to see which assets need attention.",
+            step: 4
+        },
+        4.5: { 
+            title: "Shadow Assets",
+            content: "No shadow assets were discovered in this run. This is a good sign - it means all discovered assets have proper governance. Let's continue to the next step.",
+            step: 4
+        },
         5: { 
             title: "Triage Findings",
             content: "Current configuration is three tiers - action recommended, needs judgment, and informational. The system is now configured as an information plane. It can also be configured as a control plane. Feel free to click on Actions to dispose of the issues.",
-            step: 4
+            step: 5
         },
         6: { 
             title: "Asset Catalog",
             content: "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously.",
-            step: 5
+            step: 6
         },
         6.5: { 
             title: "Asset Catalog",
             content: "No assets found in the catalog for this run. This may indicate the run is still processing or no assets were discovered.",
-            step: 5
+            step: 6
         },
         7: { 
             title: "Verify Accuracy",
             content: "Now let's verify AOD's accuracy. Farm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
-            step: 6
+            step: 7
         },
         8: { 
             title: "Tour Complete",
             content: "The guided validation is complete. You've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely.",
-            step: 7
+            step: 8
         }
     };
     
-    const TOTAL_STEPS = 7;
+    const TOTAL_STEPS = 8;
     
     function trackedTimeout(fn, delay) {
         const id = setTimeout(() => {
@@ -576,7 +586,42 @@ const TourManager = (function() {
     
     async function executePhase4() {
         if (aborted) return;
-        advance();
+        
+        const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
+        if (consoleTab) consoleTab.click();
+        
+        await trackedDelay(300);
+        if (aborted) return;
+        
+        const shadowCount = getStatCount('shadow');
+        const shadowCard = document.querySelector('.stat-card[data-drill-type="shadow"]');
+        
+        if (shadowCount === 0) {
+            showOverlay(4.5, {
+                highlightElement: shadowCard,
+                primaryButtonText: 'Continue',
+                onContinue: () => {
+                    if (aborted) return;
+                    removeOverlay();
+                    advance();
+                }
+            });
+            return;
+        }
+        
+        showOverlay(4, {
+            highlightElement: shadowCard,
+            onContinue: async () => {
+                if (aborted) return;
+                removeOverlay();
+                if (shadowCard) {
+                    shadowCard.click();
+                    await trackedDelay(500);
+                }
+                if (aborted) return;
+                advance();
+            }
+        });
     }
     
     async function executePhase5() {

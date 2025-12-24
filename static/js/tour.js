@@ -367,8 +367,6 @@ const TourManager = (function() {
     function showPhase3bResultsDialog() {
         if (aborted) return;
         
-        removeOverlay();
-        
         const ingested = getStatCount('observations') || 0;
         const validated = getStatCount('validated') || 0;
         const rejected = getStatCount('rejected') || 0;
@@ -378,25 +376,8 @@ const TourManager = (function() {
         
         const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
         
-        const overlay = document.createElement('div');
-        overlay.className = 'tour-overlay tour-overlay-bottom';
-        overlay.innerHTML = `
-            <p style="white-space: pre-line; margin: 0 0 16px 0;">${message}</p>
-            <div class="tour-buttons">
-                <button class="tour-btn tour-btn-secondary tour-exit-btn">Exit Tour</button>
-                <button class="tour-btn tour-btn-primary tour-continue-btn">Continue</button>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-        
-        overlay.querySelector('.tour-exit-btn').addEventListener('click', () => {
-            exit();
-        });
-        
-        overlay.querySelector('.tour-continue-btn').addEventListener('click', () => {
-            if (aborted) return;
-            removeOverlay();
-            advance();
+        showOverlay(message, {
+            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' }
         });
     }
     
@@ -536,14 +517,18 @@ const TourManager = (function() {
             return;
         }
         
-        if (catalogCard) {
-            catalogCard.click();
-            await trackedDelay(500);
-        }
-        if (aborted) return;
-        
         showOverlay(TOUR_COPY[6], {
-            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)', top: 'auto' }
+            highlightElement: catalogCard,
+            onContinue: async () => {
+                if (aborted) return;
+                removeOverlay();
+                if (catalogCard) {
+                    catalogCard.click();
+                    await trackedDelay(500);
+                }
+                if (aborted) return;
+                advance();
+            }
         });
     }
     

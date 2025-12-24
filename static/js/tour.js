@@ -359,7 +359,7 @@ const TourManager = (function() {
         overlay.className = 'tour-overlay tour-overlay-bottom';
         overlay.id = 'tour-processing-overlay';
         overlay.innerHTML = `
-            <p style="white-space: pre-line; margin: 0;">Discovery in progress ...</p>
+            <p style="white-space: pre-line; margin: 0;">Discovery in process ...</p>
         `;
         document.body.appendChild(overlay);
     }
@@ -376,17 +376,7 @@ const TourManager = (function() {
         const shadow = getStatCount('shadow') || 0;
         const zombie = getStatCount('zombie') || 0;
         
-        let message = `Discovery complete!\n\nAOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged} assets.`;
-        
-        if (shadow > 0 || zombie > 0) {
-            message += `\n\nIn addition, AOD discovered ${shadow} Shadow assets`;
-            if (zombie > 0) {
-                message += `, and identified savings opportunities by discovering ${zombie} Zombie assets`;
-            }
-            message += '.';
-        }
-        
-        message += '\n\nFeel free to click through to the details.';
+        const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
         
         const overlay = document.createElement('div');
         overlay.className = 'tour-overlay tour-overlay-bottom';
@@ -536,7 +526,6 @@ const TourManager = (function() {
         
         if (assetCount === 0) {
             showOverlay(TOUR_COPY[6.5], {
-                highlightElement: catalogCard,
                 primaryButtonText: 'Continue',
                 onContinue: () => {
                     if (aborted) return;
@@ -547,18 +536,14 @@ const TourManager = (function() {
             return;
         }
         
+        if (catalogCard) {
+            catalogCard.click();
+            await trackedDelay(500);
+        }
+        if (aborted) return;
+        
         showOverlay(TOUR_COPY[6], {
-            highlightElement: catalogCard,
-            onContinue: async () => {
-                if (aborted) return;
-                removeOverlay();
-                if (catalogCard) {
-                    catalogCard.click();
-                    await trackedDelay(500);
-                }
-                if (aborted) return;
-                advance();
-            }
+            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)', top: 'auto' }
         });
     }
     

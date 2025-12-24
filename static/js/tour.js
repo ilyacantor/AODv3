@@ -4,18 +4,50 @@ const TourManager = (function() {
     let aborted = false;
     let pendingTimeouts = [];
     
-    const TOUR_COPY = {
-        0: "AOD discovers what actually exists in an enterprise environment.\nThis run shows how discovery is executed, inspected, and verified.",
-        3: "Welcome back to AOD.\n\nThe tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below.",
-        '3b': "The snapshot has been scanned. These are the results.\n\nClick through to any KPI to see the details.",
-        4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
-        4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
-        5: "Current configuration is three tiers - action recommended, needs judgment, and informational.\n\nThe system is now configured as an information plane. It can also be configured as a control plane.\n\nFeel free to click on Actions to dispose of the issues.",
-        6: "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously.",
-        6.5: "No assets found in the catalog for this run.\nThis may indicate the run is still processing or no assets were discovered.",
-        7: "Now let's verify AOD's accuracy.\n\nFarm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
-        8: "The guided validation is complete.\n\nYou've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely."
+    const TOUR_PHASES = {
+        0: { 
+            title: "Welcome to AOD",
+            content: "AOD discovers what actually exists in an enterprise environment. This run shows how discovery is executed, inspected, and verified.",
+            step: 1
+        },
+        3: { 
+            title: "Run Discovery",
+            content: "Welcome back to AOD. The tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below.",
+            step: 2
+        },
+        '3b': { 
+            title: "Discovery Results",
+            content: "",
+            step: 3
+        },
+        5: { 
+            title: "Triage Findings",
+            content: "Current configuration is three tiers - action recommended, needs judgment, and informational. The system is now configured as an information plane. It can also be configured as a control plane. Feel free to click on Actions to dispose of the issues.",
+            step: 4
+        },
+        6: { 
+            title: "Asset Catalog",
+            content: "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously.",
+            step: 5
+        },
+        6.5: { 
+            title: "Asset Catalog",
+            content: "No assets found in the catalog for this run. This may indicate the run is still processing or no assets were discovered.",
+            step: 5
+        },
+        7: { 
+            title: "Verify Accuracy",
+            content: "Now let's verify AOD's accuracy. Farm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
+            step: 6
+        },
+        8: { 
+            title: "Tour Complete",
+            content: "The guided validation is complete. You've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely.",
+            step: 7
+        }
     };
+    
+    const TOTAL_STEPS = 7;
     
     function trackedTimeout(fn, delay) {
         const id = setTimeout(() => {
@@ -118,8 +150,14 @@ const TourManager = (function() {
         }
     }
     
-    function showOverlay(copy, options = {}) {
+    function showOverlay(phaseKey, options = {}) {
         removeOverlay();
+        
+        const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'Guided Validation', content: String(phaseKey), step: 1 };
+        const title = options.title || phaseConfig.title;
+        const content = options.content || phaseConfig.content;
+        const currentStep = options.step || phaseConfig.step;
+        const isLastStep = currentStep === TOTAL_STEPS;
         
         const scrim = document.createElement('div');
         scrim.className = 'tour-scrim';
@@ -127,6 +165,7 @@ const TourManager = (function() {
         
         const overlay = document.createElement('div');
         overlay.className = 'tour-overlay';
+        overlay.id = 'tour-dialog';
         
         let highlightEl = null;
         if (options.highlightElement) {
@@ -144,61 +183,135 @@ const TourManager = (function() {
             overlay.style.left = options.position.left || 'auto';
             overlay.style.right = options.position.right || 'auto';
             overlay.style.bottom = options.position.bottom || 'auto';
-            overlay.style.transform = 'none';
-        } else if (highlightEl) {
-            document.body.appendChild(overlay);
+            overlay.style.transform = options.position.transform || 'none';
+        }
+        
+        overlay.innerHTML = `
+            <div class="tour-overlay-header">
+                <div class="tour-header-left">
+                    <div class="tour-pulse-dot"></div>
+                    <span class="tour-overlay-title">Guided Validation</span>
+                </div>
+                <button class="tour-close-btn" aria-label="Close tour">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tour-overlay-content">
+                <div class="tour-step-counter">Step ${currentStep} of ${TOTAL_STEPS}</div>
+                <h3 class="tour-content-title">${title}</h3>
+                <div class="tour-content-body">
+                    ${content.split('\n').map(line => `<p>${line}</p>`).join('')}
+                </div>
+            </div>
+            <div class="tour-overlay-footer">
+                <div class="tour-footer-left"></div>
+                <div class="tour-footer-right">
+                    ${currentStep > 1 && options.showBack !== false ? `
+                        <button class="tour-btn-back" ${currentStep <= 1 ? 'disabled' : ''}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M15 18l-6-6 6-6"/>
+                            </svg>
+                            Back
+                        </button>
+                    ` : ''}
+                    ${options.primaryButton !== false ? (isLastStep ? `
+                        <button class="tour-btn-finish">${options.primaryButtonText || 'Finish'}</button>
+                    ` : `
+                        <button class="tour-btn-next">
+                            ${options.primaryButtonText || 'Next'}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6-6-6"/>
+                            </svg>
+                        </button>
+                    `) : ''}
+                </div>
+            </div>
+            <div class="tour-progress-bar">
+                <div class="tour-progress-fill" style="width: ${(currentStep / TOTAL_STEPS) * 100}%"></div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        if (!options.position && highlightEl) {
             positionOverlayNearElement(overlay, highlightEl);
         }
         
-        const header = document.createElement('div');
-        header.className = 'tour-overlay-header';
+        overlay.querySelector('.tour-close-btn').addEventListener('click', () => exit());
         
-        const title = document.createElement('span');
-        title.className = 'tour-overlay-title';
-        title.textContent = 'Guided Validation';
-        header.appendChild(title);
+        const nextBtn = overlay.querySelector('.tour-btn-next');
+        const finishBtn = overlay.querySelector('.tour-btn-finish');
+        const backBtn = overlay.querySelector('.tour-btn-back');
         
-        const exitBtn = document.createElement('button');
-        exitBtn.className = 'tour-exit-btn';
-        exitBtn.textContent = 'Exit Tour';
-        exitBtn.addEventListener('click', () => exit());
-        header.appendChild(exitBtn);
-        
-        overlay.appendChild(header);
-        
-        const copyDiv = document.createElement('div');
-        copyDiv.className = 'tour-overlay-copy';
-        copyDiv.innerHTML = copy.split('\n').map(line => `<p>${line}</p>`).join('');
-        overlay.appendChild(copyDiv);
-        
-        const buttonsDiv = document.createElement('div');
-        buttonsDiv.className = 'tour-overlay-buttons';
-        
-        if (options.primaryButton !== false) {
-            const continueBtn = document.createElement('button');
-            continueBtn.className = 'tour-continue-btn';
-            continueBtn.textContent = options.primaryButtonText || 'Continue';
-            continueBtn.addEventListener('click', () => {
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
                 if (options.onContinue) {
                     options.onContinue();
                 } else {
                     advance();
                 }
             });
-            buttonsDiv.appendChild(continueBtn);
         }
         
-        overlay.appendChild(buttonsDiv);
-        
-        if (!options.position && !highlightEl) {
-            document.body.appendChild(overlay);
-        } else if (options.position) {
-            document.body.appendChild(overlay);
+        if (finishBtn) {
+            finishBtn.addEventListener('click', () => {
+                if (options.onContinue) {
+                    options.onContinue();
+                } else {
+                    exit();
+                }
+            });
         }
+        
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                if (options.onBack) {
+                    options.onBack();
+                }
+            });
+        }
+        
+        makeDraggable(overlay);
         
         if (highlightEl) {
             highlightEl.classList.add('tour-highlight');
         }
+    }
+    
+    function makeDraggable(element) {
+        const header = element.querySelector('.tour-overlay-header');
+        if (!header) return;
+        
+        let isDragging = false;
+        let startX, startY, initialX, initialY;
+        
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button')) return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = element.getBoundingClientRect();
+            initialX = rect.left;
+            initialY = rect.top;
+            element.style.transform = 'none';
+            element.style.transition = 'none';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            element.style.left = (initialX + dx) + 'px';
+            element.style.top = (initialY + dy) + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            element.style.transition = '';
+        });
     }
     
     function start() {
@@ -269,8 +382,9 @@ const TourManager = (function() {
     }
     
     function executePhase0() {
-        showOverlay(TOUR_COPY[0], {
+        showOverlay(0, {
             primaryButtonText: 'Run Guided Validation',
+            showBack: false,
             onContinue: () => {
                 navigateToFarmWithGuided();
             }
@@ -309,10 +423,11 @@ const TourManager = (function() {
         await trackedDelay(200);
         if (aborted) return;
         
-        showOverlay(TOUR_COPY[3], {
+        showOverlay(3, {
             highlightElement: '#fetchFromFarm',
             position: { top: '60%', left: '50%', transform: 'translateX(-50%)' },
-            primaryButton: false
+            primaryButton: false,
+            showBack: false
         });
         
         waitForUserRunAndContinue();
@@ -355,13 +470,38 @@ const TourManager = (function() {
     function showProcessingDialog() {
         removeOverlay();
         
+        const scrim = document.createElement('div');
+        scrim.className = 'tour-scrim';
+        document.body.appendChild(scrim);
+        
         const overlay = document.createElement('div');
-        overlay.className = 'tour-overlay tour-overlay-bottom';
+        overlay.className = 'tour-overlay';
         overlay.id = 'tour-processing-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.bottom = '20px';
+        overlay.style.left = '50%';
+        overlay.style.top = 'auto';
+        overlay.style.transform = 'translateX(-50%)';
         overlay.innerHTML = `
-            <p style="white-space: pre-line; margin: 0;">Discovery in process ...</p>
+            <div class="tour-overlay-header">
+                <div class="tour-header-left">
+                    <div class="tour-pulse-dot"></div>
+                    <span class="tour-overlay-title">Guided Validation</span>
+                </div>
+            </div>
+            <div class="tour-overlay-content">
+                <div class="tour-step-counter">Step 3 of ${TOTAL_STEPS}</div>
+                <h3 class="tour-content-title">Running Discovery</h3>
+                <div class="tour-content-body">
+                    <p>Discovery in process ...</p>
+                </div>
+            </div>
+            <div class="tour-progress-bar">
+                <div class="tour-progress-fill" style="width: ${(3 / TOTAL_STEPS) * 100}%"></div>
+            </div>
         `;
         document.body.appendChild(overlay);
+        makeDraggable(overlay);
     }
     
     function showPhase3bResultsDialog() {
@@ -376,8 +516,12 @@ const TourManager = (function() {
         
         const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
         
-        showOverlay(message, {
-            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' }
+        showOverlay('3b', {
+            title: 'Discovery Results',
+            content: message,
+            step: 3,
+            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
+            showBack: false
         });
     }
     
@@ -432,42 +576,7 @@ const TourManager = (function() {
     
     async function executePhase4() {
         if (aborted) return;
-        
-        const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
-        if (consoleTab) consoleTab.click();
-        
-        await trackedDelay(300);
-        if (aborted) return;
-        
-        const shadowCount = getStatCount('shadow');
-        const shadowCard = document.querySelector('.stat-card[data-drill-type="shadow"]');
-        
-        if (shadowCount === 0) {
-            showOverlay(TOUR_COPY[4.5], {
-                highlightElement: shadowCard,
-                primaryButtonText: 'Continue',
-                onContinue: () => {
-                    if (aborted) return;
-                    removeOverlay();
-                    advance();
-                }
-            });
-            return;
-        }
-        
-        showOverlay(TOUR_COPY[4], {
-            highlightElement: shadowCard,
-            onContinue: async () => {
-                if (aborted) return;
-                removeOverlay();
-                if (shadowCard) {
-                    shadowCard.click();
-                    await trackedDelay(500);
-                }
-                if (aborted) return;
-                advance();
-            }
-        });
+        advance();
     }
     
     async function executePhase5() {
@@ -487,7 +596,7 @@ const TourManager = (function() {
             if (aborted) return;
         }
         
-        showOverlay(TOUR_COPY[5], {
+        showOverlay(5, {
             highlightElement: '#triageSections',
             position: { top: '200px', left: '50%' }
         });
@@ -506,7 +615,7 @@ const TourManager = (function() {
         const catalogCard = document.querySelector('.stat-card[data-drill-type="assets"]');
         
         if (assetCount === 0) {
-            showOverlay(TOUR_COPY[6.5], {
+            showOverlay(6.5, {
                 primaryButtonText: 'Continue',
                 onContinue: () => {
                     if (aborted) return;
@@ -517,7 +626,7 @@ const TourManager = (function() {
             return;
         }
         
-        showOverlay(TOUR_COPY[6], {
+        showOverlay(6, {
             highlightElement: catalogCard,
             onContinue: async () => {
                 if (aborted) return;
@@ -535,7 +644,7 @@ const TourManager = (function() {
     async function executePhase7() {
         if (aborted) return;
         
-        showOverlay(TOUR_COPY[7], {
+        showOverlay(7, {
             primaryButtonText: 'Verify in Farm',
             onContinue: async () => {
                 if (aborted) return;
@@ -570,7 +679,7 @@ const TourManager = (function() {
     function executePhase8() {
         if (aborted) return;
         
-        showOverlay(TOUR_COPY[8], {
+        showOverlay(8, {
             primaryButtonText: 'Finish',
             onContinue: () => {
                 exit();

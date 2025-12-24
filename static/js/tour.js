@@ -11,7 +11,7 @@ const TourManager = (function() {
         4: "Shadow assets are systems in active use without governance coverage.\nClassification is based on evidence patterns, not hardcoded rules.",
         4.5: "No shadow assets found in this run.\nThis is a good sign - all discovered assets are governed.",
         5: "Current configuration is three tiers - action recommended, needs judgment, and informational.\n\nThe system is now configured as an information plane. It can also be configured as a control plane.\n\nFeel free to click on Actions to dispose of the issues.",
-        6: "The catalog is the trusted output of discovery.\n\nClick through to explore assets, then click View Full Catalog to see all cataloged assets including your triage actions.",
+        6: "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously.",
         6.5: "No assets found in the catalog for this run.\nThis may indicate the run is still processing or no assets were discovered.",
         7: "Now let's verify AOD's accuracy.\n\nFarm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
         8: "The guided validation is complete.\n\nYou've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely."

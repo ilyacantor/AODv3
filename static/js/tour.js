@@ -32,7 +32,7 @@ const TourManager = (function() {
         },
         5: { 
             title: "Triage Findings",
-            content: "Current configuration is three tiers - action recommended, needs judgment, and informational. The system is now configured as an information plane. It can also be configured as a control plane. Feel free to click on Actions to dispose of the issues.",
+            content: "Current configuration creates a \"Triage queue\" for the user to review and dispose of issues categorized in tiers. This workflow is customizable and can be configured as a control pane rather than an informational pane.\n\nClick through on any actions or item for details.",
             step: 5
         },
         6: { 
@@ -559,29 +559,46 @@ const TourManager = (function() {
     async function showPhase3bResultsDialog() {
         if (aborted) return;
         
-        let lastIngested = -1;
-        let stableCount = 0;
-        const maxWaitCycles = 30;
+        let ingested = 0, validated = 0, rejected = 0, cataloged = 0, shadow = 0, zombie = 0;
         
-        for (let i = 0; i < maxWaitCycles && stableCount < 3; i++) {
-            await trackedDelay(200);
+        try {
+            const runsResp = await fetch('/api/runs');
             if (aborted) return;
+            const runs = await runsResp.json();
             
-            const currentIngested = getStatCount('observations') || 0;
-            if (currentIngested === lastIngested && currentIngested > 0) {
-                stableCount++;
-            } else {
-                stableCount = 0;
-                lastIngested = currentIngested;
+            if (runs && runs.length > 0) {
+                const latestRun = runs[0];
+                const runId = latestRun.run_id;
+                
+                const [runResp, derivedResp] = await Promise.all([
+                    fetch(`/api/runs/${runId}`),
+                    fetch(`/api/runs/${runId}/derived`)
+                ]);
+                if (aborted) return;
+                
+                const runData = await runResp.json();
+                const derivedData = await derivedResp.json();
+                
+                if (runData) {
+                    ingested = runData.observations_ingested || 0;
+                    validated = runData.observations_validated || 0;
+                    rejected = runData.observations_rejected || 0;
+                    cataloged = runData.assets_cataloged || 0;
+                }
+                if (derivedData) {
+                    shadow = derivedData.shadow_count || 0;
+                    zombie = derivedData.zombie_count || 0;
+                }
             }
+        } catch (e) {
+            console.error('TourManager: Failed to fetch run stats from API', e);
+            ingested = getStatCount('observations') || 0;
+            validated = getStatCount('validated') || 0;
+            rejected = getStatCount('rejected') || 0;
+            cataloged = getStatCount('assets') || 0;
+            shadow = getStatCount('shadow') || 0;
+            zombie = getStatCount('zombie') || 0;
         }
-        
-        const ingested = getStatCount('observations') || 0;
-        const validated = getStatCount('validated') || 0;
-        const rejected = getStatCount('rejected') || 0;
-        const cataloged = getStatCount('assets') || 0;
-        const shadow = getStatCount('shadow') || 0;
-        const zombie = getStatCount('zombie') || 0;
         
         const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
         

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
+from ..config import policy
 
 
 class MatchStatus(str, Enum):
@@ -67,23 +68,34 @@ def _levenshtein_distance(s1: str, s2: str) -> int:
     return prev_row[-1]
 
 
-def _is_fuzzy_match(name1: str, name2: str, max_distance: int = 2, max_ratio: float = 0.20) -> bool:
+def _is_fuzzy_match(
+    name1: str,
+    name2: str,
+    max_distance: int = None,
+    max_ratio: float = None
+) -> bool:
     """
     Check if two names are a fuzzy match (typo tolerance).
-    
+
     Handles cases like:
     - "monday" vs "mondayc" (truncation/typo)
     - "monday" vs "monady" (transposition)
-    
+
     Rules:
-    - Names must be at least 4 chars to avoid false positives
+    - Names must be at least MIN_NAME_LENGTH_FOR_FUZZY chars to avoid false positives
     - One must be a prefix of the other with ≤2 extra chars, OR
-    - Edit distance ≤ max_distance AND distance/max_len ≤ max_ratio (0.20)
-    
+    - Edit distance ≤ max_distance AND distance/max_len ≤ max_ratio
+
     The ratio gate prevents short-token collisions like miro↔jira (2/4=0.50)
     and loom↔zoom (1/4=0.25) while preserving longer fuzzy matches.
     """
-    if len(name1) < 4 or len(name2) < 4:
+    if max_distance is None:
+        max_distance = policy.FUZZY_MATCH_MAX_DISTANCE
+    if max_ratio is None:
+        max_ratio = policy.FUZZY_MATCH_MAX_RATIO
+
+    min_len = policy.MIN_NAME_LENGTH_FOR_FUZZY
+    if len(name1) < min_len or len(name2) < min_len:
         return False
     
     if name1.startswith(name2) and len(name1) - len(name2) <= 2:

@@ -12,7 +12,7 @@ It MUST NOT be referenced by:
 
 Constraints:
 - This is decorative only - never affects admission or shadow logic
-- Max confidence is 0.9 - never authoritative
+- Max confidence from policy.VENDOR_HYPOTHESIS_MAX_CONFIDENCE - never authoritative
 - Based on curated domain mappings only (no ML, no NLP)
 - UI displays as suggestion: "Likely MongoDB (90% confidence)"
 """
@@ -20,6 +20,8 @@ Constraints:
 from dataclasses import dataclass
 from typing import Optional
 import re
+
+from ..config import policy
 
 
 @dataclass
@@ -257,17 +259,19 @@ def infer_vendor_from_domain(domain: Optional[str]) -> Optional[VendorHypothesis
     if not registered:
         return None
     
+    confidence = policy.VENDOR_HYPOTHESIS_MAX_CONFIDENCE
+
     if registered in DOMAIN_TO_VENDOR:
         return VendorHypothesisResult(
             value=DOMAIN_TO_VENDOR[registered],
-            confidence=0.9,
+            confidence=confidence,
             basis=f"domain:{registered}"
         )
-    
+
     if domain in DOMAIN_TO_VENDOR:
         return VendorHypothesisResult(
             value=DOMAIN_TO_VENDOR[domain],
-            confidence=0.9,
+            confidence=confidence,
             basis=f"domain:{domain}"
         )
     

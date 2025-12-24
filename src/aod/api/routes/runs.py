@@ -22,6 +22,7 @@ from ...farm_reconcile import reconcile_to_farm
 from ...pipeline.pipeline_executor import execute_pipeline
 from ...models.output_contracts import RunStatus, SyncStatus
 from ...pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
+from ...config import policy
 
 
 router = APIRouter(prefix="/runs")
@@ -229,7 +230,7 @@ async def create_run_from_farm(request: FarmRunRequest):
         
         assets = await db.get_assets_by_run(run_id)
         findings = await db.get_findings_by_run(run_id)
-        rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
+        rejections, _ = await db.get_rejections_by_run(run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
         
         success, error = await reconcile_to_farm(
             run_log=result.run_log,
@@ -288,7 +289,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     assets = await db.get_assets_by_run(request.run_id)
     findings = await db.get_findings_by_run(request.run_id)
-    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=1000)
+    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
     
     mode = request.mode or "sprawl"
     
@@ -599,7 +600,7 @@ async def get_reconcile_payload(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
-    rejections, _ = await db.get_rejections_by_run(run_id, limit=1000)
+    rejections, _ = await db.get_rejections_by_run(run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
     
     snapshot_id = run.input_meta.get("snapshot_id") if run.input_meta else None
     

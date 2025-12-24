@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 
 from ...utils.normalization import normalize_key
+from ...config import policy
 from ..schemas import (
     ZombieExplainRequest,
     KeyExplanation,
@@ -587,7 +588,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     
     assets = await db.get_assets_by_run(request.run_id)
     
-    rejections_result = await db.get_rejections_by_run(request.run_id, limit=1000)
+    rejections_result = await db.get_rejections_by_run(request.run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
     rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
     
     if not assets and not rejections:

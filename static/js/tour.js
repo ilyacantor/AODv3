@@ -495,13 +495,23 @@ const TourManager = (function() {
             fetchBtn.removeEventListener('click', clickHandler);
             removeOverlay();
             
+            // Capture existing run IDs BEFORE the new run starts
+            let existingRunIds = new Set();
+            try {
+                const resp = await fetch('/api/runs');
+                const runs = await resp.json();
+                existingRunIds = new Set(runs.map(r => r.run_id));
+            } catch (e) {
+                console.error('TourManager: Failed to get existing runs', e);
+            }
+            
             await trackedDelay(500);
             if (aborted) return;
             
             showProcessingDialog();
             
-            const snapshotSelect = document.getElementById('snapshotSelect');
-            await waitForRunCompletion(snapshotSelect ? snapshotSelect.value : null);
+            // Wait for a NEW run to appear and complete
+            const newRunId = await waitForNewRunCompletion(existingRunIds);
             
             if (aborted) return;
             
@@ -513,10 +523,41 @@ const TourManager = (function() {
             await trackedDelay(500);
             if (aborted) return;
             
-            await showPhase3bResultsDialog();
+            await showPhase3bResultsDialog(newRunId);
         };
         
         fetchBtn.addEventListener('click', clickHandler);
+    }
+    
+    async function waitForNewRunCompletion(existingRunIds) {
+        const maxAttempts = 120;
+        const pollInterval = 500;
+        
+        for (let i = 0; i < maxAttempts; i++) {
+            if (aborted) return null;
+            
+            await trackedDelay(pollInterval);
+            if (aborted) return null;
+            
+            try {
+                const resp = await fetch('/api/runs');
+                const runs = await resp.json();
+                
+                // Find a run that didn't exist before
+                const newRun = runs.find(r => !existingRunIds.has(r.run_id));
+                
+                if (newRun) {
+                    // Check if it's completed
+                    if (newRun.status && newRun.status.toLowerCase().includes('completed')) {
+                        return newRun.run_id;
+                    }
+                }
+            } catch (e) {
+                console.error('TourManager: Error polling for new run', e);
+            }
+        }
+        
+        return null;
     }
     
     function showProcessingDialog() {
@@ -556,20 +597,21 @@ const TourManager = (function() {
         makeDraggable(overlay);
     }
     
-    async function showPhase3bResultsDialog() {
+    async function showPhase3bResultsDialog(runId) {
         if (aborted) return;
         
         let ingested = 0, validated = 0, rejected = 0, cataloged = 0, shadow = 0, zombie = 0;
         
-        try {
-            const runsResp = await fetch('/api/runs');
-            if (aborted) return;
-            const runs = await runsResp.json();
-            
-            if (runs && runs.length > 0) {
-                const latestRun = runs[0];
-                const runId = latestRun.run_id;
-                
+        // If no runId provided, fall back to DOM reading
+        if (!runId) {
+            ingested = getStatCount('observations') || 0;
+            validated = getStatCount('validated') || 0;
+            rejected = getStatCount('rejected') || 0;
+            cataloged = getStatCount('assets') || 0;
+            shadow = getStatCount('shadow') || 0;
+            zombie = getStatCount('zombie') || 0;
+        } else {
+            try {
                 const [runResp, derivedResp] = await Promise.all([
                     fetch(`/api/runs/${runId}`),
                     fetch(`/api/runs/${runId}/derived`)
@@ -589,15 +631,15 @@ const TourManager = (function() {
                     shadow = derivedData.shadow_count || 0;
                     zombie = derivedData.zombie_count || 0;
                 }
+            } catch (e) {
+                console.error('TourManager: Failed to fetch run stats from API', e);
+                ingested = getStatCount('observations') || 0;
+                validated = getStatCount('validated') || 0;
+                rejected = getStatCount('rejected') || 0;
+                cataloged = getStatCount('assets') || 0;
+                shadow = getStatCount('shadow') || 0;
+                zombie = getStatCount('zombie') || 0;
             }
-        } catch (e) {
-            console.error('TourManager: Failed to fetch run stats from API', e);
-            ingested = getStatCount('observations') || 0;
-            validated = getStatCount('validated') || 0;
-            rejected = getStatCount('rejected') || 0;
-            cataloged = getStatCount('assets') || 0;
-            shadow = getStatCount('shadow') || 0;
-            zombie = getStatCount('zombie') || 0;
         }
         
         const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
@@ -611,54 +653,6 @@ const TourManager = (function() {
         });
     }
     
-    async function waitForRunCompletion(snapshotId) {
-        const maxAttempts = 120;
-        const pollInterval = 300;
-        
-        for (let i = 0; i < maxAttempts; i++) {
-            if (aborted) return;
-            
-            await trackedDelay(pollInterval);
-            if (aborted) return;
-            
-            const totalAssetsEl = document.getElementById('totalAssets');
-            if (totalAssetsEl) {
-                const val = parseInt(totalAssetsEl.textContent, 10);
-                if (!isNaN(val) && val > 0) {
-                    return;
-                }
-            }
-            
-            const runsList = document.getElementById('runsList');
-            if (runsList) {
-                const runCards = runsList.querySelectorAll('.run-card');
-                if (runCards.length > 0) {
-                    const latestCard = runCards[0];
-                    const statusBadge = latestCard.querySelector('.badge');
-                    if (statusBadge && statusBadge.textContent.toLowerCase().includes('complete')) {
-                        return;
-                    }
-                    if (snapshotId) {
-                        const cardText = latestCard.textContent || '';
-                        if (cardText.includes(snapshotId) && statusBadge) {
-                            const status = statusBadge.textContent.toLowerCase();
-                            if (status.includes('complete') || status.includes('success')) {
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            const resultSection = document.getElementById('resultsSection');
-            if (resultSection && !resultSection.classList.contains('hidden')) {
-                const statsLoaded = getStatCount('assets') > 0 || getStatCount('shadow') > 0 || getStatCount('zombie') > 0;
-                if (statsLoaded) {
-                    return;
-                }
-            }
-        }
-    }
     
     async function executePhase4() {
         if (aborted) return;

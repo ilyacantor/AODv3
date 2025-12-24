@@ -182,6 +182,34 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
 }
 
 
+def build_vendor_to_domain_map() -> dict[str, str]:
+    """
+    Build reverse mapping from vendor name to canonical domain.
+
+    Uses DOMAIN_TO_VENDOR from vendor_inference.py.
+    When a vendor has multiple domains, prefer the primary one (.com, .so, .io).
+
+    Returns:
+        Dictionary mapping lowercase vendor names to their canonical domains
+    """
+    vendor_to_domain: dict[str, str] = {}
+
+    for domain, vendor in DOMAIN_TO_VENDOR.items():
+        vendor_key = vendor.lower().strip()
+        if vendor_key not in vendor_to_domain:
+            vendor_to_domain[vendor_key] = domain
+        else:
+            current = vendor_to_domain[vendor_key]
+            if domain.endswith(('.com', '.so', '.io', '.us')) and not current.endswith(('.com', '.so', '.io', '.us')):
+                vendor_to_domain[vendor_key] = domain
+
+    return vendor_to_domain
+
+
+# Build and export VENDOR_TO_DOMAIN as single source of truth
+VENDOR_TO_DOMAIN = build_vendor_to_domain_map()
+
+
 def extract_registered_domain(domain: str) -> Optional[str]:
     """
     Extract the registered domain from a full domain.

@@ -1,12 +1,12 @@
 """Debug and reconcile API routes for AOD"""
 
-import re
 import subprocess
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from ...utils.normalization import normalize_key
 from ..schemas import (
     ZombieExplainRequest,
     KeyExplanation,
@@ -38,17 +38,6 @@ from ...models.output_contracts import Asset, LensStatus
 
 
 router = APIRouter(prefix="")
-
-
-def normalize_key(name: str) -> str:
-    """
-    Normalize an asset name to a key for matching.
-    Removes special chars, lowercases, strips whitespace.
-    e.g. "Slack.com" -> "slackcom", "PostgreSQL Main" -> "postgresqlmain"
-    """
-    key = name.lower()
-    key = re.sub(r'[^a-z0-9]', '', key)
-    return key
 
 
 TIMESTAMP_FIELD_VARIANTS = {
@@ -914,8 +903,9 @@ async def trace_asset(request: AssetTraceRequest) -> AssetTraceResponse:
     - Canonicalization steps for each domain
     - Final asset key and where it was produced
     """
-    from ...pipeline.vendor_inference import extract_registered_domain, DOMAIN_TO_VENDOR
-    from ...pipeline.aod_agent_reconcile import _extract_registered_domain, VENDOR_TO_DOMAIN, _normalize_name_for_vendor_lookup
+    from ...pipeline.vendor_inference import extract_registered_domain, DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
+    from ...pipeline.aod_agent_reconcile import _extract_registered_domain
+    from ...utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
     
     db = await get_db()
     

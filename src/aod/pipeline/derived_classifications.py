@@ -18,25 +18,10 @@ Zombie Asset = admitted asset with:
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import re
 from ..models.output_contracts import Asset, LensStatus
-from .vendor_inference import DOMAIN_TO_VENDOR
-
-
-def _build_vendor_to_domain_map() -> dict[str, str]:
-    """Build reverse mapping from vendor name to canonical domain."""
-    vendor_to_domain: dict[str, str] = {}
-    for domain, vendor in DOMAIN_TO_VENDOR.items():
-        vendor_key = vendor.lower().strip()
-        if vendor_key not in vendor_to_domain:
-            vendor_to_domain[vendor_key] = domain
-        else:
-            current = vendor_to_domain[vendor_key]
-            if domain.endswith(('.com', '.so', '.io', '.us')) and not current.endswith(('.com', '.so', '.io', '.us')):
-                vendor_to_domain[vendor_key] = domain
-    return vendor_to_domain
-
-
-VENDOR_TO_DOMAIN = _build_vendor_to_domain_map()
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
+from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 
 
 def _utc_now() -> datetime:
@@ -554,24 +539,6 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
         distribution=distribution,
         domain_rollups=domain_rollups
     )
-
-
-def _normalize_name_for_vendor_lookup(name: str) -> str:
-    """
-    Normalize asset name for vendor lookup by stripping common suffixes.
-    
-    Examples:
-        "Notion-prod" -> "notion"
-        "Notion (Legacy)" -> "notion"
-        "Monday.com-Test" -> "monday.com"
-        "Zapier Integration" -> "zapier"
-    """
-    import re
-    name = name.lower().strip()
-    name = re.sub(r'\s*[\(\[].*?[\)\]]', '', name)
-    name = re.sub(r'[-_]\s*(prod|dev|test|staging|legacy|integration|api|v\d+).*$', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'\s+(prod|dev|test|staging|legacy|integration|api)$', '', name, flags=re.IGNORECASE)
-    return name.strip()
 
 
 def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:

@@ -31,80 +31,9 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from ..models.output_contracts import Asset, LensStatus
-from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
-
-
-def _build_vendor_to_domain_map() -> dict[str, str]:
-    """
-    Build reverse mapping from vendor name to canonical domain.
-    
-    Uses DOMAIN_TO_VENDOR from vendor_inference.py.
-    When a vendor has multiple domains, prefer the primary one (.com, .so, .io).
-    """
-    vendor_to_domain: dict[str, str] = {}
-    
-    for domain, vendor in DOMAIN_TO_VENDOR.items():
-        vendor_key = vendor.lower().strip()
-        if vendor_key not in vendor_to_domain:
-            vendor_to_domain[vendor_key] = domain
-        else:
-            current = vendor_to_domain[vendor_key]
-            if domain.endswith(('.com', '.so', '.io', '.us')) and not current.endswith(('.com', '.so', '.io', '.us')):
-                vendor_to_domain[vendor_key] = domain
-    
-    return vendor_to_domain
-
-
-VENDOR_TO_DOMAIN = _build_vendor_to_domain_map()
-
-INFRASTRUCTURE_DOMAINS = {
-    "redis.io",
-    "redis.com",
-    "postgresql.org",
-    "mysql.com",
-    "mariadb.org",
-    "docker.com",
-    "docker.io",
-    "kubernetes.io",
-    "k8s.io",
-    "nginx.org",
-    "nginx.com",
-    "apache.org",
-    "golang.org",
-    "go.dev",
-    "python.org",
-    "nodejs.org",
-    "npmjs.com",
-    "npmjs.org",
-    "pypi.org",
-    "rubygems.org",
-    "maven.org",
-    "gradle.org",
-    "jenkins.io",
-    "circleci.com",
-    "travisci.com",
-    "travis-ci.com",
-    "terraform.io",
-    "hashicorp.com",
-    "vault.hashicorp.com",
-    "consul.io",
-    "nomad.io",
-    "elastic.co",
-    "elasticsearch.org",
-    "mongodb.org",
-    "mongodb.com",
-    "couchdb.apache.org",
-    "kafka.apache.org",
-    "rabbitmq.com",
-    "nats.io",
-    "prometheus.io",
-    "grafana.com",
-    "influxdata.com",
-    "rust-lang.org",
-    "ruby-lang.org",
-    "linux.org",
-    "gnu.org",
-}
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
+from ..constants import INFRASTRUCTURE_DOMAINS
+from ..utils.normalization import normalize_key as _normalize_key, normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 
 
 class ReasonCode(str, Enum):
@@ -174,12 +103,6 @@ def _ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.astimezone(timezone.utc)
 
 
-def _normalize_key(key: str) -> str:
-    """Normalize asset key for matching."""
-    import re
-    return re.sub(r'[^a-z0-9]', '', key.lower())
-
-
 def _deduplicate_reason_codes(reasons: set) -> set:
     """
     Deduplicate contradictory reason codes when aggregating across assets.
@@ -206,24 +129,6 @@ def _deduplicate_reason_codes(reasons: set) -> set:
             result.discard(no_code)
     
     return result
-
-
-def _normalize_name_for_vendor_lookup(name: str) -> str:
-    """
-    Normalize asset name for vendor lookup by stripping common suffixes.
-    
-    Examples:
-        "Notion-prod" -> "notion"
-        "Notion (Legacy)" -> "notion"
-        "Monday.com-Test" -> "monday.com"
-        "Zapier Integration" -> "zapier"
-    """
-    import re
-    name = name.lower().strip()
-    name = re.sub(r'\s*[\(\[].*?[\)\]]', '', name)
-    name = re.sub(r'[-_]\s*(prod|dev|test|staging|legacy|integration|api|v\d+).*$', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'\s+(prod|dev|test|staging|legacy|integration|api)$', '', name, flags=re.IGNORECASE)
-    return name.strip()
 
 
 def _is_infrastructure_domain(domain: str) -> bool:

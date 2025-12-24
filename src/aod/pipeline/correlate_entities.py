@@ -10,8 +10,7 @@ logger = logging.getLogger(__name__)
 
 from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
-from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
-from .derived_classifications import VENDOR_TO_DOMAIN
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
 
 
 class MatchStatus(str, Enum):

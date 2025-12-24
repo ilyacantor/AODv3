@@ -1,0 +1,56 @@
+"""
+Constants used across the AOD codebase.
+
+Consolidates hardcoded values and configuration data.
+"""
+
+# Infrastructure domains excluded from shadow/zombie SaaS reconciliation
+# These represent tooling and infrastructure, not SaaS applications
+INFRASTRUCTURE_DOMAINS = {
+    "redis.io",
+    "redis.com",
+    "postgresql.org",
+    "mysql.com",
+    "mariadb.org",
+    "docker.com",
+    "docker.io",
+    "kubernetes.io",
+    "k8s.io",
+    "nginx.org",
+    "nginx.com",
+    "apache.org",
+    "golang.org",
+    "go.dev",
+    "python.org",
+    "nodejs.org",
+    "npmjs.com",
+    "npmjs.org",
+    "pypi.org",
+    "rubygems.org",
+    "maven.org",
+    "gradle.org",
+    "jenkins.io",
+    "circleci.com",
+    "travisci.com",
+    "travis-ci.com",
+    "terraform.io",
+    "hashicorp.com",
+    "vault.hashicorp.com",
+    "consul.io",
+    "nomad.io",
+    "elastic.co",
+    "elasticsearch.org",
+    "mongodb.org",
+    "mongodb.com",
+    "couchdb.apache.org",
+    "kafka.apache.org",
+    "rabbitmq.com",
+    "nats.io",
+    "prometheus.io",
+    "grafana.com",
+    "influxdata.com",
+    "rust-lang.org",
+    "ruby-lang.org",
+    "linux.org",
+    "gnu.org",
+}

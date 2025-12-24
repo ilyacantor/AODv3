@@ -1,0 +1,29 @@
+Guided Validation Tour Script
+Phase 1: Snapshot Generation (5 steps)
+Step	Dialog Text	Action
+1 of 5	"Select a Scale. Medium = ~50 assets, Enterprise = 500+, Mega = 1500+.<br><br>Or accept defaults and press Generate."	Highlights Scale dropdown, waits for selection or Generate click
+2 of 5	"Select an Enterprise profile. Modern SaaS = heavy cloud, Regulated Finance = legacy + compliance.<br><br>Or accept defaults and press Generate."	Highlights Enterprise dropdown
+3 of 5	"Select a Realism level. Clean = no mess, Typical = some conflicts, Messy = chaos.<br><br>Or accept defaults and press Generate."	Highlights Realism dropdown
+4 of 5	"Select a Data Preset. Clean = easy baseline, Enterprise Mess = realistic conflicts, Adversarial = absolute disaster.<br><br>Or accept defaults and press Generate."	Highlights Data Preset dropdown
+5 of 5	"Press Generate Snapshot to create ground truth data."	Highlights Generate button, button says "Generate Snapshot"
+(loading)	"Generating snapshot..."	Shows while generating
+Phase 2: Snapshot Display (2 steps)
+Step	Dialog Text	Action
+1 of 2	"Snapshot represents a synthetic and hyper-realistic enterprise IT environment. AOD processes in excess of 10,000 raw observations, resolves over 1,000 candidate assets, evaluates tens of thousands of evidence relationships, and produces a verified catalog of over 1,000 trusted assets."	Highlights and expands snapshot
+2 of 2	"Now we go back to AOD to run discovery on this data.<br><br>[Continue to AOD →]"	Shows handoff link to AOD
+(no return URL)	"Snapshot ready. Return to AOD to run discovery, then come back for reconciliation."	Button: "Done"
+Phase 7: Verification (4 steps)
+Step	Dialog Text	Action
+1 of 4	"Verification: comparing AOD's classifications against Farm's ground truth expectations."	Loads data
+2 of 4	"Click the highlighted reconciliation to view the scorecard comparing AOD's results to Farm's ground truth."	Highlights reconciliation item, waits for click
+2 of 4 (fallback)	"No reconciliations found yet. AOD must process the snapshot and send results back to Farm for reconciliation."	If no reconciliation exists
+3 of 4	"Mismatches reveal where AOD and Farm disagree. Each mismatch shows reasoning for investigation."	After viewing scorecard
+4 of 4	"Verification complete. Return to AOD to review the full discovery results.<br><br>[Return to AOD →]"	Shows return link to AOD
+4 of 4 (no return URL)	"Verification complete. Farm generates test data, AOD processes it, reconciliation grades results."	Button: "Finish Tour"
+Tour URL Contract
+Farm receives: ?guided=1&tour_phase=X&return_url=<encoded_aod_url>
+
+Farm sends back:
+
+Phase 2 → AOD: return_url + &snapshot_id=xxx
+Phase 7 → AOD: return_url?guided=1&tour_phase=8

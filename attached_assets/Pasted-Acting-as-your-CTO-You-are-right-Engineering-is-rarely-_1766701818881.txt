@@ -1,0 +1,114 @@
+Acting as your CTO.
+
+You are right. Engineering is rarely a "one-shot" fix, and my previous enthusiasm for the "Golden Run" was premature. Let’s stick to the data and the iterative process.
+
+### The Situation Report
+
+Looking at the latest Dashboard (`image_680ce5.jpg`) and the Analysis (`AOD_IRON_DOME_FIX.md`):
+
+* **Shadows:** **90%** (20/20 Found). This logic is solid.
+* **Zombies:** **100%** (5/5 Found). This logic is solid.
+* **Catalog Hygiene:** **Critical Failure.**
+* **False Positives:** 456.
+* **The Culprits:** `fonts214`, `cdn674`, `lb464`, `crash220`.
+
+
+
+**Correction on Diagnosis:**
+I previously guessed these remaining FPs were "Cloud Spam" (e.g., `server.amazonaws.com`).
+The MD file proves I was wrong. These are still **Internal Hostnames** (`fonts214`).
+
+* **Implication:** The "Iron Dome" (TLD Validation) **did not execute** effectively on the last run. If it had, `fonts214` (which has no TLD) would have been rejected.
+
+### The Execution Plan
+
+We are not reinventing the wheel. We are simply enforcing the code specification you just provided in `AOD_IRON_DOME_FIX.md`. It contains the exact logic needed to kill these 456 FPs and fix the missing `okta.com` classifications.
+
+Here is the implementation order for the AOD Agent.
+
+---
+
+### Prompt Package: AOD Agent (Implement Iron Dome & Vendor Map)
+
+**Copy/Paste into AOD Replit:**
+
+```markdown
+# Engineering Order: Implement Key Integrity & Vendor Mapping
+
+**Context:**
+Our latest run confirms that Internal Hostnames (`fonts214`, `cdn674`) are still bypassing admission. The previous TLD check was either bypassed or ineffective.
+We also missed classifying high-value assets (`okta.com`, `zendesk.com`) likely due to ingestion normalization issues.
+
+**Your Mission:**
+Implement the strict validation logic defined in the architectural spec `AOD_IRON_DOME_FIX.md`.
+
+## Step 1: Implement `validate_key_integrity`
+Insert this function into your normalization/admission utility module:
+
+```python
+import tldextract
+
+def validate_key_integrity(key: str) -> tuple[bool, str]:
+    if not key or not key.strip():
+        return False, "Empty key"
+    
+    key = key.strip().lower()
+    
+    # Reject whitespace/tabs
+    if ' ' in key or '\t' in key:
+        return False, "Contains whitespace"
+    
+    # Strict TLD Validation
+    ext = tldextract.extract(key)
+    if not ext.suffix:
+        return False, f"No valid TLD suffix: {key}"
+    
+    if not ext.domain:
+        return False, f"No domain component: {key}"
+        
+    return True, None
+
+```
+
+## Step 2: Apply to ALL Ingestion Pipelines
+
+You must call this function and **REJECT** invalid keys in:
+
+1. **Discovery:** `ingest_discovery_observation`
+2. **CMDB:** `sync_cmdb_ci`
+3. **Finance:** `process_finance_contract`
+4. **Endpoint:** `ingest_endpoint_telemetry`
+
+*Critically:* Do not let a "fallback" mechanism bypass this. If it fails `validate_key_integrity`, it is dead.
+
+## Step 3: Implement Vendor Domain Resolution
+
+To fix the missing `okta.com` and `workday.com`, implement this mapping *before* validation:
+
+```python
+VENDOR_DOMAIN_MAP = {
+    "okta": "okta.com",
+    "workday": "workday.com",
+    "zendesk": "zendesk.com",
+    "splunk": "splunk.com",
+    "pagerduty": "pagerduty.com",
+    "salesforce": "salesforce.com",
+    "servicenow": "servicenow.com",
+    "zoom": "zoom.us",
+    "slack": "slack.com"
+}
+
+def resolve_vendor_domain(vendor_name: str) -> str | None:
+    normalized = vendor_name.lower().replace("-", "").replace(" ", "")
+    for key, domain in VENDOR_DOMAIN_MAP.items():
+        if key in normalized:
+            return domain
+    return None
+
+```
+
+**Execute these changes and confirm readiness for the next validation pass.**
+
+```
+
+```

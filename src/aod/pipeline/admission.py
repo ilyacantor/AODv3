@@ -19,63 +19,16 @@ import tldextract
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
 VALID_LIFECYCLES = {"prod", "production", "staging", "stage", "live", "active"}
 
-# Corporate/marketing/vendor root domains - NEVER admit these
-# These are vendor web properties, not operational assets
+# Corporate/marketing root domains - NEVER admit these
+# These are the TENANT'S OWN domains (not vendor SaaS platforms)
+# NOTE: SaaS vendor domains (okta.com, workday.com, etc.) are OPERATIONAL
+# assets that SHOULD be admitted and classified as shadow IT if ungoverned.
+# Only block the tenant's own corporate domains.
 CORPORATE_ROOT_DOMAINS = {
-    # Atlassian
-    "atlassian.com",
-    # Salesforce
-    "salesforce.com",
-    # Microsoft
-    "microsoft.com",
-    # Google
-    "google.com",
-    # Amazon
-    "amazon.com",
-    # Adobe
-    "adobe.com",
-    # Oracle
-    "oracle.com",
-    # SAP
-    "sap.com",
-    # IBM
-    "ibm.com",
-    # Cisco
-    "cisco.com",
-    # VMware
-    "vmware.com",
-    # ServiceNow
-    "servicenow.com",
-    # Workday
-    "workday.com",
-    # Zendesk
-    "zendesk.com",
-    # HubSpot
-    "hubspot.com",
-    # Intuit
-    "intuit.com",
-    # Autodesk
-    "autodesk.com",
-    # Splunk
-    "splunk.com",
-    # Datadog
-    "datadog.com",
-    # Cloudflare
-    "cloudflare.com",
-    # Twilio
-    "twilio.com",
-    # Stripe
-    "stripe.com",
-    # MongoDB
-    "mongodb.com",
-    # Elastic
-    "elastic.co",
-    # Snowflake
-    "snowflake.com",
-    # Okta
-    "okta.com",
-    # PagerDuty
-    "pagerduty.com",
+    # Placeholder - populated dynamically per tenant if available
+    # Example: "acme-corp.com", "acme.io" for tenant ACME
+    # For now, we don't block any domains globally since all vendor
+    # SaaS platforms are legitimate discovery targets.
 }
 
 

@@ -473,7 +473,7 @@ main { padding: 2rem; }
     z-index: 1;
 }
 .tour-step-counter {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--cyan-400);
     text-transform: uppercase;
@@ -481,14 +481,14 @@ main { padding: 2rem; }
     margin-bottom: 0.25rem;
 }
 .tour-content-title {
-    font-size: 1.125rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: white;
     margin-bottom: 0.5rem;
     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 .tour-content-body {
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: #cbd5e1;
     line-height: 1.6;
 }

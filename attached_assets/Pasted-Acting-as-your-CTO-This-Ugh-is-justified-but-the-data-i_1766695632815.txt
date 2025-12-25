@@ -1,0 +1,75 @@
+Acting as your CTO.
+
+This "Ugh" is justified, but the data is screaming the answer.
+
+We swung the pendulum too far. We went from "Admit Everything" to "Admit Nothing."
+
+* **Shadows Found:** 0.
+* **Shadows Expected:** 25.
+* **Admission Rate:** 0%.
+
+You didn't just filter the noise; you shut down the factory.
+
+### The Root Cause: "Source Quarantine" Mismatch
+
+The smoking gun is in your previous note:
+
+> *"Unknown Source Quarantine - Unrecognized sources now return None and are excluded."*
+
+And the result:
+
+> *"AOD has evidence for calendly.com but did not normalize to domain key"*
+
+**Translation:**
+
+1. Farm is generating traffic using source labels like `simulated_proxy` or `test_network`.
+2. AOD's new "Strict Source Map" (the list of 60 sensors) looks at `simulated_proxy`, says **"I don't know you,"** and quarantines the data.
+3. **Result:** Zero valid evidence planes. Zero admission.
+
+### The Exclusion List Update (The Noise)
+
+You noted the noise domains (`hub.io`) are still "Missed."
+
+* **Farm** expected them to be **Admitted** (because Farm saw the exclusion list was empty/small).
+* **AOD** blocked them.
+* *Optimistic View:* The exclusion list update worked!
+* *Real View:* AOD blocked them for the same reason it blocked `calendly.com`—because it killed the data source.
+
+
+
+### The Fix
+
+We need to tell AOD that **Farm is a valid vendor.**
+
+**1. Update Source Mapping**
+You need to add the Farm Generator's source names to AOD's "Allowed Sensors" list.
+
+* *Likely Names:* `farm_dns`, `farm_proxy`, `farm_network`, `farm_endpoint`. (Ask the Farm agent for the exact strings if you don't have them).
+
+**2. Verify the "Finance" Pathway**
+`calendly.com` had `HAS_FINANCE`. AOD rejected it.
+
+* This confirms that even the **Finance Gate** is broken.
+* *Likely Cause:* The Finance ingestion is also failing the "Domain-First" check. If the CSV says "Vendor: Calendly" and no domain, and your new code says "No Domain = Reject," you are dropping the money.
+
+### Immediate Prompt for AOD Agent
+
+**Copy/Paste into AOD:**
+
+```markdown
+# Urgent Fix: The Bouncer is Too Strict
+
+**Context:**
+The latest run resulted in **0% Shadow Admission**. We blocked every single asset, including valid ones like `calendly.com`.
+
+**Root Cause Hypothesis:**
+The new **"Unknown Source Quarantine"** is rejecting the Simulator's data. Farm likely sends data with source labels that are not in your hardcoded list of 60+ vendors.
+
+**Action Required:**
+1.  **Open the Gates for Farm:** Add `simulation`, `generator`, `farm_dns`, `farm_proxy`, `farm_network`, and `farm_endpoint` (and any generic fallbacks) to the `VALID_SOURCES` list.
+2.  **Debug Finance Ingestion:** Ensure that Finance records (which might lack a domain) are not being silently dropped. If a Finance record has a "Product Name" but no Domain, it should trigger a lookup or create a "Finance-Only" asset, not vanish.
+3.  **Check Rejections:** Query the `rejections` table. I expect to see thousands of rows with "Reason: Unknown Source". Confirm this.
+
+**Execute these changes immediately.**
+
+```

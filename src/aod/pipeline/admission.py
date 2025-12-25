@@ -122,8 +122,11 @@ class AdmissionResult:
 def check_idp_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check IdP plane admission criteria:
-    - IdP match AND (has_sso OR has_scim OR idp_type==service_principal)
+    - IdP match (any IdP object is sufficient for admission)
+    - Prefer: has_sso OR has_scim OR idp_type==service_principal (stronger signal)
     NOTE: Both MATCHED and AMBIGUOUS count as having IdP evidence.
+    
+    RELAXED: Any IdP match counts. SSO/SCIM provides stronger confidence but is not required.
     """
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
@@ -137,14 +140,20 @@ def check_idp_admission(correlation: CorrelationResult) -> tuple[bool, str]:
             if record.idp_type == "service_principal":
                 return True, "IdP match as service principal"
     
+    if correlation.idp.matched_records:
+        return True, "IdP match (directory object)"
+    
     return False, ""
 
 
 def check_cmdb_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check CMDB plane admission criteria:
-    - CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
+    - CMDB match (any CI is sufficient for admission)
+    - Prefer: ci_type in app/service/database/infra AND lifecycle in prod/staging (stronger signal)
     NOTE: Both MATCHED and AMBIGUOUS count as having CMDB evidence.
+    
+    RELAXED: Any CMDB match counts. Valid ci_type/lifecycle provides stronger confidence but is not required.
     """
     if correlation.cmdb.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
@@ -157,14 +166,20 @@ def check_cmdb_admission(correlation: CorrelationResult) -> tuple[bool, str]:
             if ci_type_valid and lifecycle_valid:
                 return True, f"CMDB match: {record.ci_type} in {record.lifecycle}"
     
+    if correlation.cmdb.matched_records:
+        return True, "CMDB match (configuration item)"
+    
     return False, ""
 
 
 def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check Cloud plane admission criteria:
-    - Cloud match AND resource_type indicates real system/resource
+    - Cloud match (any cloud resource is sufficient for admission)
+    - Prefer: resource_type indicates real system/resource (stronger signal)
     NOTE: Both MATCHED and AMBIGUOUS count as having Cloud evidence.
+    
+    RELAXED: Any cloud match counts. Valid resource_type provides stronger confidence but is not required.
     """
     if correlation.cloud.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
@@ -176,18 +191,21 @@ def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
                 if valid_type in resource_type:
                     return True, f"Cloud match: {record.resource_type}"
     
+    if correlation.cloud.matched_records:
+        return True, "Cloud match (cloud resource)"
+    
     return False, ""
 
 
 def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     """
     Check Finance plane admission criteria:
-    - Finance match AND recurring spend (contract or transaction)
+    - Finance match with any spend evidence
+    - Prefer: recurring contracts/transactions (stronger signal)
     
-    POLICY: One-time purchases and expense reimbursements are not actionable.
-    Only recurring spend qualifies for finance-based admission.
+    RELAXED: Any finance match with amount > 0 counts for admission.
+    Recurring spend provides stronger confidence but is not required.
     
-    IMPORTANT: Vendor alone is not admission.
     NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
     """
     if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
@@ -197,9 +215,16 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
         if isinstance(record, Contract):
             if record.is_recurring and record.amount > 0:
                 return True, f"Finance match: Recurring contract ${record.amount}"
+            elif record.amount > 0:
+                return True, f"Finance match: Contract ${record.amount}"
         elif isinstance(record, Transaction):
             if record.is_recurring and record.amount > 0:
                 return True, f"Finance match: Recurring transaction ${record.amount}"
+            elif record.amount > 0:
+                return True, f"Finance match: Transaction ${record.amount}"
+    
+    if correlation.finance.matched_records:
+        return True, "Finance match (spend evidence)"
     
     return False, ""
 
@@ -285,6 +310,42 @@ SOURCE_TO_PLANE = {
     "cmdb": "cmdb",
     "servicenow": "cmdb",
     "discovery": "discovery",
+    "simulation": "discovery",
+    "generator": "discovery",
+    "farm_dns": "network",
+    "farm_proxy": "network",
+    "farm_network": "network",
+    "farm_endpoint": "endpoint",
+    "farm_idp": "idp",
+    "farm_sso": "idp",
+    "farm_cloud": "cloud",
+    "farm_finance": "finance",
+    "farm_cmdb": "cmdb",
+    "simulated_dns": "network",
+    "simulated_proxy": "network",
+    "simulated_network": "network",
+    "simulated_endpoint": "endpoint",
+    "simulated_idp": "idp",
+    "simulated_sso": "idp",
+    "simulated_cloud": "cloud",
+    "simulated_finance": "finance",
+    "simulated_cmdb": "cmdb",
+    "test_dns": "network",
+    "test_proxy": "network",
+    "test_network": "network",
+    "test_endpoint": "endpoint",
+    "test_idp": "idp",
+    "test_cloud": "cloud",
+    "synthetic_dns": "network",
+    "synthetic_proxy": "network",
+    "synthetic_network": "network",
+    "synthetic_endpoint": "endpoint",
+    "synthetic_idp": "idp",
+    "synthetic_cloud": "cloud",
+    "network": "network",
+    "endpoint": "endpoint",
+    "idp": "idp",
+    "cloud": "cloud",
 }
 
 

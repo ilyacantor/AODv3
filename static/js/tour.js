@@ -52,7 +52,7 @@ const TourManager = (function() {
         },
         4: { 
             title: "Risks & Waste",
-            content: "Let's inspect the problems AOD found:\n\n• <strong>Shadow IT:</strong> Apps running without IT's knowledge (Security Risk).\n• <strong>Zombies:</strong> Paid licenses with zero usage (Financial Waste).\n\nClick the <strong>Shadow</strong> card to drill down.",
+            content: "Let's inspect the problems AOD found:\n\n<strong>Security Risks:</strong>\n• <strong>Shadow IT:</strong> Apps running without IT's knowledge.\n\n<strong>Governance Issues:</strong>\n• <strong>Zombies:</strong> Paid licenses with zero usage.\n\nClick the <strong>Shadow</strong> card to drill down.",
             step: 12
         },
         4.5: { 

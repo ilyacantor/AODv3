@@ -39,6 +39,7 @@ INFRASTRUCTURE_DOMAINS = {
     "consul.io",
     "nomad.io",
     "elastic.co",
+    "elasticsearch.com",
     "elasticsearch.org",
     "mongodb.org",
     "mongodb.com",

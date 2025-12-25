@@ -211,6 +211,20 @@ def build_vendor_to_domain_map() -> dict[str, str]:
 # Build and export VENDOR_TO_DOMAIN as single source of truth
 VENDOR_TO_DOMAIN = build_vendor_to_domain_map()
 
+# Add product name aliases that don't match vendor names exactly
+VENDOR_TO_DOMAIN.update({
+    "microsoft 365": "microsoft.com",
+    "office 365": "microsoft.com",
+    "office365": "microsoft.com",
+    "ms 365": "microsoft.com",
+    "google workspace": "google.com",
+    "g suite": "google.com",
+    "gsuite": "google.com",
+    "google apps": "google.com",
+    "aws": "amazonaws.com",
+    "amazon web services": "amazonaws.com",
+})
+
 
 def extract_registered_domain(domain: str) -> Optional[str]:
     """

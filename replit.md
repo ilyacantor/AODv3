@@ -63,6 +63,9 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - API: `POST /api/v1/policy/reload` hot-reloads config from disk
     - Parallel validation: Pipeline runs both legacy and PolicyEngine, logs mismatches
     - Seed lists: corporate_root_domains (27), infrastructure_domains (46) exposed via API
+    - Controlled cutover: `scope.use_policy_engine` flag (default: false) enables PolicyEngine as primary
+    - Conservative mode: When enabled, PolicyEngine can only reduce admissions (block what legacy allows)
+    - Farm integration complete: Farm fetches policy from AOD with 5-min cache, uses seed lists from API
 *   **API Structure**: A FastAPI application with modular routing architecture:
     - `src/aod/api/routes/health.py`: Health check endpoint
     - `src/aod/api/routes/farm.py`: Farm integration endpoints (tenants, snapshots)

@@ -494,18 +494,15 @@ const TourManager = (function() {
         const phaseConfig = TOUR_PHASES[phaseKey];
         const isLastIntro = phaseKey === 'intro_3';
         
-        const overviewContainer = document.getElementById('overviewContainer');
-        if (overviewContainer && phaseConfig.scrollTarget) {
-            const scrollPositions = {
-                'hero': 0,
-                'pipeline': 600,
-                'aod-details': 1800
-            };
-            const scrollTo = scrollPositions[phaseConfig.scrollTarget] || 0;
-            overviewContainer.scrollTo({ top: scrollTo, behavior: 'smooth' });
+        const overviewIframe = document.querySelector('.overview-iframe');
+        if (overviewIframe && overviewIframe.contentWindow && phaseConfig.scrollTarget) {
+            overviewIframe.contentWindow.postMessage({
+                action: 'scrollToSection',
+                section: phaseConfig.scrollTarget
+            }, '*');
         }
         
-        await trackedDelay(400);
+        await trackedDelay(600);
         if (aborted) return;
         
         await showOverlay(phaseKey, {

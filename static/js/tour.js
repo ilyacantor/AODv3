@@ -26,7 +26,7 @@ const TourManager = (function() {
             content: "AOD is the functional prerequisite for the platform.\n\nThe <strong>Adaptive API Mesh (AAM)</strong> requires a verified asset inventory to establish connections.\n\nAOD's primary function is to construct this <strong>Asset Catalog</strong>, enabling AAM and the DCL to operate on trusted data.",
             step: 3,
             location: 'overview',
-            scrollTarget: 'pipeline'
+            scrollTarget: 'gateway'
         },
         'intro_3': {
             title: "Inputs & Outputs",
@@ -361,6 +361,7 @@ const TourManager = (function() {
         
         let isDragging = false;
         let startX, startY, initialX, initialY;
+        let elementWidth, elementHeight;
         
         header.addEventListener('mousedown', (e) => {
             if (e.target.closest('button')) return;
@@ -369,9 +370,10 @@ const TourManager = (function() {
             startY = e.clientY;
             
             const rect = element.getBoundingClientRect();
-            const computedWidth = rect.width;
+            elementWidth = rect.width;
+            elementHeight = rect.height;
             
-            element.style.width = computedWidth + 'px';
+            element.style.width = elementWidth + 'px';
             element.style.right = 'auto';
             element.style.bottom = 'auto';
             element.style.transform = 'none';
@@ -381,20 +383,38 @@ const TourManager = (function() {
             
             initialX = rect.left;
             initialY = rect.top;
+            
+            header.style.cursor = 'grabbing';
         });
         
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
             e.preventDefault();
+            
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            element.style.left = (initialX + dx) + 'px';
-            element.style.top = (initialY + dy) + 'px';
+            
+            let newX = initialX + dx;
+            let newY = initialY + dy;
+            
+            const minX = 0;
+            const minY = 0;
+            const maxX = window.innerWidth - elementWidth;
+            const maxY = window.innerHeight - elementHeight;
+            
+            newX = Math.max(minX, Math.min(newX, maxX));
+            newY = Math.max(minY, Math.min(newY, maxY));
+            
+            element.style.left = newX + 'px';
+            element.style.top = newY + 'px';
         });
         
         document.addEventListener('mouseup', () => {
-            isDragging = false;
-            element.style.transition = '';
+            if (isDragging) {
+                isDragging = false;
+                element.style.transition = '';
+                header.style.cursor = 'grab';
+            }
         });
     }
     
@@ -518,9 +538,29 @@ const TourManager = (function() {
             }
         };
         
+        const triggerPipelineDemo = () => {
+            const overviewIframe = document.querySelector('.overview-iframe');
+            if (overviewIframe && overviewIframe.contentWindow) {
+                try {
+                    const pipelineIframe = overviewIframe.contentWindow.document.querySelector('iframe[title="AutonomOS Pipeline Overview"]');
+                    if (pipelineIframe && pipelineIframe.contentWindow) {
+                        pipelineIframe.contentWindow.postMessage({ action: 'runDemo' }, '*');
+                    }
+                } catch (e) {
+                    console.warn('TourManager: Failed to trigger demo (cross-origin)', e);
+                }
+                overviewIframe.contentWindow.postMessage({ action: 'triggerPipelineDemo' }, '*');
+            }
+        };
+        
         sendScrollMessage();
         await trackedDelay(300);
         sendScrollMessage();
+        
+        if (phaseKey === 'intro_1') {
+            await trackedDelay(500);
+            triggerPipelineDemo();
+        }
         
         await trackedDelay(400);
         if (aborted) return;

@@ -21,6 +21,7 @@ export default function Overview() {
         const sectionIds: Record<string, string> = {
           'hero': 'section-hero',
           'pipeline': 'section-pipeline',
+          'gateway': 'section-gateway',
           'aod-details': 'section-aod-details'
         };
         
@@ -32,6 +33,11 @@ export default function Overview() {
           }
         } else if (section === 'hero') {
           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } else if (event.data?.action === 'triggerPipelineDemo') {
+        const pipelineIframe = document.querySelector('iframe[title="AutonomOS Pipeline Overview"]') as HTMLIFrameElement;
+        if (pipelineIframe && pipelineIframe.contentWindow) {
+          pipelineIframe.contentWindow.postMessage({ action: 'runDemo' }, '*');
         }
       }
     };
@@ -153,7 +159,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 3: AOD INTRODUCTION ("The Gateway") --- */}
-      <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+      <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <div className="flex flex-col gap-8 text-center md:text-left">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold tracking-widest uppercase w-fit mx-auto md:mx-0">
             <ScanLine className="w-3 h-3" />

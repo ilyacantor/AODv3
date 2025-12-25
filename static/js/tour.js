@@ -6,58 +6,58 @@ const TourManager = (function() {
     
     const TOUR_PHASES = {
         0: { 
-            title: "Welcome to AOD",
-            content: "AOD discovers what actually exists in an enterprise environment. This run shows how discovery is executed, inspected, and verified.",
+            title: "The Visibility Gap",
+            content: "Most enterprises don't know what they own. Between <strong>Shadow IT</strong> (risk) and <strong>Zombie SaaS</strong> (waste), millions are lost annually.\n\nThis tour doesn't just show you a static demo. We're going to generate a live, chaotic IT environment and watch AOD organize it in real-time.",
             step: 1
         },
         3: { 
-            title: "Run Discovery",
-            content: "Welcome back to AOD. The tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below.",
-            step: 2
+            title: "Ingest & Resolve",
+            content: "AOD is now processing raw observations. It doesn't just list rows; it <strong>resolves identity</strong>.\n\nIt is currently correlating disparate signals (e.g., a credit card charge vs. a login event) to determine what is a real asset and what is noise.",
+            step: 6
         },
         '3b': { 
-            title: "Discovery Results",
+            title: "The Discovery Dashboard",
             content: "",
-            step: 3
+            step: 7
         },
         4: { 
-            title: "Inspect Shadow Assets",
-            content: "Shadow assets are systems that exist in your environment but lack proper governance. Click on the Shadow card to see which assets need attention.",
-            step: 4
+            title: "Risks & Waste",
+            content: "Let's inspect the problems AOD found:\n\n• <strong>Shadow IT:</strong> Apps running without IT's knowledge (Security Risk).\n• <strong>Zombies:</strong> Paid licenses with zero usage (Financial Waste).\n\nClick the <strong>Shadow</strong> card to drill down.",
+            step: 8
         },
         4.5: { 
-            title: "Shadow Assets",
-            content: "No shadow assets were discovered in this run. This is a good sign - it means all discovered assets have proper governance. Let's continue to the next step.",
-            step: 4
+            title: "Risks & Waste",
+            content: "This simulation produced a clean run with no Shadow IT detected. In real enterprise environments, Shadow assets are common.\n\nLet's continue to the Triage console.",
+            step: 8
         },
         5: { 
-            title: "Triage Findings",
-            content: "Current configuration creates a \"Triage queue\" for the user to review and dispose of issues categorized in tiers. This workflow is customizable and can be configured as a control pane rather than an informational pane.\n\nClick through on any actions or item for details.",
-            step: 5
+            title: "The Decision Layer",
+            content: "Discovery is useless without action.\n\nThe <strong>Triage Console</strong> prioritizes findings by urgency. You don't have to review 10,000 lines—just the Tier 1 issues that require human judgment.\n\nYou can acknowledge, reject, or flag assets right here.",
+            step: 9
         },
         6: { 
-            title: "Asset Catalog",
-            content: "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously.",
-            step: 6
+            title: "The Trusted Catalog",
+            content: "This is the \"Golden Record.\"\n\nWhile Triage handles the exceptions, the <strong>Catalog</strong> contains the fully verified estate.\n\nThis trusted list is what feeds the <strong>Adaptive API Mesh (AAM)</strong> to automate connections and the <strong>Business Logic Layer (BLL)</strong> to generate reports.",
+            step: 10
         },
         6.5: { 
-            title: "Asset Catalog",
-            content: "No assets found in the catalog for this run. This may indicate the run is still processing or no assets were discovered.",
-            step: 6
+            title: "The Trusted Catalog",
+            content: "The Catalog is still being populated. In production, this becomes the \"Golden Record\" that feeds downstream systems.",
+            step: 10
         },
         7: { 
-            title: "Verify Accuracy",
-            content: "Now let's verify AOD's accuracy. Farm will compare AOD's classifications against the expected ground truth to measure precision and recall.",
-            step: 7
+            title: "Trust, but Verify",
+            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier. We measure our own Precision and Recall.",
+            step: 11
         },
         8: { 
             title: "Tour Complete",
-            content: "The guided validation is complete. You've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely.",
-            step: 8
+            content: "You've seen the cycle: <strong>Generate Chaos → Discover Order → Audit Accuracy.</strong>\n\nYou are now free to explore the Catalog, run new simulations, or drill into specific asset details.",
+            step: 13
         }
     };
     
-    const TOTAL_STEPS = 8;
+    const TOTAL_STEPS = 13;
     
     function trackedTimeout(fn, delay) {
         const id = setTimeout(() => {
@@ -194,7 +194,7 @@ const TourManager = (function() {
     async function showOverlay(phaseKey, options = {}) {
         removeOverlay();
         
-        const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'Guided Validation', content: String(phaseKey), step: 1 };
+        const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'Simulation & Proof', content: String(phaseKey), step: 1 };
         const title = options.title || phaseConfig.title;
         const content = options.content || phaseConfig.content;
         const currentStep = Number(options.step || phaseConfig.step) || 1;
@@ -233,7 +233,7 @@ const TourManager = (function() {
             <div class="tour-overlay-header">
                 <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
-                    <span class="tour-overlay-title">Guided Validation</span>
+                    <span class="tour-overlay-title">Simulation & Proof</span>
                 </div>
                 <button class="tour-close-btn" aria-label="Close tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -435,7 +435,7 @@ const TourManager = (function() {
     
     async function executePhase0() {
         await showOverlay(0, {
-            primaryButtonText: 'Run Guided Validation',
+            primaryButtonText: 'Start Simulation',
             showBack: false,
             onContinue: () => {
                 navigateToFarmWithGuided();
@@ -579,18 +579,19 @@ const TourManager = (function() {
             <div class="tour-overlay-header">
                 <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
-                    <span class="tour-overlay-title">Guided Validation</span>
+                    <span class="tour-overlay-title">Simulation & Proof</span>
                 </div>
             </div>
             <div class="tour-overlay-content">
-                <div class="tour-step-counter">Step 3 of ${TOTAL_STEPS}</div>
-                <h3 class="tour-content-title">Running Discovery</h3>
+                <div class="tour-step-counter">Step 6 of ${TOTAL_STEPS}</div>
+                <h3 class="tour-content-title">Ingest & Resolve</h3>
                 <div class="tour-content-body">
-                    <p>Discovery in process ...</p>
+                    <p>AOD is processing raw observations. It doesn't just list rows; it <strong>resolves identity</strong>.</p>
+                    <p>Correlating disparate signals to determine what is a real asset and what is noise...</p>
                 </div>
             </div>
             <div class="tour-progress-bar">
-                <div class="tour-progress-fill" style="width: ${(3 / TOTAL_STEPS) * 100}%"></div>
+                <div class="tour-progress-fill" style="width: ${(6 / TOTAL_STEPS) * 100}%"></div>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -642,12 +643,12 @@ const TourManager = (function() {
             }
         }
         
-        const message = `Discovery complete! AOD ingested ${ingested} observations, validated ${validated}, rejected ${rejected}, and cataloged ${cataloged}. In addition, AOD discovered ${shadow} Shadow assets, and identified savings opportunities by discovering ${zombie} zombie assets. Feel free to click through to the details.`;
+        const message = `Processing complete. AOD has distilled <strong>${ingested}</strong> signals into <strong>${cataloged}</strong> trusted assets.\n\nNotice the <strong>Lifecycle Cards</strong> below. This isn't just a count; it's a health check. We've isolated <strong>${shadow} Shadow IT</strong> (unmanaged apps) and <strong>${zombie} Zombie Assets</strong> (wasted spend) automatically.`;
         
         await showOverlay('3b', {
-            title: 'Discovery Results',
+            title: 'The Discovery Dashboard',
             content: message,
-            step: 3,
+            step: 7,
             position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
             showBack: false
         });
@@ -795,7 +796,7 @@ const TourManager = (function() {
         if (aborted) return;
         
         await showOverlay(8, {
-            primaryButtonText: 'Finish',
+            primaryButtonText: 'Finish & Explore',
             onContinue: () => {
                 exit();
             }

@@ -9,7 +9,7 @@ const TourManager = (function() {
     const TOUR_PHASES = {
         'intro_1': {
             title: "The Execution Pipeline",
-            content: "AutonomOS operates as a <strong>linear execution pipeline</strong>.\n\nThe architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
+            content: "The architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
             step: 1,
             location: 'overview',
             scrollTarget: 'hero'

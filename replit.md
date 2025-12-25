@@ -91,6 +91,8 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - **Unknown Source Quarantine**: Unknown sources return None and are excluded from plane diversity counts to prevent signal inflation
     - **Domain-First Identity**: Entities without resolvable domains are rejected and persisted to rejections table
     - **Discovery Corroboration Planes**: Only network, endpoint, idp, cloud, discovery count toward discovery admission; finance and CMDB excluded from discovery corroboration
+    - **TLD Validation (GATE 0)**: Entities without valid public TLD suffixes (internal hostnames) rejected at admission start
+    - **Activity Rollup for Zombie Classification**: Subdomain activity propagates to parent domains (e.g., mail.google.com activity counts toward google.com), preventing false zombie classifications
 *   **Product Name Aliases**: Maps common product names to canonical domains (Microsoft 365 → microsoft.com, Google Workspace → google.com, AWS → amazonaws.com, Office 365 → microsoft.com).
 
 ## External Dependencies

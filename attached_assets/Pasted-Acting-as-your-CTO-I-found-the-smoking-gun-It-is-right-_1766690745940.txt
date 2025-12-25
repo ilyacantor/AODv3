@@ -1,0 +1,59 @@
+Acting as your CTO.
+
+I found the smoking gun. It is right there in the config:
+
+```json
+"use_policy_engine": false
+
+```
+
+**Diagnosis:**
+You are staring at a "Ghost Config."
+
+You have defined the rules (`noise_floor: 2`), but because the engine is disabled, **AOD is not using them.** It is falling back to the "twisted logic" of the legacy codebase.
+
+The legacy code is almost certainly hardcoded to admit on `source_count >= 1` (or it counts "2 DNS hits" as "2 Sources"), which explains why it admitted 443 items that Farm knew were noise. Farm generated them as noise (weak signal), expecting the new Policy Engine to kill them. The Legacy Engine let them in.
+
+### The Fix
+
+We need to stop debugging the old code. We built the new engine to fix exactly this.
+
+**1. Activate the Brain**
+Flip the toggle. This forces AOD to actually read the `noise_floor: 2` setting you defined.
+
+**2. Patch the Holes (Exclusions)**
+Your `exclusions` list is empty (`[]`). This is why `cdn688.cloud.net` got in. Even the new engine will admit that if we don't explicitly kill it.
+
+**3. Execution Command**
+Please update the config to this **exact state** and re-run the simulation. This aligns the "Rules of the Game" (AOD) with the "Referee" (Farm).
+
+```json
+{
+  "admission": {
+    "minimum_spend": 200,
+    "noise_floor": 2,
+    "zombie_window_days": 90,
+    "require_sso_for_idp": true,
+    "require_valid_ci_type": true,
+    "require_valid_lifecycle": true
+  },
+  "scope": {
+    "include_infra": false,
+    "treat_directory_as_idp": false,
+    "use_policy_engine": true  <-- CRITICAL CHANGE
+  },
+  "exclusions": [
+    "cloud.net",
+    "services.io",
+    "world.net",
+    "tech.net"
+  ]
+}
+
+```
+
+**Why this fixes the 443 Mismatches:**
+
+1. **Noise Floor:** The `PolicyEngine` strictly enforces "Distinct Planes" (e.g., DNS + Proxy). The Legacy code likely allowed "DNS + DNS".
+2. **Exclusions:** Adding `cloud.net` kills the CDN noise instantly.
+3. **Alignment:** Farm is generating data *assuming* these rules exist. Now AOD will actually enforce them.

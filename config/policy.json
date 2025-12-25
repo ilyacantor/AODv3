@@ -10,7 +10,12 @@
   "scope": {
     "include_infra": false,
     "treat_directory_as_idp": false,
-    "use_policy_engine": false
+    "use_policy_engine": true
   },
-  "exclusions": []
+  "exclusions": [
+    "cloud.net",
+    "services.io",
+    "world.net",
+    "tech.net"
+  ]
 }

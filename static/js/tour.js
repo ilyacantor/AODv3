@@ -61,9 +61,10 @@ const TourManager = (function() {
             step: 12
         },
         5: { 
-            title: "The Decision Layer",
-            content: "Discovery is useless without action.\n\nThe <strong>Triage Console</strong> prioritizes findings by urgency. You don't have to review 10,000 lines—just the Tier 1 issues that require human judgment.\n\nYou can acknowledge, reject, or flag assets right here.",
-            step: 13
+            title: "Triage Workflow",
+            content: "Triage acts as the operational workflow engine for AOD.\n\n<strong>Issue Disposition:</strong> While the Catalog feeds AAM, this console allows users to resolve specific findings (Shadow IT, Zombies) efficiently.\n\n<strong>Configurability:</strong> The engine is highly configurable. It can be deployed as a passive informational plane or set as a strict control plane to gate assets before they enter the ecosystem.",
+            step: 13,
+            highlightElement: '.triage-section'
         },
         6: { 
             title: "The Trusted Catalog",
@@ -859,7 +860,7 @@ const TourManager = (function() {
         }
         
         await showOverlay(5, {
-            highlightElement: '#triageSections',
+            highlightElement: '.triage-section',
             position: { top: '200px', left: '50%' }
         });
     }

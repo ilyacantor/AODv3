@@ -52,7 +52,7 @@ const TourManager = (function() {
         },
         4: { 
             title: "Risks & Waste",
-            content: "AOD surfaces two types of problems:\n\n<strong>Security Risks:</strong> Actionable findings—ungoverned access paths, financially-backed shadow systems, and data conflicts on security-relevant fields.\n\n<strong>Governance Issues:</strong> Hygiene gaps—CMDB inconsistencies, duplication, and visibility gaps that reduce control plane accuracy.\n\nThe <strong>Shadow</strong> and <strong>Zombie</strong> cards show asset classifications derived from these findings.\n\nClick <strong>Shadow</strong> to drill down.",
+            content: "AOD classifies problems into four categories:\n\n<strong>Security Risks:</strong> Ungoverned access, data conflicts, identity gaps.\n\n<strong>Governance Issues:</strong> CMDB gaps, duplication, visibility issues.\n\n<strong>Shadow IT:</strong> Active systems operating outside IT governance.\n\n<strong>Zombies:</strong> Licensed assets with no recent activity.\n\nClick <strong>Shadow</strong> to drill down.",
             step: 12
         },
         4.5: { 

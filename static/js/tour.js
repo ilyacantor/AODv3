@@ -62,7 +62,7 @@ const TourManager = (function() {
         },
         5: { 
             title: "Triage Workflow",
-            content: "Triage acts as the operational workflow engine for AOD.\n\n<strong>Issue Disposition:</strong> While the Catalog feeds AAM, this console allows users to resolve specific findings (Shadow IT, Zombies) efficiently.\n\n<strong>Configurability:</strong> The engine is highly configurable. It can be deployed as a passive informational plane or set as a strict control plane to gate assets before they enter the ecosystem.",
+            content: "Triage acts as the operational workflow engine for AOD.\n\n<strong>Issue Disposition:</strong> While the Catalog feeds AAM, this console allows users to resolve findings across all four categories—Security Risks, Governance Issues, Shadow IT, and Zombies.\n\n<strong>Configurability:</strong> The engine is highly configurable. It can be deployed as a passive informational plane or set as a strict control plane to gate assets before they enter the ecosystem.",
             step: 13,
             highlightElement: '.triage-section'
         },

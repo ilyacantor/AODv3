@@ -54,6 +54,15 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **LLM Fringe Resolution**: For ambiguous assets, an LLM-based resolver provides classification assistance, persisting facts for reuse and excluding INFRA_TECH assets.
 *   **Risk Case Aggregation**: Security findings include confidence, materiality, and triage_priority fields. P0 = HIGH confidence + HIGH materiality; P1 = HIGH+MED or MED+HIGH; P2 = everything else. UI shows actionable (P0+P1) as headline.
 *   **Tighter Trigger Gates**: IDENTITY_GAP requires strong activity evidence (cloud/finance/multi-plane); FINANCE_GAP requires recurring spend ≥$200/mo; DATA_CONFLICT only fires for security-relevant fields (owner, environment, data_classification, etc.) with deduplication by (asset, field).
+*   **Policy Engine (Dec 2025)**: Configuration-driven admission and classification replacing hardcoded rules:
+    - `src/aod/core/policy/schema.py`: PolicyConfig dataclasses (AdmissionConfig, ScopeConfig)
+    - `src/aod/core/policy/engine.py`: Pure-function PolicyEngine (no DB dependencies)
+    - `src/aod/core/policy/loader.py`: Config loading with hot-reload support
+    - `config/policy.json`: Default configuration (minimum_spend=200, noise_floor=2, zombie_window_days=90)
+    - API: `GET /api/v1/policy/config` exposes config for Farm alignment
+    - API: `POST /api/v1/policy/reload` hot-reloads config from disk
+    - Parallel validation: Pipeline runs both legacy and PolicyEngine, logs mismatches
+    - Seed lists: corporate_root_domains (27), infrastructure_domains (46) exposed via API
 *   **API Structure**: A FastAPI application with modular routing architecture:
     - `src/aod/api/routes/health.py`: Health check endpoint
     - `src/aod/api/routes/farm.py`: Farm integration endpoints (tenants, snapshots)
@@ -62,6 +71,7 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - `src/aod/api/routes/findings.py`: Findings and artifacts endpoints
     - `src/aod/api/routes/triage.py`: Triage action persistence endpoints
     - `src/aod/api/routes/debug.py`: Debug and reconciliation endpoints
+    - `src/aod/api/routes/policy.py`: Policy configuration endpoints
     - `src/aod/api/schemas.py`: Shared Pydantic request/response models
     - `src/aod/api/deps.py`: Shared dependencies and helpers
 *   **Run Status Semantics**: Explicit run statuses (e.g., `UPSTREAM_ERROR`, `COMPLETED_WITH_RESULTS`).

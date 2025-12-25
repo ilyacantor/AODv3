@@ -2,15 +2,17 @@
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from ..models.input_contracts import Snapshot
+from ..models.input_contracts import Snapshot, Observation
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts
 )
 from ..db.database import Database
+from ..core.policy import PolicyEngine, get_current_config
 
 from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
@@ -22,7 +24,72 @@ from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
 
+logger = logging.getLogger(__name__)
+
 MAX_OBSERVATION_SAMPLES = 2000
+
+
+def _build_policy_asset_data(
+    candidate: CandidateEntity,
+    correlation: CorrelationResult,
+    observations: list[Observation]
+) -> dict:
+    """
+    Build asset_data dict for PolicyEngine evaluation.
+    
+    Translates correlation results into the flat structure expected by PolicyEngine.
+    """
+    in_idp = correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    in_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    in_cloud = correlation.cloud.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    in_finance = correlation.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    
+    has_sso = False
+    has_scim = False
+    is_service_principal = False
+    for record in correlation.idp.matched_records:
+        if hasattr(record, 'has_sso') and record.has_sso:
+            has_sso = True
+        if hasattr(record, 'has_scim') and record.has_scim:
+            has_scim = True
+        if hasattr(record, 'idp_type') and record.idp_type == "service_principal":
+            is_service_principal = True
+    
+    ci_type = ""
+    lifecycle = ""
+    for record in correlation.cmdb.matched_records:
+        if hasattr(record, 'ci_type') and record.ci_type:
+            ci_type = record.ci_type
+        if hasattr(record, 'lifecycle') and record.lifecycle:
+            lifecycle = record.lifecycle
+    
+    monthly_spend = 0.0
+    for record in correlation.finance.matched_records:
+        if hasattr(record, 'monthly_spend'):
+            monthly_spend = max(monthly_spend, record.monthly_spend or 0)
+        elif hasattr(record, 'amount'):
+            monthly_spend = max(monthly_spend, record.amount or 0)
+    
+    discovery_sources = set()
+    for obs in observations:
+        if obs.source:
+            discovery_sources.add(obs.source)
+    
+    return {
+        "domain": candidate.domain or "",
+        "in_idp": in_idp,
+        "in_cmdb": in_cmdb,
+        "in_cloud": in_cloud,
+        "in_finance": in_finance,
+        "has_sso": has_sso,
+        "has_scim": has_scim,
+        "is_service_principal": is_service_principal,
+        "ci_type": ci_type,
+        "lifecycle": lifecycle,
+        "monthly_spend": monthly_spend,
+        "discovery_sources_count": len(discovery_sources),
+        "is_active": True,
+    }
 
 
 @dataclass
@@ -194,6 +261,9 @@ async def execute_pipeline(
         
         propagated_governance = propagate_vendor_governance(correlations)
         
+        policy_engine = PolicyEngine(get_current_config())
+        policy_mismatches = []
+        
         assets = []
         rejections_batch = []
         
@@ -220,6 +290,21 @@ async def execute_pipeline(
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason
             )
             
+            policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)
+            policy_decision = policy_engine.evaluate(policy_asset_data)
+            
+            if admission_result.admitted != policy_decision.admitted:
+                policy_mismatches.append({
+                    "entity": candidate.original_name,
+                    "domain": candidate.domain,
+                    "legacy_admitted": admission_result.admitted,
+                    "policy_admitted": policy_decision.admitted,
+                    "legacy_reason": admission_result.rejection_reason or admission_result.admission_reason,
+                    "policy_reason": policy_decision.rejection_reason or policy_decision.admission_reason,
+                    "policy_codes": policy_decision.reason_codes,
+                    "asset_data": policy_asset_data,
+                })
+            
             if admission_result.admitted and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
@@ -239,6 +324,18 @@ async def execute_pipeline(
         await db.create_rejections_batch(rejections_batch)
         run_log.counts.assets_admitted = len(assets)
         run_log.counts.rejected = len(rejections_batch)
+        
+        if policy_mismatches:
+            logger.warning("policy_engine.mismatch_detected", extra={
+                "run_id": run_id,
+                "mismatch_count": len(policy_mismatches),
+                "mismatches": policy_mismatches[:10],
+            })
+        else:
+            logger.info("policy_engine.validation_passed", extra={
+                "run_id": run_id,
+                "candidates_evaluated": len(filtered_candidates),
+            })
         
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
         run_log.counts.findings_generated = len(findings)

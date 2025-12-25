@@ -13,11 +13,25 @@
     "use_policy_engine": true
   },
   "exclusions": [
-    "cloud.net",
-    "services.io",
-    "world.net",
-    "tech.net",
+    "platform.io",
+    "hub.io",
+    "data.io",
+    "cdn.com",
+    "edge.com",
+    "global.com",
+    "api.co",
+    "app.co",
+    "pro.co",
+    "quick.net",
+    "max.io",
+    "smart.io",
+    "sys.net",
+    "force.com",
     "fast.io",
-    "plus.net"
+    "plus.net",
+    "cloud.net",
+    "tech.net",
+    "services.io",
+    "world.net"
   ]
 }

@@ -639,18 +639,29 @@ def apply_admission_criteria(
             rejection_reason="No resolvable domain - requires domain-first identity"
         )
     
-    # GATE 1: Reject corporate/marketing root domains unconditionally
-    if is_corporate_root_domain(entity.domain):
+    # Compute registered domain (eTLD+1) ONCE for all subsequent gates
+    # This ensures mail.google.com -> google.com for gate checks
+    registered_domain = extract_registered_domain(entity.domain)
+    if not registered_domain:
         return AdmissionResult(
             admitted=False,
-            rejection_reason=f"Corporate root domain: {entity.domain}"
+            rejection_reason=f"Cannot extract registered domain from: {entity.domain}"
+        )
+    
+    # GATE 1: Reject corporate/marketing root domains unconditionally
+    # Check against REGISTERED domain, not raw FQDN (fixes mail.google.com -> google.com)
+    if is_corporate_root_domain(registered_domain):
+        return AdmissionResult(
+            admitted=False,
+            rejection_reason=f"Corporate root domain: {registered_domain} (from {entity.domain})"
         )
     
     # GATE 2: Reject infrastructure/tooling domains unconditionally
-    if is_infrastructure_domain(entity.domain):
+    # Check against REGISTERED domain, not raw FQDN
+    if is_infrastructure_domain(registered_domain):
         return AdmissionResult(
             admitted=False,
-            rejection_reason=f"Infrastructure domain: {entity.domain}"
+            rejection_reason=f"Infrastructure domain: {registered_domain} (from {entity.domain})"
         )
     
     # Check each admission criterion

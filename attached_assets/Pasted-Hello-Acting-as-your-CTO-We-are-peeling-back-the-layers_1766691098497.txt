@@ -1,0 +1,87 @@
+Hello. Acting as your CTO.
+
+We are peeling back the layers of the onion, and this layer is ugly. The "Ghost Config" was just the start. This new data proves we have a fundamental **Data Architecture Failure** in AOD's ingestion pipeline.
+
+You have three critical failures happening simultaneously:
+
+1. **Identity Schizophrenia:** AOD doesn't know if an asset is a "Name" (`salesforce`) or a "Domain" (`salesforce.com`). So it catalogs both, or catalogs the wrong one.
+2. **The "Kill List" is Broken:** Infrastructure domains (`redis.com`) are walking right past the bouncer.
+3. **Signal Inflation:** Single-source noise (`fast.io`) is still getting in, meaning your "Source Counting" logic is flawed.
+
+Here is the remediation plan.
+
+### 1. The Identity Crisis (Fixing "Key Drift")
+
+**The Problem:** AOD is attempting to be "smart" by converting `salesforce.com` to `Salesforce` too early. Farm operates on **Ground Truth** (Domains). AOD is operating on **Marketing Names**.
+
+* **The Result:** You have 267 assets instead of 134 because you likely have `salesforce.com` (from DNS) AND `Salesforce` (from Finance/IdP) existing as two separate rows.
+* **The Fix:** **Domain-First Identity.**
+* **Rule:** The `primary_key` for admission is **ALWAYS** the Root Domain.
+* **Logic:**
+* `salesforce.com` -> `salesforce.com` (Admitted)
+* `crm.salesforce.com` -> `salesforce.com` (Admitted as alias)
+* `Salesforce` (from Contract) -> **Must resolve to `salesforce.com**` or it is rejected/held in a "Unresolved" queue.
+
+
+
+
+
+**Order to Devs:** "Disable `product_name` aliasing in the Admission phase. Admission runs on `canonical_domain` only. If you can't map a Finance record to a domain, it stays in a 'Finance Holding' table, it does NOT become an asset."
+
+### 2. The Leaking Infrastructure (`redis.com`)
+
+**The Problem:** The `infrastructure_seeds` list exists in the config, but the code is failing to match it.
+
+* **Likely Bug:** You are comparing `www.redis.com` (Observed) against `redis.com` (Exclusion List). String equality fails.
+* **The Fix:** **Root Domain Extraction.**
+* You must strip `www.` or `api.` before checking the Kill List.
+
+
+
+```python
+# The Logic You Need
+def is_excluded(candidate_domain):
+    root = get_root_domain(candidate_domain) # "api.redis.com" -> "redis.com"
+    return root in config.exclusions or root in config.infrastructure_seeds
+
+```
+
+### 3. The Signal Inflation (`fast.io`)
+
+**The Problem:** `fast.io` was rejected by Farm (Single Source) but admitted by AOD.
+
+* **Likely Bug:** AOD is counting **Event Volume** instead of **Source Diversity**.
+* *Scenario:* A user browses `fast.io`.
+* *Data:* 50 DNS queries, 10 Proxy logs.
+* *Bad Math:* "60 Evidence Points! Admit!"
+* *Correct Math:* "Source 1: Network. Source 2: Network. Total Distinct Sources: 1. **Reject.**"
+
+
+
+**Order to Devs:** "Change the `source_count` logic to count **Distinct Planes**, not total observations. `len(unique([obs.plane for obs in observations]))`."
+
+---
+
+### Summary of Orders
+
+**1. Wipe the Database.**
+Your current catalog is poisoned with duplicate keys (`zendesk` vs `zendesk.com`). You cannot fix this in flight. Truncate the `Assets` table.
+
+**2. Patch `Admission.py`:**
+
+* **Enforce Domain Key:** `asset_key = canonical_domain`.
+* **Fix Exclusion Check:** Use root domain matching.
+* **Fix Noise Floor:** Count distinct planes only.
+
+**3. Update `policy_config.json` (One last time):**
+Ensure your exclusions are actually covering the noise you see.
+
+```json
+"exclusions": [
+  "fast.io", "plus.net", "cloud.net", "tech.net"
+]
+
+```
+
+**4. Re-Run Farm.**
+Once AOD stops hallucinating product names and starts respecting domains, the count (134 vs 134) will align.

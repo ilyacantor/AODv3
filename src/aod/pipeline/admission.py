@@ -86,6 +86,17 @@ def is_corporate_root_domain(domain: Optional[str]) -> bool:
     return domain_lower in CORPORATE_ROOT_DOMAINS
 
 
+from ..constants import INFRASTRUCTURE_DOMAINS
+
+
+def is_infrastructure_domain(domain: Optional[str]) -> bool:
+    """Check if domain is an infrastructure/tooling domain that should not be admitted as a SaaS asset."""
+    if not domain:
+        return False
+    domain_lower = domain.lower().strip()
+    return domain_lower in INFRASTRUCTURE_DOMAINS
+
+
 VALID_CLOUD_RESOURCE_TYPES = {
     "compute", "ec2", "vm", "instance", "container", "ecs", "eks", "kubernetes",
     "database", "rds", "dynamodb", "aurora", "redis", "elasticache",
@@ -456,6 +467,13 @@ def apply_admission_criteria(
         return AdmissionResult(
             admitted=False,
             rejection_reason=f"Corporate root domain: {entity.domain}"
+        )
+    
+    # GATE 2: Reject infrastructure/tooling domains unconditionally
+    if is_infrastructure_domain(entity.domain):
+        return AdmissionResult(
+            admitted=False,
+            rejection_reason=f"Infrastructure domain: {entity.domain}"
         )
     
     # Check each admission criterion

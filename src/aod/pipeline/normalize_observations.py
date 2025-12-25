@@ -61,11 +61,26 @@ def extract_domain_from_uri(uri: str) -> Optional[str]:
     return None
 
 
+ENV_SUFFIXES = {
+    "prod", "production", "prd",
+    "dev", "development",
+    "staging", "stg", "stage",
+    "test", "testing", "tst",
+    "uat", "qa",
+    "sandbox", "sbx",
+    "demo", "legacy", "old", "new",
+}
+
+
 def derive_canonical_name(observation: Observation) -> str:
     """Derive a canonical name from an observation"""
     name = observation.name
     canonical = normalize_string(name)
     canonical = re.sub(r'\([^)]*\)', '', canonical).strip()
+    
+    env_pattern = r'[-_](' + '|'.join(ENV_SUFFIXES) + r')$'
+    canonical = re.sub(env_pattern, '', canonical, flags=re.IGNORECASE)
+    
     suffixes_to_remove = [
         "dashboard", "report", "calculator", "worksheet",
         "view", "saved query", "file", "spreadsheet"

@@ -438,8 +438,18 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         evidence["registered_domain"] = registered
         evidence["name_variant"] = asset.name
     else:
-        asset_key = _normalize_key(asset.name)
-        evidence["key_source"] = "name_derived"
+        normalized_name = _normalize_name_for_vendor_lookup(asset.name)
+        if normalized_name in VENDOR_TO_DOMAIN:
+            asset_key = VENDOR_TO_DOMAIN[normalized_name]
+            evidence["key_source"] = "vendor_alias"
+            evidence["original_name"] = asset.name
+        elif asset.vendor and asset.vendor.lower() in VENDOR_TO_DOMAIN:
+            asset_key = VENDOR_TO_DOMAIN[asset.vendor.lower()]
+            evidence["key_source"] = "vendor_lookup"
+            evidence["original_name"] = asset.name
+        else:
+            asset_key = _normalize_key(asset.name)
+            evidence["key_source"] = "name_derived"
     
     return AssetActualResult(
         asset_key=asset_key,

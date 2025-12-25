@@ -13,6 +13,7 @@ from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
+import tldextract
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -621,6 +622,22 @@ def apply_admission_criteria(
         AdmissionResult indicating whether entity is admitted
     """
     entity = correlation.entity
+    
+    # GATE 0: Reject invalid TLDs / internal hostnames
+    # Must have a valid public suffix (e.g., .com, .io, .org)
+    if entity.domain:
+        extracted = tldextract.extract(entity.domain)
+        if not extracted.suffix:
+            return AdmissionResult(
+                admitted=False,
+                rejection_reason=f"Invalid TLD / Internal hostname: {entity.domain}"
+            )
+    else:
+        # No domain at all - reject
+        return AdmissionResult(
+            admitted=False,
+            rejection_reason="No resolvable domain - requires domain-first identity"
+        )
     
     # GATE 1: Reject corporate/marketing root domains unconditionally
     if is_corporate_root_domain(entity.domain):

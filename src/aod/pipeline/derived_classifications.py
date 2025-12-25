@@ -583,6 +583,22 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
     return (re.sub(r'[^a-z0-9]', '', name.lower()), False)
 
 
+def _get_parent_domain(domain: str) -> Optional[str]:
+    """
+    Extract parent domain from a subdomain.
+    e.g., mail.google.com -> google.com
+    Returns None if already a root domain or invalid.
+    """
+    import tldextract
+    extracted = tldextract.extract(domain)
+    if not extracted.suffix:
+        return None
+    registered_domain = f"{extracted.domain}.{extracted.suffix}"
+    if domain.lower() == registered_domain.lower():
+        return None
+    return registered_domain
+
+
 def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) -> dict[str, DomainRollup]:
     """
     Compute domain-level rollups using OR logic across entities.
@@ -598,6 +614,9 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
     
     This ensures that if ANY entity under a domain has evidence,
     the domain is considered to have that evidence for reconciliation purposes.
+    
+    ACTIVITY ROLLUP (Zombie Cure): Activity from subdomains is propagated to parent domains.
+    e.g., activity on mail.google.com counts as activity for google.com
     
     INVARIANT: Domain key resolution matches aod_agent_reconcile.py to ensure
     UI counts match reconciliation counts (eliminating IRL breach).
@@ -642,5 +661,18 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
                 entity_count=1,
                 is_domain_canonical=is_canonical
             )
+    
+    # ACTIVITY ROLLUP (Zombie Cure): Propagate activity from subdomains to parent domains
+    # e.g., activity on mail.google.com should count as activity for google.com
+    for domain_key, rollup in list(rollups.items()):
+        parent_domain = _get_parent_domain(domain_key)
+        if parent_domain and parent_domain in rollups:
+            parent_rollup = rollups[parent_domain]
+            # Propagate activity: if subdomain has more recent activity, use it for parent
+            if rollup.latest_activity_at is not None:
+                subdomain_activity = _ensure_utc_aware(rollup.latest_activity_at)
+                parent_activity = _ensure_utc_aware(parent_rollup.latest_activity_at)
+                if parent_activity is None or (subdomain_activity and subdomain_activity > parent_activity):
+                    parent_rollup.latest_activity_at = subdomain_activity
     
     return rollups

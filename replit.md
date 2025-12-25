@@ -84,6 +84,8 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
 *   **Overview Tab**: React-based landing page built with Vite, Tailwind CSS, and framer-motion. Source in `client/`, builds to `static/overview/`. Displays AutonomOS platform introduction, AOD gateway explanation, interactive architecture iframe from overview.autonomos.software, and call-to-action buttons for Guided Validation.
 *   **Guided Validation Run**: Narrated walkthrough of AOD discovery and verification. Phases: Entry framing (0), Discovery run (3), Shadows inspection (4), Triage demonstration (5), Catalog review (6), Free exploration (8). Features auto-navigation, factual overlays, Farm handoff via URL params, and deterministic example selection with fallback handling. Tour state persisted in localStorage (`aod_guided_tour`). Implemented in `static/js/tour.js`.
+*   **Reconciliation Fixes (Dec 2025)**: Key generation uses VENDOR_TO_DOMAIN before falling back to name normalization; infrastructure domains (redis.com, mongodb.com, postgresql.org, etc.) rejected at admission GATE 2; environment suffixes (-prod, -dev, -staging, -legacy) stripped during canonical name derivation.
+*   **Product Name Aliases**: Maps common product names to canonical domains (Microsoft 365 → microsoft.com, Google Workspace → google.com, AWS → amazonaws.com, Office 365 → microsoft.com).
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and recipient of reconciliation results.

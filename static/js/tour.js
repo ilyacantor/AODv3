@@ -12,7 +12,7 @@ const TourManager = (function() {
         },
         3: { 
             title: "Ingest & Resolve",
-            content: "AOD is now processing raw observations. It doesn't just list rows; it <strong>resolves identity</strong>.\n\nIt is currently correlating disparate signals (e.g., a credit card charge vs. a login event) to determine what is a real asset and what is noise.",
+            content: "The Farm has generated a chaotic dataset. Now let's watch AOD make sense of it.\n\nClick <strong>Fetch & Run Discovery</strong> to ingest the snapshot and start the discovery process.",
             step: 6
         },
         '3b': { 
@@ -37,7 +37,7 @@ const TourManager = (function() {
         },
         6: { 
             title: "The Trusted Catalog",
-            content: "This is the \"Golden Record.\"\n\nWhile Triage handles the exceptions, the <strong>Catalog</strong> contains the fully verified estate.\n\nThis trusted list is what feeds the <strong>Adaptive API Mesh (AAM)</strong> to automate connections and the <strong>Business Logic Layer (BLL)</strong> to generate reports.",
+            content: "This is the \"Golden Record.\"\n\nWhile Triage handles the exceptions, the <strong>Catalog</strong> contains the fully verified estate.\n\nThis trusted list feeds the <strong>AAM</strong> for connecting and maintaining healthy connections, and then to <strong>DCL</strong> for creating a unified data ontology.",
             step: 10
         },
         6.5: { 
@@ -47,7 +47,7 @@ const TourManager = (function() {
         },
         7: { 
             title: "Trust, but Verify",
-            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier. We measure our own Precision and Recall.",
+            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset inventory.",
             step: 11
         },
         8: { 
@@ -312,6 +312,8 @@ const TourManager = (function() {
             backBtn.addEventListener('click', () => {
                 if (options.onBack) {
                     options.onBack();
+                } else {
+                    goBack();
                 }
             });
         }
@@ -399,6 +401,25 @@ const TourManager = (function() {
         state.phase = nextPhase;
         setState(state);
         executePhase(nextPhase);
+    }
+    
+    function goBack() {
+        if (aborted) return;
+        
+        const state = getState();
+        if (!state.active) return;
+        
+        const phaseOrder = [0, 3, 4, 5, 6, 7, 8];
+        const currentIndex = phaseOrder.indexOf(state.phase);
+        
+        if (currentIndex <= 0) {
+            return;
+        }
+        
+        const prevPhase = phaseOrder[currentIndex - 1];
+        state.phase = prevPhase;
+        setState(state);
+        executePhase(prevPhase);
     }
     
     function executePhase(phase) {

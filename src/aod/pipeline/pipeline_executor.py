@@ -102,7 +102,6 @@ async def execute_pipeline(
         run_log.counts.observations_in = len(observations)
         
         candidates = normalize_observations(observations)
-        run_log.counts.candidates_out = len(candidates)
         
         obs_samples = []
         for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:
@@ -189,6 +188,7 @@ async def execute_pipeline(
         
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
         run_log.counts.artifacts_recorded = len(artifacts)
+        run_log.counts.candidates_out = len(filtered_candidates)
         
         correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
         

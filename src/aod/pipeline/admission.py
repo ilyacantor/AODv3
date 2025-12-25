@@ -12,7 +12,7 @@ from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, C
 from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity
-from .vendor_inference import DOMAIN_TO_VENDOR
+from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -93,8 +93,10 @@ def is_infrastructure_domain(domain: Optional[str]) -> bool:
     """Check if domain is an infrastructure/tooling domain that should not be admitted as a SaaS asset."""
     if not domain:
         return False
-    domain_lower = domain.lower().strip()
-    return domain_lower in INFRASTRUCTURE_DOMAINS
+    registered = extract_registered_domain(domain)
+    if not registered:
+        return False
+    return registered in INFRASTRUCTURE_DOMAINS
 
 
 VALID_CLOUD_RESOURCE_TYPES = {
@@ -204,37 +206,119 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
 
 DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
 
+SOURCE_TO_PLANE = {
+    "dns": "network",
+    "proxy": "network",
+    "web_filter": "network",
+    "firewall": "network",
+    "netflow": "network",
+    "packet_capture": "network",
+    "casb": "network",
+    "swg": "network",
+    "dlp": "network",
+    "siem": "network",
+    "zscaler": "network",
+    "zscaler_proxy": "network",
+    "zscaler_zia": "network",
+    "zscaler_gre": "network",
+    "paloalto": "network",
+    "paloalto_panorama": "network",
+    "netskope": "network",
+    "netskope_casb": "network",
+    "symantec_proxy": "network",
+    "bluecoat": "network",
+    "fortigate": "network",
+    "cisco_umbrella": "network",
+    "cato": "network",
+    "cloudflare_gateway": "network",
+    "menlo": "network",
+    "iboss": "network",
+    "edr": "endpoint",
+    "mdm": "endpoint",
+    "av": "endpoint",
+    "agent": "endpoint",
+    "endpoint_protection": "endpoint",
+    "crowdstrike": "endpoint",
+    "sentinelone": "endpoint",
+    "carbonblack": "endpoint",
+    "defender": "endpoint",
+    "jamf": "endpoint",
+    "intune": "endpoint",
+    "workspace_one": "endpoint",
+    "kandji": "endpoint",
+    "sso": "idp",
+    "oauth": "idp",
+    "saml": "idp",
+    "directory": "idp",
+    "ldap": "idp",
+    "okta": "idp",
+    "azure_ad": "idp",
+    "entra_id": "idp",
+    "onelogin": "idp",
+    "ping": "idp",
+    "jumpcloud": "idp",
+    "cloud_trail": "cloud",
+    "cloudtrail": "cloud",
+    "aws_config": "cloud",
+    "azure_monitor": "cloud",
+    "gcp_audit": "cloud",
+    "aws": "cloud",
+    "azure": "cloud",
+    "gcp": "cloud",
+    "contract": "finance",
+    "invoice": "finance",
+    "expense": "finance",
+    "purchase_order": "finance",
+    "procurement": "finance",
+    "cmdb": "cmdb",
+    "servicenow": "cmdb",
+    "discovery": "discovery",
+}
+
+
+def source_to_plane(source: str) -> Optional[str]:
+    """
+    Map a source to its parent plane.
+    
+    Returns None for unknown sources to ensure they don't contribute to plane diversity.
+    Unknown sources are quarantined from counting to prevent signal inflation.
+    """
+    return SOURCE_TO_PLANE.get(source.lower())
+
 
 def check_discovery_admission(
     observations: Optional[list[Observation]],
-    min_sources: int = 2
+    min_planes: int = 2
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
     
     Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct discovery sources
+    - Evidence from ≥2 distinct PLANES (not sources!)
     - Recent activity ≤ 90 days
     
-    This allows shadow IT to be admitted before finance/cloud evidence appears,
-    since usage signals typically precede contracts or infrastructure.
+    CRITICAL: Count distinct planes, not distinct sources.
+    dns + proxy = 1 plane (Network)
+    dns + oauth = 2 planes (Network + IdP)
     """
     if not observations:
         return False, ""
     
     from datetime import datetime, timedelta, timezone
     
-    sources = set()
+    planes = set()
     latest_activity: Optional[datetime] = None
     
     for obs in observations:
         if obs.source:
-            sources.add(obs.source.lower())
+            plane = source_to_plane(obs.source)
+            if plane is not None:
+                planes.add(plane)
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
                 latest_activity = obs.observed_at
     
-    if len(sources) < min_sources:
+    if len(planes) < min_planes:
         return False, ""
     
     if latest_activity is None:
@@ -247,7 +331,7 @@ def check_discovery_admission(
     if latest_activity < cutoff:
         return False, ""
     
-    return True, f"Discovery: {len(sources)} sources ({', '.join(sorted(sources))}), last activity {latest_activity.date()}"
+    return True, f"Discovery: {len(planes)} planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
 
 
 def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:
@@ -548,11 +632,22 @@ def apply_admission_criteria(
             basis=entity.vendor_hypothesis.basis
         )
     
+    canonical_domain = extract_registered_domain(entity.domain) if entity.domain else None
+    
+    if not canonical_domain:
+        return AdmissionResult(
+            admitted=False,
+            rejection_reason="No resolvable domain - requires domain-first identity"
+        )
+    
+    asset_key = canonical_domain
+    display_name = entity.original_name
+    
     asset = Asset(
-        asset_id=deterministic_uuid(snapshot_id, run_id, "asset", entity.original_name),
+        asset_id=deterministic_uuid(snapshot_id, run_id, "asset", asset_key),
         tenant_id=tenant_id,
         run_id=run_id,
-        name=entity.original_name,
+        name=display_name,
         asset_type=determine_asset_type(correlation, entity),
         identifiers=identifiers,
         vendor=entity.vendor,

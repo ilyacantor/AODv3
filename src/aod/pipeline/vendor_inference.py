@@ -228,36 +228,37 @@ VENDOR_TO_DOMAIN.update({
 
 def extract_registered_domain(domain: str) -> Optional[str]:
     """
-    Extract the registered domain from a full domain.
+    Extract the registered domain (eTLD+1) from a full domain using PSL.
+    
+    Uses tldextract for proper Public Suffix List parsing, ensuring accurate
+    extraction for all TLDs including .app, .cloud, .io, etc.
     
     Examples:
         docs.mongodb.com -> mongodb.com
         api.stripe.com -> stripe.com
-        sub.sub.example.com -> example.com
+        observability.prod.elasticcloud.app -> elasticcloud.app
+        tooling.dev.meraki.io -> meraki.io
+        cache01.use1.redis.com -> redis.com
     """
     if not domain:
         return None
     
     domain = domain.lower().strip()
-    domain = domain.removeprefix("www.")
     
-    parts = domain.split(".")
-    if len(parts) < 2:
+    try:
+        import tldextract
+        extracted = tldextract.extract(domain)
+        if extracted.domain and extracted.suffix:
+            return f"{extracted.domain}.{extracted.suffix}"
         return None
-    
-    if len(parts) == 2:
-        return domain
-    
-    tld = parts[-1]
-    sld = parts[-2]
-    
-    if tld in ("com", "net", "org", "io", "co", "app", "dev", "so", "us"):
-        return f"{sld}.{tld}"
-    
-    if len(parts) >= 3 and parts[-2] == "co":
-        return f"{parts[-3]}.{parts[-2]}.{parts[-1]}"
-    
-    return f"{sld}.{tld}"
+    except Exception:
+        domain = domain.removeprefix("www.")
+        parts = domain.split(".")
+        if len(parts) < 2:
+            return None
+        if len(parts) == 2:
+            return domain
+        return f"{parts[-2]}.{parts[-1]}"
 
 
 def infer_vendor_from_domain(domain: Optional[str]) -> Optional[VendorHypothesisResult]:

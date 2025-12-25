@@ -52,7 +52,7 @@ const TourManager = (function() {
         },
         4: { 
             title: "Risks & Waste",
-            content: "AOD classifies problems into four categories:\n\n<strong>Security Risks:</strong> Ungoverned access, data conflicts, identity gaps.\n\n<strong>Governance Issues:</strong> CMDB gaps, duplication, visibility issues.\n\n<strong>Shadow IT:</strong> Active systems operating outside IT governance.\n\n<strong>Zombies:</strong> Licensed assets with no recent activity.\n\nClick <strong>Shadow</strong> to drill down.",
+            content: "AOD classifies problems into four categories:\n\n<strong>Security Risks:</strong> Ungoverned access, data conflicts, identity gaps.\n\n<strong>Governance Issues:</strong> CMDB gaps, duplication, visibility issues.\n\n<strong>Shadow IT:</strong> Active systems operating outside IT governance.\n\n<strong>Zombies:</strong> Licensed assets with no recent activity.\n\nClick on any KPI box to drill down.",
             step: 12
         },
         4.5: { 

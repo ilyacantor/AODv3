@@ -69,5 +69,7 @@ class PolicyConfig:
             "seed_exclusions": {
                 "corporate_root_domains": sorted(list(self.corporate_root_domains)),
                 "infrastructure_domains": sorted(list(self.infrastructure_domains)),
-            }
+            },
+            "infrastructure_seeds": sorted(list(self.infrastructure_domains)),
+            "corporate_root_domains": sorted(list(self.corporate_root_domains)),
         }

@@ -4,83 +4,90 @@ const TourManager = (function() {
     let aborted = false;
     let pendingTimeouts = [];
     
-    const INTRO_STEPS = 3;
+    const INTRO_STEPS = 4;
     
     const TOUR_PHASES = {
-        'intro_1': {
-            title: "The Execution Pipeline",
-            content: "The architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
+        'intro_0': {
+            title: "Welcome to the AOD Demo",
+            content: "The following is a brief overview of the entire AOS platform, and how AOD fits.",
             step: 1,
             location: 'overview',
             scrollTarget: 'hero'
         },
+        'intro_1': {
+            title: "The Execution Pipeline",
+            content: "The architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
+            step: 2,
+            location: 'overview',
+            scrollTarget: 'pipeline'
+        },
         'intro_2': {
             title: "Structural Dependency",
             content: "AOD is the functional prerequisite for the platform.\n\nThe <strong>Adaptive API Mesh (AAM)</strong> requires a verified asset inventory to establish connections.\n\nAOD's primary function is to construct this <strong>Asset Catalog</strong>, enabling AAM and the DCL to operate on trusted data.",
-            step: 2,
+            step: 3,
             location: 'overview',
             scrollTarget: 'pipeline'
         },
         'intro_3': {
             title: "Inputs & Outputs",
             content: "AOD ingests raw signals—from <strong>Identity</strong>, <strong>DNS</strong>, and <strong>Finance</strong>—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Shadow IT, Zombies, and governance risks.\n\nWe will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.",
-            step: 3,
+            step: 4,
             location: 'overview',
             scrollTarget: 'aod-details'
         },
         0: { 
             title: "The Visibility Gap",
             content: "Most enterprises don't know what they own. Between <strong>Shadow IT</strong> (risk) and <strong>Zombie SaaS</strong> (waste), millions are lost annually.\n\nThis tour doesn't just show you a static demo. We're going to generate a live, chaotic IT environment and watch AOD organize it in real-time.",
-            step: 4
+            step: 5
         },
         3: { 
             title: "Ingest & Resolve",
             content: "The Farm has generated a chaotic dataset. Now let's watch AOD make sense of it.\n\nClick <strong>Fetch & Run Discovery</strong> to ingest the snapshot and start the discovery process.",
-            step: 9
+            step: 10
         },
         '3b': { 
             title: "The Discovery Dashboard",
             content: "",
-            step: 10
+            step: 11
         },
         4: { 
             title: "Risks & Waste",
             content: "Let's inspect the problems AOD found:\n\n• <strong>Shadow IT:</strong> Apps running without IT's knowledge (Security Risk).\n• <strong>Zombies:</strong> Paid licenses with zero usage (Financial Waste).\n\nClick the <strong>Shadow</strong> card to drill down.",
-            step: 11
+            step: 12
         },
         4.5: { 
             title: "Risks & Waste",
             content: "This simulation produced a clean run with no Shadow IT detected. In real enterprise environments, Shadow assets are common.\n\nLet's continue to the Triage console.",
-            step: 11
+            step: 12
         },
         5: { 
             title: "The Decision Layer",
             content: "Discovery is useless without action.\n\nThe <strong>Triage Console</strong> prioritizes findings by urgency. You don't have to review 10,000 lines—just the Tier 1 issues that require human judgment.\n\nYou can acknowledge, reject, or flag assets right here.",
-            step: 12
+            step: 13
         },
         6: { 
             title: "The Trusted Catalog",
             content: "This is the \"Golden Record.\"\n\nWhile Triage handles the exceptions, the <strong>Catalog</strong> contains the fully verified estate.\n\nThis trusted list feeds the <strong>AAM</strong> for connecting and maintaining healthy connections, and then to <strong>DCL</strong> for creating a unified data ontology.",
-            step: 13
+            step: 14
         },
         6.5: { 
             title: "The Trusted Catalog",
             content: "The Catalog is still being populated. In production, this becomes the \"Golden Record\" that feeds downstream systems.",
-            step: 13
+            step: 14
         },
         7: { 
             title: "Trust, but Verify",
             content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset inventory.",
-            step: 14
+            step: 15
         },
         8: { 
             title: "Tour Complete",
             content: "You've seen the cycle: <strong>Generate Chaos → Discover Order → Audit Accuracy.</strong>\n\nYou are now free to explore the Catalog, run new simulations, or drill into specific asset details.",
-            step: 16
+            step: 17
         }
     };
     
-    const TOTAL_STEPS = 16;
+    const TOTAL_STEPS = 17;
     
     function trackedTimeout(fn, delay) {
         const id = setTimeout(() => {
@@ -394,13 +401,13 @@ const TourManager = (function() {
     function start() {
         aborted = false;
         clearAllTimeouts();
-        const state = { active: true, phase: 'intro_1', runId: null };
+        const state = { active: true, phase: 'intro_0', runId: null };
         setState(state);
         
         const overviewTab = document.querySelector('.header-nav-tab[data-tab="overview"]');
         if (overviewTab) overviewTab.click();
         
-        setTimeout(() => executePhase('intro_1'), 300);
+        setTimeout(() => executePhase('intro_0'), 300);
     }
     
     function exit() {
@@ -416,7 +423,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
+        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -436,7 +443,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
+        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex <= 0) {
@@ -455,6 +462,9 @@ const TourManager = (function() {
         const state = getState();
         
         switch (phase) {
+            case 'intro_0':
+                executeIntroPhase('intro_0');
+                break;
             case 'intro_1':
                 executeIntroPhase('intro_1');
                 break;
@@ -494,19 +504,29 @@ const TourManager = (function() {
         const phaseConfig = TOUR_PHASES[phaseKey];
         const isLastIntro = phaseKey === 'intro_3';
         
-        const overviewIframe = document.querySelector('.overview-iframe');
-        if (overviewIframe && overviewIframe.contentWindow && phaseConfig.scrollTarget) {
-            overviewIframe.contentWindow.postMessage({
-                action: 'scrollToSection',
-                section: phaseConfig.scrollTarget
-            }, '*');
-        }
+        const sendScrollMessage = () => {
+            const overviewIframe = document.querySelector('.overview-iframe');
+            if (overviewIframe && overviewIframe.contentWindow && phaseConfig.scrollTarget) {
+                try {
+                    overviewIframe.contentWindow.postMessage({
+                        action: 'scrollToSection',
+                        section: phaseConfig.scrollTarget
+                    }, '*');
+                } catch (e) {
+                    console.warn('TourManager: Failed to send scroll message', e);
+                }
+            }
+        };
         
-        await trackedDelay(600);
+        sendScrollMessage();
+        await trackedDelay(300);
+        sendScrollMessage();
+        
+        await trackedDelay(400);
         if (aborted) return;
         
         await showOverlay(phaseKey, {
-            showBack: phaseKey !== 'intro_1',
+            showBack: phaseKey !== 'intro_0',
             primaryButtonText: isLastIntro ? 'Start Simulation' : 'Next',
             position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
             onContinue: () => {

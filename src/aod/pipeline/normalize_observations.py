@@ -1,11 +1,96 @@
 """Stage 2: NormalizeObservations - Normalize names/domains and derive candidate entities"""
 
 import re
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+import tldextract
+
 from ..models.input_contracts import Observation
-from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult
+from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult, VENDOR_TO_DOMAIN
+
+logger = logging.getLogger(__name__)
+
+
+def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
+    """
+    Iron Dome: Unified admission gate for key/domain validation.
+    
+    This function MUST be called for ALL evidence streams before entity creation.
+    Nothing bypasses this check - Discovery, Finance, CMDB, IdP, Endpoint.
+    
+    Rules:
+    1. If suffix is empty (internal hostname like 'auth-service', 'images694'), reject
+    2. If key contains spaces or invalid characters, reject
+    3. Must have a valid public TLD suffix (.com, .io, .org, etc.)
+    
+    Args:
+        key: Domain or key to validate
+        
+    Returns:
+        (is_valid, reason) tuple
+    """
+    if not key:
+        return False, "Empty key"
+    
+    key = key.lower().strip()
+    
+    if ' ' in key or '\t' in key or '\n' in key:
+        return False, f"Key contains whitespace: {key}"
+    
+    invalid_chars = re.search(r'[<>"\'\{\}\[\]\\]', key)
+    if invalid_chars:
+        return False, f"Key contains invalid characters: {key}"
+    
+    extracted = tldextract.extract(key)
+    
+    if not extracted.suffix:
+        return False, f"No valid TLD suffix (internal hostname): {key}"
+    
+    if not extracted.domain:
+        return False, f"No domain component: {key}"
+    
+    return True, ""
+
+
+def normalize_name_to_domain(name: str) -> Optional[str]:
+    """
+    Attempt to resolve a product name to its canonical domain.
+    
+    Uses VENDOR_TO_DOMAIN mapping to convert product names like:
+    - "Okta" -> "okta.com"
+    - "Workday" -> "workday.com"
+    - "Microsoft 365" -> "microsoft.com"
+    
+    This normalization MUST happen BEFORE the validate_key_integrity check.
+    
+    Args:
+        name: Raw product/vendor name
+        
+    Returns:
+        Canonical domain if found, None otherwise
+    """
+    if not name:
+        return None
+    
+    normalized = name.lower().strip()
+    
+    normalized = re.sub(r'[^\w\s-]', '', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    if normalized in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized]
+    
+    normalized_no_spaces = normalized.replace(' ', '')
+    if normalized_no_spaces in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_no_spaces]
+    
+    normalized_underscores = normalized.replace(' ', '_')
+    if normalized_underscores in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[normalized_underscores]
+    
+    return None
 
 
 @dataclass
@@ -93,12 +178,16 @@ def derive_canonical_name(observation: Observation) -> str:
     return canonical if canonical else normalize_string(name)
 
 
-def normalize_observations(observations: list[Observation]) -> list[CandidateEntity]:
+def normalize_observations(observations: list[Observation]) -> tuple[list[CandidateEntity], list[dict]]:
     """
     Normalize observations and derive candidate system entities.
     
+    IRON DOME: All entities MUST pass validate_key_integrity() before creation.
+    Internal hostnames (no valid TLD) are rejected at this stage.
+    
     - Normalize names/domains/hostnames
     - Derive candidate "system entities" from raw observations
+    - Apply validate_key_integrity() to filter invalid entities
     - Maintain provenance (observation IDs)
     - Merge observations that represent the same entity
     - Domain-first keying: if entity has domain, use domain as canonical key
@@ -107,15 +196,23 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
         observations: List of raw observations
         
     Returns:
-        List of candidate entities with normalized identifiers
+        Tuple of (valid_entities, rejected_observations)
+        - valid_entities: List of candidate entities with normalized identifiers
+        - rejected_observations: List of rejected observations with reasons
     """
     entities_by_domain: dict[str, CandidateEntity] = {}
     entities_by_name: dict[str, CandidateEntity] = {}
+    rejected: list[dict] = []
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
         canonical_name = derive_canonical_name(obs)
         
         if not canonical_name:
+            rejected.append({
+                "observation_id": obs.observation_id,
+                "name": obs.name,
+                "reason": "Empty canonical name after normalization"
+            })
             continue
         
         domain = normalize_domain(obs.domain) if obs.domain else None
@@ -123,6 +220,43 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
             domain = extract_domain_from_uri(obs.uri)
         if not domain and _looks_like_domain(obs.name.lower().strip()):
             domain = normalize_domain(obs.name.lower().strip())
+        
+        if not domain:
+            resolved_domain = normalize_name_to_domain(obs.name)
+            if resolved_domain:
+                domain = resolved_domain
+                logger.debug("normalize.product_name_resolved", extra={
+                    "observation_id": obs.observation_id,
+                    "name": obs.name,
+                    "resolved_domain": domain
+                })
+        
+        if not domain:
+            if obs.vendor:
+                resolved_domain = normalize_name_to_domain(obs.vendor)
+                if resolved_domain:
+                    domain = resolved_domain
+                    logger.debug("normalize.vendor_name_resolved", extra={
+                        "observation_id": obs.observation_id,
+                        "vendor": obs.vendor,
+                        "resolved_domain": domain
+                    })
+        
+        is_valid, rejection_reason = validate_key_integrity(domain)
+        if not is_valid:
+            rejected.append({
+                "observation_id": obs.observation_id,
+                "name": obs.name,
+                "domain": domain,
+                "reason": rejection_reason
+            })
+            logger.debug("normalize.iron_dome_rejected", extra={
+                "observation_id": obs.observation_id,
+                "name": obs.name,
+                "domain": domain,
+                "reason": rejection_reason
+            })
+            continue
         
         hostname = obs.hostname.lower().strip() if obs.hostname else None
         uri = obs.uri.lower().strip() if obs.uri else None
@@ -165,7 +299,15 @@ def normalize_observations(observations: list[Observation]) -> list[CandidateEnt
                 entities_by_name[canonical_name] = entity
     
     all_entities = list(entities_by_domain.values()) + list(entities_by_name.values())
-    return sorted(all_entities, key=lambda e: e.domain or e.canonical_name)
+    
+    if rejected:
+        logger.info("normalize.iron_dome_summary", extra={
+            "total_observations": len(observations),
+            "valid_entities": len(all_entities),
+            "rejected_count": len(rejected)
+        })
+    
+    return sorted(all_entities, key=lambda e: e.domain or e.canonical_name), rejected
 
 
 def _looks_like_domain(name: str) -> bool:

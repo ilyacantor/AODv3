@@ -168,7 +168,25 @@ async def execute_pipeline(
         observations = snapshot.planes.discovery.observations
         run_log.counts.observations_in = len(observations)
         
-        candidates = normalize_observations(observations)
+        candidates, iron_dome_rejections = normalize_observations(observations)
+        
+        if iron_dome_rejections:
+            logger.info("pipeline.iron_dome_rejections", extra={
+                "run_id": run_id,
+                "rejected_count": len(iron_dome_rejections),
+                "sample_rejections": iron_dome_rejections[:5]
+            })
+            
+            iron_dome_batch = []
+            for rej in iron_dome_rejections:
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "iron_dome", rej.get("observation_id", "")))
+                iron_dome_batch.append((
+                    rejection_id, run_id, rej.get("observation_id", ""), rej.get("name", ""),
+                    "iron_dome", rej.get("reason", "Invalid key"),
+                    json.dumps({"domain": rej.get("domain")}),
+                    started_at.isoformat()
+                ))
+            await db.create_rejections_batch(iron_dome_batch)
         
         obs_samples = []
         for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:

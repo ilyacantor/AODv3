@@ -93,6 +93,13 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - **Discovery Corroboration Planes**: Only network, endpoint, idp, cloud, discovery count toward discovery admission; finance and CMDB excluded from discovery corroboration
     - **TLD Validation (GATE 0)**: Entities without valid public TLD suffixes (internal hostnames) rejected at admission start
     - **Activity Rollup for Zombie Classification**: Subdomain activity propagates to parent domains (e.g., mail.google.com activity counts toward google.com), preventing false zombie classifications
+*   **Iron Dome (Dec 2025)**: Unified early-stage validation gate applied at normalization (Stage 2) before entity creation:
+    - `validate_key_integrity(key)`: Uses tldextract to reject internal hostnames (no valid TLD suffix like `images694`, `auth-service`, `token865`)
+    - `normalize_name_to_domain(name)`: Resolves product names to canonical domains BEFORE validation (Okta → okta.com, Workday → workday.com)
+    - All Discovery observations pass through Iron Dome before becoming CandidateEntities
+    - CMDB/IdP/Finance/Cloud records are ONLY used for correlation, NOT entity creation - Iron Dome at normalization is sufficient
+    - Rejected observations persisted to rejections table with `iron_dome` rejection type
+    - GATE 0 in admission.py retained as final safety net
 *   **Product Name Aliases**: Maps common product names to canonical domains (Microsoft 365 → microsoft.com, Google Workspace → google.com, AWS → amazonaws.com, Office 365 → microsoft.com).
 
 ## External Dependencies

@@ -242,16 +242,6 @@ main { padding: 2rem; }
 .help-kpi-name { font-weight: 600; color: var(--cyan-400); font-size: 0.875rem; margin-bottom: 0.25rem; }
 .help-kpi-desc { color: var(--slate-400); font-size: 0.8rem; line-height: 1.4; }
 @media (max-width: 600px) { .help-kpi-grid { grid-template-columns: 1fr; } }
-.mode-toggle { display: flex; align-items: center; gap: 0.75rem; margin-right: 1rem; }
-.mode-label { font-size: 0.8rem; font-weight: 600; color: var(--slate-500); transition: color 0.2s ease; }
-.mode-label.active { color: var(--cyan-400); }
-.toggle-switch { position: relative; width: 48px; height: 24px; background: var(--slate-700); border-radius: 12px; cursor: pointer; transition: background 0.2s ease; }
-.toggle-switch.prod { background: var(--cyan-600); }
-.toggle-knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-.toggle-switch.prod .toggle-knob { transform: translateX(24px); }
-.mode-indicator { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; }
-.mode-indicator.dev { background: rgba(148, 163, 184, 0.2); color: var(--slate-400); }
-.mode-indicator.prod { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); }
 .main-tab-content { display: none; }
 .main-tab-content.active { display: block; }
 .test-card { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; transition: all 0.2s ease; }

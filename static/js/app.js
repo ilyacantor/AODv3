@@ -3,44 +3,9 @@
         let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], validated: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
         
-        let llmMode = 'dev';
         let decisionTracesCache = null;
         let decisionTraceFilter = 'all';
         let decisionMismatches = {};
-        
-        function initModeToggle() {
-            const toggle = document.getElementById('modeToggle');
-            const devLabel = document.getElementById('devLabel');
-            const prodLabel = document.getElementById('prodLabel');
-            
-            const saved = localStorage.getItem('aod_llm_mode');
-            if (saved === 'prod') {
-                llmMode = 'prod';
-                toggle.classList.add('prod');
-                devLabel.classList.remove('active');
-                prodLabel.classList.add('active');
-            }
-            
-            toggle.addEventListener('click', () => {
-                if (llmMode === 'dev') {
-                    llmMode = 'prod';
-                    toggle.classList.add('prod');
-                    devLabel.classList.remove('active');
-                    prodLabel.classList.add('active');
-                } else {
-                    llmMode = 'dev';
-                    toggle.classList.remove('prod');
-                    devLabel.classList.add('active');
-                    prodLabel.classList.remove('active');
-                }
-                localStorage.setItem('aod_llm_mode', llmMode);
-                console.log('LLM mode:', llmMode === 'prod' ? 'ON' : 'OFF');
-            });
-        }
-        
-        function getLlmEnabled() {
-            return llmMode === 'prod';
-        }
         
         function initMainTabs() {
             document.querySelectorAll('.header-nav-tab').forEach(tab => {
@@ -2167,7 +2132,7 @@
                 const r = await fetch('/api/runs/from-farm', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId, llm_enabled: getLlmEnabled() }) 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
                 });
                 
                 const result = await r.json();
@@ -2242,7 +2207,6 @@
             popDrill();
         });
         
-        initModeToggle();
         initMainTabs();
         initTriageTab();
         initTestTab();

@@ -52,7 +52,7 @@ const TourManager = (function() {
         },
         4: { 
             title: "Risks & Waste",
-            content: "Let's inspect the problems AOD found:\n\n<strong>Security Risks:</strong>\n• <strong>Shadow IT:</strong> Apps running without IT's knowledge.\n\n<strong>Governance Issues:</strong>\n• <strong>Zombies:</strong> Paid licenses with zero usage.\n\nClick the <strong>Shadow</strong> card to drill down.",
+            content: "AOD surfaces two types of problems:\n\n<strong>Security Risks:</strong> Actionable findings—ungoverned access paths, financially-backed shadow systems, and data conflicts on security-relevant fields.\n\n<strong>Governance Issues:</strong> Hygiene gaps—CMDB inconsistencies, duplication, and visibility gaps that reduce control plane accuracy.\n\nThe <strong>Shadow</strong> and <strong>Zombie</strong> cards show asset classifications derived from these findings.\n\nClick <strong>Shadow</strong> to drill down.",
             step: 12
         },
         4.5: { 

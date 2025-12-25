@@ -217,7 +217,7 @@ const TourManager = (function() {
     async function showOverlay(phaseKey, options = {}) {
         removeOverlay();
         
-        const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'Simulation & Proof', content: String(phaseKey), step: 1 };
+        const phaseConfig = TOUR_PHASES[phaseKey] || { title: 'AOD Demo', content: String(phaseKey), step: 1 };
         const title = options.title || phaseConfig.title;
         const content = options.content || phaseConfig.content;
         const currentStep = Number(options.step || phaseConfig.step) || 1;
@@ -256,7 +256,7 @@ const TourManager = (function() {
             <div class="tour-overlay-header">
                 <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
-                    <span class="tour-overlay-title">Simulation & Proof</span>
+                    <span class="tour-overlay-title">AOD Demo</span>
                 </div>
                 <button class="tour-close-btn" aria-label="Close tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -665,7 +665,7 @@ const TourManager = (function() {
             <div class="tour-overlay-header">
                 <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
-                    <span class="tour-overlay-title">Simulation & Proof</span>
+                    <span class="tour-overlay-title">AOD Demo</span>
                 </div>
             </div>
             <div class="tour-overlay-content">

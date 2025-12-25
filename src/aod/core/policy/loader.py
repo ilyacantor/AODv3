@@ -15,35 +15,12 @@ from .schema import PolicyConfig, AdmissionConfig, ScopeConfig
 
 _current_config: Optional[PolicyConfig] = None
 
-CORPORATE_ROOT_DOMAINS = {
-    "atlassian.com",
-    "salesforce.com",
-    "microsoft.com",
-    "google.com",
-    "amazon.com",
-    "adobe.com",
-    "oracle.com",
-    "sap.com",
-    "ibm.com",
-    "cisco.com",
-    "vmware.com",
-    "servicenow.com",
-    "workday.com",
-    "zendesk.com",
-    "hubspot.com",
-    "intuit.com",
-    "autodesk.com",
-    "splunk.com",
-    "datadog.com",
-    "cloudflare.com",
-    "twilio.com",
-    "stripe.com",
-    "mongodb.com",
-    "elastic.co",
-    "snowflake.com",
-    "okta.com",
-    "pagerduty.com",
-}
+CORPORATE_ROOT_DOMAINS: set[str] = set()
+# Empty - SaaS vendor domains are legitimate discovery targets.
+# This was incorrectly populated with major SaaS vendors (pagerduty.com,
+# zendesk.com, okta.com, etc.) which caused them to be killed at admission.
+# Corporate root domains are meant for MARKETING websites of a tenant's
+# own company, not third-party SaaS platforms they use.
 
 
 def _get_infrastructure_domains() -> set[str]:

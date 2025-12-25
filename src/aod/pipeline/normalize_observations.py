@@ -60,10 +60,13 @@ def normalize_name_to_domain(name: str) -> Optional[str]:
     
     Uses VENDOR_TO_DOMAIN mapping to convert product names like:
     - "Okta" -> "okta.com"
+    - "Okta (Legacy)" -> "okta.com"
     - "Workday" -> "workday.com"
     - "Microsoft 365" -> "microsoft.com"
+    - "PagerDuty-prod" -> "pagerduty.com"
     
     This normalization MUST happen BEFORE the validate_key_integrity check.
+    Strips common suffixes like (Legacy), -prod, -dev etc. before matching.
     
     Args:
         name: Raw product/vendor name
@@ -76,15 +79,24 @@ def normalize_name_to_domain(name: str) -> Optional[str]:
     
     normalized = name.lower().strip()
     
+    normalized = re.sub(r'\s*\([^)]*\)', '', normalized).strip()
+    
+    env_suffixes = r'[-_]?(prod|production|prd|dev|development|staging|stg|stage|test|testing|tst|uat|qa|sandbox|sbx|demo|legacy|old|new)$'
+    normalized = re.sub(env_suffixes, '', normalized, flags=re.IGNORECASE).strip()
+    
     normalized = re.sub(r'[^\w\s-]', '', normalized)
     normalized = re.sub(r'\s+', ' ', normalized).strip()
     
     if normalized in VENDOR_TO_DOMAIN:
         return VENDOR_TO_DOMAIN[normalized]
     
-    normalized_no_spaces = normalized.replace(' ', '')
+    normalized_no_spaces = normalized.replace(' ', '').replace('-', '')
     if normalized_no_spaces in VENDOR_TO_DOMAIN:
         return VENDOR_TO_DOMAIN[normalized_no_spaces]
+    
+    for vendor_key, domain in VENDOR_TO_DOMAIN.items():
+        if vendor_key in normalized or vendor_key in normalized_no_spaces:
+            return domain
     
     normalized_underscores = normalized.replace(' ', '_')
     if normalized_underscores in VENDOR_TO_DOMAIN:
@@ -205,21 +217,25 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     rejected: list[dict] = []
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
+        domain = normalize_domain(obs.domain) if obs.domain else None
+        if not domain and obs.uri:
+            domain = extract_domain_from_uri(obs.uri)
+        if not domain and obs.name and _looks_like_domain(obs.name.lower().strip()):
+            domain = normalize_domain(obs.name.lower().strip())
+        
         canonical_name = derive_canonical_name(obs)
+        
+        if not canonical_name and domain:
+            canonical_name = _extract_base_name(domain) or domain
         
         if not canonical_name:
             rejected.append({
                 "observation_id": obs.observation_id,
                 "name": obs.name,
-                "reason": "Empty canonical name after normalization"
+                "domain": domain,
+                "reason": "Empty canonical name and no domain"
             })
             continue
-        
-        domain = normalize_domain(obs.domain) if obs.domain else None
-        if not domain and obs.uri:
-            domain = extract_domain_from_uri(obs.uri)
-        if not domain and _looks_like_domain(obs.name.lower().strip()):
-            domain = normalize_domain(obs.name.lower().strip())
         
         if not domain:
             resolved_domain = normalize_name_to_domain(obs.name)

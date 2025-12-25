@@ -307,7 +307,7 @@ async def execute_pipeline(
             prop_cmdb = prop_gov.cmdb_present if prop_gov else False
             prop_reason = prop_gov.propagation_reason if prop_gov else None
             
-            entity_observations = [obs for obs in observations if obs.name == candidate.original_name or obs.domain == candidate.domain]
+            entity_observations = [obs for obs in observations if obs.observation_id in candidate.observation_ids]
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason

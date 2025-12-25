@@ -54,7 +54,7 @@ class SnapshotMeta(BaseModel):
 class Observation(BaseModel):
     """A discovery observation from the discovery plane"""
     observation_id: str
-    name: str
+    name: Optional[str] = None
     domain: Optional[str] = None
     hostname: Optional[str] = None
     uri: Optional[str] = None

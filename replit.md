@@ -62,7 +62,8 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - API: `GET /api/v1/policy/config` exposes config for Farm alignment
     - API: `POST /api/v1/policy/reload` hot-reloads config from disk
     - Parallel validation: Pipeline runs both legacy and PolicyEngine, logs mismatches
-    - Seed lists: corporate_root_domains (27), infrastructure_domains (46) exposed via API
+    - Seed lists: corporate_root_domains (empty - SaaS vendors are legitimate targets), infrastructure_domains (46) exposed via API
+    - **Critical Fix (Dec 2025)**: CORPORATE_ROOT_DOMAINS was incorrectly populated with 27 major SaaS vendors (pagerduty.com, okta.com, zendesk.com, etc.) causing them to be killed at admission. Fixed by emptying the list - SaaS platforms are legitimate discovery targets, not corporate marketing websites. Corporate root domains are meant for tenant's OWN marketing domains only.
     - Controlled cutover: `scope.use_policy_engine` flag (default: false) enables PolicyEngine as primary
     - Conservative mode: When enabled, PolicyEngine can only reduce admissions (block what legacy allows)
     - Farm integration complete: Farm fetches policy from AOD with 5-min cache, uses seed lists from API

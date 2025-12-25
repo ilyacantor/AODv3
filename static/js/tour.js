@@ -30,7 +30,7 @@ const TourManager = (function() {
         },
         'intro_3': {
             title: "Inputs & Outputs",
-            content: "AOD ingests raw signals—from <strong>Identity</strong>, <strong>DNS</strong>, and <strong>Finance</strong>—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Shadow IT, Zombies, and governance risks.\n\nWe will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.",
+            content: "AOD ingests raw signals—from <strong>Identity</strong>, <strong>DNS</strong>, and <strong>Finance</strong>—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Security Risks, Governance Issues, Shadow IT, and Zombies.\n\nWe will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.",
             step: 4,
             location: 'overview',
             scrollTarget: 'aod-details'

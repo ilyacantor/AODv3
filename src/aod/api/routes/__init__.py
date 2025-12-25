@@ -9,6 +9,7 @@ from .catalog import router as catalog_router
 from .findings import router as findings_router
 from .triage import router as triage_router
 from .debug import router as debug_router
+from .policy import router as policy_router
 
 router = APIRouter(prefix="/api")
 
@@ -19,3 +20,5 @@ router.include_router(catalog_router, tags=["catalog"])
 router.include_router(findings_router, tags=["findings"])
 router.include_router(triage_router, tags=["triage"])
 router.include_router(debug_router, tags=["debug"])
+
+router.include_router(policy_router, prefix="/v1", tags=["policy"])

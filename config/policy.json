@@ -1,0 +1,15 @@
+{
+  "admission": {
+    "minimum_spend": 200,
+    "noise_floor": 2,
+    "zombie_window_days": 90,
+    "require_sso_for_idp": true,
+    "require_valid_ci_type": true,
+    "require_valid_lifecycle": true
+  },
+  "scope": {
+    "include_infra": false,
+    "treat_directory_as_idp": false
+  },
+  "exclusions": []
+}

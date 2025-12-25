@@ -1,104 +1,97 @@
-# Guided Validation Tour Script
+# Simulation & Proof Tour Script
 
-Complete narrated walkthrough coordinating between AOD (discovery) and Farm (data generation/verification).
+**Strategic Narrative: "Battle-Hardened" Discovery**
+
+The story isn't "Look, our software works." The story is: *"Enterprise data is dirty. Most tools break. Watch us generate a mess (Farm) and then create order from chaos (AOD)."*
+
+---
 
 ## Tour Overview
 
 | System | Phases | Steps |
 |--------|--------|-------|
-| AOD | Entry, Discovery, Results, Triage, Catalog, Exit | 8 steps |
-| Farm | Snapshot Generation, Snapshot Display, Verification | 11 steps |
+| AOD | Entry, Discovery, Results, Risks, Triage, Catalog, Verify, Exit | Steps 1, 6-11, 13 |
+| Farm | Chaos Generation, Handoff, Reconciliation | Steps 2-5, 12-13 |
 
-**Total Experience**: 8 AOD steps + 11 Farm steps = 19 guided interactions
-
----
-
-## Phase 0: Entry Framing (AOD)
-
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 1 of 8 | Welcome to AOD | "AOD discovers what actually exists in an enterprise environment. This run shows how discovery is executed, inspected, and verified." | Entry point, Next button proceeds |
+**Total Experience**: 13 guided steps across both systems
 
 ---
 
-## Phase 1: Snapshot Generation (Farm - 5 steps)
+## Phase 0: The Hook (AOD Entry)
 
-| Step | Dialog Text | Action |
-|------|-------------|--------|
-| 1 of 5 | "Select a Scale. Medium = ~50 assets, Enterprise = 500+, Mega = 1500+.<br><br>Or accept defaults and press Generate." | Highlights Scale dropdown, waits for selection or Generate click |
-| 2 of 5 | "Select an Enterprise profile. Modern SaaS = heavy cloud, Regulated Finance = legacy + compliance.<br><br>Or accept defaults and press Generate." | Highlights Enterprise dropdown |
-| 3 of 5 | "Select a Realism level. Clean = no mess, Typical = some conflicts, Messy = chaos.<br><br>Or accept defaults and press Generate." | Highlights Realism dropdown |
-| 4 of 5 | "Select a Data Preset. Clean = easy baseline, Enterprise Mess = realistic conflicts, Adversarial = absolute disaster.<br><br>Or accept defaults and press Generate." | Highlights Data Preset dropdown |
-| 5 of 5 | "Press Generate Snapshot to create ground truth data." | Highlights Generate button, button says "Generate Snapshot" |
-| (loading) | "Generating snapshot..." | Shows while generating |
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **1 of 13** | **The Visibility Gap** | Most enterprises don't know what they own. Between **Shadow IT** (risk) and **Zombie SaaS** (waste), millions are lost annually.<br><br>This tour doesn't just show you a static demo. We're going to generate a live, chaotic IT environment and watch AOD organize it in real-time. | Center Modal.<br>Button: **"Start Simulation"** |
 
 ---
 
-## Phase 2: Snapshot Display (Farm - 2 steps)
+## Phase 1: Creating the Chaos (Farm)
 
-| Step | Dialog Text | Action |
-|------|-------------|--------|
-| 1 of 2 | "Snapshot represents a synthetic and hyper-realistic enterprise IT environment. AOD processes in excess of 10,000 raw observations, resolves over 1,000 candidate assets, evaluates tens of thousands of evidence relationships, and produces a verified catalog of over 1,000 trusted assets." | Highlights and expands snapshot |
-| 2 of 2 | "Now we go back to AOD to run discovery on this data.<br><br>[Continue to AOD →]" | Shows handoff link to AOD |
-| (no return URL) | "Snapshot ready. Return to AOD to run discovery, then come back for reconciliation." | Button: "Done" |
-
----
-
-## Phase 3: Discovery Run (AOD)
-
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 2 of 8 | Run Discovery | "Welcome back to AOD. The tenant has been loaded. Press Fetch & Run Discovery and then review the results of the Run below." | Highlights Fetch & Run Discovery button, waits for click |
-| (loading) | Running Discovery | "Discovery in process ..." | Shows while processing |
-| 3 of 8 | Discovery Results | "Discovery complete! AOD ingested {observations} observations, validated {validated}, rejected {rejected}, and cataloged {assets}. In addition, AOD discovered {shadow} Shadow assets, and identified savings opportunities by discovering {zombie} zombie assets. Feel free to click through to the details." | Dynamic stats from completed run |
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **2 of 13** | **Simulating Reality** | Real data is messy. To prove AOD is battle-hardened, we use **The Farm** to generate complex, conflicted datasets—not "happy path" demo data.<br><br>Select **"Enterprise"** to simulate the scale where human management fails. | Highlight **Scale** dropdown. |
+| **3 of 13** | **Stress Testing** | Clean data doesn't exist in the wild.<br><br>Select **"Messy"** or **"Adversarial."** We intentionally inject conflicting records, partial telemetry, and duplicates to force the system to resolve ambiguity—something simple asset managers can't handle. | Highlight **Realism** & **Data Preset**. |
+| **4 of 13** | **Generate Ground Truth** | We are now creating thousands of raw signals—DNS logs, finance transactions, and SSO records.<br><br>Click **Generate** to create this "Ground Truth" snapshot. | Highlight **Generate Button**. |
 
 ---
 
-## Phase 4: Shadow Assets Inspection (AOD)
+## Phase 2: The Handoff (Farm → AOD)
 
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 4 of 8 | Inspect Shadow Assets | "Shadow assets are systems that exist in your environment but lack proper governance. Click on the Shadow card to see which assets need attention." | Highlights Shadow stat card, waits for click |
-| 4 of 8 (fallback) | Shadow Assets | "No shadow assets were discovered in this run. This is a good sign - it means all discovered assets have proper governance. Let's continue to the next step." | If shadow count = 0 |
-
----
-
-## Phase 5: Triage Findings (AOD)
-
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 5 of 8 | Triage Findings | "Current configuration creates a \"Triage queue\" for the user to review and dispose of issues categorized in tiers. This workflow is customizable and can be configured as a control pane rather than an informational pane.<br><br>Click through on any actions or item for details." | Navigates to Triage tab, highlights findings |
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **5 of 13** | **The Raw Data** | The Farm has generated a complex estate with intentional anomalies.<br><br>Now, let's switch to **AOD** to ingest, normalize, and make sense of this chaos. | Highlight **"Continue to AOD"**. |
 
 ---
 
-## Phase 6: Asset Catalog Review (AOD)
+## Phase 3: The Engine (AOD Discovery)
 
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 6 of 8 | Asset Catalog | "The penultimate product of the discovery effort is the Catalog which is then passed to the AOS Adaptive API Mesh to obtain and sustain connections autonomously." | Highlights catalog section |
-| 6 of 8 (fallback) | Asset Catalog | "No assets found in the catalog for this run. This may indicate the run is still processing or no assets were discovered." | If catalog empty |
-
----
-
-## Phase 7: Verification (Farm - 4 steps)
-
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 7 of 8 (AOD) | Verify Accuracy | "Now let's verify AOD's accuracy. Farm will compare AOD's classifications against the expected ground truth to measure precision and recall." | Shows handoff link to Farm |
-| 1 of 4 | Verification | "Verification: comparing AOD's classifications against Farm's ground truth expectations." | Loads data |
-| 2 of 4 | Reconciliation | "Click the highlighted reconciliation to view the scorecard comparing AOD's results to Farm's ground truth." | Highlights reconciliation item, waits for click |
-| 2 of 4 (fallback) | No Reconciliation | "No reconciliations found yet. AOD must process the snapshot and send results back to Farm for reconciliation." | If no reconciliation exists |
-| 3 of 4 | Mismatches | "Mismatches reveal where AOD and Farm disagree. Each mismatch shows reasoning for investigation." | After viewing scorecard |
-| 4 of 4 | Complete | "Verification complete. Return to AOD to review the full discovery results.<br><br>[Return to AOD →]" | Shows return link to AOD |
-| 4 of 4 (no return URL) | Complete | "Verification complete. Farm generates test data, AOD processes it, reconciliation grades results." | Button: "Finish Tour" |
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **6 of 13** | **Ingest & Resolve** | AOD is now processing raw observations. It doesn't just list rows; it **resolves identity**.<br><br>It is currently correlating disparate signals (e.g., a credit card charge vs. a login event) to determine what is a real asset and what is noise. | *Processing State Animation* |
+| **7 of 13** | **The Discovery Dashboard** | Processing complete. AOD has distilled **{observations}** signals into **{assets}** trusted assets.<br><br>Notice the **Lifecycle Cards** below. This isn't just a count; it's a health check. We've isolated **{shadow} Shadow IT** (unmanaged apps) and **{zombie} Zombie Assets** (wasted spend) automatically. | Highlight the **Results/Lifecycle** row. |
 
 ---
 
-## Phase 8: Tour Complete (AOD)
+## Phase 4: The Findings (Risks & Waste)
 
-| Step | Dialog Title | Dialog Text | Action |
-|------|--------------|-------------|--------|
-| 8 of 8 | Tour Complete | "The guided validation is complete. You've seen how AOD discovers assets and how Farm verifies accuracy. You may now explore freely." | Finish button ends tour |
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **8 of 13** | **Risks & Waste** | Let's inspect the problems AOD found:<br><br>• **Shadow IT:** Apps running without IT's knowledge (Security Risk).<br>• **Zombies:** Paid licenses with zero usage (Financial Waste).<br><br>Click the **Shadow** card to drill down. | Highlight **Shadow** or **Zombie** card (whichever has data). |
+| **8 of 13** (fallback) | **Risks & Waste** | This simulation produced a clean run with no Shadow IT detected. In real enterprise environments, Shadow assets are common.<br><br>Let's continue to the Triage console. | If shadow count = 0 |
+
+---
+
+## Phase 5: Taking Action (Triage)
+
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **9 of 13** | **The Decision Layer** | Discovery is useless without action.<br><br>The **Triage Console** prioritizes findings by urgency. You don't have to review 10,000 lines—just the Tier 1 issues that require human judgment.<br><br>You can acknowledge, reject, or flag assets right here. | Highlight the **Triage List** / Actions column. |
+
+---
+
+## Phase 6: The Bridge (Catalog)
+
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **10 of 13** | **The Trusted Catalog** | This is the "Golden Record."<br><br>While Triage handles the exceptions, the **Catalog** contains the fully verified estate.<br><br>This trusted list is what feeds the **Adaptive API Mesh (AAM)** to automate connections and the **Business Logic Layer (BLL)** to generate reports. | Navigate to **Catalog Tab**. Highlight the list. |
+| **10 of 13** (fallback) | **The Trusted Catalog** | The Catalog is still being populated. In production, this becomes the "Golden Record" that feeds downstream systems. | If catalog empty |
+
+---
+
+## Phase 7: The Audit (Verification)
+
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **11 of 13** | **Trust, but Verify** | In a demo, you trust the vendor. In AutonomOS, we let you audit the math.<br><br>Let's go back to **The Farm** to compare AOD's findings against the Ground Truth we generated earlier. We measure our own Precision and Recall. | Button: **"Verify in Farm"** |
+
+---
+
+## Phase 8: Reconciliation (Farm)
+
+| Step | Dialog Title | Dialog Text | Visual/Action |
+|------|--------------|-------------|---------------|
+| **12 of 13** | **The Scorecard** | This report compares what *actually* existed (Farm) vs. what AOD *found*.<br><br>If AOD missed a Shadow asset, it shows up here. This transparency ensures that when you deploy on real enterprise data, the results are defensible. | Highlight **Reconciliation Scorecard**. |
+| **13 of 13** | **Tour Complete** | You've seen the cycle: **Generate Chaos → Discover Order → Audit Accuracy.**<br><br>You are now free to explore the Catalog, run new simulations, or drill into specific asset details. | Button: **"Finish & Explore"** |
 
 ---
 
@@ -113,7 +106,7 @@ Complete narrated walkthrough coordinating between AOD (discovery) and Farm (dat
 | Phase | Destination | Parameters |
 |-------|-------------|------------|
 | Phase 2 → AOD | `return_url` | `&snapshot_id=xxx` |
-| Phase 7 → AOD | `return_url` | `?guided=1&tour_phase=8` |
+| Phase 8 → AOD | `return_url` | `?guided=1&tour_phase=8` |
 
 ---
 
@@ -123,17 +116,30 @@ Complete narrated walkthrough coordinating between AOD (discovery) and Farm (dat
 - **Accent**: Cyan (`#00D9FF`) for highlights and pulsing indicator
 - **Dialog**: Draggable header, step counter, progress bar
 - **Navigation**: Back/Next buttons with conditional rendering based on phase
+- **Branding**: "Simulation & Proof" (not "Guided Validation")
 
 ---
 
-## Phase Order (AOD)
+## Implementation Notes
+
+1. **Terminology**: Replace "Validation" with "Simulation" or "Verification" throughout
+2. **Fallback Logic**: Ensure "Guided Tour" preset in Farm defaults to a seed that guarantees at least 1 Shadow and 1 Zombie asset
+3. **Visuals**: When discussing Shadows (Step 8), the UI should filter to show only those items
+4. **Button Text**:
+   - Entry: "Start Simulation"
+   - Verify: "Verify in Farm"
+   - Exit: "Finish & Explore"
+
+---
+
+## AOD Phase Order
 
 ```javascript
 phaseOrder: [0, 3, 4, 5, 6, 7, 8]
 ```
 
 With conditional intermediate phases:
-- `3b`: Discovery Results (after run completes)
+- `3b`: The Discovery Dashboard (after run completes)
 - `4.5`: No Shadow Assets (fallback)
 - `6.5`: Empty Catalog (fallback)
 

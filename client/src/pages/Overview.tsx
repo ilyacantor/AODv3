@@ -12,32 +12,26 @@ import { Button } from "@/components/ui/button";
 
 export default function Overview() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
-  const pipelineRef = useRef<HTMLElement>(null);
-  const aodDetailsRef = useRef<HTMLElement>(null);
   
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.action === 'scrollToSection') {
         const section = event.data.section;
-        let targetRef: React.RefObject<HTMLElement> | null = null;
         
-        switch (section) {
-          case 'hero':
-            targetRef = heroRef;
-            break;
-          case 'pipeline':
-            targetRef = pipelineRef;
-            break;
-          case 'aod-details':
-            targetRef = aodDetailsRef;
-            break;
-        }
+        const sectionIds: Record<string, string> = {
+          'hero': 'section-hero',
+          'pipeline': 'section-pipeline',
+          'aod-details': 'section-aod-details'
+        };
         
-        if (targetRef?.current) {
-          targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (section === 'hero' && containerRef.current) {
-          containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        const targetId = sectionIds[section];
+        if (targetId) {
+          const element = document.getElementById(targetId);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        } else if (section === 'hero') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }
     };
@@ -52,7 +46,7 @@ export default function Overview() {
       className="min-h-screen bg-slate-950 text-slate-50 selection:bg-cyan-500/30 selection:text-cyan-50 overflow-x-hidden font-sans"
     >
       {/* --- SECTION 1: HERO (AutonomOS) --- */}
-      <section ref={heroRef} className="relative z-10 w-full max-w-6xl mx-auto px-6 py-20 md:py-32 flex flex-col justify-center min-h-[80vh]">
+      <section id="section-hero" className="relative z-10 w-full max-w-6xl mx-auto px-6 py-20 md:py-32 flex flex-col justify-center min-h-[80vh]">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -95,7 +89,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 2: HOW TO READ THIS (Pipeline Diagram) --- */}
-      <section ref={pipelineRef} className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
+      <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">
           <iframe
@@ -187,7 +181,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 4: AOD REACTFLOW VISUAL (What AOD Does) --- */}
-      <section ref={aodDetailsRef} className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
+      <section id="section-aod-details" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">
           <iframe

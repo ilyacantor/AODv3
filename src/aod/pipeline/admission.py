@@ -270,6 +270,18 @@ SOURCE_TO_PLANE = {
     "expense": "finance",
     "purchase_order": "finance",
     "procurement": "finance",
+    "finance": "finance",
+    "finance_coupa": "finance",
+    "finance_netsuite": "finance",
+    "finance_sap": "finance",
+    "finance_ariba": "finance",
+    "finance_concur": "finance",
+    "coupa": "finance",
+    "netsuite": "finance",
+    "sap_ariba": "finance",
+    "concur": "finance",
+    "workday": "finance",
+    "spend": "finance",
     "cmdb": "cmdb",
     "servicenow": "cmdb",
     "discovery": "discovery",
@@ -286,6 +298,8 @@ def source_to_plane(source: str) -> Optional[str]:
     return SOURCE_TO_PLANE.get(source.lower())
 
 
+DISCOVERY_CORROBORATION_PLANES = {"network", "endpoint", "idp", "cloud", "discovery"}
+
 def check_discovery_admission(
     observations: Optional[list[Observation]],
     min_planes: int = 2
@@ -294,12 +308,13 @@ def check_discovery_admission(
     Check discovery-only admission criteria.
     
     Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct PLANES (not sources!)
+    - Evidence from ≥2 distinct DISCOVERY CORROBORATION PLANES (not all planes!)
     - Recent activity ≤ 90 days
     
-    CRITICAL: Count distinct planes, not distinct sources.
-    dns + proxy = 1 plane (Network)
-    dns + oauth = 2 planes (Network + IdP)
+    CRITICAL: 
+    - Count distinct planes, not distinct sources (dns + proxy = 1 network plane)
+    - Only count discovery-corroborating planes: network, endpoint, idp, cloud, discovery
+    - Finance and CMDB do NOT count as discovery corroboration (they are governance evidence)
     """
     if not observations:
         return False, ""
@@ -312,7 +327,7 @@ def check_discovery_admission(
     for obs in observations:
         if obs.source:
             plane = source_to_plane(obs.source)
-            if plane is not None:
+            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
                 planes.add(plane)
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
@@ -331,7 +346,7 @@ def check_discovery_admission(
     if latest_activity < cutoff:
         return False, ""
     
-    return True, f"Discovery: {len(planes)} planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
+    return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
 
 
 def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:

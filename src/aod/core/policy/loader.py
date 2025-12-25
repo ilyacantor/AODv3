@@ -100,6 +100,7 @@ def load_config(path: Optional[str] = None) -> PolicyConfig:
             scope = ScopeConfig(
                 include_infra=scope_data.get("include_infra", False),
                 treat_directory_as_idp=scope_data.get("treat_directory_as_idp", False),
+                use_policy_engine=scope_data.get("use_policy_engine", False),
             )
             
             exclusions = data.get("exclusions", [])

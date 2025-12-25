@@ -261,8 +261,13 @@ async def execute_pipeline(
         
         propagated_governance = propagate_vendor_governance(correlations)
         
-        policy_engine = PolicyEngine(get_current_config())
+        policy_config = get_current_config()
+        policy_engine = PolicyEngine(policy_config)
+        use_policy_engine = policy_config.scope.use_policy_engine
         policy_mismatches = []
+        
+        if use_policy_engine:
+            logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
         
         assets = []
         rejections_batch = []
@@ -305,7 +310,9 @@ async def execute_pipeline(
                     "asset_data": policy_asset_data,
                 })
             
-            if admission_result.admitted and admission_result.asset:
+            should_admit = policy_decision.admitted if use_policy_engine else admission_result.admitted
+            
+            if should_admit and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))

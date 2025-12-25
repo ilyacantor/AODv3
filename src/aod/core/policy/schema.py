@@ -31,6 +31,7 @@ class ScopeConfig:
     """
     include_infra: bool = False
     treat_directory_as_idp: bool = False
+    use_policy_engine: bool = False
 
 
 @dataclass
@@ -62,6 +63,7 @@ class PolicyConfig:
             "scope": {
                 "include_infra": self.scope.include_infra,
                 "treat_directory_as_idp": self.scope.treat_directory_as_idp,
+                "use_policy_engine": self.scope.use_policy_engine,
             },
             "exclusions": self.exclusions,
             "seed_exclusions": {

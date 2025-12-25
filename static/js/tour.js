@@ -11,19 +11,22 @@ const TourManager = (function() {
             title: "The Execution Pipeline",
             content: "AutonomOS operates as a <strong>linear execution pipeline</strong>.\n\nThe architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
             step: 1,
-            location: 'overview'
+            location: 'overview',
+            scrollTarget: 'hero'
         },
         'intro_2': {
-            title: "Discovery Gateway",
-            content: "AOD is the foundation. Before AI systems can integrate, automate, or act—they must know what actually exists.\n\nAOD discovers assets, resolves ambiguity, scores evidence, and produces a trusted catalog.",
+            title: "Structural Dependency",
+            content: "AOD is the functional prerequisite for the platform.\n\nThe <strong>Adaptive API Mesh (AAM)</strong> requires a verified asset inventory to establish connections.\n\nAOD's primary function is to construct this <strong>Asset Catalog</strong>, enabling AAM and the DCL to operate on trusted data.",
             step: 2,
-            location: 'overview'
+            location: 'overview',
+            scrollTarget: 'pipeline'
         },
         'intro_3': {
-            title: "Simulation & Proof",
-            content: "This tour doesn't just show you a static demo. We're going to <strong>generate a live, chaotic IT environment</strong> and watch AOD organize it in real-time.\n\nReady to begin the simulation?",
+            title: "Inputs & Outputs",
+            content: "AOD ingests raw signals—from <strong>Identity</strong>, <strong>DNS</strong>, and <strong>Finance</strong>—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Shadow IT, Zombies, and governance risks.\n\nWe will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.",
             step: 3,
-            location: 'overview'
+            location: 'overview',
+            scrollTarget: 'aod-details'
         },
         0: { 
             title: "The Visibility Gap",
@@ -491,9 +494,24 @@ const TourManager = (function() {
         const phaseConfig = TOUR_PHASES[phaseKey];
         const isLastIntro = phaseKey === 'intro_3';
         
+        const overviewContainer = document.getElementById('overviewContainer');
+        if (overviewContainer && phaseConfig.scrollTarget) {
+            const scrollPositions = {
+                'hero': 0,
+                'pipeline': 600,
+                'aod-details': 1800
+            };
+            const scrollTo = scrollPositions[phaseConfig.scrollTarget] || 0;
+            overviewContainer.scrollTo({ top: scrollTo, behavior: 'smooth' });
+        }
+        
+        await trackedDelay(400);
+        if (aborted) return;
+        
         await showOverlay(phaseKey, {
             showBack: phaseKey !== 'intro_1',
             primaryButtonText: isLastIntro ? 'Start Simulation' : 'Next',
+            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
             onContinue: () => {
                 if (isLastIntro) {
                     navigateToFarmWithGuided();

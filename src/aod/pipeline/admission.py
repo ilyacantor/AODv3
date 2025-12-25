@@ -663,18 +663,9 @@ def apply_admission_criteria(
     # NOTE: Vendor governance propagation does NOT cause admission
     # It is recorded as metadata for classification/explanation only
     
-    # STRICT ADMISSION: Require at least one GOVERNANCE plane for admission
-    # Discovery alone is NOT sufficient - it provides activity evidence but not governance
-    # Governance planes: IdP, CMDB, Cloud, Finance
-    has_governance = any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted])
-    
-    if not has_governance:
-        # Discovery-only assets are rejected - they lack governance evidence
-        if discovery_admitted:
-            return AdmissionResult(
-                admitted=False,
-                rejection_reason="Discovery-only: No governance plane evidence (IdP/CMDB/Cloud/Finance)"
-            )
+    # Admission: ANY plane can admit (IdP, CMDB, Cloud, Finance, or Discovery)
+    # Discovery-only admission is CRITICAL for Shadow IT detection
+    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
             rejection_reason="No admission criteria satisfied"

@@ -1985,8 +1985,24 @@
                 const dr = await fetch(`/api/runs/${runId}/derived`);
                 if (dr.ok) {
                     const derived = await dr.json();
-                    document.getElementById('statShadow').textContent = derived.shadow_count ?? 0;
-                    document.getElementById('statZombie').textContent = derived.zombie_count ?? 0;
+                    const shadowCount = derived.shadow_count ?? 0;
+                    const zombieCount = derived.zombie_count ?? 0;
+                    document.getElementById('statShadow').textContent = shadowCount;
+                    document.getElementById('statZombie').textContent = zombieCount;
+                    
+                    const shadowSublabel = document.getElementById('shadowAssetsSublabel');
+                    if (shadowCount > 0) {
+                        shadowSublabel.textContent = `${shadowCount} admitted`;
+                    } else {
+                        shadowSublabel.textContent = '';
+                    }
+                    
+                    const zombieSublabel = document.getElementById('zombieAssetsSublabel');
+                    if (zombieCount > 0) {
+                        zombieSublabel.textContent = `${zombieCount} admitted`;
+                    } else {
+                        zombieSublabel.textContent = '';
+                    }
                     
                     const { data: shadowNorm, errors: shadowErrs } = normalizeResponse('shadow', derived.shadow_assets || []);
                     normalizedData.shadow = shadowNorm;
@@ -1998,6 +2014,8 @@
                 } else {
                     document.getElementById('statShadow').textContent = '-';
                     document.getElementById('statZombie').textContent = '-';
+                    document.getElementById('shadowAssetsSublabel').textContent = '';
+                    document.getElementById('zombieAssetsSublabel').textContent = '';
                     normalizedData.shadow = [];
                     normalizedData.zombie = [];
                 }
@@ -2005,6 +2023,8 @@
                 console.error('Failed to load derived classifications:', e);
                 document.getElementById('statShadow').textContent = '-';
                 document.getElementById('statZombie').textContent = '-';
+                document.getElementById('shadowAssetsSublabel').textContent = '';
+                document.getElementById('zombieAssetsSublabel').textContent = '';
                 normalizedData.shadow = [];
                 normalizedData.zombie = [];
             }
@@ -2054,7 +2074,25 @@
                     breakdownEl.textContent = '';
                 }
                 
+                const securityAssetIds = new Set(securityRisks.map(f => f.asset_id).filter(Boolean));
+                const secAssetsEl = document.getElementById('securityAssetsCount');
+                if (securityAssetIds.size > 0) {
+                    secAssetsEl.textContent = `${securityAssetIds.size} assets affected`;
+                    secAssetsEl.dataset.assetIds = JSON.stringify([...securityAssetIds]);
+                } else {
+                    secAssetsEl.textContent = '';
+                }
+                
                 document.getElementById('statGovernanceHygiene').textContent = governanceHygiene.length;
+                
+                const governanceAssetIds = new Set(governanceHygiene.map(f => f.asset_id).filter(Boolean));
+                const govAssetsEl = document.getElementById('governanceAssetsCount');
+                if (governanceAssetIds.size > 0) {
+                    govAssetsEl.textContent = `${governanceAssetIds.size} assets affected`;
+                    govAssetsEl.dataset.assetIds = JSON.stringify([...governanceAssetIds]);
+                } else {
+                    govAssetsEl.textContent = '';
+                }
             } catch (e) { 
                 console.error('Failed to load findings:', e);
                 normalizedData.security_risks = [];
@@ -2205,6 +2243,24 @@
                 const drillType = card.dataset.drillType;
                 if (drillType && currentRunId) {
                     initiateDrill(drillType);
+                }
+            });
+        });
+        
+        document.querySelectorAll('.stat-sublabel-link').forEach(sublabel => {
+            sublabel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!currentRunId) return;
+                
+                const id = sublabel.id;
+                if (id === 'shadowAssetsSublabel') {
+                    initiateDrill('shadow');
+                } else if (id === 'zombieAssetsSublabel') {
+                    initiateDrill('zombie');
+                } else if (id === 'securityAssetsCount') {
+                    initiateDrill('security_risks');
+                } else if (id === 'governanceAssetsCount') {
+                    initiateDrill('governance_hygiene');
                 }
             });
         });

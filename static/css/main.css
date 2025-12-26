@@ -63,6 +63,8 @@ main { padding: 2rem; }
 .stat-value.stat-visibility { color: var(--cyan-400); }
 .stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
 .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
+.stat-sublabel-link { color: var(--cyan-400); cursor: pointer; transition: color 0.2s; }
+.stat-sublabel-link:hover { color: var(--cyan-300); text-decoration: underline; }
 .findings-list { max-height: 400px; overflow-y: auto; }
 .finding-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: var(--slate-800); border-radius: 8px; margin-bottom: 0.5rem; }
 .priority-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }

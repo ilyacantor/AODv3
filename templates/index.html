@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=9">
+    <link rel="stylesheet" href="/static/css/main.css?v=10">
 </head>
 <body>
     <header>
@@ -144,22 +144,26 @@
                             <div class="stat-help" title="Shadow IT: Assets discovered and actively used but NOT governed (no IdP AND no CMDB presence). Represents potential security and compliance risk.">?</div>
                             <div class="stat-value stat-shadow" id="statShadow">-</div>
                             <div class="stat-label">Shadow</div>
+                            <div class="stat-sublabel stat-sublabel-link" id="shadowAssetsSublabel"></div>
                         </div>
                         <div class="stat-card clickable" data-drill-type="zombie">
                             <div class="stat-help" title="Zombie Assets: Governed (in IdP or CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems.">?</div>
                             <div class="stat-value stat-zombie" id="statZombie">-</div>
                             <div class="stat-label">Zombie</div>
+                            <div class="stat-sublabel stat-sublabel-link" id="zombieAssetsSublabel"></div>
                         </div>
                         <div class="stat-card clickable" data-drill-type="security_risks">
                             <div class="stat-help" title="Security Risks: Identity gaps (ungoverned access paths), shadow IT spend (financially-backed shadow systems), and data conflicts (conflicting authoritative data).">?</div>
                             <div class="stat-value stat-security" id="statSecurityRisks">-</div>
                             <div class="stat-label">Security Risks</div>
                             <div class="stat-sublabel" id="riskBreakdown"></div>
+                            <div class="stat-sublabel stat-sublabel-link" id="securityAssetsCount"></div>
                         </div>
                         <div class="stat-card clickable" data-drill-type="governance_hygiene">
                             <div class="stat-help" title="Governance Hygiene: CMDB coverage gaps (partial governance), ownership gaps, and duplicate records. These are exposure amplifiers that reduce control plane accuracy.">?</div>
                             <div class="stat-value" id="statGovernanceHygiene">-</div>
                             <div class="stat-label">Governance</div>
+                            <div class="stat-sublabel stat-sublabel-link" id="governanceAssetsCount"></div>
                         </div>
                     </div>
                 </div>

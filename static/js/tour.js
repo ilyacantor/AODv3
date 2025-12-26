@@ -4,7 +4,7 @@ const TourManager = (function() {
     let aborted = false;
     let pendingTimeouts = [];
     
-    const OVERVIEW_SECTIONS = ['market', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info', 'cta'];
+    const OVERVIEW_SECTIONS = ['market', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
     const INTRO_STEPS = OVERVIEW_SECTIONS.length;
     
     const TOUR_PHASES = {
@@ -552,6 +552,7 @@ const TourManager = (function() {
         overlay.innerHTML = `
             <div class="tour-header tour-overlay-header">
                 <div class="tour-header-left">
+                    <span class="tour-drag-icon">⋮⋮</span>
                     <div class="tour-pulse-dot"></div>
                     <span class="tour-header-title">AOD Guided Tour</span>
                 </div>

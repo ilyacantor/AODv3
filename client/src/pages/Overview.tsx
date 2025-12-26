@@ -220,9 +220,18 @@ export default function Overview() {
           transition={{ duration: 0.6 }}
           className="space-y-10"
         >
-          <h2 className="text-3xl md:text-4xl font-bold text-white">
-            autonom<span className="text-transparent bg-clip-text bg-gradient-brand">OS</span> Platform (AOS) Components
-          </h2>
+          <div className="space-y-4">
+            <h1 className="text-[30px] md:text-[40px] font-bold tracking-tight leading-[1.1] text-white">
+              autonomOS:{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-brand">
+                The Operating System
+              </span>
+              {" "}for the Intelligent Enterprise
+            </h1>
+            <h2 className="text-2xl md:text-3xl font-bold text-slate-400">
+              Platform (AOS) Components
+            </h2>
+          </div>
 
           <div className="space-y-4">
             {/* AOD */}
@@ -306,51 +315,33 @@ export default function Overview() {
 
         {/* Fixed Side Panel */}
         <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
               <BookOpen className="w-5 h-5 text-purple-400" />
-              How to Read This
+              Platform Components
             </h2>
             <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
           </div>
 
-          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
-            <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
+          <div className="space-y-4 text-sm text-slate-400 leading-relaxed overflow-y-auto">
+            <div className="border-l-2 border-cyan-500 pl-3">
+              <h3 className="font-bold text-cyan-400 mb-1">Discover (AOD)</h3>
+              <p>Fingerprints and catalogs your technology environment, inferring relationships without manual configuration.</p>
+            </div>
 
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-bold text-cyan-400 mb-1">
-                  Discovery (AOD, this Demo)
-                </h3>
-                <p>
-                  Signals are collected from enterprise systems—identity,
-                  finance, cloud, endpoints, DNS, and systems of record—and
-                  resolved into assets.
-                </p>
-              </div>
+            <div className="border-l-2 border-orange-500 pl-3">
+              <h3 className="font-bold text-orange-400 mb-1">Adaptive API Mesh (AAM)</h3>
+              <p>Self-healing integration layer that monitors API health and autonomously adapts to schema changes.</p>
+            </div>
 
-              <div>
-                <h3 className="font-bold text-blue-400 mb-1">
-                  Connection (AAM) & Unification (DCL)
-                </h3>
-                <p>
-                  Discovered assets are connected and unified into a shared
-                  enterprise ontology, creating consistent identity, structure,
-                  and meaning across systems.
-                </p>
-              </div>
+            <div className="border-l-2 border-rose-500 pl-3">
+              <h3 className="font-bold text-rose-400 mb-1">Data Connectivity Layer (DCL)</h3>
+              <p>Unified enterprise ontology mapping sources into a coherent knowledge graph for intelligent decision-making.</p>
+            </div>
 
-              <div>
-                <h3 className="font-bold text-purple-400 mb-1">
-                  Logic (BLL) & Action (Agents)
-                </h3>
-                <p>
-                  Business Logic Layer (BLL) turns unified data into governed
-                  business metrics, rules, and decisions. Intelligent agents
-                  operate on this trusted foundation to answer questions, drive
-                  automation, and execute actions.
-                </p>
-              </div>
+            <div className="border-l-2 border-green-500 pl-3">
+              <h3 className="font-bold text-green-400 mb-1">Agentic Orchestration (AOA)</h3>
+              <p>Governance engine managing agent proliferation with audit trails and HITL mechanisms.</p>
             </div>
           </div>
         </div>

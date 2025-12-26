@@ -4,7 +4,7 @@ import asyncpg
 import json
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from uuid import UUID
 
 from ..models.output_contracts import (
@@ -48,8 +48,33 @@ def get_active_db_source() -> str:
 _db_instance: Optional["Database"] = None
 
 
-async def get_db() -> "Database":
-    """Get or create database instance"""
+async def get_db() -> AsyncGenerator["Database", None]:
+    """
+    FastAPI dependency for database access.
+
+    Yields a Database instance for use in route handlers.
+    Maintains a singleton pool but compatible with dependency injection.
+
+    Usage:
+        @router.get("/example")
+        async def example(db: Database = Depends(get_db)):
+            await db.get_run(run_id)
+    """
+    global _db_instance
+    if _db_instance is None:
+        db_url = get_database_url()
+        _db_instance = Database(db_url)
+        await _db_instance.initialize()
+    yield _db_instance
+
+
+async def get_db_direct() -> "Database":
+    """
+    Direct database access for non-FastAPI contexts (e.g., pipeline executor).
+
+    Returns the Database instance directly instead of yielding.
+    Use this in pipeline code where Depends() is not available.
+    """
     global _db_instance
     if _db_instance is None:
         db_url = get_database_url()

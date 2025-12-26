@@ -1,17 +1,16 @@
 """Findings routes for AOD API"""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from ..schemas import FindingsResponse
-from ...db.database import get_db
+from ...db.database import get_db, Database
 
 router = APIRouter(prefix="")
 
 
 @router.get("/findings", response_model=FindingsResponse)
-async def get_findings(run_id: str):
+async def get_findings(run_id: str, db: Database = Depends(get_db)):
     """Get findings for a run"""
-    db = await get_db()
     
     run = await db.get_run(run_id)
     if not run:
@@ -43,9 +42,8 @@ async def get_findings(run_id: str):
 
 
 @router.get("/artifacts")
-async def get_artifacts(run_id: str):
+async def get_artifacts(run_id: str, db: Database = Depends(get_db)):
     """Get artifacts for a run"""
-    db = await get_db()
     
     run = await db.get_run(run_id)
     if not run:

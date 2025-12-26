@@ -6,7 +6,7 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 
 from ..schemas import (
     FarmRunRequest,
@@ -15,7 +15,7 @@ from ..schemas import (
     ResyncRequest,
     ResyncResponse,
 )
-from ...db.database import get_db
+from ...db.database import get_db, get_db_direct, Database
 from ..deps import now_pst, get_farm_url
 from ...farm_client import FarmClient, validate_schema_version
 from ...farm_reconcile import reconcile_to_farm
@@ -111,8 +111,8 @@ async def create_run(file: UploadFile = File(...)):
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()
-    
-    db = await get_db()
+
+    db = await get_db_direct()
     result = await execute_pipeline(data, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
@@ -139,8 +139,8 @@ async def create_run_json(snapshot: dict[str, Any]):
     """
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()
-    
-    db = await get_db()
+
+    db = await get_db_direct()
     result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
     
     if not result.success:
@@ -404,9 +404,8 @@ async def delete_all_runs():
 
 
 @router.get("/{run_id}", response_model=RunDetailResponse)
-async def get_run(run_id: str):
+async def get_run(run_id: str, db: Database = Depends(get_db)):
     """Get run detail + counts"""
-    db = await get_db()
     run = await db.get_run(run_id)
     
     if not run:

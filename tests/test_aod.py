@@ -112,11 +112,11 @@ class TestDeterminism:
             Observation(observation_id="2", name="Slack", domain="slack.com", source="proxy"),
         ]
         
-        result1 = normalize_observations(observations)
-        result2 = normalize_observations(observations)
+        entities1, rejected1 = normalize_observations(observations)
+        entities2, rejected2 = normalize_observations(observations)
         
-        assert len(result1) == len(result2)
-        for e1, e2 in zip(result1, result2):
+        assert len(entities1) == len(entities2)
+        for e1, e2 in zip(entities1, entities2):
             assert e1.canonical_name == e2.canonical_name
             assert e1.observation_ids == e2.observation_ids
     

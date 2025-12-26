@@ -214,6 +214,7 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     """
     entities_by_domain: dict[str, CandidateEntity] = {}
     entities_by_name: dict[str, CandidateEntity] = {}
+    entities_by_base_token: dict[str, CandidateEntity] = {}
     rejected: list[dict] = []
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
@@ -278,14 +279,41 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         
+        base_token = extract_base_token(domain, is_domain=True) if domain else extract_base_token(canonical_name, is_domain=False)
+        
         existing_entity = None
         
         if domain:
             if domain in entities_by_domain:
                 existing_entity = entities_by_domain[domain]
+            elif base_token and base_token in entities_by_base_token:
+                existing_by_token = entities_by_base_token[base_token]
+                if not existing_by_token.domain:
+                    existing_entity = existing_by_token
+                    existing_entity.domain = domain
+                    existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
+                    entities_by_domain[domain] = existing_entity
+                    if existing_entity.canonical_name in entities_by_name:
+                        del entities_by_name[existing_entity.canonical_name]
+                    logger.debug("normalize.base_token_merge_domain_wins", extra={
+                        "observation_id": obs.observation_id,
+                        "base_token": base_token,
+                        "domain": domain,
+                        "absorbed_name": existing_entity.canonical_name
+                    })
         else:
             if canonical_name in entities_by_name:
                 existing_entity = entities_by_name[canonical_name]
+            elif base_token and base_token in entities_by_base_token:
+                existing_by_token = entities_by_base_token[base_token]
+                if existing_by_token.domain:
+                    existing_entity = existing_by_token
+                    logger.debug("normalize.base_token_merge_into_domain", extra={
+                        "observation_id": obs.observation_id,
+                        "base_token": base_token,
+                        "name": canonical_name,
+                        "merged_into_domain": existing_by_token.domain
+                    })
         
         if existing_entity:
             existing_entity.observation_ids.append(obs.observation_id)
@@ -313,6 +341,9 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
                 entities_by_domain[domain] = entity
             else:
                 entities_by_name[canonical_name] = entity
+            
+            if base_token and base_token not in entities_by_base_token:
+                entities_by_base_token[base_token] = entity
     
     all_entities = list(entities_by_domain.values()) + list(entities_by_name.values())
     
@@ -346,3 +377,65 @@ def _extract_base_name(domain: str) -> Optional[str]:
     if len(parts) >= 2:
         return parts[0]
     return None
+
+
+def extract_base_token(value: str, is_domain: bool = False) -> Optional[str]:
+    """
+    Extract base token for cross-reference matching.
+    
+    This enables aggressive domain merging by creating a common key that allows
+    matching between name-only entities and domain entities.
+    
+    For domains: "airtable.com" → "airtable"
+    For names: "Airtable" → "airtable", "Airtable (Legacy)" → "airtable"
+    
+    Args:
+        value: Domain string or product name
+        is_domain: If True, treat value as domain; otherwise as product name
+        
+    Returns:
+        Lowercase base token for matching, or None if extraction fails
+    """
+    if not value:
+        return None
+    
+    value = value.lower().strip()
+    
+    if is_domain:
+        extracted = tldextract.extract(value)
+        if extracted.domain:
+            return extracted.domain
+        parts = value.split('.')
+        if len(parts) >= 2:
+            return parts[0]
+        return None
+    
+    normalized = re.sub(r'\s*\([^)]*\)', '', value).strip()
+    
+    env_suffixes = r'[-_]?(prod|production|prd|dev|development|staging|stg|stage|test|testing|tst|uat|qa|sandbox|sbx|demo|legacy|old|new)$'
+    normalized = re.sub(env_suffixes, '', normalized, flags=re.IGNORECASE).strip()
+    
+    normalized = re.sub(r'[^\w]', '', normalized)
+    
+    return normalized if normalized else None
+
+
+def _merge_entity_data(target: CandidateEntity, source: CandidateEntity) -> None:
+    """
+    Merge data from source entity into target entity.
+    
+    Transfers observation_ids and fills in missing fields.
+    Target entity is the "winner" (domain-backed entity).
+    """
+    for obs_id in source.observation_ids:
+        if obs_id not in target.observation_ids:
+            target.observation_ids.append(obs_id)
+    
+    if source.hostname and not target.hostname:
+        target.hostname = source.hostname
+    if source.uri and not target.uri:
+        target.uri = source.uri
+    if source.vendor and not target.vendor:
+        target.vendor = source.vendor
+    if source.original_name and not target.original_name:
+        target.original_name = source.original_name

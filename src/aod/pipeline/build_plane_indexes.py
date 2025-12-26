@@ -1,10 +1,9 @@
 """Stage 3: BuildPlaneIndexes - Build indexes for efficient correlation"""
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from ..models.input_contracts import (
-    IdPPlane, CMDBPlane, CloudPlane, FinancePlane, Planes
+    IdPPlane, CMDBPlane, CloudPlane, FinancePlane, Planes, PlaneRecord
 )
 from .normalize_observations import normalize_string, normalize_domain
 
@@ -16,7 +15,7 @@ class PlaneIndex:
     by_canonical_name: dict[str, list[str]] = field(default_factory=dict)
     by_uri: dict[str, list[str]] = field(default_factory=dict)
     by_vendor_product: dict[str, list[str]] = field(default_factory=dict)
-    records: dict[str, Any] = field(default_factory=dict)
+    records: dict[str, PlaneRecord] = field(default_factory=dict)
 
 
 @dataclass

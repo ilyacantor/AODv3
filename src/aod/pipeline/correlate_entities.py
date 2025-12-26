@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,7 @@ from .normalize_observations import CandidateEntity, normalize_string
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
 from ..config import policy
+from ..models.input_contracts import PlaneRecord
 
 
 class MatchStatus(str, Enum):
@@ -118,7 +119,7 @@ class PlaneMatch:
     """Match result for a single plane"""
     status: MatchStatus
     matched_ids: list[str] = field(default_factory=list)
-    matched_records: list[Any] = field(default_factory=list)
+    matched_records: list[PlaneRecord] = field(default_factory=list)
     match_method: Optional[str] = None
     match_key: Optional[str] = None
     ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
@@ -165,7 +166,7 @@ def _is_legacy_name(name: str) -> bool:
     return any(marker in normalized for marker in LEGACY_MARKERS)
 
 
-def _get_record_name(record: Any) -> str:
+def _get_record_name(record: PlaneRecord) -> str:
     """Extract name from a record (handles dict or object)."""
     if record is None:
         return ""
@@ -174,7 +175,7 @@ def _get_record_name(record: Any) -> str:
     return getattr(record, "name", "") or getattr(record, "app_name", "") or ""
 
 
-def _get_record_vendor(record: Any) -> str:
+def _get_record_vendor(record: PlaneRecord) -> str:
     """Extract vendor from a record (handles dict or object)."""
     if record is None:
         return ""
@@ -304,7 +305,7 @@ def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:
     return False
 
 
-def _get_record_field(record: Any, field: str, default: Any = None) -> Any:
+def _get_record_field(record: PlaneRecord, field: str, default=None):
     """Extract a field from a record (handles dict or object)."""
     if record is None:
         return default
@@ -313,42 +314,42 @@ def _get_record_field(record: Any, field: str, default: Any = None) -> Any:
     return getattr(record, field, default)
 
 
-def _is_deprecated_by_field(record: Any) -> bool:
+def _is_deprecated_by_field(record: PlaneRecord) -> bool:
     """Check if a record is deprecated based on actual CMDB fields."""
     status = str(_get_record_field(record, "status", "") or "").lower()
     lifecycle = str(_get_record_field(record, "lifecycle_state", "") or "").lower()
     is_deprecated = _get_record_field(record, "is_deprecated", False)
     is_retired = _get_record_field(record, "is_retired", False)
-    
+
     deprecated_statuses = {"deprecated", "retired", "archived", "decommissioned", "obsolete", "inactive"}
-    
+
     if is_deprecated or is_retired:
         return True
     if status in deprecated_statuses:
         return True
     if lifecycle in deprecated_statuses:
         return True
-    
+
     return False
 
 
-def _get_environment_field(record: Any) -> Optional[str]:
+def _get_environment_field(record: PlaneRecord) -> Optional[str]:
     """Extract environment from actual CMDB field."""
     env = _get_record_field(record, "environment")
     if env:
         return str(env).lower()
-    
+
     env_type = _get_record_field(record, "environment_type")
     if env_type:
         return str(env_type).lower()
-    
+
     return None
 
 
 def disambiguate_matches(
     entity: CandidateEntity,
     matched_ids: list[str],
-    matched_records: list[Any],
+    matched_records: list[PlaneRecord],
     match_method: str
 ) -> tuple[AmbiguityCode, Optional[str], Optional[list[str]]]:
     """
@@ -435,7 +436,7 @@ def disambiguate_matches(
             None
         )
     
-    def get_identity_tuple(record: Any) -> tuple:
+    def get_identity_tuple(record: PlaneRecord) -> tuple:
         return (
             normalize_string(_get_record_name(record)),
             normalize_string(_get_record_vendor(record) or ""),

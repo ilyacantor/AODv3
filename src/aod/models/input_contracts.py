@@ -1,7 +1,7 @@
 """Pydantic v2 models for AOD input contracts (Snapshot JSON)"""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 BANNED_FIELDS = frozenset([
@@ -242,7 +242,7 @@ class Snapshot(BaseModel):
     """Complete snapshot input contract"""
     meta: SnapshotMeta
     planes: Planes
-    
+
     @model_validator(mode="before")
     @classmethod
     def reject_banned_fields(cls, data: Any) -> Any:
@@ -255,3 +255,21 @@ class Snapshot(BaseModel):
                     "AOD does not accept pre-adjudicated data."
                 )
         return data
+
+
+# Type aliases for improved type safety
+PlaneRecord = Union[
+    IdPObject,
+    CMDBConfigItem,
+    CloudResource,
+    Contract,
+    Transaction,
+    Observation,  # Discovery plane uses Observation
+    EndpointDevice,
+    InstalledApp,
+    DNSRecord,
+    ProxyLog,
+    Certificate,
+    Vendor
+]
+"""Union type for any record from any evidence plane"""

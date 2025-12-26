@@ -2,7 +2,6 @@ import { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Info,
-  ArrowDown,
   Search,
   Play,
 } from "lucide-react";
@@ -49,47 +48,7 @@ export default function Overview() {
       ref={containerRef}
       className="min-h-screen bg-slate-950 text-slate-50 selection:bg-cyan-500/30 selection:text-cyan-50 overflow-x-hidden font-sans"
     >
-      {/* --- SECTION 1: HERO (AutonomOS) --- */}
-      <section id="section-hero" className="relative z-10 w-full max-w-6xl mx-auto px-6 py-20 md:py-32 flex flex-col justify-center min-h-[80vh]">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="space-y-10"
-        >
-          {/* Main Headline & Description */}
-          <div className="space-y-8 max-w-5xl">
-            <h1 className="text-[30px] md:text-[40px] font-bold tracking-tight leading-[1.1] text-white">
-              autonomOS:{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-brand">
-                The Operating System
-              </span>
-              {" "}for the Intelligent Enterprise
-            </h1>
-
-            <div className="space-y-6 max-w-3xl">
-              <p className="text-xl md:text-2xl text-slate-400 leading-relaxed font-medium">
-                Leading the paradigm shift from rigid legacy software to unified, natural language engagement with enterprise data.
-              </p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Scroll Indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5, duration: 1 }}
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-slate-500"
-        >
-          <span className="text-[10px] uppercase tracking-widest font-bold">
-            Scroll to Explore
-          </span>
-          <ArrowDown className="w-4 h-4 animate-bounce text-cyan-500" />
-        </motion.div>
-      </section>
-
-      {/* --- SECTION 2: THE MARKET IS BROKEN --- */}
+      {/* --- SECTION 1: THE MARKET IS BROKEN --- */}
       <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -206,6 +165,29 @@ export default function Overview() {
           <p className="text-xl md:text-2xl text-slate-300 text-center font-medium leading-relaxed max-w-4xl mx-auto">
             The enterprise is transitioning from a software-centric model to an intelligence-centric model.{" "}
             <strong className="text-white">This shift demands a new operating system.</strong>
+          </p>
+        </motion.div>
+      </section>
+
+      {/* --- SECTION 3: INTRODUCING AUTONOMOS --- */}
+      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="space-y-8 text-center"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] text-white">
+            autonomOS:{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-brand">
+              The Operating System
+            </span>
+            {" "}for the Intelligent Enterprise
+          </h2>
+
+          <p className="text-xl md:text-2xl text-slate-400 leading-relaxed font-medium max-w-4xl mx-auto">
+            Leading the paradigm shift from rigid legacy software to unified, natural language engagement with enterprise data.
           </p>
         </motion.div>
       </section>

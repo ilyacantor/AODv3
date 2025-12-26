@@ -130,9 +130,29 @@
                 const result = await response.json();
                 console.log('Provisioning action result:', result);
                 
-                removeItemFromTriage(assetId);
+                const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned' };
+                const newState = stateMap[action] || action.toLowerCase();
                 
-                await loadTriageData();
+                for (const section of ['blocked', 'stale', 'governance']) {
+                    const items = triageSectionData[section];
+                    const idx = items.findIndex(item => (item.asset_id || item.id) === assetId);
+                    if (idx !== -1) {
+                        const itemType = items[idx].itemType;
+                        const key = `${itemType}:${assetId}`;
+                        triageActionsMap[key] = {
+                            item_id: assetId,
+                            item_type: itemType,
+                            action: action.toLowerCase(),
+                            state: newState
+                        };
+                        
+                        updateTriageItemInSections(assetId, itemType, {
+                            triageState: newState,
+                            triageAction: action.toLowerCase()
+                        });
+                        break;
+                    }
+                }
                 
             } catch (err) {
                 console.error('Provisioning action failed:', err);
@@ -642,6 +662,9 @@
                 
                 if (isTriaged) {
                     const stateLabels = {
+                        'approved': '✓ Approved for AAM',
+                        'banned': '⊘ Banned',
+                        'deprovisioned': '✗ Deprovisioned',
                         'acknowledged': '✓ Acknowledged',
                         'assigned': '→ Assigned',
                         'deferred': '⏳ Deferred',

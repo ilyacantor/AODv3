@@ -347,6 +347,9 @@ main { padding: 2rem; }
 .triage-btn.danger { background: #ef4444; color: white; }
 .triage-btn.danger:hover { background: #dc2626; }
 .triage-status-badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; white-space: nowrap; }
+.triage-status-badge.approved { background: #064e3b; color: #34d399; border: 1px solid #10b981; }
+.triage-status-badge.banned { background: #1e293b; color: #ef4444; border: 1px solid #ef4444; }
+.triage-status-badge.deprovisioned { background: #374151; color: #9ca3af; border: 1px solid #6b7280; }
 .triage-status-badge.acknowledged { background: var(--cyan-900); color: var(--cyan-300); border: 1px solid var(--cyan-700); }
 .triage-status-badge.assigned { background: var(--purple-900, #4c1d95); color: var(--purple-300, #c4b5fd); border: 1px solid var(--purple-700, #7c3aed); }
 .triage-status-badge.deferred { background: var(--yellow-900, #713f12); color: var(--yellow-300, #fcd34d); border: 1px solid var(--yellow-700, #a16207); }

@@ -21,14 +21,18 @@ class ProvisioningStatus(str, Enum):
     Default is QUARANTINE (fail-closed) to ensure no untrusted assets
     leak to downstream consumers (DCL).
     
-    ACTIVE: Trusted, flows to DCL automatically
-    REVIEW: Admitted but flagged for cleanup (e.g., zombie)
-    QUARANTINE: Saved for triage but BLOCKED from DCL
-    IGNORED: Hard rejection, dropped from pipeline
+    ACTIVE: Trusted, flows to DCL automatically (Green)
+    REVIEW: Admitted but flagged for cleanup - zombie candidate (Amber)
+    QUARANTINE: Saved for triage but BLOCKED from DCL - shadow IT (Red)
+    BLOCKED: User rejected via BAN action - permanently blocked (Black)
+    RETIRED: User deprovisioned - removed from active use (Gray)
+    IGNORED: Hard rejection at admission, dropped from pipeline
     """
     ACTIVE = "active"
     REVIEW = "review"
     QUARANTINE = "quarantine"
+    BLOCKED = "blocked"
+    RETIRED = "retired"
     IGNORED = "ignored"
 
 

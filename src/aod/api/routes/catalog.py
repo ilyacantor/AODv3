@@ -5,11 +5,17 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from typing import Optional
 
-from ..schemas import CatalogResponse
+from ..schemas import CatalogResponse, ProvisioningActionRequest, ProvisioningActionResponse
 from ...db.database import get_db_direct
 from ...models.output_contracts import ProvisioningStatus
 
 router = APIRouter(prefix="/catalog")
+
+ACTION_TO_STATUS = {
+    "SANCTION": ProvisioningStatus.ACTIVE,
+    "BAN": ProvisioningStatus.BLOCKED,
+    "DEPROVISION": ProvisioningStatus.RETIRED,
+}
 
 
 @router.get("", response_model=CatalogResponse)
@@ -487,3 +493,77 @@ async def view_catalog(run_id: str):
     </html>
     '''
     return HTMLResponse(content=html)
+
+
+@router.post("/assets/{asset_id}/provisioning", response_model=ProvisioningActionResponse)
+async def update_asset_provisioning(
+    asset_id: str,
+    request: ProvisioningActionRequest
+):
+    """
+    Update an asset's provisioning status via state transition actions.
+    
+    Actions:
+    - SANCTION: Approve shadow IT → ACTIVE (flows to DCL)
+    - BAN: Reject asset → BLOCKED (permanently blocked)
+    - DEPROVISION: Retire zombie → RETIRED (removed from active use)
+    
+    This is the "Sanction Button" that allows users to approve or reject
+    quarantined assets, giving them control over what flows to the DCL.
+    """
+    action = request.action.upper()
+    
+    if action not in ACTION_TO_STATUS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION"
+        )
+    
+    db = await get_db_direct()
+    
+    asset = await db.get_asset_by_id(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
+    
+    previous_status = asset.provisioning_status
+    new_status = ACTION_TO_STATUS[action]
+    
+    valid_transitions = {
+        "SANCTION": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW],
+        "BAN": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
+        "DEPROVISION": [ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
+    }
+    
+    if previous_status not in valid_transitions[action]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot {action} an asset with status '{previous_status.value}'. Valid source statuses: {[s.value for s in valid_transitions[action]]}"
+        )
+    
+    success = await db.update_asset_provisioning_status(
+        asset_id=asset_id,
+        new_status=new_status.value,
+        reason=request.reason,
+        actor=request.actor
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update asset status")
+    
+    action_messages = {
+        "SANCTION": f"Asset '{asset.name}' sanctioned - now flows to DCL",
+        "BAN": f"Asset '{asset.name}' banned - permanently blocked from DCL",
+        "DEPROVISION": f"Asset '{asset.name}' deprovisioned - retired from active use",
+    }
+    
+    return ProvisioningActionResponse(
+        success=True,
+        asset_id=asset_id,
+        asset_name=asset.name,
+        previous_status=previous_status.value,
+        new_status=new_status.value,
+        action=action,
+        reason=request.reason,
+        actor=request.actor,
+        message=action_messages[action]
+    )

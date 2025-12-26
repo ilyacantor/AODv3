@@ -334,3 +334,30 @@ class TriageActionResponse(BaseModel):
     owner: Optional[str] = None
     defer_until: Optional[str] = None
     ignore_reason: Optional[str] = None
+
+
+class ProvisioningActionRequest(BaseModel):
+    """
+    Request for asset provisioning state transition.
+    
+    Actions:
+    - SANCTION: Approve shadow IT → sets status to ACTIVE
+    - BAN: Reject asset → sets status to BLOCKED
+    - DEPROVISION: Retire zombie → sets status to RETIRED
+    """
+    action: str = Field(..., description="Action: SANCTION, BAN, or DEPROVISION")
+    reason: Optional[str] = Field(None, description="Reason for the action")
+    actor: Optional[str] = Field(None, description="User performing the action")
+
+
+class ProvisioningActionResponse(BaseModel):
+    """Response for provisioning state transition"""
+    success: bool
+    asset_id: str
+    asset_name: str
+    previous_status: str
+    new_status: str
+    action: str
+    reason: Optional[str] = None
+    actor: Optional[str] = None
+    message: str

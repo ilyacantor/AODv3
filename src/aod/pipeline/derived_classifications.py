@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import re
-from ..models.output_contracts import Asset, LensStatus
+from ..models.output_contracts import Asset, LensStatus, ProvisioningStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 from .cache import get_domain_rollups_cache
@@ -157,21 +157,11 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     """
     Determine if an asset is a Shadow Asset.
     
-    Shadow = has evidence of existence (cloud or discovery)
-             but is NOT in identity systems and NOT in CMDB
-             AND has recent activity within the activity window
+    POLICY (Dec 2025): Uses Traffic Light provisioning_status as primary source of truth.
+    - QUARANTINE → Shadow Block (Tier 1 triage item)
+    - ACTIVE/REVIEW/BLOCKED/RETIRED → Not shadow
     
-    POLICY (Dec 2025): Finance is NOT a trigger for shadow classification.
-    Shadow depends only on discovery presence + activity recency + governance status.
-    
-    POLICY (Dec 2025): INFRA_TECH exclusion via LLM.
-    If LLM classified asset as INFRA_TECH with high confidence, exclude from shadow.
-    
-    Interpretation: "We know this software is used, but it's not being
-    managed through official channels."
-    
-    Uses lens_coverage (boolean flags indicating plane admission) to determine
-    presence, not just evidence_refs.
+    Interpretation: "Shadow IT blocked from DCL, needs user approval to sanction."
     
     Args:
         asset: The asset to classify
@@ -184,6 +174,40 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
             classification_type="shadow",
             reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
             evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
+    if asset.provisioning_status == ProvisioningStatus.QUARANTINE:
+        has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+        has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+        has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+        
+        presence_sources = []
+        if has_cloud:
+            presence_sources.append("cloud infrastructure")
+        if has_discovery:
+            presence_sources.append("discovery")
+        if has_finance:
+            presence_sources.append("finance")
+        
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason=f"Shadow Block: Asset quarantined - no IdP/CMDB governance, blocked from DCL",
+            evidence_summary=[
+                f"Status: QUARANTINE (Shadow IT)",
+                f"Presence: {', '.join(presence_sources) if presence_sources else 'discovery-only'}",
+                "Action required: SANCTION to approve, or BAN to reject"
+            ]
+        )
+    
+    if asset.provisioning_status != ProvisioningStatus.QUARANTINE:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason=f"Asset status is {asset.provisioning_status.value} - not shadow",
+            evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
         )
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
@@ -299,18 +323,11 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
     """
     Determine if an asset is a Zombie Asset.
     
-    Zombie = exists in CMDB or IdP (official records)
-             AND (has NO timestamped activity OR activity is outside the window)
+    POLICY (Dec 2025): Uses Traffic Light provisioning_status as primary source of truth.
+    - REVIEW → Zombie Review (Tier 2 triage item)
+    - ACTIVE/QUARANTINE/BLOCKED/RETIRED → Not zombie
     
-    Interpretation: "This is in our official systems but we have no
-    evidence anyone is actually using it."
-    
-    IMPORTANT: Activity is determined by timestamps, not evidence_refs.
-    If no activity timestamps exist, the asset is classified as zombie
-    (we cannot prove it's being used).
-    
-    POLICY (Dec 2025): INFRA_TECH exclusion via LLM.
-    If LLM classified asset as INFRA_TECH with high confidence, exclude from zombie.
+    Interpretation: "Zombie candidate needs cleanup - has governance but stale activity."
     
     Args:
         asset: The asset to classify
@@ -323,6 +340,41 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
             classification_type="zombie",
             reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
             evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
+    if asset.provisioning_status == ProvisioningStatus.REVIEW:
+        has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        
+        official_sources = []
+        if has_idp:
+            official_sources.append("IdP")
+        if has_cmdb:
+            official_sources.append("CMDB")
+        
+        latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+        activity_info = f"Last activity: {latest_activity.isoformat()}" if latest_activity else "No activity timestamps"
+        
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Zombie Review: Asset flagged for cleanup - in {', '.join(official_sources) if official_sources else 'governance'} but stale activity",
+            evidence_summary=[
+                f"Status: REVIEW (Zombie candidate)",
+                f"Official presence: {', '.join(official_sources) if official_sources else 'CMDB'}",
+                activity_info,
+                "Action required: DEPROVISION to retire, or update activity evidence"
+            ]
+        )
+    
+    if asset.provisioning_status != ProvisioningStatus.REVIEW:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Asset status is {asset.provisioning_status.value} - not zombie",
+            evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
         )
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)

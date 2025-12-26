@@ -508,6 +508,75 @@ class Database:
             ))
         return assets
     
+    async def get_asset_by_id(self, asset_id: str) -> Optional[Asset]:
+        """Get a single asset by ID"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM assets WHERE asset_id = $1",
+                asset_id
+            )
+        
+        if not row:
+            return None
+        
+        activity_evidence_data = row.get("activity_evidence", "{}")
+        vendor_hypothesis_data = row.get("vendor_hypothesis")
+        vendor_hypothesis = None
+        if vendor_hypothesis_data:
+            vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
+        
+        from src.aod.models.output_contracts import ProvisioningStatus
+        prov_status_raw = row.get("provisioning_status", "quarantine")
+        try:
+            prov_status = ProvisioningStatus(prov_status_raw)
+        except ValueError:
+            prov_status = ProvisioningStatus.QUARANTINE
+        
+        return Asset(
+            asset_id=UUID(row["asset_id"]),
+            tenant_id=row["tenant_id"],
+            run_id=row["run_id"],
+            name=row["name"],
+            asset_type=AssetType(row["asset_type"]),
+            identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
+            vendor=row["vendor"],
+            vendor_hypothesis=vendor_hypothesis,
+            environment=Environment(row["environment"]),
+            evidence_refs=json.loads(row["evidence_refs"]),
+            lens_status=LensStatuses.model_validate_json(row["lens_status"]),
+            lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
+            activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
+            tags=json.loads(row["tags"]),
+            admission_reason=row["admission_reason"],
+            provisioning_status=prov_status,
+            created_at=datetime.fromisoformat(row["created_at"])
+        )
+    
+    async def update_asset_provisioning_status(
+        self, 
+        asset_id: str, 
+        new_status: str,
+        reason: Optional[str] = None,
+        actor: Optional[str] = None
+    ) -> bool:
+        """Update an asset's provisioning status"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE assets 
+                SET provisioning_status = $2
+                WHERE asset_id = $1
+                """,
+                asset_id,
+                new_status
+            )
+        
+        return "UPDATE 1" in result
+    
     async def create_artifact(self, artifact: Artifact) -> Artifact:
         """Create a new artifact"""
         pool = await self.get_pool()

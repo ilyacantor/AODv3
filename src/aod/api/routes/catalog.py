@@ -605,8 +605,12 @@ async def update_asset_provisioning(
         "DEPROVISION": "deprovisioned",
     }
     
+    tenant_id = "unknown"
+    if asset.tags and isinstance(asset.tags, dict):
+        tenant_id = asset.tags.get("tenant_id", "unknown")
+    
     await db.save_triage_action(
-        tenant_id=asset.tags.get("tenant_id", "unknown") if asset.tags else "unknown",
+        tenant_id=tenant_id,
         run_id=asset.run_id,
         item_id=asset_id,
         item_type="asset",

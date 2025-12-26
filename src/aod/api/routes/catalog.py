@@ -156,19 +156,25 @@ async def view_catalog(run_id: str):
         if not action:
             return ''
         
-        action_type = action.get('action_type', '')
+        action_type = action.get('action_type', '') or action.get('action', '')
         state = action.get('state', '')
+        owner = action.get('owner', '') or action.get('metadata', {}).get('assigned_to', '')
         
-        if action_type == 'assign':
-            owner = action.get('metadata', {}).get('assigned_to', '')
-            return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
+        if state == 'approved':
+            return f'<span style="background: #10b981; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Approved for AAM{" by " + owner if owner else ""}</span>'
+        elif state == 'banned':
+            return f'<span style="background: #1e293b; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500; border: 1px solid #ef4444;">Banned{" by " + owner if owner else ""}</span>'
+        elif state == 'deprovisioned':
+            return f'<span style="background: #374151; color: #9ca3af; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deprovisioned{" by " + owner if owner else ""}</span>'
+        elif action_type == 'assign':
+            return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned to: {owner}</span>'
         elif action_type == 'defer':
             days = action.get('metadata', {}).get('defer_days', '')
             return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred {days}d</span>'
         elif action_type == 'ignore':
             return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
         elif state == 'acknowledged':
-            return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
+            return f'<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned to: {owner if owner else "team"}</span>'
         return ''
     
     shadow_count = sum(1 for a in assets if get_tag(a, 'shadow_actual') == True)
@@ -200,17 +206,16 @@ async def view_catalog(run_id: str):
             if action.get('item_id') == str(finding_id):
                 action_type = action.get('action', '')
                 state = action.get('state', '')
+                owner = action.get('owner', '')
                 
                 if action_type == 'assign':
-                    owner = action.get('owner', '')
-                    return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned: {owner}</span>'
+                    return f'<span style="background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned to: {owner}</span>'
                 elif action_type == 'defer':
-                    defer_until = action.get('defer_until', '')
-                    return f'<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred</span>'
+                    return '<span style="background: #8b5cf6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deferred</span>'
                 elif action_type == 'ignore':
                     return '<span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Ignored</span>'
                 elif action_type == 'acknowledge' or state == 'acknowledged':
-                    return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
+                    return f'<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Assigned to: {owner if owner else "team"}</span>'
         return ''
     
     def get_provisioning_badge(asset):
@@ -571,9 +576,27 @@ async def update_asset_provisioning(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update asset status")
     
+    action_to_triage_state = {
+        "SANCTION": "approved",
+        "BAN": "banned",
+        "DEPROVISION": "deprovisioned",
+    }
+    
+    await db.save_triage_action(
+        tenant_id=asset.tags.get("tenant_id", "unknown") if asset.tags else "unknown",
+        run_id=asset.run_id,
+        item_id=asset_id,
+        item_type="asset",
+        action=action.lower(),
+        state=action_to_triage_state[action],
+        owner=request.actor,
+        defer_until=None,
+        ignore_reason=request.reason
+    )
+    
     action_messages = {
-        "SANCTION": f"Asset '{asset.name}' sanctioned - now flows to DCL",
-        "BAN": f"Asset '{asset.name}' banned - permanently blocked from DCL",
+        "SANCTION": f"Asset '{asset.name}' sanctioned - now eligible for AAM",
+        "BAN": f"Asset '{asset.name}' banned - permanently blocked from AAM",
         "DEPROVISION": f"Asset '{asset.name}' deprovisioned - retired from active use",
     }
     

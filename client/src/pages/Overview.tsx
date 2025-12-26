@@ -211,71 +211,7 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 4: HOW TO READ THIS (Pipeline Diagram) --- */}
-      <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
-        {/* Main Flow Area */}
-        <div className="flex-1 relative h-full bg-slate-900/20">
-          <iframe
-            src="https://overview.autonomos.software/embed"
-            className="w-full h-full border-none opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-            title="AutonomOS Pipeline Overview"
-            loading="lazy"
-          />
-        </div>
-
-        {/* Fixed Side Panel */}
-        <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
-              <BookOpen className="w-5 h-5 text-purple-400" />
-              How to Read This
-            </h2>
-            <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
-          </div>
-
-          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
-            <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-bold text-cyan-400 mb-1">
-                  Discovery (AOD, this Demo)
-                </h3>
-                <p>
-                  Signals are collected from enterprise systems—identity,
-                  finance, cloud, endpoints, DNS, and systems of record—and
-                  resolved into assets.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-400 mb-1">
-                  Connection (AAM) & Unification (DCL)
-                </h3>
-                <p>
-                  Discovered assets are connected and unified into a shared
-                  enterprise ontology, creating consistent identity, structure,
-                  and meaning across systems.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-purple-400 mb-1">
-                  Logic (BLL) & Action (Agents)
-                </h3>
-                <p>
-                  Business Logic Layer (BLL) turns unified data into governed
-                  business metrics, rules, and decisions. Intelligent agents
-                  operate on this trusted foundation to answer questions, drive
-                  automation, and execute actions.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- SECTION 5: PLATFORM COMPONENTS --- */}
+      {/* --- SECTION 4: PLATFORM COMPONENTS --- */}
       <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -356,7 +292,71 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 6: AOD INTRODUCTION ("The Gateway") --- */}
+      {/* --- SECTION 5: HOW TO READ THIS (Pipeline Diagram) --- */}
+      <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
+        {/* Main Flow Area */}
+        <div className="flex-1 relative h-full bg-slate-900/20">
+          <iframe
+            src="https://overview.autonomos.software/embed"
+            className="w-full h-full border-none opacity-80 group-hover:opacity-100 transition-opacity duration-500"
+            title="AutonomOS Pipeline Overview"
+            loading="lazy"
+          />
+        </div>
+
+        {/* Fixed Side Panel */}
+        <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+              <BookOpen className="w-5 h-5 text-purple-400" />
+              How to Read This
+            </h2>
+            <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
+          </div>
+
+          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
+            <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-bold text-cyan-400 mb-1">
+                  Discovery (AOD, this Demo)
+                </h3>
+                <p>
+                  Signals are collected from enterprise systems—identity,
+                  finance, cloud, endpoints, DNS, and systems of record—and
+                  resolved into assets.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-blue-400 mb-1">
+                  Connection (AAM) & Unification (DCL)
+                </h3>
+                <p>
+                  Discovered assets are connected and unified into a shared
+                  enterprise ontology, creating consistent identity, structure,
+                  and meaning across systems.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-purple-400 mb-1">
+                  Logic (BLL) & Action (Agents)
+                </h3>
+                <p>
+                  Business Logic Layer (BLL) turns unified data into governed
+                  business metrics, rules, and decisions. Intelligent agents
+                  operate on this trusted foundation to answer questions, drive
+                  automation, and execute actions.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- SECTION 3: AOD INTRODUCTION ("The Gateway") --- */}
       <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <div className="flex flex-col gap-8 text-center md:text-left">
           <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">

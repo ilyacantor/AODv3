@@ -350,7 +350,7 @@ export default function Overview() {
               <li className="flex gap-3 items-start">
                 <div className="mt-2 w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(11,202,217,0.6)] shrink-0" />
                 <span>
-                  Classifies outcomes (clean, shadow, zombie, mismatched)
+                  Classifies outcomes (Security Risks, Governance Gaps, Shadow Assets, Zombie Assets)
                 </span>
               </li>
               <li className="flex gap-3 items-start">

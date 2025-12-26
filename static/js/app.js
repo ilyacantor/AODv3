@@ -2077,7 +2077,7 @@
                 const securityAssetIds = new Set(securityRisks.map(f => f.asset_id).filter(Boolean));
                 const secAssetsEl = document.getElementById('securityAssetsCount');
                 if (securityAssetIds.size > 0) {
-                    secAssetsEl.textContent = `${securityAssetIds.size} assets affected`;
+                    secAssetsEl.textContent = `${securityAssetIds.size} admitted`;
                     secAssetsEl.dataset.assetIds = JSON.stringify([...securityAssetIds]);
                 } else {
                     secAssetsEl.textContent = '';
@@ -2088,7 +2088,7 @@
                 const governanceAssetIds = new Set(governanceHygiene.map(f => f.asset_id).filter(Boolean));
                 const govAssetsEl = document.getElementById('governanceAssetsCount');
                 if (governanceAssetIds.size > 0) {
-                    govAssetsEl.textContent = `${governanceAssetIds.size} assets affected`;
+                    govAssetsEl.textContent = `${governanceAssetIds.size} admitted`;
                     govAssetsEl.dataset.assetIds = JSON.stringify([...governanceAssetIds]);
                 } else {
                     govAssetsEl.textContent = '';

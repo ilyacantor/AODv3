@@ -36,7 +36,7 @@ export default function Overview() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } else if (event.data?.action === 'triggerPipelineDemo') {
-        const pipelineIframe = document.querySelector('iframe[title="AutonomOS Pipeline Overview"]') as HTMLIFrameElement;
+        const pipelineIframe = document.querySelector('iframe[title="autonomOS Pipeline Overview"]') as HTMLIFrameElement;
         if (pipelineIframe && pipelineIframe.contentWindow) {
           pipelineIframe.contentWindow.postMessage({ action: 'runDemo' }, '*');
         }
@@ -203,7 +203,7 @@ export default function Overview() {
           <iframe
             src="https://overview.autonomos.software/embed"
             className="w-full h-full border-none opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-            title="AutonomOS Pipeline Overview"
+            title="autonomOS Pipeline Overview"
             loading="lazy"
           />
         </div>
@@ -289,7 +289,7 @@ export default function Overview() {
       <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <div className="flex flex-col gap-8 text-center md:text-left">
           <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">
-            AOD is the gateway to AutonomOS.
+            AOD is the gateway to autonom<span className="text-cyan-400">OS</span>.
           </h2>
 
           <div className="mt-4">
@@ -444,7 +444,7 @@ export default function Overview() {
 
       {/* Footer minimal */}
       <footer className="w-full py-8 text-center text-xs text-slate-600 border-t border-slate-900 bg-slate-950">
-        © 2025 AutonomOS. All rights reserved.
+        © 2025 autonom<span className="text-cyan-400">OS</span>. All rights reserved.
       </footer>
     </div>
   );

@@ -105,27 +105,27 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
     """Build Finance index: by vendor+product and memo tokens"""
     index = PlaneIndex()
     
+    # Build vendor lookup dict for O(1) access (optimization)
+    vendor_by_id = {}
     for vendor in finance_plane.vendors:
+        vendor_by_id[vendor.vendor_id] = vendor
         index.records[f"vendor:{vendor.vendor_id}"] = vendor
-        
+
         vendor_name = normalize_string(vendor.name)
         add_to_index(index.by_vendor_product, vendor_name, f"vendor:{vendor.vendor_id}")
         add_to_index(index.by_canonical_name, vendor_name, f"vendor:{vendor.vendor_id}")
-        
+
         for product in vendor.products:
             product_key = f"{vendor_name}:{normalize_string(product)}"
             add_to_index(index.by_vendor_product, product_key, f"vendor:{vendor.vendor_id}")
             add_to_index(index.by_canonical_name, normalize_string(product), f"vendor:{vendor.vendor_id}")
-    
+
     for contract in finance_plane.contracts:
         record_id = f"contract:{contract.contract_id}"
         index.records[record_id] = contract
-        
-        vendor_record = None
-        for v in finance_plane.vendors:
-            if v.vendor_id == contract.vendor_id:
-                vendor_record = v
-                break
+
+        # O(1) vendor lookup instead of O(n) loop
+        vendor_record = vendor_by_id.get(contract.vendor_id)
         
         if vendor_record:
             vendor_name = normalize_string(vendor_record.name)

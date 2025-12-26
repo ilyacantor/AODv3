@@ -224,19 +224,15 @@ async def execute_pipeline(
             """
             if not plane_match.matched_records:
                 return False
-            
-            vendor_names = set()
-            for rec in plane_match.matched_records:
-                if rec is None:
-                    continue
-                vendor_name = None
-                if hasattr(rec, 'name'):
-                    vendor_name = rec.name
-                elif hasattr(rec, 'vendor_name'):
-                    vendor_name = rec.vendor_name
-                if vendor_name:
-                    vendor_names.add(vendor_name.lower().strip())
-            
+
+            # Optimized: use set comprehension with generator expression
+            vendor_names = {
+                (rec.name if hasattr(rec, 'name') else rec.vendor_name).lower().strip()
+                for rec in plane_match.matched_records
+                if rec is not None and (hasattr(rec, 'name') or hasattr(rec, 'vendor_name'))
+                and (rec.name if hasattr(rec, 'name') else getattr(rec, 'vendor_name', None))
+            }
+
             return len(vendor_names) > 1
         
         ambiguous_count = 0

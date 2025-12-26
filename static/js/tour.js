@@ -547,7 +547,51 @@ const TourManager = (function() {
         overlay.style.top = 'auto';
         overlay.style.transform = 'none';
         
-        const buttonText = isLastSection ? 'Start Simulation' : 'Next';
+        const isFirstSection = sectionIndex === 0;
+        const isMiddleSection = !isFirstSection && !isLastSection;
+        
+        let bodyContent = '';
+        let footerContent = '';
+        
+        if (isFirstSection) {
+            // Full welcome dialog
+            bodyContent = `
+                <div class="tour-body">
+                    <h3 class="tour-headline">Welcome to the autonom<span class="tour-os-accent">OS</span> Discovery (AOD) Guided Tour</h3>
+                    <p class="tour-content">Click Next to scroll through the sections of the AOS Overview.</p>
+                </div>
+            `;
+            footerContent = `
+                <div class="tour-footer">
+                    <div></div>
+                    <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
+                </div>
+            `;
+        } else if (isLastSection) {
+            // Expanded final dialog
+            bodyContent = `
+                <div class="tour-body">
+                    <h3 class="tour-headline">Ready for the Functional Tour</h3>
+                    <p class="tour-content">Now we'll proceed with the live simulation to see AOD in action.</p>
+                </div>
+            `;
+            footerContent = `
+                <div class="tour-footer">
+                    <button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>
+                    <button class="tour-btn tour-btn-next tour-btn-primary">Start Simulation <span class="tour-btn-arrow">›</span></button>
+                </div>
+            `;
+        } else {
+            // Collapsed minimal bar
+            overlay.classList.add('tour-overlay-collapsed');
+            bodyContent = '';
+            footerContent = `
+                <div class="tour-footer tour-footer-inline">
+                    <button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>
+                    <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
+                </div>
+            `;
+        }
         
         overlay.innerHTML = `
             <div class="tour-header tour-overlay-header">
@@ -558,14 +602,8 @@ const TourManager = (function() {
                 </div>
                 <button class="tour-close" aria-label="Close tour">×</button>
             </div>
-            <div class="tour-body">
-                <h3 class="tour-headline">Welcome to the autonom<span class="tour-os-accent">OS</span> Discovery (AOD) Guided Tour</h3>
-                <p class="tour-content">Click Next to scroll through the sections of the AOS Overview.</p>
-            </div>
-            <div class="tour-footer">
-                ${sectionIndex > 0 ? '<button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>' : '<div></div>'}
-                <button class="tour-btn tour-btn-next">${buttonText} <span class="tour-btn-arrow">›</span></button>
-            </div>
+            ${bodyContent}
+            ${footerContent}
         `;
         
         document.body.appendChild(overlay);

@@ -336,6 +336,12 @@
                 const zombieAssets = derivedData.zombie_assets || [];
                 const assets = catalogAssets.assets || catalogAssets || [];
                 
+                const assetStatusMap = {};
+                assets.forEach(a => {
+                    const id = a.asset_id || a.id;
+                    assetStatusMap[id] = (a.provisioning_status || '').toUpperCase();
+                });
+                
                 const blockedItems = [];
                 const staleItems = [];
                 const governanceItems = [];
@@ -343,12 +349,13 @@
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`shadow:${assetId}`];
-                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
                     
                     const item = { 
                         ...a, 
                         itemType: 'shadow',
                         sectionType: 'blocked',
+                        provisioning_status: provStatus,
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
@@ -356,7 +363,7 @@
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
                     
-                    if (provStatus === 'QUARANTINE' || provStatus === '' || !a.provisioning_status) {
+                    if (provStatus === 'QUARANTINE') {
                         blockedItems.push(item);
                     }
                 });
@@ -364,12 +371,13 @@
                 zombieAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`zombie:${assetId}`];
-                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
                     
                     const item = { 
                         ...a, 
                         itemType: 'zombie',
                         sectionType: 'stale',
+                        provisioning_status: provStatus,
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
@@ -377,7 +385,7 @@
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
                     
-                    if (provStatus === 'REVIEW' || provStatus === '' || !a.provisioning_status) {
+                    if (provStatus === 'REVIEW') {
                         staleItems.push(item);
                     }
                 });

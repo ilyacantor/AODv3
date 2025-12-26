@@ -61,17 +61,16 @@ export default function Overview() {
           {/* Main Headline & Description */}
           <div className="space-y-8 max-w-5xl">
             <h1 className="text-[30px] md:text-[40px] font-bold tracking-tight leading-[1.1] text-white">
-              AutonomOS is an{" "}
+              autonomOS:{" "}
               <span className="text-transparent bg-clip-text bg-gradient-brand">
-                AI-native
+                The Operating System
               </span>
-              , enterprise-grade platform that turns your scattered company data
-              into action.
+              {" "}for the Intelligent Enterprise
             </h1>
 
             <div className="space-y-6 max-w-3xl">
               <p className="text-xl md:text-2xl text-slate-400 leading-relaxed font-medium">
-                <strong className="text-white">AOD is the gateway to AutonomOS.</strong>
+                Leading the paradigm shift from rigid legacy software to unified, natural language engagement with enterprise data.
               </p>
             </div>
           </div>

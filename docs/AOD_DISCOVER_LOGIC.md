@@ -23,13 +23,27 @@ Raw Evidence → Validate → Normalize → Correlate → Admit → Classify →
 
 ## ADMISSION GATES
 
-An entity must pass ALL gates to become a **Cataloged Asset**:
+An entity must pass ALL rejection gates, then satisfy at least ONE admission criterion:
+
+### Rejection Gates (must pass all)
 
 | Gate | Rule |
 |------|------|
 | **GATE 0** | Valid public TLD (rejects `auth-service`, `token865`) |
-| **GATE 1** | Not infrastructure domain (rejects `redis.com`, `postgresql.org`) |
-| **GATE 2** | Evidence threshold: IdP/CMDB match OR Cloud match OR Finance (≥$200/mo recurring) OR Discovery with **≥2 distinct planes** |
+| **GATE 1** | Not corporate root domain (rejects marketing domains) |
+| **GATE 2** | Not infrastructure domain (rejects `redis.com`, `postgresql.org`) |
+
+### Admission Criteria (must satisfy at least one)
+
+| Criterion | Rule |
+|-----------|------|
+| **IdP** | Any IdP match (SSO/SCIM/service principal preferred) |
+| **CMDB** | Any CMDB match (app/service/database/infra in prod/staging preferred) |
+| **Cloud** | Any cloud resource match |
+| **Finance** | Any spend > $0 (recurring preferred) |
+| **Discovery** | ≥2 distinct corroborating planes + activity within 90 days |
+
+**Note:** Discovery corroboration planes are: network, endpoint, idp, cloud, discovery. Finance and CMDB do NOT count as discovery corroboration.
 
 ---
 
@@ -52,14 +66,21 @@ Applied **after admission** to cataloged assets:
 
 Findings are **issues detected about admitted assets**. One asset can trigger multiple findings:
 
+### Security Risks (headline KPIs)
+
 | Finding Type | Category | Trigger |
 |--------------|----------|---------|
-| `identity_gap` | Security Risk | Admitted via cloud/finance but no IdP |
-| `finance_gap` | Security Risk | ≥$200/mo recurring spend, ungoverned |
-| `data_conflict` | Security Risk | Conflicting values across planes (owner, env, etc.) |
-| `cmdb_gap` | Governance | Has IdP/Finance but missing from CMDB |
-| `governance_gap` | Governance | No owner or system records |
-| `duplication_risk` | Governance | Multiple entities match same plane record |
+| `identity_gap` | Identity & Access | Admitted via cloud/finance but no IdP |
+| `finance_gap` | Shadow IT | ≥$200/mo recurring spend + ungoverned |
+| `data_conflict` | Data Integrity | Conflicting values across planes (owner, env, etc.) |
+
+### Governance (secondary KPIs)
+
+| Finding Type | Category | Trigger |
+|--------------|----------|---------|
+| `cmdb_gap` | Visibility Gap | Has IdP/Finance but missing from CMDB |
+| `governance_gap` | Governance Hygiene | No owner or system records |
+| `duplication_risk` | Governance Hygiene | Multiple entities match same plane record |
 
 ---
 

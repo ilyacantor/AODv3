@@ -81,6 +81,16 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
 *   **Run Status Semantics**: Explicit run statuses (e.g., `UPSTREAM_ERROR`, `COMPLETED_WITH_RESULTS`).
 *   **Database Design**: PostgreSQL persistence for `runs`, `assets`, `findings`, `artifacts`, `triage_actions`, and other related data.
 *   **Triage Persistence**: Triage actions (acknowledge, assign, defer, ignore) are saved to the database and restored when viewing the Triage tab. Status badges show current state with visual distinction for triaged items.
+*   **Traffic Light Provisioning (Dec 2025)**: Fail-closed asset provisioning system that controls which assets flow to DCL (Discovery Control Layer):
+    - **ACTIVE** (Green): Trusted - has IdP or CMDB governance, flows to DCL automatically
+    - **REVIEW** (Amber): Needs cleanup - CMDB match but stale activity >90 days (zombie candidate)
+    - **QUARANTINE** (Red): Shadow IT - Cloud/Finance/Discovery only with no governance, blocked from DCL
+    - **IGNORED** (Black): Hard rejection - invalid TLD, infrastructure domain, dropped completely
+    - Strict precedence: IGNORED → ACTIVE → REVIEW → QUARANTINE (fail-closed default)
+    - DCL export endpoint: `GET /api/v1/catalog/dcl?run_id=X` returns only ACTIVE assets
+    - Catalog filtering: `GET /api/v1/catalog?run_id=X&provisioning_status=active|review|quarantine`
+    - Database: `provisioning_status` field added to assets table with QUARANTINE default
+    - Tests: `tests/test_traffic_light.py` with 9 test cases covering all status paths
 *   **Smart Snapshot Selection**: On page load, the tenant with the most recent snapshot is automatically selected, marked with ★ (Latest).
 *   **Window Management**: Links between AOD and Farm reuse named windows (`aos_discover`, `aos_farm`) instead of opening new tabs.
 *   **Overview Tab**: React-based landing page built with Vite, Tailwind CSS, and framer-motion. Source in `client/`, builds to `static/overview/`. Displays AutonomOS platform introduction, AOD gateway explanation, interactive architecture iframe from overview.autonomos.software, and call-to-action buttons for Guided Validation.

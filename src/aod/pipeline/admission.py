@@ -656,7 +656,7 @@ def apply_admission_criteria(
     if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
-            provisioning_status=ProvisioningStatus.QUARANTINE,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason="No admission criteria satisfied"
         )
     

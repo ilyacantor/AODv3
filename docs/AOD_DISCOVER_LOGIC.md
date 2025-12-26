@@ -62,6 +62,54 @@ Applied **after admission** to cataloged assets:
 
 ---
 
+## TRAFFIC LIGHT PROVISIONING
+
+The Traffic Light system controls which assets flow to DCL (Discovery Control Layer). It operates on a **fail-closed** principle with strict precedence.
+
+### Provisioning Status
+
+| Status | Color | Definition | DCL Flow |
+|--------|-------|------------|----------|
+| **ACTIVE** | 🟢 Green | Trusted (has IdP or CMDB governance) | ✅ Flows to DCL |
+| **REVIEW** | 🟡 Amber | Needs cleanup (CMDB but stale activity >90 days) | ❌ Blocked |
+| **QUARANTINE** | 🔴 Red | Shadow IT (Cloud/Finance/Discovery only, no governance) | ❌ Blocked |
+| **IGNORED** | ⚫ Black | Hard rejection (invalid TLD, infrastructure domain) | ❌ Dropped |
+
+### Precedence Order
+
+```
+STEP 0: Hard rejection → IGNORED (dropped, not saved)
+    ↓ (passes rejection gates)
+STEP 1: Has IdP OR CMDB → ACTIVE (Green Lane)
+    ↓ (no IdP/CMDB)
+STEP 2: Has CMDB + Stale Activity → REVIEW (Amber Lane)
+    ↓ (no CMDB)
+STEP 3: Cloud/Finance/Discovery only → QUARANTINE (Red Lane)
+```
+
+### Decision Logic
+
+| Evidence | Activity | Status | Reason |
+|----------|----------|--------|--------|
+| IdP match | Any | ACTIVE | Trusted identity governance |
+| CMDB match | Recent (<90d) | ACTIVE | Trusted system record |
+| CMDB match | Stale (>90d) | REVIEW | Zombie candidate, needs cleanup |
+| Cloud only | Any | QUARANTINE | No governance, shadow IT |
+| Finance only | Any | QUARANTINE | No governance, shadow IT |
+| Discovery only | 2+ planes | QUARANTINE | No governance, shadow IT |
+
+### API Endpoints
+
+| Endpoint | Returns | Use Case |
+|----------|---------|----------|
+| `GET /api/v1/catalog?run_id=X` | All assets | Full inventory view |
+| `GET /api/v1/catalog?run_id=X&provisioning_status=active` | ACTIVE only | Filtered view |
+| `GET /api/v1/catalog/dcl?run_id=X` | ACTIVE only | DCL export (guardrailed) |
+
+**Key Principle:** The DCL endpoint is the guardrail that ensures only ACTIVE assets flow downstream. QUARANTINE assets are visible in triage but blocked from production provisioning.
+
+---
+
 ## FINDINGS (Many-to-One)
 
 Findings are **issues detected about admitted assets**. One asset can trigger multiple findings:

@@ -1,18 +1,30 @@
 """Catalog routes for AOD API"""
 
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from typing import Optional
 
 from ..schemas import CatalogResponse
 from ...db.database import get_db_direct
+from ...models.output_contracts import ProvisioningStatus
 
 router = APIRouter(prefix="/catalog")
 
 
 @router.get("", response_model=CatalogResponse)
-async def get_catalog(run_id: str):
-    """Get assets for a run"""
+async def get_catalog(
+    run_id: str,
+    provisioning_status: Optional[str] = Query(None, description="Filter by provisioning status (active, review, quarantine)")
+):
+    """
+    Get assets for a run.
+    
+    Optional filter by provisioning_status:
+    - active: Only ACTIVE assets (trusted, flows to DCL)
+    - review: Only REVIEW assets (needs cleanup)
+    - quarantine: Only QUARANTINE assets (shadow IT, blocked from DCL)
+    """
     db = await get_db_direct()
     
     run = await db.get_run(run_id)
@@ -20,6 +32,11 @@ async def get_catalog(run_id: str):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     assets = await db.get_assets_by_run(run_id)
+    
+    # Apply provisioning status filter if provided
+    if provisioning_status:
+        status_filter = provisioning_status.upper()
+        assets = [a for a in assets if a.provisioning_status.value.upper() == status_filter]
     
     return CatalogResponse(
         run_id=run_id,
@@ -36,11 +53,58 @@ async def get_catalog(run_id: str):
                 "tags": a.tags,
                 "admission_reason": a.admission_reason,
                 "evidence_refs": a.evidence_refs,
+                "provisioning_status": a.provisioning_status.value,
                 "created_at": a.created_at.isoformat()
             }
             for a in assets
         ],
         count=len(assets)
+    )
+
+
+@router.get("/dcl", response_model=CatalogResponse)
+async def get_dcl_export(run_id: str):
+    """
+    DCL (Discovery Control Layer) Export - Only ACTIVE provisioned assets.
+    
+    This is the guardrail endpoint that ONLY returns assets with provisioning_status=ACTIVE.
+    These are trusted assets (IdP or CMDB governed) that flow to the DCL.
+    
+    QUARANTINE assets (Shadow IT) are blocked from this export.
+    REVIEW assets (zombie candidates) are blocked until cleaned up.
+    """
+    db = await get_db_direct()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    all_assets = await db.get_assets_by_run(run_id)
+    
+    # GUARDRAIL: Only ACTIVE assets flow to DCL
+    active_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
+    
+    return CatalogResponse(
+        run_id=run_id,
+        assets=[
+            {
+                "asset_id": str(a.asset_id),
+                "name": a.name,
+                "asset_type": a.asset_type.value,
+                "vendor": a.vendor,
+                "environment": a.environment.value,
+                "identifiers": a.identifiers.model_dump(),
+                "lens_status": a.lens_status.model_dump(),
+                "lens_coverage": a.lens_coverage.model_dump(),
+                "tags": a.tags,
+                "admission_reason": a.admission_reason,
+                "evidence_refs": a.evidence_refs,
+                "provisioning_status": a.provisioning_status.value,
+                "created_at": a.created_at.isoformat()
+            }
+            for a in active_assets
+        ],
+        count=len(active_assets)
     )
 
 

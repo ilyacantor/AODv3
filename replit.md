@@ -49,7 +49,7 @@ The UI is a single-page application using the AutonomOS color palette and Quicks
 *   **Aggressive Domain Merging**: Prevents "split brain" where name-only entities (e.g., "Airtable" from finance) and domain entities (e.g., "airtable.com" from discovery) create separate rows. Uses base token extraction and cross-referencing to ensure single unified record per tool.
 *   **Gatekeeper Triage UI**: Workflow-oriented triage replacing tier-based system with three sections:
     - Blocked Assets (Shadow IT): `provisioning_status == QUARANTINE`, actions: Approve for AAM, Ban
-    - Stale Assets (Cleanup): `provisioning_status == REVIEW`, actions: Deprovision, Sanction
+    - Zombie Assets (Cleanup): `provisioning_status == REVIEW`, actions: Deprovision, Sanction
     - Governance Gaps: `provisioning_status == ACTIVE AND has_findings`, shows specific issues
 
 ## External Dependencies

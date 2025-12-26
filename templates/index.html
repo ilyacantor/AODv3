@@ -192,7 +192,7 @@
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Triage Workflow</h2>
-                    <p class="config-note" style="margin:0;">Status-based asset review. Blocked assets need admission decisions; Stale assets need cleanup; Governance gaps need attention.</p>
+                    <p class="config-note" style="margin:0;">Status-based asset review. Blocked assets need admission decisions; Zombie assets need cleanup; Governance gaps need attention.</p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -222,11 +222,11 @@
                     <div class="triage-section-header stale-header triage-collapsible" data-target="triageStaleContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon section-stale">⏱</span>
-                            Stale Assets (Cleanup)
+                            <span class="triage-icon section-stale">💀</span>
+                            Zombie Assets (Cleanup)
                             <span class="triage-count stale-count" id="triageStaleCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Stale connections needing cleanup — deprovision or sanction</div>
+                        <div class="triage-section-desc">Zombie assets needing cleanup — deprovision or sanction</div>
                     </div>
                     <div class="triage-section-content" id="triageStaleContent">
                         <div class="triage-empty">Select a snapshot to load items</div>

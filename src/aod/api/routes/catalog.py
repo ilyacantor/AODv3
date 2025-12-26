@@ -135,8 +135,15 @@ async def view_catalog(run_id: str):
         item_id = action.get('item_id')
         item_type = action.get('item_type')
         
-        if item_type == 'asset':
-            triage_by_asset[item_id] = action
+        if item_type in ('asset', 'shadow', 'zombie', 'governance'):
+            if item_id not in triage_by_asset:
+                triage_by_asset[item_id] = action
+            else:
+                existing = triage_by_asset[item_id]
+                existing_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'acknowledged': 2, 'ignored': 1}.get(existing.get('state', ''), 0)
+                new_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'acknowledged': 2, 'ignored': 1}.get(action.get('state', ''), 0)
+                if new_priority > existing_priority:
+                    triage_by_asset[item_id] = action
         elif item_type == 'finding':
             asset_id = finding_to_asset.get(item_id)
             if asset_id and asset_id not in triage_by_asset:
@@ -181,16 +188,22 @@ async def view_catalog(run_id: str):
     zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
     governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
     
-    triage_stats = {'acknowledged': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
+    triage_stats = {'approved': 0, 'banned': 0, 'deprovisioned': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
     triaged_asset_ids = set()
     for action in triage_actions:
-        action_type = action.get('action_type', '')
+        action_type = action.get('action_type', '') or action.get('action', '')
+        state = action.get('state', '')
         item_id = action.get('item_id', '')
-        if action_type == 'acknowledge' or action.get('state') == 'acknowledged':
-            triage_stats['acknowledged'] += 1
-        elif action_type == 'assign':
+        
+        if state == 'approved':
+            triage_stats['approved'] += 1
+        elif state == 'banned':
+            triage_stats['banned'] += 1
+        elif state == 'deprovisioned':
+            triage_stats['deprovisioned'] += 1
+        elif action_type == 'assign' or state == 'acknowledged':
             triage_stats['assigned'] += 1
-        elif action_type == 'defer':
+        elif action_type == 'defer' or state == 'deferred':
             triage_stats['deferred'] += 1
         elif action_type == 'ignore':
             triage_stats['ignored'] += 1
@@ -320,19 +333,25 @@ async def view_catalog(run_id: str):
             <div class="section-title" style="color: #06b6d4;">Triage Summary</div>
             <div class="section-subtitle">Overview of triage actions taken on assets in this run</div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
             <div class="stat">
-                <div class="stat-value" style="color: #f59e0b;">{triage_stats['pending']}</div>
-                <div class="stat-label">Pending Review</div>
+                <div class="stat-value" style="color: #10b981;">{triage_stats['approved']}</div>
+                <div class="stat-label">Approved for AAM</div>
             </div>
             <div class="stat">
-                <div class="stat-value" style="color: #0ea5e9;">{triage_stats['acknowledged']}</div>
-                <div class="stat-label">Acknowledged</div>
+                <div class="stat-value" style="color: #ef4444;">{triage_stats['banned']}</div>
+                <div class="stat-label">Banned</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #9ca3af;">{triage_stats['deprovisioned']}</div>
+                <div class="stat-label">Deprovisioned</div>
             </div>
             <div class="stat">
                 <div class="stat-value" style="color: #3b82f6;">{triage_stats['assigned']}</div>
                 <div class="stat-label">Assigned</div>
             </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
             <div class="stat">
                 <div class="stat-value" style="color: #8b5cf6;">{triage_stats['deferred']}</div>
                 <div class="stat-label">Deferred</div>
@@ -340,6 +359,10 @@ async def view_catalog(run_id: str):
             <div class="stat">
                 <div class="stat-value" style="color: #64748b;">{triage_stats['ignored']}</div>
                 <div class="stat-label">Ignored</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" style="color: #f59e0b;">{triage_stats['pending']}</div>
+                <div class="stat-label">Pending Review</div>
             </div>
         </div>
     '''

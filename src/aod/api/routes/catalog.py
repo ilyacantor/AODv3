@@ -140,8 +140,8 @@ async def view_catalog(run_id: str):
                 triage_by_asset[item_id] = action
             else:
                 existing = triage_by_asset[item_id]
-                existing_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'acknowledged': 2, 'ignored': 1}.get(existing.get('state', ''), 0)
-                new_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'acknowledged': 2, 'ignored': 1}.get(action.get('state', ''), 0)
+                existing_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'assigned': 2, 'acknowledged': 2, 'ignored': 1}.get(existing.get('state', ''), 0)
+                new_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'assigned': 2, 'acknowledged': 2, 'ignored': 1}.get(action.get('state', ''), 0)
                 if new_priority > existing_priority:
                     triage_by_asset[item_id] = action
         elif item_type == 'finding':

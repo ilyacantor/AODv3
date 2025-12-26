@@ -526,61 +526,54 @@ const TourManager = (function() {
         await trackedDelay(400);
         if (aborted) return;
         
-        showCompactOverviewPrompt(sectionIndex, isLastSection);
+        showOverviewTourDialog(sectionIndex, isLastSection);
     }
     
-    function showCompactOverviewPrompt(sectionIndex, isLastSection) {
+    function showOverviewTourDialog(sectionIndex, isLastSection) {
         removeOverlay();
         
         const scrim = document.createElement('div');
-        scrim.className = 'tour-scrim tour-scrim-transparent';
+        scrim.className = 'tour-scrim';
         document.body.appendChild(scrim);
         
         const overlay = document.createElement('div');
-        overlay.className = 'tour-overlay tour-compact-overlay';
+        overlay.className = 'tour-overlay';
         overlay.id = 'tour-dialog';
         
-        overlay.style.position = 'fixed';
-        overlay.style.bottom = '20px';
-        overlay.style.left = '50%';
-        overlay.style.transform = 'translateX(-50%)';
-        
-        const progressText = `${sectionIndex + 1} / ${OVERVIEW_SECTIONS.length}`;
         const buttonText = isLastSection ? 'Start Simulation' : 'Next';
         
         overlay.innerHTML = `
-            <div class="tour-compact-content">
-                <div class="tour-compact-left">
+            <div class="tour-header">
+                <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
-                    <span class="tour-compact-title">AOD Guided Tour</span>
-                    <span class="tour-compact-progress">${progressText}</span>
+                    <span class="tour-header-title">AOD Guided Tour</span>
                 </div>
-                <div class="tour-compact-right">
-                    ${sectionIndex > 0 ? '<button class="tour-compact-btn tour-compact-back">Back</button>' : ''}
-                    <button class="tour-compact-btn tour-compact-next">${buttonText}</button>
-                    <button class="tour-compact-close" aria-label="Close tour">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 6L6 18M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
+                <button class="tour-close" aria-label="Close tour">×</button>
+            </div>
+            <div class="tour-body">
+                <h3 class="tour-headline">Welcome to the autonom<span class="tour-os-accent">OS</span> Discovery (AOD) Guided Tour</h3>
+                <p class="tour-content">Click Next to scroll through the sections of the AOS Overview.</p>
+            </div>
+            <div class="tour-footer">
+                ${sectionIndex > 0 ? '<button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>' : '<div></div>'}
+                <button class="tour-btn tour-btn-next">${buttonText} <span class="tour-btn-arrow">›</span></button>
             </div>
         `;
         
         document.body.appendChild(overlay);
         
-        overlay.querySelector('.tour-compact-next').addEventListener('click', () => {
+        overlay.querySelector('.tour-btn-next').addEventListener('click', () => {
             advance();
         });
         
-        const backBtn = overlay.querySelector('.tour-compact-back');
+        const backBtn = overlay.querySelector('.tour-btn-back');
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 goBack();
             });
         }
         
-        overlay.querySelector('.tour-compact-close').addEventListener('click', () => {
+        overlay.querySelector('.tour-close').addEventListener('click', () => {
             exit();
         });
         

@@ -142,7 +142,157 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 3: HOW TO READ THIS (Pipeline Diagram) --- */}
+      {/* --- SECTION 3: PARADIGM SHIFT --- */}
+      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="space-y-12"
+        >
+          <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">
+            This Unsustainable Paradigm is Leading to the Fundamental Market Shift:{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-brand">From Software to Intelligence</span>
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Legacy Model */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-slate-600">
+              <h3 className="text-xl font-bold text-slate-400 mb-4">The Legacy Model: Software Navigation (Obsolete)</h3>
+              <ul className="space-y-3 text-slate-400">
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                  <span>Users must navigate rigid, disconnected applications (ERP, CRM, etc.).</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                  <span>Operations require manual orchestration and specialized technical expertise.</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                  <span>Siloed systems create complexity and limit operational visibility.</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                  <span>Value is trapped within the applications.</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* New Reality */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-orange-500">
+              <h3 className="text-xl font-bold text-orange-400 mb-4">The New Reality: Autonomous Orchestration (Emerging)</h3>
+              <ul className="space-y-3 text-slate-300">
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                  <span>Users engage directly with data through natural language (Intent-driven).</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                  <span>Operations are managed autonomously by multi-agent AI systems.</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                  <span>A unified interface abstracts away underlying technical complexity.</span>
+                </li>
+                <li className="flex gap-3 items-start">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                  <span>The stack is commoditized; value shifts to the intelligence layer.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <p className="text-xl md:text-2xl text-slate-300 text-center font-medium leading-relaxed max-w-4xl mx-auto">
+            The enterprise is transitioning from a software-centric model to an intelligence-centric model.{" "}
+            <strong className="text-white">This shift demands a new operating system.</strong>
+          </p>
+        </motion.div>
+      </section>
+
+      {/* --- SECTION 4: PLATFORM COMPONENTS --- */}
+      <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="space-y-10"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
+            autonom<span className="text-transparent bg-clip-text bg-gradient-brand">OS</span> Platform (AOS) Components
+          </h2>
+
+          <div className="space-y-4">
+            {/* AOD */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-cyan-500">
+              <div className="flex items-start gap-4">
+                <Search className="w-6 h-6 text-cyan-400 shrink-0 mt-1" />
+                <div>
+                  <h3 className="text-xl font-bold text-cyan-400 mb-2">Discover (AOD)</h3>
+                  <p className="text-slate-400 leading-relaxed">
+                    AOD autonomously fingerprints and catalogs your entire technology environment—spanning 100s of apps, DBs, and tools. It rapidly infers relationships and establishes connections without manual configuration (minimal HITL). This engine creates a complete, secure architectural view using metadata only, forming the foundation for autonomous orchestration.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AAM */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-orange-500">
+              <div className="flex items-start gap-4">
+                <div className="w-6 h-6 text-orange-400 shrink-0 mt-1 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-orange-400 mb-2">Adaptive API Mesh (AAM)</h3>
+                  <p className="text-slate-400 leading-relaxed">
+                    Self-healing integration layer that monitors API health, detects schema changes, and autonomously adapts—eliminating the primary cause of automation failure.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* DCL */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-rose-500">
+              <div className="flex items-start gap-4">
+                <div className="w-6 h-6 text-rose-400 shrink-0 mt-1 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                    <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-rose-400 mb-2">Data Connectivity Layer (DCL)</h3>
+                  <p className="text-slate-400 leading-relaxed">
+                    Unified enterprise ontology mapping disparate sources into a coherent knowledge graph. Provides the contextual "brain" for intelligent decision-making.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AOA */}
+            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-green-500">
+              <div className="flex items-start gap-4">
+                <div className="w-6 h-6 text-green-400 shrink-0 mt-1 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                    <path d="M12 3v18" /><path d="M5.636 5.636l12.728 12.728" /><path d="M18.364 5.636L5.636 18.364" /><circle cx="12" cy="12" r="3" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-green-400 mb-2">Agentic Orchestration Architecture (AOA)</h3>
+                  <p className="text-slate-400 leading-relaxed">
+                    Governance engine managing agent proliferation at scale. Coordinates workflows with audit trails, HITL mechanisms, and observability for trusted autonomy.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* --- SECTION 5: HOW TO READ THIS (Pipeline Diagram) --- */}
       <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">

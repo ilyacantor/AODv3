@@ -114,7 +114,7 @@
         
         async function submitProvisioningAction(assetId, action) {
             try {
-                const response = await fetch(`/api/v1/catalog/assets/${assetId}/provisioning`, {
+                const response = await fetch(`/api/catalog/assets/${assetId}/provisioning`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: action })
@@ -314,7 +314,7 @@
                     fetch(`/api/findings?run_id=${runId}`),
                     fetch(`/api/runs/${runId}/derived`),
                     fetch(`/api/triage/actions/${runId}`),
-                    fetch(`/api/v1/catalog/assets?run_id=${runId}`)
+                    fetch(`/api/catalog?run_id=${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();

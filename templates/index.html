@@ -192,7 +192,7 @@
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Triage Workflow</h2>
-                    <p class="config-note" style="margin:0;">Prioritized observations for review. Tier 1 items need action; Tier 2 needs judgment; Tier 3 is informational.</p>
+                    <p class="config-note" style="margin:0;">Status-based asset review. Blocked assets need admission decisions; Stale assets need cleanup; Governance gaps need attention.</p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -203,58 +203,57 @@
             </div>
             
             <div class="triage-sections" id="triageSections">
-                <div class="triage-section tier-1">
-                    <div class="triage-section-header tier-1-header triage-collapsible" data-target="triageTier1Content">
+                <div class="triage-section section-blocked">
+                    <div class="triage-section-header blocked-header triage-collapsible" data-target="triageBlockedContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon tier-1">!</span>
-                            Tier 1 — Action Recommended
-                            <span class="triage-count tier-1-count" id="triageTier1Count">0</span>
+                            <span class="triage-icon section-blocked">⊘</span>
+                            Blocked Assets (Shadow IT)
+                            <span class="triage-count blocked-count" id="triageBlockedCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Material, multi-source signals requiring attention</div>
+                        <div class="triage-section-desc">Shadow IT waiting for approval — approve for AAM or ban</div>
                     </div>
-                    <div class="triage-section-content" id="triageTier1Content">
+                    <div class="triage-section-content" id="triageBlockedContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section tier-2">
-                    <div class="triage-section-header tier-2-header triage-collapsible" data-target="triageTier2Content">
+                <div class="triage-section section-stale">
+                    <div class="triage-section-header stale-header triage-collapsible" data-target="triageStaleContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon tier-2">?</span>
-                            Tier 2 — Needs Judgment
-                            <span class="triage-count tier-2-count" id="triageTier2Count">0</span>
+                            <span class="triage-icon section-stale">⏱</span>
+                            Stale Assets (Cleanup)
+                            <span class="triage-count stale-count" id="triageStaleCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Ambiguous matches or conflicting data requiring review</div>
+                        <div class="triage-section-desc">Stale connections needing cleanup — deprovision or sanction</div>
                     </div>
-                    <div class="triage-section-content" id="triageTier2Content">
+                    <div class="triage-section-content" id="triageStaleContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section tier-3">
-                    <div class="triage-section-header tier-3-header triage-collapsible" data-target="triageTier3Content">
+                <div class="triage-section section-governance">
+                    <div class="triage-section-header governance-header triage-collapsible" data-target="triageGovernanceContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon tier-3">i</span>
-                            Tier 3 — Informational
-                            <span class="triage-count tier-3-count" id="triageTier3Count">0</span>
+                            <span class="triage-icon section-governance">⚠</span>
+                            Governance Gaps
+                            <span class="triage-count governance-count" id="triageGovernanceCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Low-risk hygiene signals; safe to batch-handle</div>
+                        <div class="triage-section-desc">Active assets with data quality issues — review and acknowledge</div>
                     </div>
-                    <div class="batch-action-bar" id="tier3BatchBar">
+                    <div class="batch-action-bar" id="governanceBatchBar">
                         <label class="batch-select-all">
-                            <input type="checkbox" class="batch-checkbox" id="tier3SelectAll">
+                            <input type="checkbox" class="batch-checkbox" id="governanceSelectAll">
                             <span>Select All</span>
                         </label>
-                        <span class="batch-count" id="tier3BatchCount">0 selected</span>
+                        <span class="batch-count" id="governanceBatchCount">0 selected</span>
                         <div class="batch-actions">
-                            <button class="batch-btn ignore" id="tier3BatchIgnore">Ignore Selected</button>
-                            <button class="batch-btn ack" id="tier3BatchAck">Acknowledge Selected</button>
+                            <button class="batch-btn ack" id="governanceBatchAck">Acknowledge Selected</button>
                         </div>
                     </div>
-                    <div class="triage-section-content" id="triageTier3Content">
+                    <div class="triage-section-content" id="triageGovernanceContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>

@@ -100,7 +100,7 @@
                     ignore_reason: extra.ignore_reason || null
                 };
                 
-                updateTriageItemInTiers(itemId, itemType, {
+                updateTriageItemInSections(itemId, itemType, {
                     triageState: state,
                     triageAction: action,
                     triageOwner: extra.owner || result.owner || null,
@@ -141,34 +141,46 @@
         }
         
         function removeItemFromTriage(assetId) {
-            for (const tier of [1, 2, 3]) {
-                const items = triageTierData[tier];
+            const sectionIds = {
+                blocked: { countEl: 'triageBlockedCount', contentEl: 'triageBlockedContent' },
+                stale: { countEl: 'triageStaleCount', contentEl: 'triageStaleContent' },
+                governance: { countEl: 'triageGovernanceCount', contentEl: 'triageGovernanceContent' }
+            };
+            
+            for (const [section, els] of Object.entries(sectionIds)) {
+                const items = triageSectionData[section];
                 const idx = items.findIndex(item => 
                     (item.asset_id || item.id) === assetId
                 );
                 if (idx !== -1) {
                     items.splice(idx, 1);
-                    document.getElementById(`triageTier${tier}Count`).textContent = items.length;
-                    const container = document.getElementById(`triageTier${tier}Content`);
+                    document.getElementById(els.countEl).textContent = items.length;
+                    const container = document.getElementById(els.contentEl);
                     if (container) {
-                        renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
+                        renderTriageSection(container, sortTriageItems(items, triageSortState[section]), section);
                     }
                     break;
                 }
             }
         }
         
-        function updateTriageItemInTiers(itemId, itemType, updates) {
-            for (const tier of [1, 2, 3]) {
-                const items = triageTierData[tier];
+        function updateTriageItemInSections(itemId, itemType, updates) {
+            const sectionIds = {
+                blocked: { contentEl: 'triageBlockedContent' },
+                stale: { contentEl: 'triageStaleContent' },
+                governance: { contentEl: 'triageGovernanceContent' }
+            };
+            
+            for (const [section, els] of Object.entries(sectionIds)) {
+                const items = triageSectionData[section];
                 const idx = items.findIndex(item => 
                     getTriageItemId(item) === itemId && getTriageItemType(item) === itemType
                 );
                 if (idx !== -1) {
                     Object.assign(items[idx], updates);
-                    const container = document.getElementById(`triageTier${tier}Content`);
+                    const container = document.getElementById(els.contentEl);
                     if (container) {
-                        renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
+                        renderTriageSection(container, sortTriageItems(items, triageSortState[section]), section);
                     }
                     break;
                 }
@@ -281,31 +293,33 @@
             }
         }
         
-        let triageTierData = { 1: [], 2: [], 3: [] };
-        let triageSortState = { 1: 'name', 2: 'name', 3: 'name' };
+        let triageSectionData = { blocked: [], stale: [], governance: [] };
+        let triageSortState = { blocked: 'name', stale: 'name', governance: 'name' };
         let triageActionsMap = {};
         
         async function loadTriageData() {
             const runId = document.getElementById('triageRunSelect').value;
             if (!runId) return;
             
-            const tier1Content = document.getElementById('triageTier1Content');
-            const tier2Content = document.getElementById('triageTier2Content');
-            const tier3Content = document.getElementById('triageTier3Content');
+            const blockedContent = document.getElementById('triageBlockedContent');
+            const staleContent = document.getElementById('triageStaleContent');
+            const governanceContent = document.getElementById('triageGovernanceContent');
             
-            tier1Content.innerHTML = '<div class="triage-empty">Loading...</div>';
-            tier2Content.innerHTML = '<div class="triage-empty">Loading...</div>';
-            tier3Content.innerHTML = '<div class="triage-empty">Loading...</div>';
+            blockedContent.innerHTML = '<div class="triage-empty">Loading...</div>';
+            staleContent.innerHTML = '<div class="triage-empty">Loading...</div>';
+            governanceContent.innerHTML = '<div class="triage-empty">Loading...</div>';
             
             try {
-                const [findingsRes, derivedRes, actionsRes] = await Promise.all([
+                const [findingsRes, derivedRes, actionsRes, catalogRes] = await Promise.all([
                     fetch(`/api/findings?run_id=${runId}`),
                     fetch(`/api/runs/${runId}/derived`),
-                    fetch(`/api/triage/actions/${runId}`)
+                    fetch(`/api/triage/actions/${runId}`),
+                    fetch(`/api/v1/catalog/assets?run_id=${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();
                 const derivedData = await derivedRes.json();
+                const catalogAssets = catalogRes.ok ? await catalogRes.json() : [];
                 
                 triageActionsMap = {};
                 if (actionsRes.ok) {
@@ -320,109 +334,126 @@
                 const findings = findingsData.findings || [];
                 const shadowAssets = derivedData.shadow_assets || [];
                 const zombieAssets = derivedData.zombie_assets || [];
+                const assets = catalogAssets.assets || catalogAssets || [];
                 
-                const tier1Items = [];
-                const tier2Items = [];
-                const tier3Items = [];
-                
-                findings.forEach(f => {
-                    const itemId = f.finding_id || f.id;
-                    const savedAction = triageActionsMap[`finding:${itemId}`];
-                    const item = { 
-                        ...f, 
-                        itemType: 'finding',
-                        triageState: savedAction?.state || 'pending',
-                        triageAction: savedAction?.action || null,
-                        triageOwner: savedAction?.owner || null,
-                        triageDeferUntil: savedAction?.defer_until || null,
-                        triageIgnoreReason: savedAction?.ignore_reason || null
-                    };
-                    const priority = (f.triage_priority || 'p2').toLowerCase();
-                    const TIER1_TYPES = ['identity_gap', 'finance_gap'];
-                    const TIER2_TYPES = ['data_conflict'];
-                    
-                    if (priority === 'p0' || priority === 'p1' || TIER1_TYPES.includes(f.finding_type)) {
-                        tier1Items.push(item);
-                    } else if (TIER2_TYPES.includes(f.finding_type) || f.category === 'data_integrity') {
-                        tier2Items.push(item);
-                    } else {
-                        tier3Items.push(item);
-                    }
-                });
+                const blockedItems = [];
+                const staleItems = [];
+                const governanceItems = [];
                 
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`shadow:${assetId}`];
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    
                     const item = { 
                         ...a, 
                         itemType: 'shadow',
+                        sectionType: 'blocked',
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
                         triageDeferUntil: savedAction?.defer_until || null,
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
-                    const agg = a.aggregated_evidence || {};
-                    const lens = a.lens_status || {};
                     
-                    const hasFinance = agg.has_finance === true;
-                    const hasCloud = agg.has_cloud === true;
-                    const hasIdp = agg.has_idp === true;
-                    const hasDiscovery = agg.has_discovery === true;
-                    const hasCmdb = agg.has_cmdb === true;
-                    
-                    const activeNoIdp = hasDiscovery && !hasIdp;
-                    const cloudNotCataloged = hasCloud && !hasCmdb;
-                    const multiPlane = [hasFinance, hasCloud, hasIdp, hasDiscovery].filter(Boolean).length > 1;
-                    
-                    const hasAmbiguousLens = Object.values(lens).some(v => v === 'ambiguous');
-                    
-                    if (hasFinance || cloudNotCataloged || (activeNoIdp && multiPlane)) {
-                        tier1Items.push(item);
-                    } else if (hasAmbiguousLens) {
-                        tier2Items.push(item);
-                    } else {
-                        tier3Items.push(item);
+                    if (provStatus === 'QUARANTINE' || provStatus === '' || !a.provisioning_status) {
+                        blockedItems.push(item);
                     }
                 });
                 
                 zombieAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`zombie:${assetId}`];
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    
                     const item = { 
                         ...a, 
                         itemType: 'zombie',
+                        sectionType: 'stale',
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
                         triageDeferUntil: savedAction?.defer_until || null,
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
-                    const lens = a.lens_status || {};
-                    const hasAmbiguousLens = Object.values(lens).some(v => v === 'ambiguous');
                     
-                    if (hasAmbiguousLens) {
-                        tier2Items.push(item);
-                    } else {
-                        tier3Items.push(item);
+                    if (provStatus === 'REVIEW' || provStatus === '' || !a.provisioning_status) {
+                        staleItems.push(item);
                     }
                 });
                 
-                triageTierData = { 1: tier1Items, 2: tier2Items, 3: tier3Items };
+                const assetFindingsMap = {};
+                findings.forEach(f => {
+                    const assetId = f.asset_id || f.id;
+                    if (!assetFindingsMap[assetId]) {
+                        assetFindingsMap[assetId] = [];
+                    }
+                    assetFindingsMap[assetId].push(f);
+                });
                 
-                document.getElementById('triageTier1Count').textContent = tier1Items.length;
-                document.getElementById('triageTier2Count').textContent = tier2Items.length;
-                document.getElementById('triageTier3Count').textContent = tier3Items.length;
+                assets.forEach(a => {
+                    const assetId = a.asset_id || a.id;
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
+                    
+                    if (provStatus === 'ACTIVE' && assetFindings.length > 0) {
+                        const savedAction = triageActionsMap[`governance:${assetId}`];
+                        const findingTypes = assetFindings.map(f => f.finding_type || 'unknown');
+                        const issueLabels = findingTypes.map(t => t.replace(/_/g, ' ')).join(', ');
+                        
+                        const item = { 
+                            ...a,
+                            itemType: 'governance',
+                            sectionType: 'governance',
+                            findings: assetFindings,
+                            findingTypes: findingTypes,
+                            issueLabels: issueLabels,
+                            triageState: savedAction?.state || 'pending',
+                            triageAction: savedAction?.action || null,
+                            triageOwner: savedAction?.owner || null,
+                            triageDeferUntil: savedAction?.defer_until || null,
+                            triageIgnoreReason: savedAction?.ignore_reason || null
+                        };
+                        governanceItems.push(item);
+                    }
+                });
                 
-                renderTierSection(tier1Content, sortTriageItems(tier1Items, triageSortState[1]), 1);
-                renderTierSection(tier2Content, sortTriageItems(tier2Items, triageSortState[2]), 2);
-                renderTierSection(tier3Content, sortTriageItems(tier3Items, triageSortState[3]), 3);
+                findings.forEach(f => {
+                    const assetId = f.asset_id;
+                    const alreadyInGovernance = governanceItems.some(g => (g.asset_id || g.id) === assetId);
+                    
+                    if (!alreadyInGovernance) {
+                        const itemId = f.finding_id || f.id;
+                        const savedAction = triageActionsMap[`finding:${itemId}`];
+                        const item = { 
+                            ...f, 
+                            itemType: 'finding',
+                            sectionType: 'governance',
+                            triageState: savedAction?.state || 'pending',
+                            triageAction: savedAction?.action || null,
+                            triageOwner: savedAction?.owner || null,
+                            triageDeferUntil: savedAction?.defer_until || null,
+                            triageIgnoreReason: savedAction?.ignore_reason || null
+                        };
+                        governanceItems.push(item);
+                    }
+                });
+                
+                triageSectionData = { blocked: blockedItems, stale: staleItems, governance: governanceItems };
+                
+                document.getElementById('triageBlockedCount').textContent = blockedItems.length;
+                document.getElementById('triageStaleCount').textContent = staleItems.length;
+                document.getElementById('triageGovernanceCount').textContent = governanceItems.length;
+                
+                renderTriageSection(blockedContent, sortTriageItems(blockedItems, triageSortState.blocked), 'blocked');
+                renderTriageSection(staleContent, sortTriageItems(staleItems, triageSortState.stale), 'stale');
+                renderTriageSection(governanceContent, sortTriageItems(governanceItems, triageSortState.governance), 'governance');
                 
             } catch (err) {
                 console.error('Failed to load triage data:', err);
-                tier1Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
-                tier2Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
-                tier3Content.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                blockedContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                staleContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
+                governanceContent.innerHTML = '<div class="triage-empty">Failed to load data</div>';
             }
         }
         
@@ -548,31 +579,32 @@
             }
         });
         
-        function renderTierSection(container, items, tier) {
+        function renderTriageSection(container, items, sectionType) {
             if (!items || items.length === 0) {
-                container.innerHTML = '<div class="triage-empty">No items in this tier</div>';
+                container.innerHTML = '<div class="triage-empty">No items in this section</div>';
                 return;
             }
             
-            const currentSort = triageSortState[tier] || 'name';
-            const checkbox = tier === 3 ? '<th style="width: 30px;"></th>' : '';
+            const currentSort = triageSortState[sectionType] || 'name';
+            const showCheckbox = sectionType === 'governance';
+            const checkboxHeader = showCheckbox ? '<th style="width: 30px;"></th>' : '';
             
             let tableHtml = `<table class="triage-table">
                 <thead>
                     <tr>
-                        ${checkbox}
-                        <th data-sort="name" data-tier="${tier}" class="${currentSort === 'name' ? 'sorted' : ''}">Asset <span class="sort-arrow">&#8597;</span></th>
-                        <th data-sort="type" data-tier="${tier}" class="${currentSort === 'type' ? 'sorted' : ''}">Issue <span class="sort-arrow">&#8597;</span></th>
-                        <th data-sort="category" data-tier="${tier}" class="${currentSort === 'category' ? 'sorted' : ''}">Category <span class="sort-arrow">&#8597;</span></th>
-                        <th style="width: 130px;">Actions</th>
+                        ${checkboxHeader}
+                        <th data-sort="name" data-section="${sectionType}" class="${currentSort === 'name' ? 'sorted' : ''}">Asset <span class="sort-arrow">&#8597;</span></th>
+                        <th data-sort="type" data-section="${sectionType}" class="${currentSort === 'type' ? 'sorted' : ''}">Issue <span class="sort-arrow">&#8597;</span></th>
+                        <th data-sort="category" data-section="${sectionType}" class="${currentSort === 'category' ? 'sorted' : ''}">Category <span class="sort-arrow">&#8597;</span></th>
+                        <th style="width: 180px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>`;
             
             items.forEach((item, idx) => {
                 const itemType = item.itemType || 'unknown';
-                const itemId = item.finding_id || item.asset_id || '';
-                const checkboxCell = tier === 3 ? `<td><input type="checkbox" class="triage-item-checkbox" data-item-id="${itemId}" data-item-type="${itemType}" onclick="event.stopPropagation()"></td>` : '';
+                const itemId = item.finding_id || item.asset_id || item.id || '';
+                const checkboxCell = showCheckbox ? `<td><input type="checkbox" class="triage-item-checkbox" data-item-id="${itemId}" data-item-type="${itemType}" onclick="event.stopPropagation()"></td>` : '';
                 
                 const triageState = item.triageState || 'pending';
                 const isTriaged = triageState !== 'pending';
@@ -585,15 +617,20 @@
                     issue = (item.finding_type || 'unknown').replace(/_/g, ' ');
                     category = getCategoryLabel(item.category);
                     categoryClass = item.category || 'governance';
+                } else if (itemType === 'governance') {
+                    assetName = item.name || item.asset_key || 'Unknown';
+                    issue = item.issueLabels || 'Data Quality Issue';
+                    category = 'Governance';
+                    categoryClass = 'governance';
                 } else {
                     assetName = item.name || item.asset_key || 'Unknown';
                     issue = itemType === 'shadow' ? 'Shadow Asset' : 'Zombie Asset';
-                    category = itemType === 'shadow' ? 'Shadow IT' : 'Zombie IT';
+                    category = itemType === 'shadow' ? 'Shadow IT' : 'Stale Asset';
                     categoryClass = itemType;
                 }
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
-                let primaryBtn, moreOptions, statusBadge = '';
+                let primaryBtn, secondaryBtn = '', moreOptions, statusBadge = '';
                 
                 if (isTriaged) {
                     const stateLabels = {
@@ -613,53 +650,40 @@
                     moreOptions = `
                         <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Re-Acknowledge</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Re-Assign</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Re-Ignore</button>`;
-                } else if (itemType === 'shadow') {
-                    primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Sanction</button>`;
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>`;
+                } else if (sectionType === 'blocked') {
+                    primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve for AAM</button>`;
+                    secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban</button>`;
                     moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="ban">Ban</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>`;
-                } else if (itemType === 'zombie') {
-                    primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
-                    moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="sanction">Sanction</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>`;
-                } else if (tier === 1) {
-                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
-                    moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
-                } else if (tier === 2) {
-                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
+                } else if (sectionType === 'stale') {
+                    primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
+                    secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="sanction">Sanction</button>`;
                     moreOptions = `
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                 } else {
-                    primaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="ignore">Ignore</button>`;
+                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
                     moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>`;
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                 }
+                
                 const actionBtns = `
                     ${statusBadge}
                     ${primaryBtn}
+                    ${secondaryBtn}
                     <div class="triage-more">
                         <button class="triage-more-btn" onclick="toggleTriageMenu(this, event);">&#8942;</button>
                         <div class="triage-more-menu">${moreOptions}</div>
                     </div>`;
                 
                 const detailHtml = buildDetailHtml(item, itemType);
-                const colSpan = tier === 3 ? 5 : 4;
+                const colSpan = showCheckbox ? 5 : 4;
                 
                 tableHtml += `
-                    <tr class="triage-row ${rowStateClass}" data-item-idx="${idx}" data-tier="${tier}">
+                    <tr class="triage-row ${rowStateClass}" data-item-idx="${idx}" data-section="${sectionType}">
                         ${checkboxCell}
                         <td class="triage-cell-asset">${assetName}</td>
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>
@@ -677,10 +701,10 @@
             container.querySelectorAll('.triage-table th[data-sort]').forEach(th => {
                 th.onclick = function() {
                     const sortBy = this.dataset.sort;
-                    const tierNum = parseInt(this.dataset.tier);
-                    triageSortState[tierNum] = sortBy;
-                    const sorted = sortTriageItems(triageTierData[tierNum], sortBy);
-                    renderTierSection(container, sorted, tierNum);
+                    const section = this.dataset.section;
+                    triageSortState[section] = sortBy;
+                    const sorted = sortTriageItems(triageSectionData[section], sortBy);
+                    renderTriageSection(container, sorted, section);
                 };
             });
             
@@ -696,20 +720,19 @@
                 };
             });
             
-            if (tier === 3) {
-                initTier3BatchSelection();
+            if (sectionType === 'governance') {
+                initGovernanceBatchSelection();
             }
         }
         
-        function initTier3BatchSelection() {
-            const batchBar = document.getElementById('tier3BatchBar');
-            const selectAllCheckbox = document.getElementById('tier3SelectAll');
-            const batchCount = document.getElementById('tier3BatchCount');
-            const tier3Content = document.getElementById('triageTier3Content');
-            const ignoreBtn = document.getElementById('tier3BatchIgnore');
-            const ackBtn = document.getElementById('tier3BatchAck');
+        function initGovernanceBatchSelection() {
+            const batchBar = document.getElementById('governanceBatchBar');
+            const selectAllCheckbox = document.getElementById('governanceSelectAll');
+            const batchCount = document.getElementById('governanceBatchCount');
+            const governanceContent = document.getElementById('triageGovernanceContent');
+            const ackBtn = document.getElementById('governanceBatchAck');
             
-            const checkboxes = tier3Content.querySelectorAll('.triage-item-checkbox');
+            const checkboxes = governanceContent.querySelectorAll('.triage-item-checkbox');
             if (checkboxes.length === 0) {
                 batchBar.classList.remove('show');
                 return;
@@ -718,7 +741,7 @@
             batchBar.classList.add('show');
             
             function updateBatchCount() {
-                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
+                const checked = governanceContent.querySelectorAll('.triage-item-checkbox:checked');
                 const count = checked.length;
                 batchCount.textContent = count === 0 ? '0 selected' : `${count} selected`;
                 selectAllCheckbox.checked = count === checkboxes.length && count > 0;
@@ -727,7 +750,7 @@
             
             selectAllCheckbox.onclick = function() {
                 const isChecked = this.checked;
-                tier3Content.querySelectorAll('.triage-item-checkbox').forEach(cb => {
+                governanceContent.querySelectorAll('.triage-item-checkbox').forEach(cb => {
                     cb.checked = isChecked;
                 });
                 updateBatchCount();
@@ -737,29 +760,8 @@
                 cb.onclick = updateBatchCount;
             });
             
-            ignoreBtn.onclick = async function() {
-                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
-                if (checked.length === 0) return;
-                const runId = document.getElementById('triageRunSelect').value;
-                if (!runId) return;
-                
-                this.disabled = true;
-                this.textContent = 'Processing...';
-                
-                for (const cb of checked) {
-                    const itemId = cb.dataset.itemId;
-                    const itemType = cb.dataset.itemType;
-                    await submitTriageAction(runId, itemId, itemType, 'ignore', { ignore_reason: 'Batch ignored' });
-                }
-                
-                this.disabled = false;
-                this.textContent = 'Ignore Selected';
-                selectAllCheckbox.checked = false;
-                updateBatchCount();
-            };
-            
             ackBtn.onclick = async function() {
-                const checked = tier3Content.querySelectorAll('.triage-item-checkbox:checked');
+                const checked = governanceContent.querySelectorAll('.triage-item-checkbox:checked');
                 if (checked.length === 0) return;
                 const runId = document.getElementById('triageRunSelect').value;
                 if (!runId) return;

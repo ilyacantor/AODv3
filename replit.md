@@ -102,6 +102,7 @@ Each KPI box includes a help icon (?) in the top right corner with detailed tool
     - Rejected observations persisted to rejections table with `iron_dome` rejection type
     - GATE 0 in admission.py retained as final safety net
 *   **Product Name Aliases**: Maps common product names to canonical domains (Microsoft 365 → microsoft.com, Google Workspace → google.com, AWS → amazonaws.com, Office 365 → microsoft.com).
+*   **Triage Category Standardization (Dec 2025)**: The Category column in Triage now displays only 4 core categories: Security Risks (with sub-labels Identity & Access, Shadow IT, Data Integrity), Governance, Shadow IT (for shadow assets), and Zombie IT (for zombie assets). Vendor names are no longer shown in the Category column - they remain visible in the detail panel. This is a UI-only change with no impact on Farm reconciliation payloads.
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and recipient of reconciliation results.

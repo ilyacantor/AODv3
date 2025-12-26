@@ -1,4 +1,13 @@
-"""Farm reconciliation module - syncs AOD results back to Farm"""
+"""Farm reconciliation module - syncs AOD results back to Farm
+
+FARM NOTIFICATION (Dec 2025):
+- AOD UI now displays "Shadow IT" / "Zombie IT" as the Category label for 
+  shadow/zombie assets in the Triage table
+- Previously displayed vendor names (e.g., "Okta", "Slack") in Category column
+- This is a UI-only change; reconciliation payload is UNCHANGED
+- Farm continues to receive: is_shadow/is_zombie booleans, reason_codes
+- No action required on Farm side
+"""
 
 import os
 import httpx

@@ -540,7 +540,7 @@
                 } else {
                     assetName = item.name || item.asset_key || 'Unknown';
                     issue = itemType === 'shadow' ? 'Shadow Asset' : 'Zombie Asset';
-                    category = item.vendor || item.vendor_hypothesis?.value || '-';
+                    category = itemType === 'shadow' ? 'Shadow IT' : 'Zombie IT';
                     categoryClass = itemType;
                 }
                 

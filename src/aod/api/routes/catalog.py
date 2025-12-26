@@ -213,6 +213,24 @@ async def view_catalog(run_id: str):
                     return '<span style="background: #0ea5e9; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Acknowledged</span>'
         return ''
     
+    def get_provisioning_badge(asset):
+        """Get provisioning status badge for an asset"""
+        status = asset.provisioning_status.value if asset.provisioning_status else 'QUARANTINE'
+        is_shadow = get_tag(asset, 'shadow_actual') == True
+        is_zombie = get_tag(asset, 'zombie_actual') == True
+        
+        if status == 'ACTIVE' and (is_shadow or is_zombie):
+            return '<span style="background: #10b981; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Approved for AAM</span>'
+        elif status == 'BLOCKED':
+            return '<span style="background: #1e293b; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500; border: 1px solid #ef4444;">Banned</span>'
+        elif status == 'RETIRED':
+            return '<span style="background: #374151; color: #9ca3af; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Deprovisioned</span>'
+        elif status == 'QUARANTINE':
+            return '<span style="background: #7f1d1d; color: #fca5a5; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Quarantined</span>'
+        elif status == 'REVIEW':
+            return '<span style="background: #78350f; color: #fcd34d; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">Under Review</span>'
+        return ''
+    
     orphan_rows_html = ""
     for f in orphan_findings:
         vendor_match = None
@@ -254,6 +272,7 @@ async def view_catalog(run_id: str):
             if a.lens_coverage.finance: lens_parts.append('Finance')
         
         triage_badge = get_triage_badge(a.asset_id)
+        provisioning_badge = get_provisioning_badge(a)
         
         rows_html += f'''
         <tr style="border-bottom: 1px solid #334155;">
@@ -262,6 +281,7 @@ async def view_catalog(run_id: str):
             <td style="padding: 0.75rem; color: #94a3b8;">{a.asset_type.value if a.asset_type else '-'}</td>
             <td style="padding: 0.75rem; color: #94a3b8;">{a.environment.value if a.environment else '-'}</td>
             <td style="padding: 0.75rem;">{' '.join(status_badges)}</td>
+            <td style="padding: 0.75rem;">{provisioning_badge or '<span style="color: #475569; font-size: 0.75rem;">-</span>'}</td>
             <td style="padding: 0.75rem; color: #64748b; font-size: 0.8rem;">{', '.join(lens_parts) or '-'}</td>
             <td style="padding: 0.75rem; color: #64748b; font-size: 0.75rem;">{a.admission_reason or '-'}</td>
             <td style="padding: 0.75rem;">{triage_badge or '<span style="color: #475569; font-size: 0.75rem;">-</span>'}</td>
@@ -445,13 +465,14 @@ async def view_catalog(run_id: str):
                         <th onclick="sortTable('assetsTable', 2)">Type <span class="sort-icon">{sort_icon}</span></th>
                         <th onclick="sortTable('assetsTable', 3)">Environment <span class="sort-icon">{sort_icon}</span></th>
                         <th onclick="sortTable('assetsTable', 4)">Status <span class="sort-icon">{sort_icon}</span></th>
-                        <th onclick="sortTable('assetsTable', 5)">Data Sources <span class="sort-icon">{sort_icon}</span></th>
-                        <th onclick="sortTable('assetsTable', 6)">Admission Reason <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 5)">Provisioning <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 6)">Data Sources <span class="sort-icon">{sort_icon}</span></th>
+                        <th onclick="sortTable('assetsTable', 7)">Admission Reason <span class="sort-icon">{sort_icon}</span></th>
                         <th onclick="scrollToTriageSummary()" style="color: #06b6d4; cursor: pointer;" title="Click to view triage summary">Triage ↓</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="8" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="9" style="padding: 2rem; text-align: center; color: #64748b;">No assets in catalog</td></tr>'}
                 </tbody>
             </table>
             

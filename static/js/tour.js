@@ -36,7 +36,7 @@ const TourManager = (function() {
         },
         6: { 
             title: "The Trusted Catalog",
-            content: "This is the \"Golden Record.\"\n\nWhile Triage handles the exceptions, the <strong>Catalog</strong> contains the fully verified estate.\n\nThis trusted list feeds the <strong>AAM</strong> for connecting and maintaining healthy connections, and then to <strong>DCL</strong> for creating a unified data ontology.",
+            content: "This is the core artifact that will be handed off to <strong>AAM</strong> after a human review of exceptions in Triage.\n\nThis trusted list feeds the <strong>AAM</strong> for connecting and maintaining healthy connections, and then to <strong>DCL</strong> for creating a unified data ontology.",
             step: 14
         },
         6.5: { 
@@ -46,7 +46,7 @@ const TourManager = (function() {
         },
         7: { 
             title: "Trust, but Verify",
-            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset inventory.",
+            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset catalog.",
             step: 15
         }
     };
@@ -226,6 +226,7 @@ const TourManager = (function() {
         overlay.innerHTML = `
             <div class="tour-overlay-header">
                 <div class="tour-header-left">
+                    <span class="tour-drag-icon">⋮⋮</span>
                     <div class="tour-pulse-dot"></div>
                     <span class="tour-overlay-title">AOD Demo</span>
                 </div>
@@ -663,6 +664,12 @@ const TourManager = (function() {
         await trackedDelay(200);
         if (aborted) return;
         
+        // Add pulse effect to Fetch & Run Discovery button
+        const fetchBtn = document.getElementById('fetchFromFarm');
+        if (fetchBtn) {
+            fetchBtn.classList.add('tour-btn-pulse');
+        }
+        
         await showOverlay(3, {
             highlightElement: '#fetchFromFarm',
             position: { top: '60%', left: '50%', transform: 'translateX(-50%)' },
@@ -681,6 +688,7 @@ const TourManager = (function() {
         
         const clickHandler = async () => {
             fetchBtn.removeEventListener('click', clickHandler);
+            fetchBtn.classList.remove('tour-btn-pulse');
             removeOverlay();
             
             // Capture existing run IDs BEFORE the new run starts
@@ -831,7 +839,7 @@ const TourManager = (function() {
             }
         }
         
-        const message = `Processing complete. AOD has distilled <strong>${ingested}</strong> signals into <strong>${cataloged}</strong> trusted assets.\n\nNotice the <strong>Lifecycle Cards</strong> below. This isn't just a count; it's a health check. We've isolated <strong>${shadow} Shadow IT</strong> (unmanaged apps) and <strong>${zombie} Zombie Assets</strong> (wasted spend) automatically.`;
+        const message = `Processing complete. AOD has distilled <strong>${ingested}</strong> signals into <strong>${cataloged}</strong> trusted assets.`;
         
         await showOverlay('3b', {
             title: 'The Discovery Dashboard',

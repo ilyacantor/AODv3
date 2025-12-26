@@ -642,6 +642,15 @@ main { padding: 2rem; }
 }
 .tour-btn-primary:hover { background: var(--cyan-400) !important; }
 
+/* Tour button pulse effect */
+.tour-btn-pulse {
+    animation: tour-button-pulse 1.5s ease-in-out infinite;
+}
+@keyframes tour-button-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(6, 182, 212, 0); }
+}
+
 /* Tour Dialog Styles */
 .tour-header { 
     display: flex; 

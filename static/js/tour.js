@@ -537,13 +537,20 @@ const TourManager = (function() {
         document.body.appendChild(scrim);
         
         const overlay = document.createElement('div');
-        overlay.className = 'tour-overlay';
+        overlay.className = 'tour-overlay tour-overlay-small';
         overlay.id = 'tour-dialog';
+        
+        // Position in lower left
+        overlay.style.position = 'fixed';
+        overlay.style.bottom = '20px';
+        overlay.style.left = '20px';
+        overlay.style.top = 'auto';
+        overlay.style.transform = 'none';
         
         const buttonText = isLastSection ? 'Start Simulation' : 'Next';
         
         overlay.innerHTML = `
-            <div class="tour-header">
+            <div class="tour-header tour-overlay-header">
                 <div class="tour-header-left">
                     <div class="tour-pulse-dot"></div>
                     <span class="tour-header-title">AOD Guided Tour</span>
@@ -561,6 +568,9 @@ const TourManager = (function() {
         `;
         
         document.body.appendChild(overlay);
+        
+        // Make draggable
+        makeDraggable(overlay);
         
         overlay.querySelector('.tour-btn-next').addEventListener('click', () => {
             advance();

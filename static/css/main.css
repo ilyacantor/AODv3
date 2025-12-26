@@ -600,6 +600,18 @@ main { padding: 2rem; }
     z-index: 9997; 
 }
 
+/* Tour Small Overlay */
+.tour-overlay-small {
+    width: 320px;
+    top: auto;
+    left: 20px;
+    bottom: 20px;
+    transform: none;
+}
+.tour-overlay-small .tour-body { padding: 1rem 1.25rem; }
+.tour-overlay-small .tour-headline { font-size: 1rem; margin-bottom: 0.5rem; }
+.tour-overlay-small .tour-content { font-size: 0.875rem; }
+
 /* Tour Dialog Styles */
 .tour-header { 
     display: flex; 

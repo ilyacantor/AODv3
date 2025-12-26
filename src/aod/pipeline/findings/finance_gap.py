@@ -28,26 +28,11 @@ def generate_finance_gap_findings(
 
     DEDUPLICATION: Aggregates by vendor/product name to prevent multiple findings
     for the same vendor with many transactions.
-    
-    ASSET LINKAGE: If a vendor matches an existing asset by name/domain, link the finding.
     """
     matched_finance_ids = set()
     for correlation in correlations:
         if correlation.finance.status == MatchStatus.MATCHED:
             matched_finance_ids.update(correlation.finance.matched_ids)
-    
-    asset_lookup = {}
-    for asset in admitted_assets:
-        name_key = (asset.name or '').lower().strip()
-        if name_key:
-            asset_lookup[name_key] = asset.asset_id
-        vendor_key = (asset.vendor or '').lower().strip()
-        if vendor_key:
-            asset_lookup[vendor_key] = asset.asset_id
-        if asset.identifiers and asset.identifiers.domains:
-            for domain in asset.identifiers.domains:
-                domain_key = domain.lower().strip().replace('.com', '').replace('.io', '').replace('.app', '')
-                asset_lookup[domain_key] = asset.asset_id
 
     # Aggregate unmatched finance by vendor/product name
     vendor_aggregates: dict[str, dict] = {}
@@ -119,23 +104,16 @@ def generate_finance_gap_findings(
         else:
             explanation = f"Finance record '{display_name}' (${total_monthly:.0f}/mo) has no corresponding asset in catalog. Possible undiscovered system."
 
-        linked_asset_id = None
-        lookup_key = aggregate_key.replace('.com', '').replace('.io', '').replace('.app', '')
-        if lookup_key in asset_lookup:
-            linked_asset_id = asset_lookup[lookup_key]
-        elif display_name.lower().strip() in asset_lookup:
-            linked_asset_id = asset_lookup[display_name.lower().strip()]
-
         findings.append(Finding(
             finding_id=deterministic_uuid(snapshot_id, run_id, aggregate_key, "finance_gap"),
-            asset_id=linked_asset_id,
+            asset_id=None,
             tenant_id=tenant_id,
             run_id=run_id,
             finding_type=FindingType.FINANCE_GAP,
             category=get_category(FindingType.FINANCE_GAP),
             severity=Severity.MED,
             explanation=explanation,
-            evidence_refs=agg['evidence_refs'][:50],
+            evidence_refs=agg['evidence_refs'][:50],  # Limit refs
             confidence=confidence,
             materiality=materiality,
             triage_priority=triage

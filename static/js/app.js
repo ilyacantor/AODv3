@@ -404,7 +404,12 @@
         
         function getItemCategory(item) {
             if (item.itemType === 'finding') return item.category || '';
-            return item.asset_type || '';
+            return item.itemType === 'shadow' ? 'Shadow' : 'Zombie';
+        }
+        
+        function getItemVendor(item) {
+            if (item.itemType === 'finding') return item.vendor || '';
+            return item.vendor || item.vendor_hypothesis?.value || '';
         }
         
         function sortTriageItems(items, sortBy) {
@@ -420,6 +425,9 @@
                 } else if (sortBy === 'category') {
                     aVal = getItemCategory(a);
                     bVal = getItemCategory(b);
+                } else if (sortBy === 'vendor') {
+                    aVal = getItemVendor(a);
+                    bVal = getItemVendor(b);
                 }
                 return aVal.localeCompare(bVal);
             });
@@ -516,6 +524,7 @@
                         <th data-sort="name" data-tier="${tier}" class="${currentSort === 'name' ? 'sorted' : ''}">Asset <span class="sort-arrow">&#8597;</span></th>
                         <th data-sort="type" data-tier="${tier}" class="${currentSort === 'type' ? 'sorted' : ''}">Issue <span class="sort-arrow">&#8597;</span></th>
                         <th data-sort="category" data-tier="${tier}" class="${currentSort === 'category' ? 'sorted' : ''}">Category <span class="sort-arrow">&#8597;</span></th>
+                        <th data-sort="vendor" data-tier="${tier}" class="${currentSort === 'vendor' ? 'sorted' : ''}">Vendor <span class="sort-arrow">&#8597;</span></th>
                         <th style="width: 130px;">Actions</th>
                     </tr>
                 </thead>
@@ -530,18 +539,20 @@
                 const isTriaged = triageState !== 'pending';
                 const rowStateClass = isTriaged ? `triaged triaged-${triageState}` : '';
                 
-                let assetName, issue, category, categoryClass;
+                let assetName, issue, category, categoryClass, vendor;
                 
                 if (itemType === 'finding') {
                     assetName = item.asset_name || 'Unknown Asset';
                     issue = (item.finding_type || 'unknown').replace(/_/g, ' ');
                     category = getCategoryLabel(item.category);
                     categoryClass = item.category || 'governance';
+                    vendor = item.vendor || '-';
                 } else {
                     assetName = item.name || item.asset_key || 'Unknown';
                     issue = itemType === 'shadow' ? 'Shadow Asset' : 'Zombie Asset';
-                    category = item.vendor || item.vendor_hypothesis?.value || '-';
+                    category = itemType === 'shadow' ? 'Shadow' : 'Zombie';
                     categoryClass = itemType;
+                    vendor = item.vendor || item.vendor_hypothesis?.value || '-';
                 }
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
@@ -594,7 +605,7 @@
                     </div>`;
                 
                 const detailHtml = buildDetailHtml(item, itemType);
-                const colSpan = tier === 3 ? 5 : 4;
+                const colSpan = tier === 3 ? 6 : 5;
                 
                 tableHtml += `
                     <tr class="triage-row ${rowStateClass}" data-item-idx="${idx}" data-tier="${tier}">
@@ -602,6 +613,7 @@
                         <td class="triage-cell-asset">${assetName}</td>
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>
                         <td class="triage-cell-category">${category}</td>
+                        <td class="triage-cell-vendor">${vendor}</td>
                         <td class="triage-cell-actions">${actionBtns}</td>
                     </tr>
                     <tr class="triage-detail-row" data-detail-for="${idx}">

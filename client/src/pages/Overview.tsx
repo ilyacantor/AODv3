@@ -363,8 +363,8 @@ export default function Overview() {
 
             <div className="mt-8 p-4 bg-cyan-950/30 border border-cyan-900/50 rounded-lg text-cyan-200 text-s font-medium text-center">
               While discovery is its primary function, AOD also delivers
-              immediate operational value by surfacing unmanaged systems,
-              inactive assets, and data conflicts.
+              immediate operational value by surfacing security risks,
+              unmanaged systems, costly inactive assets, and governance issues.
             </div>
           </div>
         </div>

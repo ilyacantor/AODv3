@@ -22,6 +22,7 @@ from ...farm_reconcile import reconcile_to_farm
 from ...pipeline.pipeline_executor import execute_pipeline
 from ...models.output_contracts import RunStatus, SyncStatus
 from ...pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
+from ...pipeline.cache import invalidate_run_caches, get_domain_rollups_cache, get_derived_classifications_cache
 from ...config import policy
 
 
@@ -394,6 +395,11 @@ async def delete_all_runs():
     """Delete all discovery runs and associated data"""
     db = await get_db()
     deleted = await db.delete_all_runs()
+
+    # Invalidate all caches when deleting all runs
+    get_domain_rollups_cache().clear()
+    get_derived_classifications_cache().clear()
+
     return {"message": f"Deleted {deleted} runs and all associated data", "deleted": deleted}
 
 
@@ -492,9 +498,9 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     assets = await db.get_assets_by_run(run_id)
-    
+
     if classification:
-        summary = compute_derived_classifications(assets, activity_window_days=90)
+        summary = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
         if classification == "zombie":
             asset_ids = {a["asset_id"] for a in summary.zombie_assets}
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
@@ -538,8 +544,8 @@ async def get_run_summary(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
-    derived = compute_derived_classifications(assets, activity_window_days=90)
-    
+    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
+
     return {
         "run_id": run_id,
         "tenant_id": run.tenant_id,
@@ -569,10 +575,10 @@ async def get_classifications(run_id: str):
     run = await db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
+
     assets = await db.get_assets_by_run(run_id)
-    derived = compute_derived_classifications(assets, activity_window_days=90)
-    
+    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
+
     return {
         "run_id": run_id,
         "shadow_count": derived.shadow_count,
@@ -644,6 +650,23 @@ async def get_lens_summary(run_id: str):
     }
 
 
+@router.get("/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics for monitoring and debugging"""
+    return {
+        "domain_rollups_cache": get_domain_rollups_cache().stats(),
+        "derived_classifications_cache": get_derived_classifications_cache().stats()
+    }
+
+
+@router.post("/cache/clear")
+async def clear_caches():
+    """Clear all caches (for debugging/testing)"""
+    get_domain_rollups_cache().clear()
+    get_derived_classifications_cache().clear()
+    return {"message": "All caches cleared"}
+
+
 @router.get("/{run_id}/derived")
 async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
     """
@@ -665,11 +688,11 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
     run = await db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
+
     assets = await db.get_assets_by_run(run_id)
-    
-    summary = compute_derived_classifications(assets, activity_window_days)
-    
+
+    summary = compute_derived_classifications(assets, activity_window_days, run_id=run_id)
+
     return {
         "run_id": run_id,
         "activity_window_days": activity_window_days,

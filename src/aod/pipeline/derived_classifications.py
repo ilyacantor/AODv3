@@ -22,6 +22,7 @@ import re
 from ..models.output_contracts import Asset, LensStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
+from .cache import get_domain_rollups_cache
 
 
 def _utc_now() -> datetime:
@@ -393,23 +394,28 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
     )
 
 
-def compute_derived_classifications(assets: list[Asset], activity_window_days: int = 90) -> DerivedClassificationSummary:
+def compute_derived_classifications(
+    assets: list[Asset],
+    activity_window_days: int = 90,
+    run_id: Optional[str] = None
+) -> DerivedClassificationSummary:
     """
     Compute derived classifications for all assets.
-    
+
     Returns summary with counts and detailed lists.
-    
+
     IMPORTANT: Both counts AND drilldown lists use DOMAIN-AGGREGATED assets.
     This ensures KPI count (16) matches drilldown count (16), not individual
     asset count (49). Multiple assets sharing the same domain are merged.
-    
+
     Note: vendor_hypothesis is included in output dicts for UI DISPLAY ONLY.
     It is NOT used in classification logic.
     Inference decorates reality; it does not redefine it.
-    
+
     Args:
         assets: List of assets to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
+        run_id: Optional run ID for caching (recommended for API routes)
     """
     cutoff_date = _utc_now() - timedelta(days=activity_window_days)
     distribution = DistributionDiagnostic(total_assets=len(assets))
@@ -431,8 +437,8 @@ def compute_derived_classifications(assets: list[Asset], activity_window_days: i
         if domain_key not in domain_to_assets:
             domain_to_assets[domain_key] = []
         domain_to_assets[domain_key].append(asset)
-    
-    domain_rollups = compute_domain_rollups(assets, activity_window_days)
+
+    domain_rollups = compute_domain_rollups(assets, activity_window_days, run_id=run_id)
     
     shadow_assets = []
     zombie_assets = []
@@ -599,28 +605,48 @@ def _get_parent_domain(domain: str) -> Optional[str]:
     return registered_domain
 
 
-def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) -> dict[str, DomainRollup]:
+def compute_domain_rollups(
+    assets: list[Asset],
+    activity_window_days: int = 90,
+    run_id: Optional[str] = None
+) -> dict[str, DomainRollup]:
     """
     Compute domain-level rollups using OR logic across entities.
-    
+
     For reconciliation, governance signals are aggregated at domain level:
     - has_idp = OR(all entities with this domain)
     - has_cmdb = OR(all entities with this domain)
     - etc.
-    
+
     IMPORTANT: HAS_* means PRESENCE (evidence exists), not admission gate passed.
     - has_finance = True if finance correlation found evidence (MATCHED/AMBIGUOUS)
     - has_discovery = True if discovery observations exist (even if stale)
-    
+
     This ensures that if ANY entity under a domain has evidence,
     the domain is considered to have that evidence for reconciliation purposes.
-    
+
     ACTIVITY ROLLUP (Zombie Cure): Activity from subdomains is propagated to parent domains.
     e.g., activity on mail.google.com counts as activity for google.com
-    
+
     INVARIANT: Domain key resolution matches aod_agent_reconcile.py to ensure
     UI counts match reconciliation counts (eliminating IRL breach).
+
+    Args:
+        assets: List of assets to aggregate
+        activity_window_days: Activity window for zombie classification (default 90)
+        run_id: Optional run ID for caching (recommended for API routes)
+
+    Returns:
+        Dictionary mapping domain keys to DomainRollup objects
     """
+    # Check cache if run_id is provided
+    cache = get_domain_rollups_cache()
+    if run_id:
+        cache_key = f"run:{run_id}:window:{activity_window_days}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     rollups: dict[str, DomainRollup] = {}
     
     for asset in assets:
@@ -674,5 +700,10 @@ def compute_domain_rollups(assets: list[Asset], activity_window_days: int = 90) 
                 parent_activity = _ensure_utc_aware(parent_rollup.latest_activity_at)
                 if parent_activity is None or (subdomain_activity and subdomain_activity > parent_activity):
                     parent_rollup.latest_activity_at = subdomain_activity
-    
+
+    # Store in cache if run_id is provided
+    if run_id:
+        cache_key = f"run:{run_id}:window:{activity_window_days}"
+        cache.set(cache_key, rollups)
+
     return rollups

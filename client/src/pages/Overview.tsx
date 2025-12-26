@@ -219,9 +219,9 @@ export default function Overview() {
               <div className="flex items-start gap-3">
                 <Search className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-bold text-cyan-400 mb-1">Discover (AOD)</h3>
+                  <h3 className="font-bold text-cyan-400 mb-1">Discover (AOD) <span className="text-cyan-300 font-normal">— this demo</span></h3>
                   <p className="text-slate-400 text-xs leading-relaxed">
-                    Autonomously fingerprints and catalogs your entire technology environment—spanning 100s of apps, DBs, and tools. Creates a complete architectural view using metadata only.
+                    Builds a centralized, continuously updated source-of-truth catalog for all digital assets. Automatically deduplicates entries, infers ownership, and enriches asset profiles with comprehensive infrastructure and network metadata.
                   </p>
                 </div>
               </div>

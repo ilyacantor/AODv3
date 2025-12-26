@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..models.output_contracts import (
     Asset, AssetType, Environment, LensStatus, LensStatuses, LensCoverage, AssetIdentifiers,
-    ActivityEvidence
+    ActivityEvidence, ProvisioningStatus
 )
 from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction, Observation
 from .correlate_entities import CorrelationResult, MatchStatus
@@ -66,8 +66,17 @@ VALID_CLOUD_RESOURCE_TYPES = {
 
 @dataclass
 class AdmissionResult:
-    """Result of admission evaluation"""
+    """
+    Result of admission evaluation with Traffic Light status.
+    
+    Traffic Light System (fail-closed):
+    - IGNORED: Hard rejection (invalid TLD, infrastructure domain) - dropped
+    - ACTIVE: Trusted (has IdP or CMDB) - flows to DCL
+    - REVIEW: Needs cleanup (CMDB but stale activity) - flagged for review
+    - QUARANTINE: Shadow IT (Cloud/Finance/Discovery but no IdP/CMDB) - blocked from DCL
+    """
     admitted: bool
+    provisioning_status: ProvisioningStatus = ProvisioningStatus.QUARANTINE
     asset: Optional[Asset] = None
     rejection_reason: Optional[str] = None
     admission_reason: Optional[str] = None
@@ -581,6 +590,11 @@ def apply_admission_criteria(
     """
     entity = correlation.entity
     
+    # =========================================================================
+    # STEP 0: HARD REJECTION (The Filter) - Results in IGNORED status
+    # These assets are dropped and do not enter Triage
+    # =========================================================================
+    
     # GATE 0: Reject invalid TLDs / internal hostnames
     # Must have a valid public suffix (e.g., .com, .io, .org)
     if entity.domain:
@@ -588,12 +602,14 @@ def apply_admission_criteria(
         if not extracted.suffix:
             return AdmissionResult(
                 admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
                 rejection_reason=f"Invalid TLD / Internal hostname: {entity.domain}"
             )
     else:
         # No domain at all - reject
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason="No resolvable domain - requires domain-first identity"
         )
     
@@ -603,6 +619,7 @@ def apply_admission_criteria(
     if not registered_domain:
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason=f"Cannot extract registered domain from: {entity.domain}"
         )
     
@@ -611,6 +628,7 @@ def apply_admission_criteria(
     if is_corporate_root_domain(registered_domain):
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason=f"Corporate root domain: {registered_domain} (from {entity.domain})"
         )
     
@@ -619,6 +637,7 @@ def apply_admission_criteria(
     if is_infrastructure_domain(registered_domain):
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason=f"Infrastructure domain: {registered_domain} (from {entity.domain})"
         )
     
@@ -637,8 +656,47 @@ def apply_admission_criteria(
     if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.QUARANTINE,
             rejection_reason="No admission criteria satisfied"
         )
+    
+    # =========================================================================
+    # TRAFFIC LIGHT LOGIC - Determine provisioning_status
+    # Strict precedence order: GREEN (ACTIVE) > AMBER (REVIEW) > RED (QUARANTINE)
+    # =========================================================================
+    
+    # STEP 1: GREEN LANE (Trusted) - IdP OR CMDB = ACTIVE
+    # These flow to DCL automatically
+    has_governance = idp_admitted or cmdb_admitted
+    
+    # STEP 2: AMBER LANE (Review) - CMDB + Stale Activity = REVIEW
+    # Check if activity is stale (zombie indicator)
+    is_stale_activity = False
+    if observations:
+        from datetime import timedelta, timezone
+        latest_activity = None
+        for obs in observations:
+            if obs.observed_at:
+                if latest_activity is None or obs.observed_at > latest_activity:
+                    latest_activity = obs.observed_at
+        if latest_activity:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            if latest_activity.tzinfo is None:
+                latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+            is_stale_activity = latest_activity < cutoff
+    
+    # Determine provisioning status based on Traffic Light rules
+    if has_governance:
+        if cmdb_admitted and is_stale_activity and not idp_admitted:
+            # STEP 2: AMBER - CMDB but stale activity (zombie candidate)
+            provisioning_status = ProvisioningStatus.REVIEW
+        else:
+            # STEP 1: GREEN - Has IdP or active CMDB
+            provisioning_status = ProvisioningStatus.ACTIVE
+    else:
+        # STEP 3: RED - Cloud/Finance/Discovery only (no governance)
+        # This is Shadow IT - saved for triage but BLOCKED from DCL
+        provisioning_status = ProvisioningStatus.QUARANTINE
     
     admission_reasons = []
     if idp_admitted:
@@ -701,11 +759,15 @@ def apply_admission_criteria(
     if not canonical_domain:
         return AdmissionResult(
             admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason="No resolvable domain - requires domain-first identity"
         )
     
     asset_key = canonical_domain
     display_name = entity.original_name
+    
+    # Add traffic light status tag
+    tags.append(f"traffic_light:{provisioning_status.value}")
     
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, run_id, "asset", asset_key),
@@ -722,11 +784,13 @@ def apply_admission_criteria(
         lens_coverage=lens_coverage,
         activity_evidence=activity_evidence,
         tags=tags,
-        admission_reason="; ".join(admission_reasons)
+        admission_reason="; ".join(admission_reasons),
+        provisioning_status=provisioning_status
     )
     
     return AdmissionResult(
         admitted=True,
+        provisioning_status=provisioning_status,
         asset=asset,
         admission_reason="; ".join(admission_reasons)
     )

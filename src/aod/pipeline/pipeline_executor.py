@@ -70,10 +70,14 @@ def _build_policy_asset_data(
         elif hasattr(record, 'amount'):
             monthly_spend = max(monthly_spend, record.amount or 0)
     
-    discovery_sources = set()
+    from .admission import source_to_plane, DISCOVERY_CORROBORATION_PLANES
+    
+    discovery_planes = set()
     for obs in observations:
         if obs.source:
-            discovery_sources.add(obs.source)
+            plane = source_to_plane(obs.source)
+            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                discovery_planes.add(plane)
     
     return {
         "domain": candidate.domain or "",
@@ -87,7 +91,7 @@ def _build_policy_asset_data(
         "ci_type": ci_type,
         "lifecycle": lifecycle,
         "monthly_spend": monthly_spend,
-        "discovery_sources_count": len(discovery_sources),
+        "discovery_planes_count": len(discovery_planes),
         "is_active": True,
     }
 

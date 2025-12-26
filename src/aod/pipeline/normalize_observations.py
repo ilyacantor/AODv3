@@ -171,7 +171,7 @@ ENV_SUFFIXES = {
 
 def derive_canonical_name(observation: Observation) -> str:
     """Derive a canonical name from an observation"""
-    name = observation.name
+    name = observation.name or ""
     canonical = normalize_string(name)
     canonical = re.sub(r'\([^)]*\)', '', canonical).strip()
     
@@ -237,7 +237,7 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
             })
             continue
         
-        if not domain:
+        if not domain and obs.name:
             resolved_domain = normalize_name_to_domain(obs.name)
             if resolved_domain:
                 domain = resolved_domain
@@ -300,7 +300,7 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
             entity = CandidateEntity(
                 entity_id=f"entity:{obs.observation_id}",
                 canonical_name=canonical_name,
-                original_name=obs.name,
+                original_name=obs.name or "",
                 domain=domain,
                 hostname=hostname,
                 uri=uri,

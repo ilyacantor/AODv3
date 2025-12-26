@@ -56,7 +56,7 @@ class PolicyEngine:
                 - in_cmdb: bool
                 - in_cloud: bool
                 - in_directory: bool (optional)
-                - discovery_sources_count: int
+                - discovery_planes_count: int (distinct corroborating planes, NOT raw sources)
                 - is_active: bool
                 - has_sso: bool (optional)
                 - has_scim: bool (optional)
@@ -181,11 +181,18 @@ class PolicyEngine:
     
     def _check_discovery_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Discovery/Shadow Gate: source_count >= noise_floor.
+        Discovery/Shadow Gate: plane_count >= noise_floor.
+        
+        CRITICAL: Count DISTINCT PLANES, not raw sources.
+        - dns + proxy = 1 plane (network)
+        - dns + edr = 2 planes (network, endpoint)
+        
+        Finance and CMDB do NOT count as discovery corroboration.
+        Only: network, endpoint, idp, cloud, discovery
         """
-        source_count = data.get("discovery_sources_count", 0) or 0
-        if source_count >= self.config.admission.noise_floor:
-            return True, ["HAS_DISCOVERY", f"SOURCE_COUNT_{source_count}"]
+        plane_count = data.get("discovery_planes_count", 0) or 0
+        if plane_count >= self.config.admission.noise_floor:
+            return True, ["HAS_DISCOVERY", f"PLANE_COUNT_{plane_count}"]
         return False, []
     
     def _classify(self, data: dict) -> tuple[str, list[str]]:
@@ -234,8 +241,8 @@ class PolicyEngine:
         if spend < self.config.admission.minimum_spend:
             codes.append("NO_FINANCE")
         
-        source_count = data.get("discovery_sources_count", 0) or 0
-        if source_count < self.config.admission.noise_floor:
-            codes.append("DISCOVERY_SOURCE_COUNT_LT_2")
+        plane_count = data.get("discovery_planes_count", 0) or 0
+        if plane_count < self.config.admission.noise_floor:
+            codes.append("DISCOVERY_PLANE_COUNT_LT_2")
         
         return codes

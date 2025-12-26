@@ -13,6 +13,25 @@ def now_pst() -> datetime:
     return datetime.now(PST)
 
 
+class ProvisioningStatus(str, Enum):
+    """
+    Provisioning status for Traffic Light system.
+    
+    Separates Inventory (what we see) from Catalog (what we trust).
+    Default is QUARANTINE (fail-closed) to ensure no untrusted assets
+    leak to downstream consumers (DCL).
+    
+    ACTIVE: Trusted, flows to DCL automatically
+    REVIEW: Admitted but flagged for cleanup (e.g., zombie)
+    QUARANTINE: Saved for triage but BLOCKED from DCL
+    IGNORED: Hard rejection, dropped from pipeline
+    """
+    ACTIVE = "active"
+    REVIEW = "review"
+    QUARANTINE = "quarantine"
+    IGNORED = "ignored"
+
+
 class AssetType(str, Enum):
     """Asset type enumeration"""
     SAAS = "saas"
@@ -131,6 +150,7 @@ class Asset(BaseModel):
     activity_evidence: ActivityEvidence = Field(default_factory=ActivityEvidence)
     tags: list[str] = Field(default_factory=list)
     admission_reason: str = ""
+    provisioning_status: ProvisioningStatus = ProvisioningStatus.QUARANTINE
     llm_metadata: Optional[LLMMetadata] = None
     created_at: datetime = Field(default_factory=now_pst)
 

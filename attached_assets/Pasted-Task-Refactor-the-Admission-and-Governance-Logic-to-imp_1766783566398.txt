@@ -1,0 +1,77 @@
+Task: Refactor the Admission and Governance Logic to implement a "Fail-Closed" Traffic Light system.
+
+Context: We are separating "Inventory" (what we see) from "Catalog" (what we trust). Currently, the system admits "Shadow" assets into the catalog. We must change this so Shadow assets are captured but Blocked (Quarantined) from downstream consumers (DCL).
+
+Phase 1: Database Schema Update (The Safety Net) Update the Asset/Entity model to include a strict provisioning state.
+
+Field Name: provisioning_status
+
+Type: Enum (ACTIVE, REVIEW, QUARANTINE, IGNORED)
+
+Default Value: QUARANTINE (Crucial: Must NOT default to ACTIVE).
+
+Migration Rule:
+
+If has_idp OR has_cmdb = True → Set to ACTIVE.
+
+Else → Set to QUARANTINE.
+
+Phase 2: Refactor admission.py (The Logic Flow) Implement the following logic flow in admission.py. It must follow this strict precedence order:
+
+STEP 0: HARD REJECTION (The Filter)
+
+Check Gate 0: Is it a valid public TLD? If no, status = IGNORED.
+
+Check Gate 1: Is it a corporate root domain (e.g., internal marketing site)? If yes, status = IGNORED.
+
+Check Gate 2: Is it an Infrastructure Domain (e.g., redis.com, aws.amazon.com)? Use the INFRASTRUCTURE_DOMAINS list. If yes, status = IGNORED.
+
+Effect: These assets are dropped or marked ignored. They do not enter Triage.
+
+STEP 1: GREEN LANE (Trusted)
+
+Rule: If HAS_IDP is True OR HAS_CMDB is True.
+
+Action: Set provisioning_status = ACTIVE.
+
+Result: These flow to DCL automatically.
+
+STEP 2: AMBER LANE (Review)
+
+Rule: If HAS_CMDB is True AND STALE_ACTIVITY is True (Zombie).
+
+Action: Set provisioning_status = REVIEW.
+
+Result: Admitted to Catalog but flagged for cleanup.
+
+STEP 3: RED LANE (Quarantine)
+
+Rule: If the asset matches any of the following but failed Step 1 & 2:
+
+HAS_CLOUD is True
+
+HAS_FINANCE is True (Spend > $0)
+
+HAS_DISCOVERY is True (matches >= 2 corroborating planes: network, endpoint, idp, cloud, discovery)
+
+Action: Set provisioning_status = QUARANTINE.
+
+Result: Saved to DB for Triage, but BLOCKED from DCL.
+
+Phase 3: The API Guardrail (The Final Check)
+
+Modify the DCL Export/Sync API endpoint.
+
+Add a mandatory server-side filter: WHERE provisioning_status = 'ACTIVE'.
+
+Constraint: You must NEVER return assets with QUARANTINE, REVIEW, or IGNORED status to the DCL consumer.
+
+Phase 4: Mandatory Testing Create tests/test_traffic_light.py with these cases:
+
+test_infra_exclusion: Input redis.com. Assert status is IGNORED.
+
+test_shadow_quarantine: Input "Dropbox" (Discovery=True, IDP=False, CMDB=False). Assert status is QUARANTINE.
+
+test_trust_promotion: Input "Salesforce" (IDP=True). Assert status is ACTIVE.
+
+test_api_leakage: Create a QUARANTINE asset. Call the DCL API. Assert the asset is NOT present in the response.

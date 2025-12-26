@@ -139,6 +139,7 @@ class Database:
                     activity_evidence TEXT NOT NULL DEFAULT '{}',
                     tags TEXT NOT NULL DEFAULT '[]',
                     admission_reason TEXT NOT NULL DEFAULT '',
+                    provisioning_status TEXT NOT NULL DEFAULT 'quarantine',
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (run_id) REFERENCES runs(run_id)
                 )
@@ -146,6 +147,11 @@ class Database:
             
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT")
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS provisioning_status TEXT NOT NULL DEFAULT 'quarantine'")
             except Exception:
                 pass
             
@@ -418,8 +424,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                    activity_evidence, tags, admission_reason, provisioning_status, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -433,6 +439,7 @@ class Database:
                     activity_evidence = EXCLUDED.activity_evidence,
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,
+                    provisioning_status = EXCLUDED.provisioning_status,
                     created_at = EXCLUDED.created_at
                 """,
                 str(asset.asset_id),
@@ -450,6 +457,7 @@ class Database:
                 asset.activity_evidence.model_dump_json(),
                 json.dumps(asset.tags),
                 asset.admission_reason,
+                asset.provisioning_status.value,
                 asset.created_at.isoformat()
             )
         return asset
@@ -472,6 +480,13 @@ class Database:
             if vendor_hypothesis_data:
                 vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
             
+            from src.aod.models.output_contracts import ProvisioningStatus
+            prov_status_raw = row.get("provisioning_status", "quarantine")
+            try:
+                prov_status = ProvisioningStatus(prov_status_raw)
+            except ValueError:
+                prov_status = ProvisioningStatus.QUARANTINE
+            
             assets.append(Asset(
                 asset_id=UUID(row["asset_id"]),
                 tenant_id=row["tenant_id"],
@@ -488,6 +503,7 @@ class Database:
                 activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
                 tags=json.loads(row["tags"]),
                 admission_reason=row["admission_reason"],
+                provisioning_status=prov_status,
                 created_at=datetime.fromisoformat(row["created_at"])
             ))
         return assets
@@ -827,6 +843,7 @@ class Database:
                 asset.activity_evidence.model_dump_json(),
                 json.dumps(asset.tags),
                 asset.admission_reason,
+                asset.provisioning_status.value,
                 asset.created_at.isoformat()
             ))
         async with pool.acquire() as conn:
@@ -835,8 +852,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                    activity_evidence, tags, admission_reason, provisioning_status, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -850,6 +867,7 @@ class Database:
                     activity_evidence = EXCLUDED.activity_evidence,
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,
+                    provisioning_status = EXCLUDED.provisioning_status,
                     created_at = EXCLUDED.created_at
                 """,
                 rows

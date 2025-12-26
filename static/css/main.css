@@ -331,6 +331,12 @@ main { padding: 2rem; }
 .triage-btn.primary:hover { background: var(--cyan-500); }
 .triage-btn.secondary { background: var(--slate-700); color: var(--slate-300); }
 .triage-btn.secondary:hover { background: var(--slate-600); color: white; }
+.triage-btn.success { background: #10b981; color: white; }
+.triage-btn.success:hover { background: #059669; }
+.triage-btn.warning { background: #f59e0b; color: white; }
+.triage-btn.warning:hover { background: #d97706; }
+.triage-btn.danger { background: #ef4444; color: white; }
+.triage-btn.danger:hover { background: #dc2626; }
 .triage-status-badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; white-space: nowrap; }
 .triage-status-badge.acknowledged { background: var(--cyan-900); color: var(--cyan-300); border: 1px solid var(--cyan-700); }
 .triage-status-badge.assigned { background: var(--purple-900, #4c1d95); color: var(--purple-300, #c4b5fd); border: 1px solid var(--purple-700, #7c3aed); }

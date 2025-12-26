@@ -53,6 +53,8 @@
                     showIgnoreModal(runId, itemId, itemType);
                 } else if (action === 'assign') {
                     showAssignModal(runId, itemId, itemType);
+                } else if (['sanction', 'ban', 'deprovision'].includes(action)) {
+                    await submitProvisioningAction(itemId, action.toUpperCase());
                 } else {
                     await submitTriageAction(runId, itemId, itemType, action);
                 }
@@ -107,6 +109,52 @@
                 });
             } catch (err) {
                 console.error('Triage action failed:', err);
+            }
+        }
+        
+        async function submitProvisioningAction(assetId, action) {
+            try {
+                const response = await fetch(`/api/v1/catalog/assets/${assetId}/provisioning`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('Provisioning action failed:', response.status, errorData.detail || response.statusText);
+                    alert(`Action failed: ${errorData.detail || 'Unknown error'}`);
+                    return;
+                }
+                
+                const result = await response.json();
+                console.log('Provisioning action result:', result);
+                
+                removeItemFromTriage(assetId);
+                
+                await loadTriageData();
+                
+            } catch (err) {
+                console.error('Provisioning action failed:', err);
+                alert('Action failed: ' + err.message);
+            }
+        }
+        
+        function removeItemFromTriage(assetId) {
+            for (const tier of [1, 2, 3]) {
+                const items = triageTierData[tier];
+                const idx = items.findIndex(item => 
+                    (item.asset_id || item.id) === assetId
+                );
+                if (idx !== -1) {
+                    items.splice(idx, 1);
+                    document.getElementById(`triageTier${tier}Count`).textContent = items.length;
+                    const container = document.getElementById(`triageTier${tier}Content`);
+                    if (container) {
+                        renderTierSection(container, sortTriageItems(items, triageSortState[tier]), tier);
+                    }
+                    break;
+                }
             }
         }
         
@@ -567,6 +615,20 @@
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Re-Assign</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="ignore">Re-Ignore</button>`;
+                } else if (itemType === 'shadow') {
+                    primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Sanction</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="ban">Ban</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>`;
+                } else if (itemType === 'zombie') {
+                    primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="sanction">Sanction</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Acknowledge</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="ignore">Ignore</button>`;
                 } else if (tier === 1) {
                     primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
                     moreOptions = `

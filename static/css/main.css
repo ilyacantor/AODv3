@@ -618,5 +618,80 @@ main { padding: 2rem; }
 }
 .btn-guided:hover { background: rgba(168, 85, 247, 0.1); border-color: var(--purple-400); color: var(--purple-300); }
 
+/* Compact Tour Overlay for Overview */
+.tour-scrim-transparent { pointer-events: auto; }
+.tour-compact-overlay {
+    width: auto !important;
+    max-width: 500px;
+    padding: 0 !important;
+    transform: translateX(-50%) !important;
+    top: auto !important;
+}
+.tour-compact-overlay::before,
+.tour-compact-overlay::after { display: none; }
+.tour-compact-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+}
+.tour-compact-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.tour-compact-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: white;
+}
+.tour-compact-progress {
+    font-size: 0.75rem;
+    color: var(--slate-400);
+    background: rgba(255,255,255,0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+.tour-compact-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.tour-compact-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: white;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.tour-compact-btn:hover { background: rgba(255,255,255,0.2); }
+.tour-compact-btn.tour-compact-next {
+    background: var(--cyan-500);
+    border-color: var(--cyan-500);
+    color: black;
+}
+.tour-compact-btn.tour-compact-next:hover { background: var(--cyan-400); }
+.tour-compact-close {
+    background: transparent;
+    border: none;
+    color: var(--slate-400);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.tour-compact-close:hover { background: rgba(255,255,255,0.1); color: white; }
+.tour-compact-close svg { width: 14px; height: 14px; }
+
 /* Overview Tab Styles */
 .overview-iframe { width: 100%; height: calc(100vh - 60px); border: none; display: block; }

@@ -16,10 +16,14 @@ export default function Overview() {
         const section = event.data.section;
         
         const sectionIds: Record<string, string> = {
-          'hero': 'section-hero',
+          'market': 'section-market',
+          'paradigm': 'section-paradigm',
+          'introducing': 'section-introducing',
           'pipeline': 'section-pipeline',
           'gateway': 'section-gateway',
-          'aod-details': 'section-aod-details'
+          'aod-details': 'section-aod-details',
+          'farm-info': 'section-farm-info',
+          'cta': 'section-cta'
         };
         
         const targetId = sectionIds[section];
@@ -49,7 +53,7 @@ export default function Overview() {
       className="min-h-screen bg-slate-950 text-slate-50 selection:bg-cyan-500/30 selection:text-cyan-50 overflow-x-hidden font-sans"
     >
       {/* --- SECTION 1: THE MARKET IS BROKEN --- */}
-      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+      <section id="section-market" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -100,8 +104,8 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 3: PARADIGM SHIFT --- */}
-      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+      {/* --- SECTION 2: PARADIGM SHIFT --- */}
+      <section id="section-paradigm" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -170,7 +174,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 3: INTRODUCING AUTONOMOS --- */}
-      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -366,8 +370,8 @@ export default function Overview() {
         </div>
       </section>
 
-      {/* --- SECTION 5: WHY FARM EXISTS --- */}
-      <section className="w-full max-w-3xl mx-auto px-6 py-24 md:py-32 text-center">
+      {/* --- SECTION 7: WHY FARM EXISTS --- */}
+      <section id="section-farm-info" className="w-full max-w-3xl mx-auto px-6 py-24 md:py-32 text-center">
         <div className="mb-6 flex justify-center">
           <div className="p-4 bg-blue-900/20 rounded-full border border-blue-500/20">
             <Info className="w-8 h-8 text-blue-500" />
@@ -393,8 +397,8 @@ export default function Overview() {
         </div>
       </section>
 
-      {/* --- SECTION 6: CALL TO ACTION --- */}
-      <section className="w-full bg-gradient-brand py-20 px-6 relative overflow-hidden">
+      {/* --- SECTION 8: CALL TO ACTION --- */}
+      <section id="section-cta" className="w-full bg-gradient-brand py-20 px-6 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
 
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">

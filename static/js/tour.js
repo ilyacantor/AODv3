@@ -4,42 +4,10 @@ const TourManager = (function() {
     let aborted = false;
     let pendingTimeouts = [];
     
-    const INTRO_STEPS = 4;
+    const OVERVIEW_SECTIONS = ['market', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info', 'cta'];
+    const INTRO_STEPS = OVERVIEW_SECTIONS.length;
     
     const TOUR_PHASES = {
-        'intro_0': {
-            title: "Welcome to the AOD Demo",
-            content: "The following is a brief overview of the entire AOS platform, and how AOD fits.",
-            step: 1,
-            location: 'overview',
-            scrollTarget: 'hero'
-        },
-        'intro_1': {
-            title: "The Execution Pipeline",
-            content: "AOD collects signals from enterprise systems—identity, finance, cloud, endpoints, DNS, and systems of record—resolves them into assets, and creates a catalog.\n\nThe architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents, Humans)</strong>.",
-            step: 2,
-            location: 'overview',
-            scrollTarget: 'pipeline'
-        },
-        'intro_2': {
-            title: "Inputs & Outputs",
-            content: "AOD ingests raw signals from <strong>7 lenses</strong>—such as Identity, DNS, and Finance—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Security Risks, Governance Issues, Shadow IT, and Zombies.",
-            step: 3,
-            location: 'overview',
-            scrollTarget: 'aod-details'
-        },
-        'intro_3': {
-            title: "Why You'll See Farm",
-            content: "We will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.\n\n<strong>AOS Farm</strong> is a synthetic data generator that produces realistic enterprise environments—including bad data, conflicts, and unmanaged systems. It exists to prove accuracy, not simulate it.",
-            step: 4,
-            location: 'overview',
-            scrollTarget: 'aod-details'
-        },
-        0: { 
-            title: "The Visibility Gap",
-            content: "Most enterprises don't know what they own. Between <strong>Shadow IT</strong> (risk) and <strong>Zombie SaaS</strong> (waste), millions are lost annually.\n\nThis tour doesn't just show you a static demo. We're going to generate a live, chaotic IT environment and watch AOD organize it in real-time.",
-            step: 5
-        },
         3: { 
             title: "Ingest & Resolve",
             content: "The Farm has generated a chaotic dataset. Now let's watch AOD make sense of it.\n\nClick <strong>Fetch & Run Discovery</strong> to ingest the snapshot and start the discovery process.",
@@ -417,13 +385,13 @@ const TourManager = (function() {
     function start() {
         aborted = false;
         clearAllTimeouts();
-        const state = { active: true, phase: 'intro_0', runId: null };
+        const state = { active: true, phase: 'overview_0', runId: null, overviewIndex: 0 };
         setState(state);
         
         const overviewTab = document.querySelector('.header-nav-tab[data-tab="overview"]');
         if (overviewTab) overviewTab.click();
         
-        setTimeout(() => executePhase('intro_0'), 300);
+        setTimeout(() => executePhase('overview_0'), 300);
     }
     
     function exit() {
@@ -439,7 +407,23 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7];
+        if (typeof state.phase === 'string' && state.phase.startsWith('overview_')) {
+            const currentIndex = state.overviewIndex || 0;
+            const nextIndex = currentIndex + 1;
+            
+            if (nextIndex >= OVERVIEW_SECTIONS.length) {
+                navigateToFarmWithGuided();
+                return;
+            }
+            
+            state.overviewIndex = nextIndex;
+            state.phase = `overview_${nextIndex}`;
+            setState(state);
+            executePhase(state.phase);
+            return;
+        }
+        
+        const phaseOrder = [3, 4, 5, 6, 7];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -459,7 +443,19 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7];
+        if (typeof state.phase === 'string' && state.phase.startsWith('overview_')) {
+            const currentIndex = state.overviewIndex || 0;
+            if (currentIndex <= 0) return;
+            
+            const prevIndex = currentIndex - 1;
+            state.overviewIndex = prevIndex;
+            state.phase = `overview_${prevIndex}`;
+            setState(state);
+            executePhase(state.phase);
+            return;
+        }
+        
+        const phaseOrder = [3, 4, 5, 6, 7];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex <= 0) {
@@ -477,22 +473,12 @@ const TourManager = (function() {
         
         const state = getState();
         
+        if (typeof phase === 'string' && phase.startsWith('overview_')) {
+            executeOverviewPhase(state.overviewIndex || 0);
+            return;
+        }
+        
         switch (phase) {
-            case 'intro_0':
-                executeIntroPhase('intro_0');
-                break;
-            case 'intro_1':
-                executeIntroPhase('intro_1');
-                break;
-            case 'intro_2':
-                executeIntroPhase('intro_2');
-                break;
-            case 'intro_3':
-                executeIntroPhase('intro_3');
-                break;
-            case 0:
-                executePhase0();
-                break;
             case 3:
                 executePhase3();
                 break;
@@ -513,17 +499,19 @@ const TourManager = (function() {
         }
     }
     
-    async function executeIntroPhase(phaseKey) {
-        const phaseConfig = TOUR_PHASES[phaseKey];
-        const isLastIntro = phaseKey === 'intro_3';
+    async function executeOverviewPhase(sectionIndex) {
+        if (aborted) return;
+        
+        const section = OVERVIEW_SECTIONS[sectionIndex];
+        const isLastSection = sectionIndex === OVERVIEW_SECTIONS.length - 1;
         
         const sendScrollMessage = () => {
             const overviewIframe = document.querySelector('.overview-iframe');
-            if (overviewIframe && overviewIframe.contentWindow && phaseConfig.scrollTarget) {
+            if (overviewIframe && overviewIframe.contentWindow) {
                 try {
                     overviewIframe.contentWindow.postMessage({
                         action: 'scrollToSection',
-                        section: phaseConfig.scrollTarget
+                        section: section
                     }, '*');
                 } catch (e) {
                     console.warn('TourManager: Failed to send scroll message', e);
@@ -531,54 +519,73 @@ const TourManager = (function() {
             }
         };
         
-        const triggerPipelineDemo = () => {
-            const overviewIframe = document.querySelector('.overview-iframe');
-            if (overviewIframe && overviewIframe.contentWindow) {
-                try {
-                    const pipelineIframe = overviewIframe.contentWindow.document.querySelector('iframe[title="AutonomOS Pipeline Overview"]');
-                    if (pipelineIframe && pipelineIframe.contentWindow) {
-                        pipelineIframe.contentWindow.postMessage({ action: 'runDemo' }, '*');
-                    }
-                } catch (e) {
-                    console.warn('TourManager: Failed to trigger demo (cross-origin)', e);
-                }
-                overviewIframe.contentWindow.postMessage({ action: 'triggerPipelineDemo' }, '*');
-            }
-        };
-        
         sendScrollMessage();
         await trackedDelay(300);
         sendScrollMessage();
         
-        if (phaseKey === 'intro_1') {
-            await trackedDelay(500);
-            triggerPipelineDemo();
-        }
-        
         await trackedDelay(400);
         if (aborted) return;
         
-        await showOverlay(phaseKey, {
-            showBack: phaseKey !== 'intro_0',
-            primaryButtonText: isLastIntro ? 'Start Simulation' : 'Next',
-            position: { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
-            onContinue: () => {
-                if (isLastIntro) {
-                    navigateToFarmWithGuided();
-                } else {
-                    advance();
-                }
-            }
-        });
+        showCompactOverviewPrompt(sectionIndex, isLastSection);
     }
     
-    async function executePhase0() {
-        await showOverlay(0, {
-            primaryButtonText: 'Start Simulation',
-            showBack: true,
-            onContinue: () => {
-                navigateToFarmWithGuided();
-            }
+    function showCompactOverviewPrompt(sectionIndex, isLastSection) {
+        removeOverlay();
+        
+        const scrim = document.createElement('div');
+        scrim.className = 'tour-scrim tour-scrim-transparent';
+        document.body.appendChild(scrim);
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'tour-overlay tour-compact-overlay';
+        overlay.id = 'tour-dialog';
+        
+        overlay.style.position = 'fixed';
+        overlay.style.bottom = '20px';
+        overlay.style.left = '50%';
+        overlay.style.transform = 'translateX(-50%)';
+        
+        const progressText = `${sectionIndex + 1} / ${OVERVIEW_SECTIONS.length}`;
+        const buttonText = isLastSection ? 'Start Simulation' : 'Next';
+        
+        overlay.innerHTML = `
+            <div class="tour-compact-content">
+                <div class="tour-compact-left">
+                    <div class="tour-pulse-dot"></div>
+                    <span class="tour-compact-title">AOD Guided Tour</span>
+                    <span class="tour-compact-progress">${progressText}</span>
+                </div>
+                <div class="tour-compact-right">
+                    ${sectionIndex > 0 ? '<button class="tour-compact-btn tour-compact-back">Back</button>' : ''}
+                    <button class="tour-compact-btn tour-compact-next">${buttonText}</button>
+                    <button class="tour-compact-close" aria-label="Close tour">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        overlay.querySelector('.tour-compact-next').addEventListener('click', () => {
+            advance();
+        });
+        
+        const backBtn = overlay.querySelector('.tour-compact-back');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                goBack();
+            });
+        }
+        
+        overlay.querySelector('.tour-compact-close').addEventListener('click', () => {
+            exit();
+        });
+        
+        scrim.addEventListener('click', () => {
+            exit();
         });
     }
     

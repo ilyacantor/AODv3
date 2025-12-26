@@ -214,7 +214,7 @@ async def create_run_from_farm(request: FarmRunRequest):
         "fetch_duration_ms": fetch_duration_ms
     }
     
-    db = await get_db()
+    db = await get_db_direct()
     result = await execute_pipeline(snapshot_data, db, run_id=run_id, started_at=started_at, provenance=provenance)
     
     if not result.success:
@@ -274,7 +274,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     Returns the sync status and a sample of the payload that was sent.
     """
-    db = await get_db()
+    db = await get_db_direct()
     run = await db.get_run(request.run_id)
     
     if not run:
@@ -339,7 +339,7 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
     
     Returns HTTP 404 if no matching run exists.
     """
-    db = await get_db()
+    db = await get_db_direct()
     runs = await db.get_all_runs()
     
     matching = [r for r in runs if r.tenant_id == tenant_id]
@@ -367,7 +367,7 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
 @router.get("", response_model=list[RunDetailResponse])
 async def list_runs(tenant_id: Optional[str] = None):
     """List all discovery runs, optionally filtered by tenant_id"""
-    db = await get_db()
+    db = await get_db_direct()
     runs = await db.get_all_runs()
     
     if tenant_id:
@@ -393,7 +393,7 @@ async def list_runs(tenant_id: Optional[str] = None):
 @router.delete("")
 async def delete_all_runs():
     """Delete all discovery runs and associated data"""
-    db = await get_db()
+    db = await get_db_direct()
     deleted = await db.delete_all_runs()
 
     # Invalidate all caches when deleting all runs
@@ -428,7 +428,7 @@ async def get_run(run_id: str, db: Database = Depends(get_db)):
 @router.get("/{run_id}/observations")
 async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
     """Get observation samples for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -447,7 +447,7 @@ async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
 @router.get("/{run_id}/ambiguous")
 async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
     """Get ambiguous matches for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -471,7 +471,7 @@ async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
 @router.get("/{run_id}/rejections")
 async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
     """Get rejections for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -490,7 +490,7 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
 @router.get("/{run_id}/assets")
 async def get_run_assets(run_id: str, classification: Optional[str] = None):
     """Get assets for a run, optionally filtered by classification"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -535,7 +535,7 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
 @router.get("/{run_id}/summary")
 async def get_run_summary(run_id: str):
     """Get summary for a run including derived classifications"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -569,7 +569,7 @@ async def get_run_summary(run_id: str):
 @router.get("/{run_id}/classifications")
 async def get_classifications(run_id: str):
     """Get shadow/zombie classifications for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -597,7 +597,7 @@ async def get_reconcile_payload(run_id: str):
     """
     from ...farm_reconcile import build_reconcile_payload
     
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -621,7 +621,7 @@ async def get_reconcile_payload(run_id: str):
 @router.get("/{run_id}/lens")
 async def get_lens_summary(run_id: str):
     """Get lens status summary for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -682,7 +682,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
         run_id: The run to get classifications for
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:

@@ -13,7 +13,7 @@ from ..schemas import (
     NonflagExplanation,
     ExplainNonflagResponse,
 )
-from ...db.database import get_db
+from ...db.database import get_db_direct
 
 
 router = APIRouter(prefix="")
@@ -44,7 +44,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     """
     from ...pipeline.aod_agent_reconcile import emit_actual_results
 
-    db = await get_db()
+    db = await get_db_direct()
 
     run = await db.get_run(request.run_id)
     if not run:
@@ -90,7 +90,7 @@ async def explain_nonflag(request: ExplainNonflagRequest):
     """
     from ...pipeline.derived_classifications import classify_shadow, compute_zombie_status
 
-    db = await get_db()
+    db = await get_db_direct()
 
     runs = await db.get_all_runs()
     matching_run = None

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 from ..schemas import CatalogResponse
-from ...db.database import get_db
+from ...db.database import get_db_direct
 
 router = APIRouter(prefix="/catalog")
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/catalog")
 @router.get("", response_model=CatalogResponse)
 async def get_catalog(run_id: str):
     """Get assets for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:
@@ -47,7 +47,7 @@ async def get_catalog(run_id: str):
 @router.get("/view", response_class=HTMLResponse)
 async def view_catalog(run_id: str):
     """Display catalog as HTML page"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:

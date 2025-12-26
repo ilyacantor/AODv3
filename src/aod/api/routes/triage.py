@@ -6,7 +6,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import TriageActionRequest, TriageActionResponse
-from ...db.database import get_db
+from ...db.database import get_db_direct
 
 router = APIRouter(prefix="/triage")
 
@@ -16,7 +16,7 @@ async def record_triage_action(request: TriageActionRequest):
     """Record a triage action (acknowledge, assign, defer, ignore)"""
     from datetime import datetime, timedelta
     
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(request.run_id)
     if not run:
@@ -62,7 +62,7 @@ async def record_triage_action(request: TriageActionRequest):
 @router.get("/actions/{run_id}")
 async def get_triage_actions(run_id: str):
     """Get all triage actions for a run"""
-    db = await get_db()
+    db = await get_db_direct()
     
     run = await db.get_run(run_id)
     if not run:

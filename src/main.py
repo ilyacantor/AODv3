@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 from aod.api.routes import router
-from aod.db.database import get_db
+from aod.db.database import get_db_direct
 
 app = FastAPI(
     title="AOD Fresh",
@@ -35,7 +35,7 @@ if STATIC_DIR.exists():
 @app.on_event("startup")
 async def startup():
     """Initialize database on startup"""
-    await get_db()
+    await get_db_direct()
 
 
 @app.get("/", response_class=HTMLResponse)

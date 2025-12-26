@@ -14,7 +14,7 @@ from ..schemas import (
     DecisionTraceRequest,
     DecisionTraceResponse,
 )
-from ...db.database import get_db
+from ...db.database import get_db_direct
 
 
 router = APIRouter(prefix="")
@@ -34,7 +34,7 @@ async def trace_asset(request: AssetTraceRequest) -> AssetTraceResponse:
     from ...pipeline.aod_agent_reconcile import _extract_registered_domain
     from ...utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 
-    db = await get_db()
+    db = await get_db_direct()
 
     asset_row = await db.fetchrow(
         "SELECT * FROM assets WHERE run_id = $1 AND asset_id = $2",
@@ -226,7 +226,7 @@ async def get_decision_traces(request: DecisionTraceRequest):
     """
     from ...pipeline.decision_trace import compute_decision_trace, decision_traces_to_dict
 
-    db = await get_db()
+    db = await get_db_direct()
 
     run = await db.get_run(request.run_id)
     if not run:

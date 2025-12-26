@@ -13,7 +13,7 @@ from ..schemas import (
     ZombieReconcileRequest,
     ZombieReconcileResponse,
 )
-from ...db.database import get_db
+from ...db.database import get_db_direct
 from ..deps import now_pst
 from ...models.output_contracts import Asset, LensStatus
 
@@ -33,7 +33,7 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
     """
     from ...pipeline.derived_classifications import compute_zombie_status
 
-    db = await get_db()
+    db = await get_db_direct()
 
     run = await db.get_run(request.run_id)
     if not run:
@@ -226,7 +226,7 @@ async def debug_zombie_reconcile(request: ZombieReconcileRequest):
 
     Returns a compact report with counts by reason.
     """
-    db = await get_db()
+    db = await get_db_direct()
 
     run = await db.get_run(request.run_id)
     if not run:

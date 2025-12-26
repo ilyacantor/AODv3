@@ -199,6 +199,12 @@
             }
         }
         
+        window.submitDeferAction = submitDeferAction;
+        window.submitIgnoreAction = submitIgnoreAction;
+        window.submitAssignAction = submitAssignAction;
+        window.closeTriageModal = closeTriageModal;
+        window.updateOwnerOptions = updateOwnerOptions;
+        
         async function loadTriageRuns() {
             const select = document.getElementById('triageRunSelect');
             try {

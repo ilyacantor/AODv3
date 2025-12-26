@@ -16,21 +16,21 @@ const TourManager = (function() {
         },
         'intro_1': {
             title: "The Execution Pipeline",
-            content: "The architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents)</strong>.\n\nOperations begin with Discovery.",
+            content: "AOD collects signals from enterprise systems—identity, finance, cloud, endpoints, DNS, and systems of record—resolves them into assets, and creates a catalog.\n\nThe architecture moves from <strong>Discovery (AOD)</strong> to <strong>Connection (AAM)</strong>, <strong>Unification (DCL)</strong>, and <strong>Action (Agents, Humans)</strong>.",
             step: 2,
             location: 'overview',
             scrollTarget: 'pipeline'
         },
         'intro_2': {
-            title: "Structural Dependency",
-            content: "AOD is the functional prerequisite for the platform.\n\nThe <strong>Adaptive API Mesh (AAM)</strong> requires a verified asset inventory to establish connections.\n\nAOD's primary function is to construct this <strong>Asset Catalog</strong>, enabling AAM and the DCL to operate on trusted data.",
+            title: "Inputs & Outputs",
+            content: "AOD ingests raw signals from <strong>7 lenses</strong>—such as Identity, DNS, and Finance—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Security Risks, Governance Issues, Shadow IT, and Zombies.",
             step: 3,
             location: 'overview',
-            scrollTarget: 'gateway'
+            scrollTarget: 'aod-details'
         },
         'intro_3': {
-            title: "Inputs & Outputs",
-            content: "AOD ingests raw signals from <strong>7 lenses</strong>—such as Identity, DNS, and Finance—to resolve identity and build the Catalog.\n\n<strong>Primary Output:</strong> The Master Catalog for AAM/DCL.\n\n<strong>Byproduct:</strong> Automated detection of Security Risks, Governance Issues, Shadow IT, and Zombies.\n\nWe will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.",
+            title: "Why You'll See Farm",
+            content: "We will now walk through the AOD functionality, as well as allow you to test AOD's ability to successfully operate in a real enterprise environment.\n\n<strong>AOS Farm</strong> is a synthetic data generator that produces realistic enterprise environments—including bad data, conflicts, and unmanaged systems. It exists to prove accuracy, not simulate it.",
             step: 4,
             location: 'overview',
             scrollTarget: 'aod-details'
@@ -52,7 +52,7 @@ const TourManager = (function() {
         },
         4: { 
             title: "Risks & Waste",
-            content: "AOD classifies problems into four categories:\n\n<strong>Security Risks:</strong> Ungoverned access, data conflicts, identity gaps.\n\n<strong>Governance Issues:</strong> CMDB gaps, duplication, visibility issues.\n\n<strong>Shadow IT:</strong> Active systems operating outside IT governance.\n\n<strong>Zombies:</strong> Licensed assets with no recent activity.\n\nClick on any KPI box to drill down.",
+            content: "AOD classifies problems into four categories:\n\n<strong>Security Risks:</strong> Ungoverned access, data conflicts, identity gaps.\n\n<strong>Governance:</strong> CMDB gaps, duplication, visibility issues.\n\n<strong>Shadow:</strong> Active systems operating outside IT governance.\n\n<strong>Zombie:</strong> Licensed assets with no recent activity.\n\nClick on any KPI box to drill down.",
             step: 12
         },
         4.5: { 
@@ -62,7 +62,7 @@ const TourManager = (function() {
         },
         5: { 
             title: "Triage Workflow",
-            content: "Triage acts as the operational workflow engine for AOD.\n\n<strong>Issue Disposition:</strong> While the Catalog feeds AAM, this console allows users to resolve findings across all four categories—Security Risks, Governance Issues, Shadow IT, and Zombies.\n\n<strong>Configurability:</strong> The engine is highly configurable. It can be deployed as a passive informational plane or set as a strict control plane to gate assets before they enter the ecosystem.",
+            content: "Triage acts as the operational workflow engine for AOD.\n\n<strong>Issue Disposition:</strong> This console allows users to resolve findings across Security Risks and Governance, and disposition Shadow and Zombie assets.\n\n<strong>Configurability:</strong> The engine is highly configurable. It can be deployed as a passive informational plane or set as a strict control plane to gate assets before they enter the ecosystem.",
             step: 13,
             highlightElement: '.triage-section'
         },
@@ -80,15 +80,10 @@ const TourManager = (function() {
             title: "Trust, but Verify",
             content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset inventory.",
             step: 15
-        },
-        8: { 
-            title: "Tour Complete",
-            content: "You've seen the cycle: <strong>Generate Chaos → Discover Order → Audit Accuracy.</strong>\n\nYou are now free to explore the Catalog, run new simulations, or drill into specific asset details.",
-            step: 17
         }
     };
     
-    const TOTAL_STEPS = 17;
+    const TOTAL_STEPS = 15;
     
     function trackedTimeout(fn, delay) {
         const id = setTimeout(() => {
@@ -444,7 +439,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
+        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -464,7 +459,7 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
-        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7, 8];
+        const phaseOrder = ['intro_0', 'intro_1', 'intro_2', 'intro_3', 0, 3, 4, 5, 6, 7];
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex <= 0) {
@@ -512,9 +507,6 @@ const TourManager = (function() {
                 break;
             case 7:
                 executePhase7();
-                break;
-            case 8:
-                executePhase8();
                 break;
             default:
                 console.warn('TourManager: Unknown phase', phase);
@@ -829,6 +821,7 @@ const TourManager = (function() {
         
         await showOverlay(4, {
             highlightElement: shadowCard,
+            position: { top: '120px', left: '50%', transform: 'translateX(-50%)' },
             onContinue: async () => {
                 if (aborted) return;
                 removeOverlay();
@@ -861,7 +854,7 @@ const TourManager = (function() {
         
         await showOverlay(5, {
             highlightElement: '.triage-section',
-            position: { top: '200px', left: '50%' }
+            position: { top: '120px', left: '50%', transform: 'translateX(-50%)' }
         });
     }
     
@@ -913,6 +906,7 @@ const TourManager = (function() {
                 if (aborted) return;
                 removeOverlay();
                 await navigateToFarmForVerification();
+                exit();
             }
         });
     }
@@ -925,29 +919,13 @@ const TourManager = (function() {
             if (aborted) return;
             const data = await r.json();
             if (data.farm_url) {
-                const returnUrl = encodeURIComponent(window.location.origin + '/?guided=1&phase=8');
                 const separator = data.farm_url.includes('?') ? '&' : '?';
-                const farmUrlWithGuided = `${data.farm_url}${separator}guided=1&tour_phase=7&return_url=${returnUrl}`;
+                const farmUrlWithGuided = `${data.farm_url}${separator}guided=1&tour_phase=7`;
                 window.open(farmUrlWithGuided, 'aos_farm');
-                
-                const state = getState();
-                state.phase = 8;
-                setState(state);
             }
         } catch (e) {
             console.error('TourManager: Failed to get Farm URL for verification', e);
         }
-    }
-    
-    async function executePhase8() {
-        if (aborted) return;
-        
-        await showOverlay(8, {
-            primaryButtonText: 'Finish & Explore',
-            onContinue: () => {
-                exit();
-            }
-        });
     }
     
     function checkResume() {

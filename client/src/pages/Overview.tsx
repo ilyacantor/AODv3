@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import {
   Info,
   ArrowDown,
-  ScanLine,
   Search,
   Play,
   BookOpen,
@@ -72,9 +71,7 @@ export default function Overview() {
 
             <div className="space-y-6 max-w-3xl">
               <p className="text-xl md:text-2xl text-slate-400 leading-relaxed font-medium">
-                <strong className="text-white">Our Core Tenet:</strong> We
-                abstract complexity away. We'll get you context regardless of
-                how disparate, numerous, and complex your data sources are.
+                <strong className="text-white">AOD is the gateway to AutonomOS.</strong>
               </p>
             </div>
           </div>
@@ -161,11 +158,6 @@ export default function Overview() {
       {/* --- SECTION 3: AOD INTRODUCTION ("The Gateway") --- */}
       <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <div className="flex flex-col gap-8 text-center md:text-left">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold tracking-widest uppercase w-fit mx-auto md:mx-0">
-            <ScanLine className="w-3 h-3" />
-            Foundation Layer
-          </div>
-
           <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">
             AOD is the gateway to AutonomOS.
           </h2>

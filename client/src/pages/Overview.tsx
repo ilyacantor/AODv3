@@ -5,7 +5,6 @@ import {
   ArrowDown,
   Search,
   Play,
-  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -211,88 +210,7 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 4: PLATFORM COMPONENTS --- */}
-      <section className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="space-y-10"
-        >
-          <h2 className="text-3xl md:text-4xl font-bold text-white">
-            autonom<span className="text-transparent bg-clip-text bg-gradient-brand">OS</span> Platform (AOS) Components
-          </h2>
-
-          <div className="space-y-4">
-            {/* AOD */}
-            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-cyan-500">
-              <div className="flex items-start gap-4">
-                <Search className="w-6 h-6 text-cyan-400 shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-xl font-bold text-cyan-400 mb-2">Discover (AOD)</h3>
-                  <p className="text-slate-400 leading-relaxed">
-                    AOD autonomously fingerprints and catalogs your entire technology environment—spanning 100s of apps, DBs, and tools. It rapidly infers relationships and establishes connections without manual configuration (minimal HITL). This engine creates a complete, secure architectural view using metadata only, forming the foundation for autonomous orchestration.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* AAM */}
-            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-orange-500">
-              <div className="flex items-start gap-4">
-                <div className="w-6 h-6 text-orange-400 shrink-0 mt-1 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-orange-400 mb-2">Adaptive API Mesh (AAM)</h3>
-                  <p className="text-slate-400 leading-relaxed">
-                    Self-healing integration layer that monitors API health, detects schema changes, and autonomously adapts—eliminating the primary cause of automation failure.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* DCL */}
-            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-rose-500">
-              <div className="flex items-start gap-4">
-                <div className="w-6 h-6 text-rose-400 shrink-0 mt-1 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                    <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-rose-400 mb-2">Data Connectivity Layer (DCL)</h3>
-                  <p className="text-slate-400 leading-relaxed">
-                    Unified enterprise ontology mapping disparate sources into a coherent knowledge graph. Provides the contextual "brain" for intelligent decision-making.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* AOA */}
-            <div className="p-6 bg-slate-900/50 rounded-xl border-l-4 border-green-500">
-              <div className="flex items-start gap-4">
-                <div className="w-6 h-6 text-green-400 shrink-0 mt-1 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                    <path d="M12 3v18" /><path d="M5.636 5.636l12.728 12.728" /><path d="M18.364 5.636L5.636 18.364" /><circle cx="12" cy="12" r="3" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-green-400 mb-2">Agentic Orchestration Architecture (AOA)</h3>
-                  <p className="text-slate-400 leading-relaxed">
-                    Governance engine managing agent proliferation at scale. Coordinates workflows with audit trails, HITL mechanisms, and observability for trusted autonomy.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </section>
-
-      {/* --- SECTION 5: HOW TO READ THIS (Pipeline Diagram) --- */}
+      {/* --- SECTION 4: PIPELINE WITH PLATFORM COMPONENTS --- */}
       <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">
@@ -304,59 +222,84 @@ export default function Overview() {
           />
         </div>
 
-        {/* Fixed Side Panel */}
-        <div className="w-full md:w-96 h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-8 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
-              <BookOpen className="w-5 h-5 text-purple-400" />
-              How to Read This
+        {/* Fixed Side Panel - Platform Components */}
+        <div className="w-full md:w-[420px] h-auto md:h-full bg-slate-900/80 backdrop-blur-xl border-t md:border-t-0 md:border-l border-slate-800 p-6 flex flex-col shrink-0 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)] overflow-y-auto">
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white mb-1">
+              autonom<span className="text-transparent bg-clip-text bg-gradient-brand">OS</span> Platform (AOS) Components
             </h2>
-            <div className="h-0.5 w-16 bg-purple-500 rounded-full" />
+            <div className="h-0.5 w-16 bg-gradient-brand rounded-full" />
           </div>
 
-          <div className="space-y-6 text-m text-slate-400 leading-relaxed">
-            <p>AutonomOS is organized as a left-to-right execution pipeline.</p>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-bold text-cyan-400 mb-1">
-                  Discovery (AOD, this Demo)
-                </h3>
-                <p>
-                  Signals are collected from enterprise systems—identity,
-                  finance, cloud, endpoints, DNS, and systems of record—and
-                  resolved into assets.
-                </p>
+          <div className="space-y-3 text-sm">
+            {/* AOD */}
+            <div className="p-4 bg-slate-800/50 rounded-lg border-l-2 border-cyan-500">
+              <div className="flex items-start gap-3">
+                <Search className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-cyan-400 mb-1">Discover (AOD)</h3>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    Autonomously fingerprints and catalogs your entire technology environment—spanning 100s of apps, DBs, and tools. Creates a complete architectural view using metadata only.
+                  </p>
+                </div>
               </div>
+            </div>
 
-              <div>
-                <h3 className="font-bold text-blue-400 mb-1">
-                  Connection (AAM) & Unification (DCL)
-                </h3>
-                <p>
-                  Discovered assets are connected and unified into a shared
-                  enterprise ontology, creating consistent identity, structure,
-                  and meaning across systems.
-                </p>
+            {/* AAM */}
+            <div className="p-4 bg-slate-800/50 rounded-lg border-l-2 border-orange-500">
+              <div className="flex items-start gap-3">
+                <div className="w-4 h-4 text-orange-400 shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-orange-400 mb-1">Adaptive API Mesh (AAM)</h3>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    Self-healing integration layer that monitors API health, detects schema changes, and autonomously adapts.
+                  </p>
+                </div>
               </div>
+            </div>
 
-              <div>
-                <h3 className="font-bold text-purple-400 mb-1">
-                  Logic (BLL) & Action (Agents)
-                </h3>
-                <p>
-                  Business Logic Layer (BLL) turns unified data into governed
-                  business metrics, rules, and decisions. Intelligent agents
-                  operate on this trusted foundation to answer questions, drive
-                  automation, and execute actions.
-                </p>
+            {/* DCL */}
+            <div className="p-4 bg-slate-800/50 rounded-lg border-l-2 border-rose-500">
+              <div className="flex items-start gap-3">
+                <div className="w-4 h-4 text-rose-400 shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-rose-400 mb-1">Data Connectivity Layer (DCL)</h3>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    Unified enterprise ontology mapping disparate sources into a coherent knowledge graph for intelligent decision-making.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AOA */}
+            <div className="p-4 bg-slate-800/50 rounded-lg border-l-2 border-green-500">
+              <div className="flex items-start gap-3">
+                <div className="w-4 h-4 text-green-400 shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M12 3v18" /><path d="M5.636 5.636l12.728 12.728" /><path d="M18.364 5.636L5.636 18.364" /><circle cx="12" cy="12" r="3" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-green-400 mb-1">Agentic Orchestration Architecture (AOA)</h3>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    Governance engine managing agent proliferation at scale with audit trails, HITL mechanisms, and observability.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* --- SECTION 3: AOD INTRODUCTION ("The Gateway") --- */}
+      {/* --- SECTION 5: AOD INTRODUCTION ("The Gateway") --- */}
       <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <div className="flex flex-col gap-8 text-center md:text-left">
           <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">

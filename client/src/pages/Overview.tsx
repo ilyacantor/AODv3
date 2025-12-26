@@ -90,7 +90,59 @@ export default function Overview() {
         </motion.div>
       </section>
 
-      {/* --- SECTION 2: HOW TO READ THIS (Pipeline Diagram) --- */}
+      {/* --- SECTION 2: THE MARKET IS BROKEN --- */}
+      <section className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+        >
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-12">
+            The Market is Fundamentally Broken
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-12">
+            {/* Left: The Enterprise Crisis */}
+            <div className="space-y-6">
+              <h3 className="text-2xl font-bold text-cyan-400">The Enterprise Crisis</h3>
+              <p className="text-lg text-slate-400 leading-relaxed">
+                Organizations are drowning in disconnected systems and digital chaos. Despite massive technology investments, enterprises remain{" "}
+                <strong className="text-white">data-rich but action-poor</strong>.
+              </p>
+              <p className="text-lg text-slate-400 leading-relaxed">
+                The result? A massive "Insight-to-Action Gap" paralyzing modern businesses.
+              </p>
+            </div>
+
+            {/* Right: Stats Grid */}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-800">
+                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-brand mb-2">1,000+</div>
+                <div className="text-white font-semibold mb-1">Apps Per Enterprise</div>
+                <div className="text-sm text-slate-500">Average for large organizations</div>
+              </div>
+              <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-800">
+                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-brand mb-2">80%</div>
+                <div className="text-white font-semibold mb-1">Budget on Maintenance</div>
+                <div className="text-sm text-slate-500">Not innovation</div>
+              </div>
+              <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-800">
+                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-brand mb-2">$2.6T</div>
+                <div className="text-white font-semibold mb-1">Annual Legacy Spend</div>
+                <div className="text-sm text-slate-500">Just keeping systems running</div>
+              </div>
+              <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-800">
+                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-brand mb-2">60%+</div>
+                <div className="text-white font-semibold mb-1">Shadow Apps</div>
+                <div className="text-sm text-slate-500">Will grow exponentially with agentic sprawl</div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* --- SECTION 3: HOW TO READ THIS (Pipeline Diagram) --- */}
       <section id="section-pipeline" className="relative w-full h-[85vh] border-y border-slate-800 bg-slate-950 flex flex-col md:flex-row overflow-hidden group">
         {/* Main Flow Area */}
         <div className="flex-1 relative h-full bg-slate-900/20">

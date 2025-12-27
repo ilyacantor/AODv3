@@ -195,7 +195,7 @@ async def view_catalog(run_id: str):
     zombie_count = sum(1 for a in assets if get_tag(a, 'zombie_actual') == True)
     governed_count = sum(1 for a in assets if a.lens_status and (a.lens_status.cmdb or a.lens_status.idp))
     
-    triage_stats = {'approved': 0, 'banned': 0, 'deprovisioned': 0, 'assigned': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
+    triage_stats = {'approved': 0, 'banned': 0, 'deprovisioned': 0, 'assigned': 0, 'acknowledged': 0, 'deferred': 0, 'ignored': 0, 'pending': 0}
     triaged_asset_ids = set()
     for action in triage_actions:
         action_type = action.get('action_type', '') or action.get('action', '')
@@ -208,8 +208,10 @@ async def view_catalog(run_id: str):
             triage_stats['banned'] += 1
         elif state == 'deprovisioned':
             triage_stats['deprovisioned'] += 1
-        elif action_type == 'assign' or state == 'acknowledged':
+        elif action_type == 'assign':
             triage_stats['assigned'] += 1
+        elif state == 'acknowledged' or action_type == 'acknowledge':
+            triage_stats['acknowledged'] += 1
         elif action_type == 'defer' or state == 'deferred':
             triage_stats['deferred'] += 1
         elif action_type == 'ignore':
@@ -358,7 +360,11 @@ async def view_catalog(run_id: str):
                 <div class="stat-label">Assigned</div>
             </div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
+            <div class="stat">
+                <div class="stat-value" style="color: #0ea5e9;">{triage_stats['acknowledged']}</div>
+                <div class="stat-label">Acknowledged</div>
+            </div>
             <div class="stat">
                 <div class="stat-value" style="color: #8b5cf6;">{triage_stats['deferred']}</div>
                 <div class="stat-label">Deferred</div>

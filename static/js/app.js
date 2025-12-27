@@ -47,7 +47,9 @@
                 
                 if (!runId || !itemId) return;
                 
-                if (action === 'defer') {
+                if (action === 'revert') {
+                    await revertTriageAction(runId, itemId, itemType);
+                } else if (action === 'defer') {
                     showDeferModal(runId, itemId, itemType);
                 } else if (action === 'ignore') {
                     showIgnoreModal(runId, itemId, itemType);
@@ -59,6 +61,32 @@
                     await submitTriageAction(runId, itemId, itemType, action);
                 }
             });
+        }
+        
+        async function revertTriageAction(runId, itemId, itemType) {
+            try {
+                const response = await fetch(`/api/triage/action/${runId}/${itemId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    console.error('Revert action failed:', response.status, response.statusText);
+                    return;
+                }
+                
+                const key = `${itemType}:${itemId}`;
+                delete triageActionsMap[key];
+                
+                updateTriageItemInSections(itemId, itemType, {
+                    triageState: null,
+                    triageAction: null,
+                    triageOwner: null,
+                    triageDeferUntil: null,
+                    triageIgnoreReason: null
+                });
+            } catch (err) {
+                console.error('Revert action failed:', err);
+            }
         }
         
         async function submitTriageAction(runId, itemId, itemType, action, extra = {}) {
@@ -736,11 +764,10 @@
                     if (item.triageIgnoreReason) extraInfo = `: ${item.triageIgnoreReason}`;
                     
                     statusBadge = `<span class="triage-status-badge ${triageState}">${stateLabel}${extraInfo}</span>`;
-                    primaryBtn = '';
+                    primaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="revert">Undo</button>`;
                     moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="acknowledge">Re-Acknowledge</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Re-Assign</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>`;
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Reassign</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>`;
                 } else if (sectionType === 'firewall') {
                     const provStatus = (item.provisioning_status || '').toUpperCase();
                     const isAlreadyBlocked = provStatus === 'BLOCKED';

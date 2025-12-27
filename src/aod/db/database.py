@@ -1236,3 +1236,15 @@ class Database:
             )
         
         return [dict(row) for row in rows]
+    
+    async def delete_triage_action(self, run_id: str, item_id: str) -> bool:
+        """Delete a triage action (revert/undo)"""
+        pool = await self.get_pool()
+        
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM triage_actions WHERE run_id = $1 AND item_id = $2",
+                run_id, item_id
+            )
+        
+        return "DELETE" in result

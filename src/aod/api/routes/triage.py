@@ -78,3 +78,17 @@ async def get_triage_actions(run_id: str):
     actions = await db.get_triage_actions_by_run(run_id)
     
     return {"run_id": run_id, "actions": actions}
+
+
+@router.delete("/action/{run_id}/{item_id}")
+async def revert_triage_action(run_id: str, item_id: str):
+    """Revert/undo a triage action by deleting it"""
+    db = await get_db_direct()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    deleted = await db.delete_triage_action(run_id, item_id)
+    
+    return {"success": True, "deleted": deleted, "item_id": item_id}

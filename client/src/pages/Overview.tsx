@@ -175,7 +175,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 3: INTRODUCING AUTONOMOS --- */}
-      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 min-h-[70vh] flex items-center justify-center">
+      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}

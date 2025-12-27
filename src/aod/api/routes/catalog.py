@@ -72,16 +72,17 @@ async def get_catalog(
     )
 
 
-@router.get("/dcl", response_model=CatalogResponse, deprecated=True)
-async def get_dcl_export(run_id: str):
+@router.get("/approved-assets", response_model=CatalogResponse)
+async def get_approved_assets(run_id: str):
     """
-    DEPRECATED: Use /api/handoff/aam-manifest instead.
+    Approved Assets Export - Only ACTIVE provisioned assets.
     
-    This endpoint incorrectly implied AOD talks directly to DCL.
-    AOD -> AAM -> DCL is the correct architecture.
+    Returns assets with provisioning_status=ACTIVE. These are trusted,
+    governed assets that have passed AOD's admission and classification gates.
     
-    The new endpoint /api/handoff/aam-manifest provides the Target Manifest
-    for AAM (Adaptive API Mesh) with proper provisioning orders.
+    QUARANTINE assets (Shadow IT) are excluded.
+    REVIEW assets (zombie candidates) are excluded.
+    BLOCKED assets are excluded.
     """
     db = await get_db_direct()
     

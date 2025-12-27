@@ -494,7 +494,7 @@ class Database:
             if vendor_hypothesis_data:
                 vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
             
-            from src.aod.models.output_contracts import ProvisioningStatus
+            from aod.models.output_contracts import ProvisioningStatus
             prov_status_raw = row.get("provisioning_status", "quarantine")
             try:
                 prov_status = ProvisioningStatus(prov_status_raw)
@@ -543,7 +543,7 @@ class Database:
         if vendor_hypothesis_data:
             vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
         
-        from src.aod.models.output_contracts import ProvisioningStatus
+        from aod.models.output_contracts import ProvisioningStatus
         prov_status_raw = row.get("provisioning_status", "quarantine")
         try:
             prov_status = ProvisioningStatus(prov_status_raw)

@@ -17,6 +17,7 @@ ACTION_TO_STATUS = {
     "DEPROVISION": ProvisioningStatus.RETIRED,
     "ACKNOWLEDGE": ProvisioningStatus.ACTIVE,
     "DISMISS_RISK": ProvisioningStatus.ACTIVE,
+    "RESOLVE": ProvisioningStatus.ACTIVE,
 }
 
 
@@ -571,7 +572,7 @@ async def update_asset_provisioning(
     if action not in ACTION_TO_STATUS:
         raise HTTPException(
             status_code=400, 
-            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION, ACKNOWLEDGE, DISMISS_RISK"
+            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION, ACKNOWLEDGE, DISMISS_RISK, RESOLVE"
         )
     
     db = await get_db_direct()
@@ -589,6 +590,7 @@ async def update_asset_provisioning(
         "DEPROVISION": [ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
         "ACKNOWLEDGE": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
         "DISMISS_RISK": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
+        "RESOLVE": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
     }
     
     if previous_status not in valid_transitions[action]:
@@ -613,6 +615,7 @@ async def update_asset_provisioning(
         "DEPROVISION": "deprovisioned",
         "ACKNOWLEDGE": "acknowledged",
         "DISMISS_RISK": "dismissed",
+        "RESOLVE": "resolved",
     }
     
     tenant_id = "unknown"
@@ -637,6 +640,7 @@ async def update_asset_provisioning(
         "DEPROVISION": f"Asset '{asset.name}' deprovisioned - retired from active use",
         "ACKNOWLEDGE": f"Asset '{asset.name}' acknowledged - data governance gap noted, awaiting remediation",
         "DISMISS_RISK": f"Asset '{asset.name}' risk dismissed - acknowledged as acceptable",
+        "RESOLVE": f"Asset '{asset.name}' governance issue resolved",
     }
     
     return ProvisioningActionResponse(

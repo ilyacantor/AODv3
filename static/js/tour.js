@@ -604,7 +604,6 @@ const TourManager = (function() {
             bodyContent = '';
             footerContent = `
                 <div class="tour-footer tour-footer-inline">
-                    <button class="tour-btn tour-btn-skip-sim">Skip <span class="tour-btn-arrow">»</span></button>
                     <button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>
                     <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
                 </div>

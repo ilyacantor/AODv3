@@ -244,7 +244,16 @@ const TourManager = (function() {
                 </div>
             </div>
             <div class="tour-overlay-footer">
-                <div class="tour-footer-left"></div>
+                <div class="tour-footer-left">
+                    ${options.showSkipToSimulation ? `
+                        <button class="tour-btn-skip-sim">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+                            </svg>
+                            Skip to Simulation
+                        </button>
+                    ` : ''}
+                </div>
                 <div class="tour-footer-right">
                     ${currentStep > 1 && options.showBack !== false ? `
                         <button class="tour-btn-back" ${currentStep <= 1 ? 'disabled' : ''}>
@@ -310,6 +319,13 @@ const TourManager = (function() {
                 } else {
                     goBack();
                 }
+            });
+        }
+        
+        const skipSimBtn = overlay.querySelector('.tour-btn-skip-sim');
+        if (skipSimBtn) {
+            skipSimBtn.addEventListener('click', () => {
+                startSimulation();
             });
         }
         
@@ -564,7 +580,7 @@ const TourManager = (function() {
             `;
             footerContent = `
                 <div class="tour-footer">
-                    <div></div>
+                    <button class="tour-btn tour-btn-skip-sim">Skip to Simulation <span class="tour-btn-arrow">»</span></button>
                     <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
                 </div>
             `;
@@ -588,6 +604,7 @@ const TourManager = (function() {
             bodyContent = '';
             footerContent = `
                 <div class="tour-footer tour-footer-inline">
+                    <button class="tour-btn tour-btn-skip-sim">Skip <span class="tour-btn-arrow">»</span></button>
                     <button class="tour-btn tour-btn-back"><span class="tour-btn-arrow">‹</span> Back</button>
                     <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
                 </div>
@@ -620,6 +637,13 @@ const TourManager = (function() {
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 goBack();
+            });
+        }
+        
+        const skipSimBtn = overlay.querySelector('.tour-btn-skip-sim');
+        if (skipSimBtn) {
+            skipSimBtn.addEventListener('click', () => {
+                startSimulation();
             });
         }
         

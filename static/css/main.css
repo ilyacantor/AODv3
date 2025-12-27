@@ -592,6 +592,28 @@ main { padding: 2rem; }
 }
 .tour-btn-finish:hover { background: var(--cyan-400); }
 
+.tour-btn-skip-sim {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.7);
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 500;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.tour-btn-skip-sim:hover { 
+    background: rgba(255,255,255,0.08); 
+    color: white;
+    border-color: rgba(255,255,255,0.25);
+}
+.tour-btn-skip-sim svg { width: 14px; height: 14px; }
+
 /* Progress Bar */
 .tour-progress-bar {
     position: absolute;

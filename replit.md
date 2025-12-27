@@ -53,6 +53,7 @@ The UI is a single-page application using the AutonomOS color palette and Quicks
     - Governance Gaps: `provisioning_status == ACTIVE AND has_findings`, shows specific issues
 *   **Asset Ownership Persistence**: Triage "Assign Owner" updates `asset.owner` directly, fixing the underlying data issue. The governance_gap finding short-circuits when asset.owner is set - no finding generated. On-conflict uses COALESCE to preserve existing owners.
 *   **AAM Handoff API**: Architecture-correct endpoint at `/api/handoff/aam-manifest` provides Target Manifest for AAM (Adaptive API Mesh). AOD identifies assets, AAM executes connections, DCL receives streams. Payload includes `target_asset`, `provisioning_status`, `governance` (owner, auth_method), and `action_required`. Old `/catalog/dcl` endpoint deprecated.
+*   **Status-Based Finding Suppression**: QUARANTINE, BLOCKED, IGNORED, and RETIRED assets do NOT generate secondary findings (Identity Gap, CMDB Gap, Governance Gap, etc.). Only ACTIVE and REVIEW assets are scanned for hygiene gaps. This prevents noise - users don't need 500 "Missing Owner" alerts for blocked malware.
 
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and reconciliation results recipient.

@@ -2475,6 +2475,10 @@
                     if (typeof TourManager !== 'undefined') {
                         TourManager.start();
                     }
+                } else if (event.data.action === 'skipToSimulation') {
+                    if (typeof TourManager !== 'undefined') {
+                        TourManager.startSimulation();
+                    }
                 } else if (event.data.action === 'switchToConsole') {
                     document.querySelectorAll('.header-nav-tab').forEach(t => t.classList.remove('active'));
                     document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));

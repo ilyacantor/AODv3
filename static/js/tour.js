@@ -1023,8 +1023,17 @@ const TourManager = (function() {
         return getState().active;
     }
     
+    function startSimulation() {
+        aborted = false;
+        clearAllTimeouts();
+        const state = { active: true, phase: 3, runId: null };
+        setState(state);
+        navigateToFarmWithGuided();
+    }
+    
     return {
         start,
+        startSimulation,
         exit,
         advance,
         checkResume,

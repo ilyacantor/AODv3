@@ -4,6 +4,7 @@ import {
   Info,
   Search,
   Play,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -411,7 +412,7 @@ export default function Overview() {
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto flex-wrap justify-center md:justify-end">
             <Button
               size="lg"
               className="bg-white text-blue-600 hover:bg-slate-100 border-none font-bold text-base px-8 h-14 rounded-full shadow-lg hover:translate-y-[-2px] transition-transform"
@@ -423,6 +424,20 @@ export default function Overview() {
             >
               <Play className="w-4 h-4 mr-2 fill-current" />
               Run Guided Validation
+            </Button>
+
+            <Button
+              size="lg"
+              variant="outline"
+              className="bg-orange-600/70 border-orange-300/50 text-white hover:bg-orange-600 hover:text-white hover:border-orange-300 font-medium text-base px-8 h-14 rounded-full backdrop-blur-sm"
+              onClick={() => {
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage({ action: "skipToSimulation" }, "*");
+                }
+              }}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Skip to Simulation
             </Button>
 
             <Button

@@ -62,10 +62,32 @@ def generate_findings(
     governance_gap_count = 0
     duplication_risk_count = 0
     data_conflict_count = 0
+    suppressed_count = 0
+
+    # Status-Based Finding Suppression:
+    # QUARANTINE/BLOCKED/IGNORED/RETIRED assets only get their primary triage item
+    # (e.g., "Shadow Block"). They do NOT get secondary hygiene findings
+    # like "Missing Owner" or "CMDB Gap" - these are noise for blocked assets.
+    SUPPRESSED_STATUSES = {
+        ProvisioningStatus.QUARANTINE,
+        ProvisioningStatus.BLOCKED,
+        ProvisioningStatus.IGNORED,
+        ProvisioningStatus.RETIRED,
+    }
 
     for asset in assets:
         correlation = correlation_by_name.get(asset.name)
         if not correlation:
+            continue
+
+        # Skip secondary findings for assets in suppressed statuses
+        if asset.provisioning_status in SUPPRESSED_STATUSES:
+            suppressed_count += 1
+            logger.debug("findings_engine.suppressed", extra={
+                "asset_name": asset.name,
+                "provisioning_status": asset.provisioning_status.value,
+                "reason": "Status-based suppression - only primary triage item applies"
+            })
             continue
 
         identity_gap = generate_identity_gap_finding(asset, correlation, tenant_id, run_id, snapshot_id)
@@ -124,7 +146,8 @@ def generate_findings(
         "identity_gap": identity_gap_count, "cmdb_gap": cmdb_gap_count,
         "governance_gap": governance_gap_count, "duplication_risk": duplication_risk_count,
         "data_conflict": data_conflict_count, "finance_gap": len(finance_gaps),
-        "critical_gap_assets": critical_gap_count
+        "critical_gap_assets": critical_gap_count,
+        "suppressed_assets": suppressed_count
     })
 
     return findings

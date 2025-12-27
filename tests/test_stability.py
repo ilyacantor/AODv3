@@ -3,16 +3,24 @@ AOD Stability Tests - Verify critical bug fixes
 
 Test 1: Split Brain Merge - Finance name + Network domain = 1 asset
 Test 2: Ownership Persistence - Triage assign updates asset.owner
+Test 3: Status-Based Suppression - QUARANTINE assets don't get secondary findings
 """
 
 import asyncio
 import sys
+from uuid import uuid4
 sys.path.insert(0, '/home/runner/workspace/src')
 
 from aod.db.database import get_db_direct
-from aod.pipeline.normalize_observations import normalize_observations
+from aod.pipeline.normalize_observations import normalize_observations, CandidateEntity
+from aod.pipeline.findings.engine import generate_findings
+from aod.pipeline.correlate_entities import CorrelationResult
+from aod.pipeline.build_plane_indexes import PlaneIndexes
 from aod.models.input_contracts import Observation
-from aod.models.output_contracts import ProvisioningStatus
+from aod.models.output_contracts import (
+    ProvisioningStatus, Asset, AssetType, AssetIdentifiers,
+    Environment, LensStatuses, LensCoverage, ActivityEvidence
+)
 
 
 async def test_split_brain_merge():
@@ -125,6 +133,89 @@ async def test_ownership_persistence():
         return False
 
 
+async def test_status_based_suppression():
+    """
+    TEST: QUARANTINE assets only get primary triage item, NOT secondary findings
+    
+    1. Create a QUARANTINE asset with owner=NULL
+    2. Run findings engine
+    3. ASSERT: No governance_gap, cmdb_gap, etc. findings for this asset
+    """
+    print("\n" + "="*60)
+    print("TEST 3: Status-Based Finding Suppression")
+    print("="*60)
+    
+    test_asset_id = uuid4()
+    quarantine_asset = Asset(
+        asset_id=test_asset_id,
+        tenant_id="test-tenant",
+        run_id="test-run",
+        name="dropbox",
+        asset_type=AssetType.SAAS,
+        identifiers=AssetIdentifiers(
+            domains=["dropbox.com"],
+            emails=[],
+            ip_addresses=[],
+            mac_addresses=[],
+            hostnames=[]
+        ),
+        vendor=None,
+        vendor_hypothesis=None,
+        environment=Environment.PROD,
+        evidence_refs=["discovery-dropbox"],
+        lens_status=LensStatuses(),
+        lens_coverage=LensCoverage(),
+        activity_evidence=ActivityEvidence(),
+        tags=[],
+        admission_reason="discovered_active",
+        provisioning_status=ProvisioningStatus.QUARANTINE,
+        has_critical_gap=False,
+        owner=None
+    )
+    
+    print(f"Created test asset: {quarantine_asset.name}")
+    print(f"  Provisioning status: {quarantine_asset.provisioning_status.value}")
+    print(f"  Owner: {quarantine_asset.owner}")
+    print(f"  IdP status: {quarantine_asset.lens_status.idp}")
+    print(f"  CMDB status: {quarantine_asset.lens_status.cmdb}")
+    
+    test_entity = CandidateEntity(
+        entity_id="dropbox-test-entity",
+        canonical_name="dropbox",
+        original_name="Dropbox",
+        domain="dropbox.com",
+        observation_ids=["discovery-dropbox"],
+        source="discovery"
+    )
+    test_correlation = CorrelationResult(
+        entity=test_entity
+    )
+    
+    empty_indexes = PlaneIndexes()
+    
+    findings = generate_findings(
+        assets=[quarantine_asset],
+        correlations=[test_correlation],
+        indexes=empty_indexes,
+        tenant_id="test-tenant",
+        run_id="test-run",
+        snapshot_id="test-snapshot"
+    )
+    
+    asset_findings = [f for f in findings if f.asset_id == test_asset_id]
+    
+    print(f"\nFindings generated for QUARANTINE asset: {len(asset_findings)}")
+    for f in asset_findings:
+        print(f"  - {f.finding_type.value}: {f.explanation[:50]}...")
+    
+    if len(asset_findings) == 0:
+        print("\nRESULT: PASS - No secondary findings generated for QUARANTINE asset")
+        return True
+    else:
+        print(f"\nRESULT: FAIL - {len(asset_findings)} findings generated (should be 0)")
+        return False
+
+
 async def run_all_tests():
     """Run all stability tests and report results"""
     print("\n" + "#"*60)
@@ -135,6 +226,7 @@ async def run_all_tests():
     
     results['split_brain_merge'] = await test_split_brain_merge()
     results['ownership_persistence'] = await test_ownership_persistence()
+    results['status_based_suppression'] = await test_status_based_suppression()
     
     print("\n" + "="*60)
     print("STABILITY TEST REPORT")

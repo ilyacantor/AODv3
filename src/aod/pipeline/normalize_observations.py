@@ -9,6 +9,7 @@ import tldextract
 
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult, VENDOR_TO_DOMAIN
+from ..utils.normalization import get_normalization_token
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +280,9 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         
-        base_token = extract_base_token(domain, is_domain=True) if domain else extract_base_token(canonical_name, is_domain=False)
+        # Use get_normalization_token for consistent base token extraction
+        # This ensures "Airtable" (name) and "airtable.com" (domain) produce the same token
+        base_token = get_normalization_token(domain) if domain else get_normalization_token(canonical_name)
         
         existing_entity = None
         
@@ -389,9 +392,13 @@ def extract_base_token(value: str, is_domain: bool = False) -> Optional[str]:
     For domains: "airtable.com" → "airtable"
     For names: "Airtable" → "airtable", "Airtable (Legacy)" → "airtable"
     
+    NOTE: This function now uses the shared get_normalization_token() for consistency
+    across the codebase. The is_domain parameter is retained for backward compatibility
+    but the same token extraction logic is used for both.
+    
     Args:
         value: Domain string or product name
-        is_domain: If True, treat value as domain; otherwise as product name
+        is_domain: Retained for backward compatibility (same logic used for both)
         
     Returns:
         Lowercase base token for matching, or None if extraction fails
@@ -399,25 +406,11 @@ def extract_base_token(value: str, is_domain: bool = False) -> Optional[str]:
     if not value:
         return None
     
-    value = value.lower().strip()
-    
-    if is_domain:
-        extracted = tldextract.extract(value)
-        if extracted.domain:
-            return extracted.domain
-        parts = value.split('.')
-        if len(parts) >= 2:
-            return parts[0]
-        return None
-    
-    normalized = re.sub(r'\s*\([^)]*\)', '', value).strip()
-    
-    env_suffixes = r'[-_]?(prod|production|prd|dev|development|staging|stg|stage|test|testing|tst|uat|qa|sandbox|sbx|demo|legacy|old|new)$'
-    normalized = re.sub(env_suffixes, '', normalized, flags=re.IGNORECASE).strip()
-    
-    normalized = re.sub(r'[^\w]', '', normalized)
-    
-    return normalized if normalized else None
+    # Use the shared get_normalization_token() for consistent token extraction
+    # This ensures domains and names that represent the same product
+    # produce the same token (e.g., "airtable.com" and "Airtable" both -> "airtable")
+    token = get_normalization_token(value)
+    return token if token else None
 
 
 def _merge_entity_data(target: CandidateEntity, source: CandidateEntity) -> None:

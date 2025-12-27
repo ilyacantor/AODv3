@@ -168,6 +168,11 @@ class Database:
             except Exception:
                 pass
             
+            try:
+                await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS has_critical_gap BOOLEAN NOT NULL DEFAULT FALSE")
+            except Exception:
+                pass
+            
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
                     artifact_id TEXT PRIMARY KEY,
@@ -424,8 +429,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, provisioning_status, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -440,6 +445,7 @@ class Database:
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,
                     provisioning_status = EXCLUDED.provisioning_status,
+                    has_critical_gap = EXCLUDED.has_critical_gap,
                     created_at = EXCLUDED.created_at
                 """,
                 str(asset.asset_id),
@@ -458,6 +464,7 @@ class Database:
                 json.dumps(asset.tags),
                 asset.admission_reason,
                 asset.provisioning_status.value,
+                asset.has_critical_gap,
                 asset.created_at.isoformat()
             )
         return asset
@@ -504,6 +511,7 @@ class Database:
                 tags=json.loads(row["tags"]),
                 admission_reason=row["admission_reason"],
                 provisioning_status=prov_status,
+                has_critical_gap=row.get("has_critical_gap", False),
                 created_at=datetime.fromisoformat(row["created_at"])
             ))
         return assets
@@ -551,6 +559,7 @@ class Database:
             tags=json.loads(row["tags"]),
             admission_reason=row["admission_reason"],
             provisioning_status=prov_status,
+            has_critical_gap=row.get("has_critical_gap", False),
             created_at=datetime.fromisoformat(row["created_at"])
         )
     
@@ -913,6 +922,7 @@ class Database:
                 json.dumps(asset.tags),
                 asset.admission_reason,
                 asset.provisioning_status.value,
+                asset.has_critical_gap,
                 asset.created_at.isoformat()
             ))
         async with pool.acquire() as conn:
@@ -921,8 +931,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, provisioning_status, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -937,6 +947,7 @@ class Database:
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,
                     provisioning_status = EXCLUDED.provisioning_status,
+                    has_critical_gap = EXCLUDED.has_critical_gap,
                     created_at = EXCLUDED.created_at
                 """,
                 rows

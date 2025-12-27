@@ -19,6 +19,28 @@ import tldextract
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
 VALID_LIFECYCLES = {"prod", "production", "staging", "stage", "live", "active"}
 
+# Banned domains - immediately BLOCKED (not QUARANTINE)
+# These are domains that are policy-forbidden regardless of governance status
+BANNED_DOMAINS = {
+    "tiktok.com",
+    "kaspersky.com",
+}
+
+
+def is_banned_domain(domain: Optional[str]) -> bool:
+    """Check if domain is in the BANNED_DOMAINS policy list.
+    
+    Banned domains are immediately blocked regardless of any governance evidence.
+    Returns True if the registered domain (eTLD+1) matches a banned domain.
+    """
+    if not domain:
+        return False
+    registered = extract_registered_domain(domain)
+    if not registered:
+        return False
+    return registered.lower() in BANNED_DOMAINS
+
+
 # Corporate/marketing root domains - NEVER admit these
 # These are the TENANT'S OWN domains (not vendor SaaS platforms)
 # NOTE: SaaS vendor domains (okta.com, workday.com, etc.) are OPERATIONAL
@@ -621,6 +643,16 @@ def apply_admission_criteria(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,
             rejection_reason=f"Cannot extract registered domain from: {entity.domain}"
+        )
+    
+    # GATE 0.5: BANNED_DOMAINS policy - immediately BLOCKED (not QUARANTINE/IGNORED)
+    # These domains are policy-forbidden regardless of any governance evidence
+    # Results in BLOCKED status - enters triage but is permanently blocked
+    if is_banned_domain(registered_domain):
+        return AdmissionResult(
+            admitted=False,
+            provisioning_status=ProvisioningStatus.BLOCKED,
+            rejection_reason=f"BANNED_DOMAINS policy: {registered_domain} is policy-forbidden"
         )
     
     # GATE 1: Reject corporate/marketing root domains unconditionally

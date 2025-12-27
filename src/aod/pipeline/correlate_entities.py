@@ -13,6 +13,7 @@ from .build_plane_indexes import PlaneIndexes, PlaneIndex
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
 from ..config import policy
 from ..models.input_contracts import PlaneRecord
+from ..utils.normalization import get_normalization_token
 
 
 class MatchStatus(str, Enum):
@@ -46,68 +47,6 @@ LEGACY_MARKERS = {
     "legacy", "old", "deprecated", "v1", "v2", "archive", "archived",
     "retired", "obsolete", "backup", "previous"
 }
-
-
-CORPORATE_SUFFIXES = {
-    "inc", "incorporated", "corp", "corporation", "llc", "ltd", "limited",
-    "technologies", "technology", "tech", "software", "solutions", "services",
-    "group", "holdings", "international", "global", "systems", "labs", "co",
-    "company", "enterprise", "enterprises", "consulting", "partners"
-}
-
-
-TLD_SUFFIXES = {
-    ".com", ".io", ".net", ".org", ".co", ".app", ".ai", ".dev", ".cloud",
-    ".us", ".uk", ".de", ".fr", ".ca", ".au", ".eu", ".biz", ".info"
-}
-
-
-def get_normalization_token(name: str) -> str:
-    """
-    Extract a core token from a name for deterministic matching.
-    
-    This function strips common corporate suffixes, TLDs, and punctuation
-    to produce a normalized token that can match across different naming
-    conventions (e.g., "Slack Technologies, Inc" -> "slack", "slack.com" -> "slack").
-    
-    Args:
-        name: Input string (company name, domain, product name)
-        
-    Returns:
-        Normalized core token (lowercase, stripped of suffixes)
-    """
-    if not name:
-        return ""
-    
-    token = name.lower().strip()
-    
-    for tld in TLD_SUFFIXES:
-        if token.endswith(tld):
-            token = token[:-len(tld)]
-            break
-    
-    token = re.sub(r'^(www\.)', '', token)
-    
-    is_domain_like = '.' not in token and '-' in name.lower() and not any(c.isspace() for c in name)
-    
-    if is_domain_like:
-        token = re.sub(r'[\-_]', '', token)
-        token = re.sub(r'[^a-z0-9]', '', token)
-        return token
-    
-    token = re.sub(r'[,.\-_\s]+', ' ', token)
-    
-    words = token.split()
-    filtered_words = [w for w in words if w not in CORPORATE_SUFFIXES]
-    
-    if filtered_words:
-        token = filtered_words[0]
-    elif words:
-        token = words[0]
-    
-    token = re.sub(r'[^a-z0-9]', '', token)
-    
-    return token
 
 
 def _levenshtein_distance(s1: str, s2: str) -> int:

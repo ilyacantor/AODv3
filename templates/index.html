@@ -191,8 +191,8 @@
         <main class="container">
             <div class="triage-header">
                 <div>
-                    <h2 class="section-title" style="margin-bottom:0.25rem;">Triage Workflow</h2>
-                    <p class="config-note" style="margin:0;">Status-based asset review. Blocked assets need admission decisions; Zombie assets need cleanup; Governance gaps need attention.</p>
+                    <h2 class="section-title" style="margin-bottom:0.25rem;">Gatekeeper Console</h2>
+                    <p class="config-note" style="margin:0;">Action-based asset triage. The Firewall for blocked items, the Warning Zone for risks, and Hygiene for data governance.</p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -203,57 +203,57 @@
             </div>
             
             <div class="triage-sections" id="triageSections">
-                <div class="triage-section section-blocked">
-                    <div class="triage-section-header blocked-header triage-collapsible" data-target="triageBlockedContent">
+                <div class="triage-section section-firewall">
+                    <div class="triage-section-header firewall-header triage-collapsible" data-target="triageFirewallContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon section-blocked">⊘</span>
-                            Blocked Assets (Shadow IT)
-                            <span class="triage-count blocked-count" id="triageBlockedCount">0</span>
+                            <span class="triage-icon section-firewall">⛔</span>
+                            Blocked / Action Required
+                            <span class="triage-count firewall-count" id="triageFirewallCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Shadow IT waiting for approval — approve for AAM or ban</div>
+                        <div class="triage-section-desc">Shadow IT and policy violations — approve for AAM or ban forever</div>
                     </div>
-                    <div class="triage-section-content" id="triageBlockedContent">
+                    <div class="triage-section-content" id="triageFirewallContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section section-stale">
-                    <div class="triage-section-header stale-header triage-collapsible" data-target="triageStaleContent">
+                <div class="triage-section section-risk">
+                    <div class="triage-section-header risk-header triage-collapsible" data-target="triageRiskContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon section-stale">💀</span>
-                            Zombie Assets (Cleanup)
-                            <span class="triage-count stale-count" id="triageStaleCount">0</span>
+                            <span class="triage-icon section-risk">⚠️</span>
+                            Risks / Review
+                            <span class="triage-count risk-count" id="triageRiskCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Zombie assets needing cleanup — deprovision or sanction</div>
+                        <div class="triage-section-desc">Zombies and toxic assets — deprovision or dismiss risk</div>
                     </div>
-                    <div class="triage-section-content" id="triageStaleContent">
+                    <div class="triage-section-content" id="triageRiskContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>
                 
-                <div class="triage-section section-governance">
-                    <div class="triage-section-header governance-header triage-collapsible" data-target="triageGovernanceContent">
+                <div class="triage-section section-hygiene">
+                    <div class="triage-section-header hygiene-header triage-collapsible" data-target="triageHygieneContent">
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
-                            <span class="triage-icon section-governance">⚠</span>
-                            Governance Gaps
-                            <span class="triage-count governance-count" id="triageGovernanceCount">0</span>
+                            <span class="triage-icon section-hygiene">🛠️</span>
+                            Data Governance
+                            <span class="triage-count hygiene-count" id="triageHygieneCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Active assets with data quality issues — review and acknowledge</div>
+                        <div class="triage-section-desc">Active assets with minor data issues — resolve or acknowledge</div>
                     </div>
-                    <div class="batch-action-bar" id="governanceBatchBar">
+                    <div class="batch-action-bar" id="hygieneBatchBar">
                         <label class="batch-select-all">
-                            <input type="checkbox" class="batch-checkbox" id="governanceSelectAll">
+                            <input type="checkbox" class="batch-checkbox" id="hygieneSelectAll">
                             <span>Select All</span>
                         </label>
-                        <span class="batch-count" id="governanceBatchCount">0 selected</span>
+                        <span class="batch-count" id="hygieneBatchCount">0 selected</span>
                         <div class="batch-actions">
-                            <button class="batch-btn ack" id="governanceBatchAck">Acknowledge Selected</button>
+                            <button class="batch-btn ack" id="hygieneBatchAck">Acknowledge Selected</button>
                         </div>
                     </div>
-                    <div class="triage-section-content" id="triageGovernanceContent">
+                    <div class="triage-section-content" id="triageHygieneContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
                     </div>
                 </div>

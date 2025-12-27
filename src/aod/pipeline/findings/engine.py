@@ -2,7 +2,7 @@
 
 import logging
 
-from ...models.output_contracts import Asset, Finding
+from ...models.output_contracts import Asset, Finding, ProvisioningStatus, FindingType
 from ..correlate_entities import CorrelationResult
 from ..build_plane_indexes import PlaneIndexes
 from .base import is_security_risk
@@ -105,11 +105,26 @@ def generate_findings(
         f.explanation
     ))
 
+    # Post-process: Set has_critical_gap=True for ACTIVE assets with identity_gap finding
+    # This is the "toxic trigger" - an ACTIVE asset without IdP governance is a critical risk
+    identity_gap_asset_ids = {
+        f.asset_id for f in findings 
+        if f.finding_type == FindingType.IDENTITY_GAP and f.asset_id
+    }
+    
+    critical_gap_count = 0
+    for asset in assets:
+        if (asset.provisioning_status == ProvisioningStatus.ACTIVE 
+            and asset.asset_id in identity_gap_asset_ids):
+            asset.has_critical_gap = True
+            critical_gap_count += 1
+
     logger.info("findings_engine.generate.complete", extra={
         "tenant_id": tenant_id, "run_id": run_id, "total_findings": len(findings),
         "identity_gap": identity_gap_count, "cmdb_gap": cmdb_gap_count,
         "governance_gap": governance_gap_count, "duplication_risk": duplication_risk_count,
-        "data_conflict": data_conflict_count, "finance_gap": len(finance_gaps)
+        "data_conflict": data_conflict_count, "finance_gap": len(finance_gaps),
+        "critical_gap_assets": critical_gap_count
     })
 
     return findings

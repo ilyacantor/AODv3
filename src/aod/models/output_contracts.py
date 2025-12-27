@@ -156,6 +156,7 @@ class Asset(BaseModel):
     admission_reason: str = ""
     provisioning_status: ProvisioningStatus = ProvisioningStatus.QUARANTINE
     llm_metadata: Optional[LLMMetadata] = None
+    has_critical_gap: bool = Field(default=False, description="True if ACTIVE asset has identity_gap finding (no IdP match)")
     created_at: datetime = Field(default_factory=now_pst)
 
 

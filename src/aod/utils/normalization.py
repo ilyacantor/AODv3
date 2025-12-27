@@ -6,6 +6,115 @@ Consolidates string normalization functions used across the codebase.
 
 import re
 
+import tldextract
+
+
+# Corporate suffixes to strip when extracting normalization tokens
+CORPORATE_SUFFIXES = {
+    "inc", "incorporated", "corp", "corporation", "llc", "ltd", "limited",
+    "technologies", "technology", "tech", "software", "solutions", "services",
+    "group", "holdings", "international", "global", "systems", "labs", "co",
+    "company", "enterprise", "enterprises", "consulting", "partners"
+}
+
+
+# TLD suffixes to strip
+TLD_SUFFIXES = {
+    ".com", ".io", ".net", ".org", ".co", ".app", ".ai", ".dev", ".cloud",
+    ".us", ".uk", ".de", ".fr", ".ca", ".au", ".eu", ".biz", ".info", ".so"
+}
+
+
+# Environment suffixes to strip from names
+ENV_SUFFIXES = {
+    "prod", "production", "prd",
+    "dev", "development",
+    "staging", "stg", "stage",
+    "test", "testing", "tst",
+    "uat", "qa",
+    "sandbox", "sbx",
+    "demo", "legacy", "old", "new"
+}
+
+
+def get_normalization_token(name: str) -> str:
+    """
+    Extract a core token from a name for deterministic matching.
+    
+    This function strips common corporate suffixes, TLDs, environment suffixes,
+    and punctuation to produce a normalized token that can match across different
+    naming conventions (e.g., "Slack Technologies, Inc" -> "slack", "slack.com" -> "slack",
+    "Airtable-prod" -> "airtable").
+    
+    Uses tldextract for proper domain handling to correctly extract base domain
+    from subdomains (e.g., "api.stripe.com" -> "stripe").
+    
+    Args:
+        name: Input string (company name, domain, product name)
+        
+    Returns:
+        Normalized core token (lowercase, stripped of suffixes)
+    """
+    if not name:
+        return ""
+    
+    token = name.lower().strip()
+    
+    # Remove parenthetical notes early (e.g., "Airtable (Legacy)" -> "Airtable")
+    token = re.sub(r'\s*\([^)]*\)', '', token).strip()
+    
+    # Strip environment suffixes early (e.g., "Airtable-prod" -> "Airtable")
+    # This pattern handles -prod, _staging, -dev, etc.
+    env_pattern = r'[-_](' + '|'.join(ENV_SUFFIXES) + r')$'
+    token = re.sub(env_pattern, '', token, flags=re.IGNORECASE).strip()
+    
+    # Check if it looks like a domain (contains a valid TLD)
+    extracted = tldextract.extract(token)
+    if extracted.suffix and extracted.domain:
+        # This is a domain - extract the registered domain part
+        # e.g., "api.stripe.com" -> "stripe", "service-now.com" -> "servicenow"
+        token = extracted.domain
+        # Remove hyphens and underscores from domain tokens
+        token = token.replace("-", "").replace("_", "")
+        return token
+    
+    # Strip TLD suffixes manually for non-recognized domains
+    for tld in TLD_SUFFIXES:
+        if token.endswith(tld):
+            token = token[:-len(tld)]
+            break
+    
+    # Remove www prefix
+    token = re.sub(r'^(www\.)', '', token)
+    
+    # Check if domain-like (has hyphens but no spaces, after env suffix removal)
+    is_domain_like = '.' not in token and '-' in token and not any(c.isspace() for c in token)
+    
+    if is_domain_like:
+        # Domain-like identifier (e.g., "service-now" -> "servicenow")
+        token = re.sub(r'[\-_]', '', token)
+        token = re.sub(r'[^a-z0-9]', '', token)
+        return token
+    
+    # Product/company name processing
+    # Replace punctuation and whitespace with spaces
+    token = re.sub(r'[,.\-_\s]+', ' ', token)
+    
+    # Split into words and filter out corporate suffixes and env suffixes
+    words = token.split()
+    filtered_words = [w for w in words if w not in CORPORATE_SUFFIXES and w not in ENV_SUFFIXES]
+    
+    # Take the first meaningful word
+    if filtered_words:
+        token = filtered_words[0]
+    elif words:
+        token = words[0]
+    
+    # Remove any remaining non-alphanumeric characters
+    token = re.sub(r'[^a-z0-9]', '', token)
+    
+    return token
+
 
 def normalize_key(key: str) -> str:
     """

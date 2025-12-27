@@ -1,0 +1,63 @@
+# AOD Triage & Governance Overhaul
+
+**Mission:** Convert the Triage system from a "Passive Inventory List" to an "Active Gatekeeper." We are removing "Tiers" and implementing a strict Traffic Light model that handles both Shadow IT and Security Threats.
+
+---
+
+### PART 1: DATA INTEGRITY (Fixing "Split Brain")
+
+**Problem:** We have duplicate rows for the same asset (e.g., "Airtable" from Finance vs "airtable.com" from Discovery).
+**Task:** Refactor `normalize_observations.py` and `correlate_entities.py`.
+
+1.  **Aggressive Domain Merging:**
+    * You must merge a **Name-Only Entity** (e.g., "Slack") into a **Domain Entity** (e.g., "slack.com") if their normalized base names match.
+    * **Priority:** The Domain Entity is the survivor. It absorbs all evidence (spend, usage) from the Name Entity.
+    * **Result:** One single asset record per tool.
+
+2.  **Migration Script:**
+    * Create a script to scan the DB and merge these existing duplicates immediately.
+
+---
+
+### PART 2: THE "GATEKEEPER" UI (Replacing Tiers)
+
+**Problem:** "Tier 1/2/3" is meaningless. We need Action-Based Queues.
+**Task:** Redesign the Triage Dashboard to display three specific Lists based on `provisioning_status`.
+
+#### 🔴 LIST 1: "BLOCKED & QUARANTINE" (The Firewall)
+* **Filter:** `provisioning_status IN ('QUARANTINE', 'BLOCKED')`
+* **Content:**
+    * **Shadow IT:** New ungoverned discoveries.
+    * **Policy Violations:** Assets flagged as 'Banned' (e.g., via a `BANNED_VENDORS` list you create).
+* **Actions:**
+    * `Approve for AAM`: Promotes to **ACTIVE**.
+    * `Ban Forever`: Sets to **BLOCKED**.
+
+#### 🟡 LIST 2: "RISK & REVIEW" (The Warning Zone)
+* **Filter:** `provisioning_status == 'REVIEW'` OR (`status == 'ACTIVE'` AND `has_critical_gap == True`)
+* **Content:**
+    * **Zombies:** Stale assets (inactive > 90 days).
+    * **Toxic Assets:** Active assets with critical findings (specifically `identity_gap` where an Active app lacks SSO).
+* **Actions:**
+    * `Deprovision`: Sets to **RETIRED**.
+    * `Dismiss Risk`: Clears flags (keeps ACTIVE).
+
+#### 🟢 LIST 3: "GOVERNANCE GAPS" (Hygiene)
+* **Filter:** `provisioning_status == 'ACTIVE'` AND `has_critical_gap == False` AND `has_findings == True`
+* **Content:** Active assets with minor data issues (missing owner, cost gaps).
+* **Actions:** `Resolve` or `Acknowledge`.
+
+---
+
+### PART 3: LOGIC UPDATES
+
+1.  **The "Toxic" Trigger:**
+    * Update `findings_engine.py`: If an `ACTIVE` asset is found to have an `identity_gap` (no IDP match), flag it as `has_critical_gap = True`. This forces it into the **Yellow List**.
+
+2.  **The "Policy" Trigger:**
+    * Add a simple `BANNED_DOMAINS` list (e.g., `tiktok.com`, `kaspersky.com`).
+    * In `admission.py`: If domain is Banned, force status to `BLOCKED` (not Quarantine).
+
+3.  **Triage Display:**
+    * **REMOVE** all references to "Tier 1", "Tier 2", "Tier 3" in the UI labels.
+    * Use the headers: "⛔ Blocked / Action Required", "⚠️ Risks / Review", "🛠️ Data Governance".

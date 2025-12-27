@@ -2022,7 +2022,6 @@
         
         async function loadSnapshots() {
             const tenantId = document.getElementById('tenantSelect').value;
-            const size = document.getElementById('sizeSelect').value;
             const select = document.getElementById('snapshotSelect');
             const msg = document.getElementById('fetchMessage');
             
@@ -2036,10 +2035,7 @@
             select.innerHTML = '<option value="">Loading snapshots...</option>';
             
             try {
-                let url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
-                if (size) {
-                    url += `&size=${encodeURIComponent(size)}`;
-                }
+                const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
                 const r = await fetch(url);
                 if (!r.ok) {
                     const e = await r.json();
@@ -2283,7 +2279,6 @@
         }
         
         document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
-        document.getElementById('sizeSelect').addEventListener('change', loadSnapshots);
         
         document.getElementById('advancedToggle').addEventListener('click', () => {
             const content = document.getElementById('advancedContent');

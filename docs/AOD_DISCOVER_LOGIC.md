@@ -1,5 +1,9 @@
 # AOD Discover — Executive Summary
 
+> **What this document covers:** A high-level overview of how AOD processes enterprise data. It explains the pipeline stages (from raw evidence to cataloged assets), the rules for admitting or rejecting entities, how assets get classified as Shadow or Zombie, and the Traffic Light system that controls which assets are trusted. Use this as your quick reference for understanding what AOD does and why.
+
+---
+
 ## LIFECYCLE (Pipeline Flow)
 
 ```

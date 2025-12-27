@@ -1,5 +1,9 @@
 # AOD Discovery & Admission Policy
 
+> **What this document covers:** The complete rules for deciding which entities become assets and which are rejected. It lists all 7 data planes (Discovery, IdP, CMDB, Cloud, Endpoint, Network, Finance), the 5 admission gates an entity must pass, and how Shadow/Zombie classifications are applied afterward. Includes example decision traces showing exactly why specific entities were admitted or rejected.
+
+---
+
 ## Overview
 
 AOD (AutonomOS Discover) processes raw enterprise evidence to produce a verified Asset Catalog. This document defines the complete policy for how entities are discovered, evaluated, admitted, and classified.

@@ -1,5 +1,9 @@
 # Simulation & Proof Tour Script
 
+> **What this document covers:** The script and dialog content for the guided tour that walks users through AOD. It defines the 13-step experience across both AOD and Farm, including what each dialog says, what UI elements to highlight, and when to navigate between systems. Use this as the reference for the tour's narrative flow and user experience.
+
+---
+
 **Strategic Narrative: "Battle-Hardened" Discovery**
 
 The story isn't "Look, our software works." The story is: *"Enterprise data is dirty. Most tools break. Watch us generate a mess (Farm) and then create order from chaos (AOD)."*

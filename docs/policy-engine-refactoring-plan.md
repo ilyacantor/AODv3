@@ -1,5 +1,9 @@
 # AOD Policy Engine Refactoring Plan
 
+> **What this document covers:** A future roadmap for replacing hardcoded business rules with a configuration-driven policy engine. It identifies where thresholds are currently hardcoded (finance threshold, zombie window, etc.), proposes a new PolicyConfig schema, and outlines a phased migration using the strangler pattern. This is a planning document for future work, not current implementation.
+
+---
+
 ## Executive Summary
 
 This document outlines the plan to refactor AOD from hardcoded business rules to a **Configuration-Driven Policy Engine**. AOD will become the System of Record, exposing a `PolicyConfig` that Farm consumes for aligned reconciliation.

@@ -1,4 +1,8 @@
-# AOD Discovery Logic
+# AOD Discovery Logic — Technical Reference
+
+> **What this document covers:** The nuts and bolts of how AOD matches and correlates data. It explains how entities are normalized (domain-first keying), the multi-pass matching strategies for CMDB and IdP correlation (domain match, fuzzy match, vendor fallback, etc.), how governance is determined, and the reason codes that explain each decision. Use this when you need to understand exactly how a match was made or debug correlation issues.
+
+---
 
 This document details the discovery and correlation logic used by AOD Fresh to identify, match, and classify enterprise assets.
 

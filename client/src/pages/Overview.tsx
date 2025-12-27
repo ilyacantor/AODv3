@@ -184,7 +184,7 @@ export default function Overview() {
           className="space-y-8 text-center"
         >
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] text-white">
-            autonomOS:{" "}
+            Introducing autonomOS:{" "}
             <span className="text-transparent bg-clip-text bg-gradient-brand">
               The Operating System
             </span>

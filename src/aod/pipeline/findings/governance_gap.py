@@ -18,7 +18,15 @@ def generate_governance_gap_finding(
     """
     Generate governance_gap finding:
     No owner/system record found
+    
+    Owner can be set via:
+    1. CMDB record with owner field
+    2. IdP record with owner field  
+    3. Triage "Assign Owner" action (sets asset.owner directly)
     """
+    if asset.owner:
+        return None
+    
     has_owner = False
 
     if correlation.cmdb.status == MatchStatus.MATCHED:

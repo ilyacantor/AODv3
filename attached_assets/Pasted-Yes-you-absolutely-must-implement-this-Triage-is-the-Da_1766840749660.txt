@@ -1,0 +1,56 @@
+Yes, you absolutely must implement this. **"Triage" is the Data Entry form for your Catalog.**
+
+If you don't update the `Asset` record, you are creating a "Groundhog Day" loop:
+
+1. **System:** "Hey, Monday.com has no owner!" (Finding Created).
+2. **User:** "Assign Owner -> John Doe."
+3. **Triage Table:** "John Doe is assigned to this ticket."
+4. **Asset Table:** `owner` is still `NULL`.
+5. **Tomorrow:** "Hey, Monday.com has no owner!" (Finding Created again).
+
+You need the Triage action to **fix the underlying data**, not just "assign the ticket."
+
+### The Logic Split: "Task Owner" vs. "Asset Owner"
+
+In a mature system, these are different.
+
+* **Task Owner:** The IT person investigating the risk.
+* **Asset Owner:** The VP of Marketing paying for the tool.
+
+**However, for your "Governance Gap: Missing Owner" workflow, they are effectively the same action.** You are assigning the business owner.
+
+### 🚜 Master Prompt: Implement Asset Ownership Persistence
+
+**Context:** The "Assign Owner" button currently only assigns the Triage *Ticket*. We need it to update the actual *Asset* so the "Missing Owner" finding is resolved and AAM knows who to contact.
+
+**Task:** Update the Asset Model and Triage Action Handler.
+
+**1. Update Schema (`models.py`)**
+
+* Add column to `Asset`: `owner` (String/VARCHAR).
+* *Note:* Ideally store the email address (e.g., `john@company.com`).
+
+**2. Update Triage Action Handler (`api/triage.py`)**
+
+* Modify the logic for `action='assign'`.
+* **Logic:**
+* Save the assignment to `triage_actions` (Task tracking).
+* **CRITICAL:** ALSO update `asset.owner = assigned_user`.
+* *Constraint:* If the user clicks "Assign Owner" on an asset, that asset's record must be permanently updated.
+
+
+
+**3. Update Findings Engine (`findings_engine.py`)**
+
+* Ensure the `governance_gap` finding logic checks `asset.owner`.
+* *Effect:* Once the owner is assigned via UI, the "Missing Owner" finding should **disappear** on the next run because `asset.owner` is no longer null.
+
+**4. Verify AAM Output**
+
+* Ensure the DCL/AAM Export API includes this new `owner` field.
+
+---
+
+### Why this is critical for AAM
+
+When AAM (Automated Asset Management) eventually connects to this tool, it needs to know **who to email** when the API token expires or the bill skyrockets. If `asset.owner` is null, AAM is flying blind.

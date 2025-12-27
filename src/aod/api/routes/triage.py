@@ -13,7 +13,11 @@ router = APIRouter(prefix="/triage")
 
 @router.post("/action", response_model=TriageActionResponse)
 async def record_triage_action(request: TriageActionRequest):
-    """Record a triage action (acknowledge, assign, defer, ignore)"""
+    """Record a triage action (acknowledge, assign, defer, ignore)
+    
+    For 'assign' action: Also updates asset.owner to fix governance_gap finding.
+    This ensures the "Missing Owner" finding disappears on future runs.
+    """
     from datetime import datetime, timedelta
     
     db = await get_db_direct()
@@ -24,7 +28,7 @@ async def record_triage_action(request: TriageActionRequest):
     
     state_map = {
         "acknowledge": "acknowledged",
-        "assign": "acknowledged",
+        "assign": "assigned",
         "defer": "deferred",
         "ignore": "ignored"
     }
@@ -33,6 +37,9 @@ async def record_triage_action(request: TriageActionRequest):
     defer_until = None
     if request.action == "defer" and request.defer_days:
         defer_until = (datetime.utcnow() + timedelta(days=request.defer_days)).isoformat()
+    
+    if request.action == "assign" and request.owner and request.item_type in ("asset", "shadow", "zombie", "hygiene", "toxic", "blocked"):
+        await db.update_asset_owner(request.item_id, request.owner)
     
     result = await db.save_triage_action(
         tenant_id=run.tenant_id,

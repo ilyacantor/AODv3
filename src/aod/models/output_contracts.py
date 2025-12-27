@@ -157,6 +157,7 @@ class Asset(BaseModel):
     provisioning_status: ProvisioningStatus = ProvisioningStatus.QUARANTINE
     llm_metadata: Optional[LLMMetadata] = None
     has_critical_gap: bool = Field(default=False, description="True if ACTIVE asset has identity_gap finding (no IdP match)")
+    owner: Optional[str] = Field(default=None, description="Business owner email - assigned via Triage or sourced from CMDB/IdP")
     created_at: datetime = Field(default_factory=now_pst)
 
 

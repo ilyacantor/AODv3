@@ -62,6 +62,8 @@ async def get_catalog(
                 "admission_reason": a.admission_reason,
                 "evidence_refs": a.evidence_refs,
                 "provisioning_status": a.provisioning_status.value,
+                "owner": a.owner,
+                "has_critical_gap": a.has_critical_gap,
                 "created_at": a.created_at.isoformat()
             }
             for a in assets
@@ -108,6 +110,7 @@ async def get_dcl_export(run_id: str):
                 "admission_reason": a.admission_reason,
                 "evidence_refs": a.evidence_refs,
                 "provisioning_status": a.provisioning_status.value,
+                "owner": a.owner,
                 "created_at": a.created_at.isoformat()
             }
             for a in active_assets

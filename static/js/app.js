@@ -778,8 +778,8 @@
                         moreOptions = `
                             <button class="triage-more-item" ${dataAttrs} data-action="sanction">Unblock (Approve)</button>`;
                     } else {
-                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve for AAM</button>`;
-                        secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban Forever</button>`;
+                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve</button>`;
+                        secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban</button>`;
                         moreOptions = `
                             <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
                             <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;

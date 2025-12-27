@@ -130,7 +130,7 @@
                 const result = await response.json();
                 console.log('Provisioning action result:', result);
                 
-                const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'RESOLVE': 'resolved' };
+                const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'ACKNOWLEDGE': 'acknowledged' };
                 const newState = stateMap[action] || action.toLowerCase();
                 
                 for (const section of ['firewall', 'risk', 'hygiene']) {
@@ -727,7 +727,7 @@
                         'deferred': '⏳ Deferred',
                         'ignored': '✗ Ignored',
                         'dismissed': '✓ Risk Dismissed',
-                        'resolved': '✓ Resolved'
+                        'acknowledged': '✓ Acknowledged'
                     };
                     const stateLabel = stateLabels[triageState] || triageState;
                     let extraInfo = '';
@@ -764,11 +764,10 @@
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                 } else {
-                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge</button>`;
-                    secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="resolve">Resolve</button>`;
+                    primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge Gap</button>`;
+                    secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="assign">Assign Owner</button>`;
                     moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>`;
                 }
                 
                 const actionBtns = `

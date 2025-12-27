@@ -15,7 +15,7 @@ ACTION_TO_STATUS = {
     "SANCTION": ProvisioningStatus.ACTIVE,
     "BAN": ProvisioningStatus.BLOCKED,
     "DEPROVISION": ProvisioningStatus.RETIRED,
-    "RESOLVE": ProvisioningStatus.ACTIVE,
+    "ACKNOWLEDGE": ProvisioningStatus.ACTIVE,
     "DISMISS_RISK": ProvisioningStatus.ACTIVE,
 }
 
@@ -567,7 +567,7 @@ async def update_asset_provisioning(
     if action not in ACTION_TO_STATUS:
         raise HTTPException(
             status_code=400, 
-            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION, RESOLVE, DISMISS_RISK"
+            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION, ACKNOWLEDGE, DISMISS_RISK"
         )
     
     db = await get_db_direct()
@@ -583,7 +583,7 @@ async def update_asset_provisioning(
         "SANCTION": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW, ProvisioningStatus.BLOCKED],
         "BAN": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
         "DEPROVISION": [ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
-        "RESOLVE": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
+        "ACKNOWLEDGE": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
         "DISMISS_RISK": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
     }
     
@@ -607,7 +607,7 @@ async def update_asset_provisioning(
         "SANCTION": "approved",
         "BAN": "banned",
         "DEPROVISION": "deprovisioned",
-        "RESOLVE": "resolved",
+        "ACKNOWLEDGE": "acknowledged",
         "DISMISS_RISK": "dismissed",
     }
     
@@ -631,7 +631,7 @@ async def update_asset_provisioning(
         "SANCTION": f"Asset '{asset.name}' sanctioned - now eligible for AAM",
         "BAN": f"Asset '{asset.name}' banned - permanently blocked from AAM",
         "DEPROVISION": f"Asset '{asset.name}' deprovisioned - retired from active use",
-        "RESOLVE": f"Asset '{asset.name}' resolved - data governance issue addressed",
+        "ACKNOWLEDGE": f"Asset '{asset.name}' acknowledged - data governance gap noted, awaiting remediation",
         "DISMISS_RISK": f"Asset '{asset.name}' risk dismissed - acknowledged as acceptable",
     }
     

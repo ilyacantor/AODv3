@@ -580,7 +580,6 @@ const TourManager = (function() {
             `;
             footerContent = `
                 <div class="tour-footer">
-                    <button class="tour-btn tour-btn-skip-sim">Skip to Simulation <span class="tour-btn-arrow">»</span></button>
                     <button class="tour-btn tour-btn-next">Next <span class="tour-btn-arrow">›</span></button>
                 </div>
             `;

@@ -88,6 +88,13 @@ def get_normalization_token(name: str) -> str:
     
     token = re.sub(r'^(www\.)', '', token)
     
+    is_domain_like = '.' not in token and '-' in name.lower() and not any(c.isspace() for c in name)
+    
+    if is_domain_like:
+        token = re.sub(r'[\-_]', '', token)
+        token = re.sub(r'[^a-z0-9]', '', token)
+        return token
+    
     token = re.sub(r'[,.\-_\s]+', ' ', token)
     
     words = token.split()
@@ -960,6 +967,8 @@ def correlate_to_plane(
     
     if entity_token and len(entity_token) >= 3:
         token_matches: list[str] = []
+        matched_vendor_tokens: set[str] = set()
+        
         for record_id, record in plane_index.records.items():
             record_name = _get_record_name(record)
             record_vendor = _get_record_vendor(record)
@@ -969,19 +978,23 @@ def correlate_to_plane(
             
             if entity_token == record_name_token or entity_token == record_vendor_token:
                 token_matches.append(record_id)
+                if record_vendor_token:
+                    matched_vendor_tokens.add(record_vendor_token)
+                elif record_name_token:
+                    matched_vendor_tokens.add(record_name_token)
         
         token_matches = list(set(token_matches))
         
-        if len(token_matches) == 1:
+        if len(token_matches) >= 1 and len(matched_vendor_tokens) == 1:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=token_matches,
-                matched_records=[plane_index.records.get(token_matches[0])],
+                matched_records=[plane_index.records.get(mid) for mid in token_matches],
                 match_method="normalization_token",
                 match_key=entity_token,
                 ambiguity_code=AmbiguityCode.NONE
             )
-        elif len(token_matches) > 1:
+        elif len(token_matches) > 1 and len(matched_vendor_tokens) > 1:
             pass
     
     return PlaneMatch(status=MatchStatus.UNMATCHED)

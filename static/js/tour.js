@@ -575,7 +575,7 @@ const TourManager = (function() {
             bodyContent = `
                 <div class="tour-body">
                     <h3 class="tour-headline">Welcome to the autonom<span class="tour-os-accent">OS</span> Discovery (AOD) Guided Tour</h3>
-                    <p class="tour-content">Click Next to scroll through the sections of the AOS Overview.</p>
+                    <p class="tour-content">Scroll through the sections of the AOS and AOD Overview, or enter the Simulation.</p>
                 </div>
             `;
             footerContent = `

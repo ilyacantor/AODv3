@@ -55,6 +55,12 @@ The UI is a single-page application using the AutonomOS color palette and Quicks
 *   **AAM Handoff API**: Architecture-correct endpoint at `/api/handoff/aam-manifest` provides Target Manifest for AAM (Adaptive API Mesh). AOD identifies assets, AAM executes connections, DCL receives streams. Payload includes `target_asset`, `provisioning_status`, `governance` (owner, auth_method), and `action_required`. Old `/catalog/dcl` endpoint deprecated.
 *   **Status-Based Finding Suppression**: QUARANTINE, BLOCKED, IGNORED, and RETIRED assets do NOT generate secondary findings (Identity Gap, CMDB Gap, Governance Gap, etc.). Only ACTIVE and REVIEW assets are scanned for hygiene gaps. This prevents noise - users don't need 500 "Missing Owner" alerts for blocked malware.
 
+## Documentation
+*   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.
+*   **docs/aod-admission-policy.md**: Detailed admission policy with pipeline stages, gate criteria, and example traces.
+*   **docs/policy-engine-refactoring-plan.md**: Refactoring plan for configuration-driven policy engine.
+*   **docs/guided-validation-tour-script.md**: Script and phases for the guided validation tour.
+
 ## External Dependencies
 *   **AOS Farm**: Upstream evidence source and reconciliation results recipient.
 *   **FastAPI**: Python web framework.

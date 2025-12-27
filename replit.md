@@ -57,6 +57,7 @@ The UI is a single-page application using the AutonomOS color palette and Quicks
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.
+*   **docs/DISCOVERY_LOGIC_TECHNICAL.md**: Technical details on pipeline stages, entity normalization, CMDB/IdP correlation methods, matching strategies, and reason codes.
 *   **docs/aod-admission-policy.md**: Detailed admission policy with pipeline stages, gate criteria, and example traces.
 *   **docs/policy-engine-refactoring-plan.md**: Refactoring plan for configuration-driven policy engine.
 *   **docs/guided-validation-tour-script.md**: Script and phases for the guided validation tour.

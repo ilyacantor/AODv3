@@ -742,11 +742,21 @@
                         <button class="triage-more-item" ${dataAttrs} data-action="assign">Re-Assign</button>
                         <button class="triage-more-item" ${dataAttrs} data-action="defer">Re-Defer</button>`;
                 } else if (sectionType === 'firewall') {
-                    primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve for AAM</button>`;
-                    secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban Forever</button>`;
-                    moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                    const provStatus = (item.provisioning_status || '').toUpperCase();
+                    const isAlreadyBlocked = provStatus === 'BLOCKED';
+                    if (isAlreadyBlocked) {
+                        statusBadge = `<span class="triage-status-badge banned">⊘ Blocked</span>`;
+                        primaryBtn = '';
+                        secondaryBtn = '';
+                        moreOptions = `
+                            <button class="triage-more-item" ${dataAttrs} data-action="sanction">Unblock (Approve)</button>`;
+                    } else {
+                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve for AAM</button>`;
+                        secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban Forever</button>`;
+                        moreOptions = `
+                            <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                            <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                    }
                 } else if (sectionType === 'risk') {
                     primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
                     secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="dismiss_risk">Dismiss Risk</button>`;

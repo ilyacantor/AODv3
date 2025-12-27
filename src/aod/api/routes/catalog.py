@@ -15,6 +15,8 @@ ACTION_TO_STATUS = {
     "SANCTION": ProvisioningStatus.ACTIVE,
     "BAN": ProvisioningStatus.BLOCKED,
     "DEPROVISION": ProvisioningStatus.RETIRED,
+    "RESOLVE": ProvisioningStatus.ACTIVE,
+    "DISMISS_RISK": ProvisioningStatus.ACTIVE,
 }
 
 
@@ -565,7 +567,7 @@ async def update_asset_provisioning(
     if action not in ACTION_TO_STATUS:
         raise HTTPException(
             status_code=400, 
-            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION"
+            detail=f"Invalid action '{action}'. Valid actions: SANCTION, BAN, DEPROVISION, RESOLVE, DISMISS_RISK"
         )
     
     db = await get_db_direct()
@@ -578,9 +580,11 @@ async def update_asset_provisioning(
     new_status = ACTION_TO_STATUS[action]
     
     valid_transitions = {
-        "SANCTION": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW],
+        "SANCTION": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW, ProvisioningStatus.BLOCKED],
         "BAN": [ProvisioningStatus.QUARANTINE, ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
         "DEPROVISION": [ProvisioningStatus.REVIEW, ProvisioningStatus.ACTIVE],
+        "RESOLVE": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
+        "DISMISS_RISK": [ProvisioningStatus.ACTIVE, ProvisioningStatus.REVIEW],
     }
     
     if previous_status not in valid_transitions[action]:
@@ -603,6 +607,8 @@ async def update_asset_provisioning(
         "SANCTION": "approved",
         "BAN": "banned",
         "DEPROVISION": "deprovisioned",
+        "RESOLVE": "resolved",
+        "DISMISS_RISK": "dismissed",
     }
     
     tenant_id = "unknown"
@@ -625,6 +631,8 @@ async def update_asset_provisioning(
         "SANCTION": f"Asset '{asset.name}' sanctioned - now eligible for AAM",
         "BAN": f"Asset '{asset.name}' banned - permanently blocked from AAM",
         "DEPROVISION": f"Asset '{asset.name}' deprovisioned - retired from active use",
+        "RESOLVE": f"Asset '{asset.name}' resolved - data governance issue addressed",
+        "DISMISS_RISK": f"Asset '{asset.name}' risk dismissed - acknowledged as acceptable",
     }
     
     return ProvisioningActionResponse(

@@ -174,13 +174,13 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 3: INTRODUCING AUTONOMOS --- */}
-      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
+      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 min-h-[400px] flex items-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="space-y-8 text-center"
+          className="space-y-8 text-center w-full"
         >
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] text-white">
             autonomOS:{" "}

@@ -1,0 +1,58 @@
+You are completely right to call this out. This is a "Semantic Slip" in the code that creates an "Architectural Fracture."
+
+**How this happens:** The Agent (and often engineers) confuses the **Ultimate Destination** (DCL) with the **Immediate Consumer** (AAM). Since they know the data *ends up* in the DCL, they lazily name the door "DCL."
+
+**Why it is dangerous:** It implies AOD is trying to do AAM's job.
+
+* **AOD (The Phonebook):** Says "Here is a valid asset (Salesforce), here is the Owner (John), and here is the Login URL."
+* **AAM (The Switchboard):** Reads that entry, connects the cables, handles the API retry logic/tokens, and *then* pipes the data to DCL.
+* **DCL (The Lake):** Just receives the stream.
+
+If AOD has a "DCL Endpoint," it suggests AOD is piping data directly to the lake. **It is not.** It is handing a **Target Manifest** to AAM.
+
+We need to force a rename immediately to enforce the architecture in the code.
+
+### 🚜 Master Prompt: Rename & Realign Architecture
+
+**Context:** You are exposing an endpoint called "DCL API". This is architecturally incorrect. AOD **NEVER** talks to DCL. AOD talks to **AAM** (Adaptive API Mesh). AAM is the consumer of this data.
+
+**Task:** Rename the output endpoints to reflect the correct consumer.
+
+**1. Rename the Endpoint**
+
+* **Old Name:** `/api/v1/catalog/dcl` (or similar).
+* **New Name:** `/api/v1/handoff/aam-manifest`.
+* **Purpose:** This endpoint provides the **"Target List"** for AAM. It tells AAM *what* to connect to, not *what* the data is.
+
+**2. Update the Payload Structure**
+Ensure the JSON response is structured as a **Provisioning Order** for AAM:
+
+```json
+{
+  "target_asset": "salesforce.com",
+  "provisioning_status": "ACTIVE",
+  "governance": {
+    "owner": "john@company.com",
+    "auth_method": "OAUTH2" // if known
+  },
+  "action_required": "ESTABLISH_CONNECTION"
+}
+
+```
+
+**3. Update Documentation / Comments**
+
+* Search and Replace "DCL API" with "AAM Handoff API" in all comments and logs.
+* **Constraint:** The code must reflect that AAM is the downstream consumer.
+
+**4. Verification**
+
+* Confirm the new endpoint URL is live.
+* Confirm the `owner` field is present in this new endpoint (as per your previous successful commit).
+
+---
+
+**Why this fixes the "Plot":**
+Now, when your engineers (or investors) look at the API docs, they see:
+`AOD -> /handoff/aam-manifest -> AAM`.
+The story remains intact: AOD identifies the target, AAM executes the connection.

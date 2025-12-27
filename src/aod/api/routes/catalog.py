@@ -72,16 +72,16 @@ async def get_catalog(
     )
 
 
-@router.get("/dcl", response_model=CatalogResponse)
+@router.get("/dcl", response_model=CatalogResponse, deprecated=True)
 async def get_dcl_export(run_id: str):
     """
-    DCL (Discovery Control Layer) Export - Only ACTIVE provisioned assets.
+    DEPRECATED: Use /api/handoff/aam-manifest instead.
     
-    This is the guardrail endpoint that ONLY returns assets with provisioning_status=ACTIVE.
-    These are trusted assets (IdP or CMDB governed) that flow to the DCL.
+    This endpoint incorrectly implied AOD talks directly to DCL.
+    AOD -> AAM -> DCL is the correct architecture.
     
-    QUARANTINE assets (Shadow IT) are blocked from this export.
-    REVIEW assets (zombie candidates) are blocked until cleaned up.
+    The new endpoint /api/handoff/aam-manifest provides the Target Manifest
+    for AAM (Adaptive API Mesh) with proper provisioning orders.
     """
     db = await get_db_direct()
     

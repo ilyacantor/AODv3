@@ -307,6 +307,7 @@ main { padding: 2rem; }
 .triage-row td:first-child { padding-left: 1rem; }
 .triage-row td:last-child { padding-right: 1rem; }
 .triage-cell-asset { font-weight: 500; color: white; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finance-badge { display: inline-block; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; font-weight: 700; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px; margin-left: 0.35rem; text-shadow: 0 1px 1px rgba(0,0,0,0.3); }
 .triage-cell-issue { color: var(--slate-300); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .triage-cell-category { }
 .triage-cell-actions { text-align: right; white-space: nowrap; }

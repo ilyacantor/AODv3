@@ -205,7 +205,7 @@
                     document.getElementById(els.countEl).textContent = items.length;
                     const container = document.getElementById(els.contentEl);
                     if (container) {
-                        renderTriageSection(container, sortTriageItems(items, triageSortState[section]), section);
+                        renderTriageSection(container, sortTriageItems(items, triageSortState[section], section), section);
                     }
                     break;
                 }
@@ -228,7 +228,7 @@
                     Object.assign(items[idx], updates);
                     const container = document.getElementById(els.contentEl);
                     if (container) {
-                        renderTriageSection(container, sortTriageItems(items, triageSortState[section]), section);
+                        renderTriageSection(container, sortTriageItems(items, triageSortState[section], section), section);
                     }
                     break;
                 }
@@ -410,12 +410,16 @@
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`shadow:${assetId}`];
                     const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
+                    const hasFinanceGap = assetFindings.some(f => f.finding_type === 'finance_gap');
                     
                     const item = { 
                         ...a, 
                         itemType: 'shadow',
                         sectionType: 'firewall',
                         provisioning_status: provStatus,
+                        hasFinanceGap: hasFinanceGap,
+                        findings: assetFindings,
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
@@ -435,11 +439,15 @@
                     
                     if ((provStatus === 'QUARANTINE' || provStatus === 'BLOCKED') && !processedAssetIds.has(assetId)) {
                         const savedAction = triageActionsMap[`blocked:${assetId}`];
+                        const assetFindings = assetFindingsMap[assetId] || [];
+                        const hasFinanceGap = assetFindings.some(f => f.finding_type === 'finance_gap');
                         const item = { 
                             ...a, 
                             itemType: 'blocked',
                             sectionType: 'firewall',
                             provisioning_status: provStatus,
+                            hasFinanceGap: hasFinanceGap,
+                            findings: assetFindings,
                             triageState: savedAction?.state || 'pending',
                             triageAction: savedAction?.action || null,
                             triageOwner: savedAction?.owner || null,
@@ -482,14 +490,9 @@
                     
                     const provStatus = (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
-                    const hasCriticalGap = assetFindings.some(f => 
-                        f.finding_type === 'identity_gap' || 
-                        f.finding_type === 'finance_gap' ||
-                        f.triage_priority === 'p0' ||
-                        f.triage_priority === 'p1'
-                    );
+                    const hasIdentityGap = assetFindings.some(f => f.finding_type === 'identity_gap');
                     
-                    if (provStatus === 'REVIEW' || (provStatus === 'ACTIVE' && hasCriticalGap)) {
+                    if (provStatus === 'REVIEW' || (provStatus === 'ACTIVE' && hasIdentityGap)) {
                         const savedAction = triageActionsMap[`risk:${assetId}`];
                         const findingTypes = assetFindings.map(f => f.finding_type || 'unknown');
                         const issueLabels = findingTypes.map(t => t.replace(/_/g, ' ')).join(', ');
@@ -548,9 +551,9 @@
                 document.getElementById('triageRiskCount').textContent = riskItems.length;
                 document.getElementById('triageHygieneCount').textContent = hygieneItems.length;
                 
-                renderTriageSection(firewallContent, sortTriageItems(firewallItems, triageSortState.firewall), 'firewall');
-                renderTriageSection(riskContent, sortTriageItems(riskItems, triageSortState.risk), 'risk');
-                renderTriageSection(hygieneContent, sortTriageItems(hygieneItems, triageSortState.hygiene), 'hygiene');
+                renderTriageSection(firewallContent, sortTriageItems(firewallItems, triageSortState.firewall, 'firewall'), 'firewall');
+                renderTriageSection(riskContent, sortTriageItems(riskItems, triageSortState.risk, 'risk'), 'risk');
+                renderTriageSection(hygieneContent, sortTriageItems(hygieneItems, triageSortState.hygiene, 'hygiene'), 'hygiene');
                 
             } catch (err) {
                 console.error('Failed to load triage data:', err);
@@ -589,9 +592,15 @@
             return item.asset_type || '';
         }
         
-        function sortTriageItems(items, sortBy) {
+        function sortTriageItems(items, sortBy, sectionType = null) {
             const sorted = [...items];
             sorted.sort((a, b) => {
+                if (sectionType === 'firewall') {
+                    const aFinance = a.hasFinanceGap ? 0 : 1;
+                    const bFinance = b.hasFinanceGap ? 0 : 1;
+                    if (aFinance !== bFinance) return aFinance - bFinance;
+                }
+                
                 let aVal = '', bVal = '';
                 if (sortBy === 'name') {
                     aVal = getItemName(a);
@@ -714,6 +723,8 @@
                 const rowStateClass = isTriaged ? `triaged triaged-${triageState}` : '';
                 
                 let assetName, issue, category, categoryClass;
+                const isFirewallSection = sectionType === 'firewall';
+                const financeBadge = (isFirewallSection && item.hasFinanceGap) ? ' <span class="finance-badge" title="Spend detected">($)</span>' : '';
                 
                 if (itemType === 'finding') {
                     assetName = item.asset_name || 'Unknown Asset';
@@ -731,12 +742,12 @@
                     category = 'Risk';
                     categoryClass = 'risk';
                 } else if (itemType === 'blocked') {
-                    assetName = item.name || item.asset_key || 'Unknown';
+                    assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
                     issue = 'Policy Violation';
                     category = 'Blocked';
                     categoryClass = 'firewall';
                 } else {
-                    assetName = item.name || item.asset_key || 'Unknown';
+                    assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
                     issue = itemType === 'shadow' ? 'Shadow IT' : 'Zombie Asset';
                     category = itemType === 'shadow' ? 'Quarantine' : 'Review';
                     categoryClass = itemType;
@@ -830,7 +841,7 @@
                     const sortBy = this.dataset.sort;
                     const section = this.dataset.section;
                     triageSortState[section] = sortBy;
-                    const sorted = sortTriageItems(triageSectionData[section], sortBy);
+                    const sorted = sortTriageItems(triageSectionData[section], sortBy, section);
                     renderTriageSection(container, sorted, section);
                 };
             });

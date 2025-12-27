@@ -1,0 +1,56 @@
+Yes, the new "Route Risks to Traffic Lights" prompt effectively supersedes the "Implement Toxic Asset Logic" prompt, but it misses one specific detail from the old one: The UI Action wiring.
+
+The Old Prompt: Explicitly asked to add the "Dismiss Risk" button for Toxic Assets.
+
+The New Prompt: Focuses heavily on the Routing Logic (Red vs. Yellow vs. Green) but assumes the UI actions are already there.
+
+To be safe and ensure the Agent doesn't leave you with a Yellow Queue that has no buttons, I have combined them into this Final Consolidated Prompt. This handles the Routing and the Buttons in one go.
+
+🚜 Master Prompt: Implement Risk Routing & Toxic Assets
+Context: We are finalizing the Triage logic. We must ensure that specific Risk Findings are routed to the correct "Traffic Light" queue. We are NOT creating a 4th "Security Risk" category.
+
+Task: Update findings_engine.py and the Triage UI logic to implement this routing table.
+
+1. The "Toxic Asset" Logic (Yellow Lane)
+
+Definition: An asset is Toxic if provisioning_status == 'ACTIVE' AND it has a IDENTITY_GAP (Missing from IdP).
+
+Routing: Force these assets into the 🟡 Risk & Review Queue (Do not leave them in Green).
+
+UI Actions:
+
+For Toxic Assets, show a "Dismiss Risk" button.
+
+Logic: This keeps the asset ACTIVE but suppresses the IDENTITY_GAP finding for future runs (effectively "accepting" the risk of password-only login).
+
+Note: "Deprovision" should also be available (standard behavior).
+
+2. The "High-Value Shadow" Logic (Red Lane)
+
+Definition: An asset is Shadow if provisioning_status == 'QUARANTINE'.
+
+Routing: Ensure FINANCE_GAP (Spend > $0) findings are attached here.
+
+Visual Priority: In the 🔴 Blocked Assets Queue, sort assets with FINANCE_GAP to the top. Use a ($) badge or similar indicator to show money is burning.
+
+3. The "Hygiene" Logic (Green Lane)
+
+Definition: DATA_CONFLICT or GOVERNANCE_GAP (Missing Owner).
+
+Routing: Keep these in the 🟢 Governance Gaps Queue.
+
+Action: Standard ACKNOWLEDGE or ASSIGN OWNER.
+
+4. Verification Test
+
+Scenario A (Toxic): Create an Active Asset (CMDB=True) with No IdP.
+
+ASSERT it appears in Yellow Queue.
+
+ASSERT "Dismiss Risk" button is available.
+
+Scenario B (Shadow): Create a Quarantined Asset with $500 spend.
+
+ASSERT it appears in Red Queue.
+
+ASSERT it is sorted above a free shadow asset.

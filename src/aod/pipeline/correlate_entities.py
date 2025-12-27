@@ -48,6 +48,61 @@ LEGACY_MARKERS = {
 }
 
 
+CORPORATE_SUFFIXES = {
+    "inc", "incorporated", "corp", "corporation", "llc", "ltd", "limited",
+    "technologies", "technology", "tech", "software", "solutions", "services",
+    "group", "holdings", "international", "global", "systems", "labs", "co",
+    "company", "enterprise", "enterprises", "consulting", "partners"
+}
+
+
+TLD_SUFFIXES = {
+    ".com", ".io", ".net", ".org", ".co", ".app", ".ai", ".dev", ".cloud",
+    ".us", ".uk", ".de", ".fr", ".ca", ".au", ".eu", ".biz", ".info"
+}
+
+
+def get_normalization_token(name: str) -> str:
+    """
+    Extract a core token from a name for deterministic matching.
+    
+    This function strips common corporate suffixes, TLDs, and punctuation
+    to produce a normalized token that can match across different naming
+    conventions (e.g., "Slack Technologies, Inc" -> "slack", "slack.com" -> "slack").
+    
+    Args:
+        name: Input string (company name, domain, product name)
+        
+    Returns:
+        Normalized core token (lowercase, stripped of suffixes)
+    """
+    if not name:
+        return ""
+    
+    token = name.lower().strip()
+    
+    for tld in TLD_SUFFIXES:
+        if token.endswith(tld):
+            token = token[:-len(tld)]
+            break
+    
+    token = re.sub(r'^(www\.)', '', token)
+    
+    token = re.sub(r'[,.\-_\s]+', ' ', token)
+    
+    words = token.split()
+    filtered_words = [w for w in words if w not in CORPORATE_SUFFIXES]
+    
+    if filtered_words:
+        token = filtered_words[0]
+    elif words:
+        token = words[0]
+    
+    token = re.sub(r'[^a-z0-9]', '', token)
+    
+    return token
+
+
 def _levenshtein_distance(s1: str, s2: str) -> int:
     """Compute Levenshtein edit distance between two strings."""
     if len(s1) < len(s2):
@@ -898,6 +953,36 @@ def correlate_to_plane(
                 ambiguity_code=AmbiguityCode.PARENT_VENDOR,
                 disambiguation_detail=f"Vendor-only match: {entity.vendor}"
             )
+    
+    entity_token = get_normalization_token(entity.canonical_name)
+    if not entity_token and entity.domain:
+        entity_token = get_normalization_token(entity.domain)
+    
+    if entity_token and len(entity_token) >= 3:
+        token_matches: list[str] = []
+        for record_id, record in plane_index.records.items():
+            record_name = _get_record_name(record)
+            record_vendor = _get_record_vendor(record)
+            
+            record_name_token = get_normalization_token(record_name) if record_name else ""
+            record_vendor_token = get_normalization_token(record_vendor) if record_vendor else ""
+            
+            if entity_token == record_name_token or entity_token == record_vendor_token:
+                token_matches.append(record_id)
+        
+        token_matches = list(set(token_matches))
+        
+        if len(token_matches) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=token_matches,
+                matched_records=[plane_index.records.get(token_matches[0])],
+                match_method="normalization_token",
+                match_key=entity_token,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(token_matches) > 1:
+            pass
     
     return PlaneMatch(status=MatchStatus.UNMATCHED)
 

@@ -181,31 +181,18 @@ class PolicyEngine:
     
     def _check_discovery_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Discovery/Shadow Gate: plane_count >= noise_floor OR multi-source corroboration.
+        Discovery/Shadow Gate: plane_count >= noise_floor.
         
         CRITICAL: Count DISTINCT PLANES, not raw sources.
         - dns + proxy = 1 plane (network)
         - dns + edr = 2 planes (network, endpoint)
         
-        MULTI-SOURCE CORROBORATION:
-        - If 3+ distinct sources from the same plane, counts as corroborated
-        - This prevents false negatives for assets heavily observed through
-          network monitoring but not yet visible in other planes
-        
         Finance and CMDB do NOT count as discovery corroboration.
         Only: network, endpoint, idp, cloud, discovery
         """
         plane_count = data.get("discovery_planes_count", 0) or 0
-        max_sources_per_plane = data.get("discovery_max_sources_per_plane", 0) or 0
-        
-        MULTI_SOURCE_THRESHOLD = 3
-        
         if plane_count >= self.config.admission.noise_floor:
             return True, ["HAS_DISCOVERY", f"PLANE_COUNT_{plane_count}"]
-        
-        if max_sources_per_plane >= MULTI_SOURCE_THRESHOLD:
-            return True, ["HAS_DISCOVERY", f"MULTI_SOURCE_{max_sources_per_plane}"]
-        
         return False, []
     
     def _classify(self, data: dict) -> tuple[str, list[str]]:
@@ -255,10 +242,7 @@ class PolicyEngine:
             codes.append("NO_FINANCE")
         
         plane_count = data.get("discovery_planes_count", 0) or 0
-        max_sources_per_plane = data.get("discovery_max_sources_per_plane", 0) or 0
-        MULTI_SOURCE_THRESHOLD = 3
-        
-        if plane_count < self.config.admission.noise_floor and max_sources_per_plane < MULTI_SOURCE_THRESHOLD:
-            codes.append("DISCOVERY_INSUFFICIENT")
+        if plane_count < self.config.admission.noise_floor:
+            codes.append("DISCOVERY_PLANE_COUNT_LT_2")
         
         return codes

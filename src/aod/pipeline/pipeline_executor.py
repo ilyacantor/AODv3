@@ -71,13 +71,18 @@ def _build_policy_asset_data(
             monthly_spend = max(monthly_spend, record.amount or 0)
     
     from .admission import source_to_plane, DISCOVERY_CORROBORATION_PLANES
+    from collections import defaultdict
     
     discovery_planes = set()
+    sources_by_plane: dict[str, set[str]] = defaultdict(set)
     for obs in observations:
         if obs.source:
             plane = source_to_plane(obs.source)
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
                 discovery_planes.add(plane)
+                sources_by_plane[plane].add(obs.source.lower())
+    
+    max_sources_in_single_plane = max((len(srcs) for srcs in sources_by_plane.values()), default=0)
     
     return {
         "domain": candidate.domain or "",
@@ -92,6 +97,7 @@ def _build_policy_asset_data(
         "lifecycle": lifecycle,
         "monthly_spend": monthly_spend,
         "discovery_planes_count": len(discovery_planes),
+        "discovery_max_sources_per_plane": max_sources_in_single_plane,
         "is_active": True,
     }
 

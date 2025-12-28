@@ -1,0 +1,83 @@
+This assessment run confirms that your **Identity Resolution Logic** is still the primary bottleneck.
+
+You fixed the "Aggressive Normalization" (stopping `atlassian.net` → `atlassian.com`), but now you have swung too far the other way: **Under-Normalization**.
+
+The report shows 174 `KEY_NORMALIZATION_MISMATCH` errors. This means your agent is finding the assets (e.g., `api.primebox.io`) but failing to strip the subdomains to match the Farm's canonical record (`primebox.io`).
+
+### The Diagnosis
+
+1. **The "Long Tail" Failure (174 Misses):**
+* The Farm expects `primebox.io`.
+* Your Agent likely found `api.primebox.io` or `www.primebox.io`.
+* **The Error:** Your "Top 100" list works for Microsoft/Zoom, but because `primebox.io` isn't in that list, the agent presumably did *nothing* to it. It passed the raw subdomain to the Governance Check, which failed.
+
+
+2. **The Zombie Aggression (36 False Positives):**
+* **Status:** `FP_FROM_PARKED`.
+* **The Scenario:** These assets are **Stale** (inactive) but **Registered** (in CMDB).
+* **The Error:** Your agent saw they were "Stale" and immediately marked them as "Zombie" (Unowned/Dead). It missed the "Parked" safe harbor.
+
+
+
+---
+
+### Step 1: Fix the "Long Tail" Normalization
+
+You must re-enable the **Generic Fallback** for domains that are *not* in your Top 100.
+
+**Update `governance_utils.py`:**
+
+```python
+def normalize_domain(raw_domain):
+    # ... [Load Rules and Check Alias Map] ...
+
+    # 1. PRESERVED LIST (Safety Check)
+    # If it is 'atlassian.net', return it immediately.
+    for preserved in rules['preserved_domains']:
+        if domain == preserved or domain.endswith("." + preserved):
+            return preserved
+
+    # 2. GENERIC FALLBACK (The Fix for 'primebox.io')
+    # If it wasn't in the lists above, we MUST strip the subdomain.
+    # PREVIOUSLY: You might have removed this to be "safe".
+    # FIX: Put it back.
+    extracted = tldextract.extract(domain)
+    
+    # Safety: Don't normalize IPs or local domains
+    if not extracted.suffix: 
+        return domain
+
+    # Reassemble: subdomain.domain.com -> domain.com
+    return f"{extracted.domain}.{extracted.suffix}"
+
+```
+
+### Step 2: Fix the Zombie Logic (The "Parked" Clause)
+
+You need to add a check for **CMDB Presence** before declaring a Zombie.
+
+**Update your Classification Logic (in `processor.py` or equivalent):**
+
+```python
+def classify_asset(asset):
+    # ... [Existing Logic] ...
+
+    # ZOMBIE CHECK
+    # Old Logic: if is_stale: return "ZOMBIE"
+    # New Logic:
+    if asset.is_stale:
+        if asset.has_cmdb_record: 
+            return "PARKED"  # Safe Harbor: Inactive but Owned
+        else:
+            return "ZOMBIE"  # Kill: Inactive and Unowned
+
+```
+
+### Step 3: Verify the "Big Misses"
+
+The report lists `microsoft.com` and `salesforce.com` as missed. This implies they might not be hitting your `normalization_rules.json` correctly.
+
+* **Check:** Ensure your `alias_map` includes common subdomains if `tldextract` isn't enough.
+* **Example:** If the log shows `login.microsoftonline.com`, your alias map needs `microsoftonline.com` -> `microsoft.com`. (This is already in the list I gave you, so the fallback fix in Step 1 handles the `login.` part).
+
+**Next Step:** Apply the **Generic Fallback** code change and the **Zombie CMDB Check**, then re-run the assessment. Your score should jump from **83.9%** to **>95%**.

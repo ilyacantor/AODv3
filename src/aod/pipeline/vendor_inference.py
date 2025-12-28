@@ -17,6 +17,7 @@ Constraints:
 - UI displays as suggestion: "Likely MongoDB (90% confidence)"
 """
 
+import functools
 from dataclasses import dataclass
 from typing import Optional
 import re
@@ -226,6 +227,7 @@ VENDOR_TO_DOMAIN.update({
 })
 
 
+@functools.lru_cache(maxsize=10000)
 def extract_registered_domain(domain: str) -> Optional[str]:
     """
     Extract the registered domain (eTLD+1) from a full domain using PSL.

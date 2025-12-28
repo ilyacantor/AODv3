@@ -1,5 +1,6 @@
 """Stage 2: NormalizeObservations - Normalize names/domains and derive candidate entities"""
 
+import functools
 import re
 import logging
 from dataclasses import dataclass, field
@@ -124,6 +125,7 @@ class CandidateEntity:
         return hash(self.entity_id)
 
 
+@functools.lru_cache(maxsize=10000)
 def normalize_string(s: str) -> str:
     """Normalize a string for matching: lowercase, strip whitespace, remove special chars"""
     if not s:

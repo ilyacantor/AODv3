@@ -1,7 +1,9 @@
 """Stage 4: CorrelateEntitiesToPlanes - Real-world simple matcher with disambiguation"""
 
+import functools
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -49,8 +51,9 @@ LEGACY_MARKERS = {
 }
 
 
+@functools.lru_cache(maxsize=10000)
 def _levenshtein_distance(s1: str, s2: str) -> int:
-    """Compute Levenshtein edit distance between two strings."""
+    """Compute Levenshtein edit distance between two strings (memoized)."""
     if len(s1) < len(s2):
         s1, s2 = s2, s1
     
@@ -484,12 +487,22 @@ def disambiguate_matches(
     )
 
 
+@dataclass
+class PrecomputedEntityData:
+    """Pre-computed data for an entity to avoid repeated calculations."""
+    registered_domain: Optional[str] = None
+    domain_token: str = ""
+    canonical_vendor: Optional[str] = None
+    normalization_token: str = ""
+
+
 def correlate_to_plane(
     entity: CandidateEntity,
     plane_index: PlaneIndex,
     use_domain: bool = True,
     use_uri: bool = False,
-    use_vendor: bool = False
+    use_vendor: bool = False,
+    precomputed: Optional[PrecomputedEntityData] = None
 ) -> PlaneMatch:
     """
     Correlate an entity to a plane using multi-pass matching with disambiguation.
@@ -512,6 +525,7 @@ def correlate_to_plane(
         use_domain: Enable domain-based matching
         use_uri: Enable URI-based matching
         use_vendor: Enable domain-to-vendor lookup for matching (useful for CMDB)
+        precomputed: Pre-computed entity data to avoid repeated calculations
     
     Returns matched/ambiguous/unmatched plus evidence refs.
     """
@@ -593,7 +607,9 @@ def correlate_to_plane(
     
     if name_matches and use_vendor:
         expected_vendor = None
-        if entity.domain:
+        if precomputed and precomputed.canonical_vendor:
+            expected_vendor = precomputed.canonical_vendor
+        elif entity.domain:
             registered_domain = extract_registered_domain(entity.domain.lower().strip()) or entity.domain.lower().strip()
             expected_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
         if not expected_vendor:
@@ -752,8 +768,10 @@ def correlate_to_plane(
         )
     
     if entity.domain and plane_index.by_canonical_name:
-        raw_domain_token = _extract_domain_base_token(entity.domain)
-        domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
+        domain_token = precomputed.domain_token if precomputed else ""
+        if not domain_token:
+            raw_domain_token = _extract_domain_base_token(entity.domain)
+            domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
         if domain_token and len(domain_token) >= 6:
             token_matches: list[str] = []
             if hasattr(plane_index, 'by_name_words') and domain_token in plane_index.by_name_words:
@@ -843,11 +861,13 @@ def correlate_to_plane(
             )
     
     if use_vendor and entity.domain and plane_index.by_vendor_product:
-        normalized_domain = entity.domain.lower().strip()
-        registered_domain = extract_registered_domain(normalized_domain) or normalized_domain
-        domain_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
-        if not domain_vendor and registered_domain != normalized_domain:
-            domain_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
+        domain_vendor = precomputed.canonical_vendor if precomputed else None
+        if not domain_vendor:
+            normalized_domain = entity.domain.lower().strip()
+            registered_domain = extract_registered_domain(normalized_domain) or normalized_domain
+            domain_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
+            if not domain_vendor and registered_domain != normalized_domain:
+                domain_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
         if domain_vendor:
             vendor_key = normalize_string(domain_vendor)
             vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
@@ -951,9 +971,11 @@ def correlate_to_plane(
                 disambiguation_detail=f"Vendor-only match: {entity.vendor}"
             )
     
-    entity_token = get_normalization_token(entity.canonical_name)
-    if not entity_token and entity.domain:
-        entity_token = get_normalization_token(entity.domain)
+    entity_token = precomputed.normalization_token if precomputed else ""
+    if not entity_token:
+        entity_token = get_normalization_token(entity.canonical_name)
+        if not entity_token and entity.domain:
+            entity_token = get_normalization_token(entity.domain)
     
     if entity_token and len(entity_token) >= 3:
         token_matches: list[str] = []
@@ -990,6 +1012,32 @@ def correlate_to_plane(
     return PlaneMatch(status=MatchStatus.UNMATCHED)
 
 
+def _precompute_entity_data(entity: CandidateEntity) -> PrecomputedEntityData:
+    """
+    Pre-compute normalized tokens and lookups for an entity.
+    
+    This avoids repeated calls to expensive normalization functions
+    when correlating the same entity across multiple planes.
+    """
+    data = PrecomputedEntityData()
+    
+    if entity.domain:
+        domain_normalized = entity.domain.lower().strip()
+        data.registered_domain = extract_registered_domain(domain_normalized)
+        data.domain_token = normalize_string(_extract_domain_base_token(entity.domain))
+        
+        if data.registered_domain:
+            data.canonical_vendor = DOMAIN_TO_VENDOR.get(data.registered_domain)
+        if not data.canonical_vendor:
+            data.canonical_vendor = DOMAIN_TO_VENDOR.get(domain_normalized)
+    
+    data.normalization_token = get_normalization_token(entity.canonical_name)
+    if not data.normalization_token and entity.domain:
+        data.normalization_token = get_normalization_token(entity.domain)
+    
+    return data
+
+
 def correlate_entities_to_planes(
     entities: list[CandidateEntity],
     indexes: PlaneIndexes
@@ -1016,6 +1064,8 @@ def correlate_entities_to_planes(
     Returns:
         List of correlation results for each entity
     """
+    t_total_start = time.perf_counter()
+    
     logger.info("correlate_entities.start", extra={
         "entity_count": len(entities),
         "idp_records": len(indexes.idp.by_canonical_name),
@@ -1024,17 +1074,36 @@ def correlate_entities_to_planes(
         "finance_records": len(indexes.finance.by_canonical_name)
     })
     
+    t_precompute_start = time.perf_counter()
+    sorted_entities = sorted(entities, key=lambda e: e.entity_id)
+    precomputed = {e.entity_id: _precompute_entity_data(e) for e in sorted_entities}
+    t_precompute = time.perf_counter() - t_precompute_start
+    
     results = []
     matched_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
     ambiguous_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
     
-    for entity in sorted(entities, key=lambda e: e.entity_id):
+    t_idp, t_cmdb, t_cloud, t_finance = 0.0, 0.0, 0.0, 0.0
+    
+    for entity in sorted_entities:
         result = CorrelationResult(entity=entity)
+        entity_precomputed = precomputed[entity.entity_id]
         
-        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True)
-        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True)
-        result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True)
-        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False)
+        t_start = time.perf_counter()
+        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True, precomputed=entity_precomputed)
+        t_idp += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True, precomputed=entity_precomputed)
+        t_cmdb += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True, precomputed=entity_precomputed)
+        t_cloud += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False, precomputed=entity_precomputed)
+        t_finance += time.perf_counter() - t_start
         
         if result.idp.status == MatchStatus.MATCHED:
             matched_counts["idp"] += 1
@@ -1058,12 +1127,20 @@ def correlate_entities_to_planes(
         
         results.append(result)
     
+    t_total = time.perf_counter() - t_total_start
+    
     logger.info("correlate_entities.complete", extra={
         "entity_count": len(entities), "result_count": len(results),
         "matched_idp": matched_counts["idp"], "matched_cmdb": matched_counts["cmdb"],
         "matched_cloud": matched_counts["cloud"], "matched_finance": matched_counts["finance"],
         "ambiguous_idp": ambiguous_counts["idp"], "ambiguous_cmdb": ambiguous_counts["cmdb"],
-        "ambiguous_cloud": ambiguous_counts["cloud"], "ambiguous_finance": ambiguous_counts["finance"]
+        "ambiguous_cloud": ambiguous_counts["cloud"], "ambiguous_finance": ambiguous_counts["finance"],
+        "timing_precompute_sec": round(t_precompute, 4),
+        "timing_idp_sec": round(t_idp, 4),
+        "timing_cmdb_sec": round(t_cmdb, 4),
+        "timing_cloud_sec": round(t_cloud, 4),
+        "timing_finance_sec": round(t_finance, 4),
+        "timing_total_sec": round(t_total, 4)
     })
     
     return results

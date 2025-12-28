@@ -4,6 +4,7 @@ Normalization utilities for AOD.
 Consolidates string normalization functions used across the codebase.
 """
 
+import functools
 import re
 
 import tldextract
@@ -37,6 +38,7 @@ ENV_SUFFIXES = {
 }
 
 
+@functools.lru_cache(maxsize=10000)
 def get_normalization_token(name: str) -> str:
     """
     Extract a core token from a name for deterministic matching.

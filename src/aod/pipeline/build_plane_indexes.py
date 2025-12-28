@@ -1,5 +1,6 @@
 """Stage 3: BuildPlaneIndexes - Build indexes for efficient correlation"""
 
+import re
 from dataclasses import dataclass, field
 
 from ..models.input_contracts import (
@@ -16,6 +17,9 @@ class PlaneIndex:
     by_uri: dict[str, list[str]] = field(default_factory=dict)
     by_vendor_product: dict[str, list[str]] = field(default_factory=dict)
     records: dict[str, PlaneRecord] = field(default_factory=dict)
+    by_name_prefix: dict[str, list[str]] = field(default_factory=dict)
+    by_name_bigrams: dict[str, list[str]] = field(default_factory=dict)
+    by_name_words: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,6 +42,46 @@ def add_to_index(index: dict[str, list[str]], key: str, record_id: str):
         index[key].append(record_id)
 
 
+def generate_bigrams(text: str) -> set[str]:
+    """Generate character bigrams from text"""
+    text = text.lower().strip()
+    if len(text) < 2:
+        return set()
+    return {text[i:i+2] for i in range(len(text) - 1)}
+
+
+def extract_words(text: str) -> set[str]:
+    """Extract words >= 4 chars for token matching"""
+    words = re.split(r'[\s\-_./]+', text.lower().strip())
+    return {w for w in words if len(w) >= 4}
+
+
+def populate_fuzzy_indexes(index: PlaneIndex):
+    """Pre-compute fuzzy matching indexes from canonical names"""
+    for name, record_ids in index.by_canonical_name.items():
+        if len(name) >= 4:
+            prefix = name[:4]
+            if prefix not in index.by_name_prefix:
+                index.by_name_prefix[prefix] = []
+            for rid in record_ids:
+                if rid not in index.by_name_prefix[prefix]:
+                    index.by_name_prefix[prefix].append(rid)
+        
+        for bigram in generate_bigrams(name):
+            if bigram not in index.by_name_bigrams:
+                index.by_name_bigrams[bigram] = []
+            for rid in record_ids:
+                if rid not in index.by_name_bigrams[bigram]:
+                    index.by_name_bigrams[bigram].append(rid)
+        
+        for word in extract_words(name):
+            if word not in index.by_name_words:
+                index.by_name_words[word] = []
+            for rid in record_ids:
+                if rid not in index.by_name_words[word]:
+                    index.by_name_words[word].append(rid)
+
+
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
     """Build IdP index: by domain, by canonical name, by vendor (if present)"""
     index = PlaneIndex()
@@ -58,6 +102,7 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
             vendor_key = normalize_string(vendor)
             add_to_index(index.by_vendor_product, vendor_key, record_id)
     
+    populate_fuzzy_indexes(index)
     return index
 
 
@@ -80,6 +125,7 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
             vendor_key = normalize_string(ci.vendor)
             add_to_index(index.by_vendor_product, vendor_key, record_id)
     
+    populate_fuzzy_indexes(index)
     return index
 
 
@@ -98,6 +144,7 @@ def build_cloud_index(cloud_plane: CloudPlane) -> PlaneIndex:
             uri = resource.uri.lower().strip()
             add_to_index(index.by_uri, uri, record_id)
     
+    populate_fuzzy_indexes(index)
     return index
 
 
@@ -162,6 +209,7 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
                 if len(token) > 3:
                     add_to_index(index.by_canonical_name, token, record_id)
     
+    populate_fuzzy_indexes(index)
     return index
 
 

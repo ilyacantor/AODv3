@@ -2114,12 +2114,29 @@
             }
         }
         
+        function updateTimingDisplay(runs) {
+            const timingDisplay = document.getElementById('timingDisplay');
+            const timingTotal = document.getElementById('timingTotal');
+            if (runs && runs.length > 0) {
+                const latestRun = runs[0];
+                if (latestRun.stage_timings && latestRun.stage_timings.total) {
+                    timingDisplay.style.display = 'flex';
+                    timingTotal.textContent = latestRun.stage_timings.total.toFixed(2);
+                } else {
+                    timingDisplay.style.display = 'none';
+                }
+            } else {
+                timingDisplay.style.display = 'none';
+            }
+        }
+        
         async function loadRuns(autoSelect = false) {
             const loading = document.getElementById('runsLoading'), list = document.getElementById('runsList');
             loading.classList.remove('hidden');
             try {
                 const r = await fetch('/api/runs'); let runs = await r.json();
                 runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+                updateTimingDisplay(runs);
                 if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
                 else {
                     list.innerHTML = runs.map(run => {
@@ -2133,10 +2150,13 @@
                         const catalogLink = isCompleted
                             ? `<a href="/api/catalog/view?run_id=${run.run_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
                             : '';
+                        const timingBadge = run.stage_timings && run.stage_timings.total
+                            ? `<span class="run-timing" title="Pipeline execution time">${run.stage_timings.total.toFixed(1)}s</span>`
+                            : '';
                         return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
                             <div class="run-info">
                                 <span class="run-tenant">${tenant}</span>
-                                <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}
+                                <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}${timingBadge}
                             </div>
                             <div class="run-meta">
                                 <span class="run-size">${size}</span>

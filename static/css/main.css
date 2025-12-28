@@ -272,6 +272,32 @@ main { padding: 2rem; }
 .triage-section-header { padding: 1rem 1.5rem; background: var(--slate-800); border-bottom: 1px solid var(--slate-700); }
 .triage-collapsible { cursor: pointer; user-select: none; }
 .triage-collapsible:hover { background: var(--gray-800); }
+.timing-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    background: rgba(11, 202, 217, 0.1);
+    border: 1px solid rgba(11, 202, 217, 0.3);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: #0bcad9;
+}
+.timing-label {
+    color: #94a3b8;
+}
+.timing-value {
+    font-weight: 600;
+    color: #22d3ee;
+}
+.run-timing {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cyan-400);
+    background: rgba(6, 182, 212, 0.15);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+}
 .triage-collapse-icon { display: inline-block; width: 1rem; margin-right: 0.25rem; transition: transform 0.2s ease; font-size: 0.75rem; color: var(--slate-400); }
 .triage-collapsible.collapsed .triage-collapse-icon { transform: rotate(-90deg); }
 .triage-section-content.collapsed { display: none; }

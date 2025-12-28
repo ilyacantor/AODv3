@@ -109,6 +109,46 @@ export default function Overview() {
         </motion.div>
       </section>
 
+      {/* --- SECTION 1.5: LEGACY STACK EMBED --- */}
+      <section id="section-legacy" className="w-full border-t border-slate-800">
+        <div className="max-w-6xl mx-auto px-6 pt-16 pb-8">
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-3xl md:text-4xl font-bold text-white mb-8 text-center"
+          >
+            Inside the Broken Legacy Stack
+          </motion.h2>
+        </div>
+        <div className="w-full h-[70vh] bg-slate-900/30">
+          <iframe
+            src="https://overview.autonomos.software/legacy/embed"
+            className="w-full h-full border-none"
+            title="Legacy Stack Visualization"
+            loading="lazy"
+          />
+        </div>
+        <div className="max-w-4xl mx-auto px-6 py-12 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="space-y-6"
+          >
+            <p className="text-lg text-slate-400 leading-relaxed">
+              Over decades, enterprises accumulated SaaS, on-prem systems, spreadsheets, bots, and human glue.
+              Each layer solved a local problem — none solved the system.
+            </p>
+            <p className="text-xl md:text-2xl text-white font-semibold">
+              autonomOS makes broken enterprise IT usable — without replacing it.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
       {/* --- SECTION 2: PARADIGM SHIFT --- */}
       <section id="section-paradigm" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800">
         <motion.div

@@ -1,23 +1,38 @@
 """
 Derived Classifications Module
 
-Computes Shadow and Zombie classifications from evidence AFTER the main pipeline.
+Computes Shadow, Zombie, and Parked classifications from evidence AFTER the main pipeline.
 These are computed on-read, not stored as flags.
 
+Activity Status (ActivityStatus enum):
+  - RECENT = has activity timestamp within activity_window_days (default 90)
+  - STALE = has activity timestamp outside activity_window_days
+  - NONE = no activity timestamps at all (indeterminate)
+
+Anchored Predicate:
+  - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+  - This is broader than just governance (IdP/CMDB) - includes finance and cloud evidence
+
 Shadow Asset = admitted asset with:
-  - finance evidence OR cloud presence OR discovery (corroborated usage from >=2 sources)
-  - AND no IdP match (no SSO / SCIM / service principal)
-  - AND no CMDB match
-  - AND has recent activity (within activity_window_days)
+  - ungoverned (NOT has_idp AND NOT has_cmdb)
+  - AND activity_status == RECENT
+  - Interpretation: Active ungoverned SaaS that needs to be sanctioned or banned
 
 Zombie Asset = admitted asset with:
-  - CMDB or IdP presence
-  - AND no activity timestamps OR activity outside activity_window_days
+  - anchored (has_idp OR has_cmdb OR has_finance OR has_cloud)
+  - AND activity_status == STALE (NOT NONE - "no evidence" ≠ "stale evidence")
+  - Interpretation: Governed/tracked asset with stale activity that may need deprovisioning
+
+Parked Asset (NEW) = admitted asset with:
+  - NOT anchored (ungoverned AND no finance AND no cloud)
+  - AND activity_status == STALE
+  - Interpretation: Non-actionable - can't deprovision what isn't managed
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from enum import Enum
 import re
 from ..models.output_contracts import Asset, LensStatus, ProvisioningStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
@@ -37,6 +52,53 @@ def _ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+class ActivityStatus(str, Enum):
+    """
+    Activity status for an asset based on timestamp evidence.
+    
+    RECENT = has activity timestamp within activity_window_days (active)
+    STALE = has activity timestamp outside activity_window_days (inactive)
+    NONE = no activity timestamps at all (indeterminate - we don't know)
+    
+    Key distinction: NONE means "no evidence" which is different from STALE ("evidence of staleness").
+    This matters for zombie classification - we only classify as zombie when we KNOW it's stale.
+    """
+    RECENT = "recent"
+    STALE = "stale"
+    NONE = "none"
+
+
+def get_activity_status(
+    latest_activity_at: Optional[datetime],
+    activity_window_days: int = 90
+) -> ActivityStatus:
+    """
+    Determine the activity status based on the latest activity timestamp.
+    
+    Args:
+        latest_activity_at: The latest activity timestamp (may be None)
+        activity_window_days: Number of days for the activity window (default 90)
+    
+    Returns:
+        ActivityStatus.RECENT if activity is within window
+        ActivityStatus.STALE if activity is outside window
+        ActivityStatus.NONE if no activity timestamp exists
+    """
+    if latest_activity_at is None:
+        return ActivityStatus.NONE
+    
+    latest = _ensure_utc_aware(latest_activity_at)
+    if latest is None:
+        return ActivityStatus.NONE
+    
+    cutoff = _utc_now() - timedelta(days=activity_window_days)
+    
+    if latest >= cutoff:
+        return ActivityStatus.RECENT
+    else:
+        return ActivityStatus.STALE
 
 
 @dataclass
@@ -74,12 +136,38 @@ class DomainRollup:
     entity_count: int
     is_domain_canonical: bool = True
     
+    def get_activity_status(self, activity_window_days: int = 90) -> ActivityStatus:
+        """Get the activity status for this domain rollup."""
+        return get_activity_status(self.latest_activity_at, activity_window_days)
+    
+    def is_anchored(self) -> bool:
+        """
+        Anchored predicate: asset is tracked/governed in at least one system.
+        
+        anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+        
+        This is broader than just governance (IdP/CMDB) - it includes any
+        evidence that the asset is being tracked in an authoritative system:
+        - IdP = identity/SSO integration exists
+        - CMDB = configuration management entry exists
+        - Finance = recurring financial spend tracked
+        - Cloud = cloud resource present (AWS/Azure/GCP etc)
+        
+        Used to determine zombie eligibility - only anchored assets can be zombies
+        because you can only deprovision what's tracked somewhere.
+        """
+        return self.has_idp or self.has_cmdb or self.has_finance or self.has_cloud
+    
     def is_shadow(self, activity_window_days: int = 90) -> bool:
         """
-        Domain-level shadow: no governance + has existence evidence + recent activity.
+        Domain-level shadow: ungoverned AND activity_status==RECENT.
+        
+        Shadow = NOT has_idp AND NOT has_cmdb AND activity_status==RECENT
         
         INVARIANT: Only domain-canonical assets count as shadow.
         Internal identifiers (name-derived keys) are excluded from shadow counts.
+        
+        INVARIANT: activity_status must be RECENT. NONE (no timestamps) is indeterminate.
         """
         if not self.is_domain_canonical:
             return False
@@ -90,34 +178,55 @@ class DomainRollup:
         if has_governance or not has_existence:
             return False
         
-        if self.latest_activity_at is None:
-            return False
-        
-        cutoff = _utc_now() - timedelta(days=activity_window_days)
-        latest = _ensure_utc_aware(self.latest_activity_at)
-        return latest is not None and latest >= cutoff
+        activity_status = self.get_activity_status(activity_window_days)
+        return activity_status == ActivityStatus.RECENT
     
     def is_zombie(self, activity_window_days: int = 90) -> bool:
         """
-        Domain-level zombie: has governance + stale/no activity.
+        Domain-level zombie: anchored AND activity_status==STALE.
+        
+        Zombie = (has_idp OR has_cmdb OR has_finance OR has_cloud) AND activity_status==STALE
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
+        
+        INVARIANT: activity_status must be STALE (proven stale). NONE (no timestamps)
+        is indeterminate and does NOT count as zombie per design principle:
+        "no evidence" ≠ "stale evidence"
         """
         if not self.is_domain_canonical:
             return False
         
-        has_governance = self.has_idp or self.has_cmdb
-        
-        if not has_governance:
+        if not self.is_anchored():
             return False
         
-        if self.latest_activity_at is None:
-            return True
+        activity_status = self.get_activity_status(activity_window_days)
+        return activity_status == ActivityStatus.STALE
+    
+    def is_parked(self, activity_window_days: int = 90) -> bool:
+        """
+        Domain-level parked: NOT anchored AND activity_status==STALE.
         
-        cutoff = _utc_now() - timedelta(days=activity_window_days)
-        latest = _ensure_utc_aware(self.latest_activity_at)
-        return latest is not None and latest < cutoff
+        Parked = NOT is_anchored() AND activity_status==STALE
+        
+        Parked assets are non-actionable - they have stale activity but no governance
+        or tracking, so there's nothing to deprovision. These are explicitly excluded
+        from zombie counts.
+        
+        INVARIANT: Only domain-canonical assets count as parked.
+        Internal identifiers (name-derived keys) are excluded.
+        
+        INVARIANT: activity_status must be STALE (proven stale). NONE (no timestamps)
+        is indeterminate and does NOT count as parked.
+        """
+        if not self.is_domain_canonical:
+            return False
+        
+        if self.is_anchored():
+            return False
+        
+        activity_status = self.get_activity_status(activity_window_days)
+        return activity_status == ActivityStatus.STALE
     
     def get_reason_codes(self) -> list[str]:
         """Generate canonical reason codes for this domain"""
@@ -128,15 +237,25 @@ class DomainRollup:
         codes.append("HAS_CLOUD" if self.has_cloud else "NO_CLOUD")
         codes.append("HAS_DISCOVERY" if self.has_discovery else "NO_DISCOVERY")
         
-        if self.latest_activity_at is not None:
-            codes.append("HAS_ACTIVITY_TIMESTAMP")
+        activity_status = self.get_activity_status()
+        if activity_status == ActivityStatus.RECENT:
+            codes.append("RECENT_ACTIVITY")
+        elif activity_status == ActivityStatus.STALE:
+            codes.append("STALE_ACTIVITY")
         else:
-            codes.append("NO_ACTIVITY_TIMESTAMP")
+            codes.append("NO_ACTIVITY_TIMESTAMPS")
+        
+        if self.is_anchored():
+            codes.append("ANCHORED")
+        else:
+            codes.append("NOT_ANCHORED")
         
         if self.is_shadow():
             codes.append("SHADOW_CLASSIFICATION")
         elif self.is_zombie():
             codes.append("ZOMBIE_CLASSIFICATION")
+        elif self.is_parked():
+            codes.append("PARKED_CLASSIFICATION")
         
         return codes
 
@@ -146,9 +265,11 @@ class DerivedClassificationSummary:
     """Summary of derived classifications for a run"""
     shadow_count: int
     zombie_count: int
+    parked_count: int
     indeterminate_count: int
     shadow_assets: list[dict]
     zombie_assets: list[dict]
+    parked_assets: list[dict]
     distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
     domain_rollups: dict[str, DomainRollup] = field(default_factory=dict)
 
@@ -282,8 +403,15 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     """
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
-    Zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
-    If there are NO timestamps at all, that still counts as "no timestamps within window"
+    NEW LOGIC (Dec 2025):
+    Zombie = anchored AND activity_status==STALE
+    
+    Where:
+    - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+    - activity_status==STALE means we have timestamps outside the window
+    - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
+    
+    This is a key semantic change: "no evidence" ≠ "stale evidence"
     
     Args:
         asset: The asset to check
@@ -292,31 +420,36 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Returns:
         Tuple of (is_zombie, is_indeterminate, reason)
     """
-    from datetime import timedelta
-    
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    has_finance = asset.lens_coverage.finance
+    has_cloud = asset.lens_coverage.cloud
     
-    if not (has_idp or has_cmdb):
-        return False, False, "Not in IdP or CMDB - cannot be zombie"
+    is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     
-    official_sources = []
+    if not is_anchored:
+        return False, False, "Not anchored (no IdP, CMDB, Finance, or Cloud) - cannot be zombie"
+    
+    anchored_sources = []
     if has_idp:
-        official_sources.append("IdP")
+        anchored_sources.append("IdP")
     if has_cmdb:
-        official_sources.append("CMDB")
+        anchored_sources.append("CMDB")
+    if has_finance:
+        anchored_sources.append("Finance")
+    if has_cloud:
+        anchored_sources.append("Cloud")
     
     latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    activity_status = get_activity_status(latest, window_days)
     
-    if latest is None:
-        return True, False, f"Zombie: In {', '.join(official_sources)} with no activity timestamps"
+    if activity_status == ActivityStatus.NONE:
+        return False, True, f"Indeterminate: Anchored in {', '.join(anchored_sources)} but no activity timestamps (cannot prove stale)"
     
-    cutoff = _utc_now() - timedelta(days=window_days)
+    if activity_status == ActivityStatus.STALE:
+        return True, False, f"Zombie: Anchored in {', '.join(anchored_sources)} with stale activity ({latest.isoformat() if latest else 'unknown'})"
     
-    if latest < cutoff:
-        return True, False, f"Zombie: In {', '.join(official_sources)} with stale activity ({latest.isoformat()})"
-    
-    return False, False, f"Not zombie: Recent activity at {latest.isoformat()}"
+    return False, False, f"Not zombie: Recent activity at {latest.isoformat() if latest else 'unknown'}"
 
 
 def classify_zombie(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
@@ -494,6 +627,7 @@ def compute_derived_classifications(
     
     shadow_assets = []
     zombie_assets = []
+    parked_assets = []
     indeterminate_count = 0
     
     for domain_key in sorted(domain_rollups.keys()):
@@ -523,6 +657,8 @@ def compute_derived_classifications(
                 all_hostnames.update(a.identifiers.hostnames)
                 all_uris.update(a.identifiers.uris)
         
+        activity_status = rollup.get_activity_status(activity_window_days)
+        
         base_entry = {
             "asset_id": str(representative.asset_id),
             "name": domain_key if rollup.is_domain_canonical else representative.name,
@@ -549,7 +685,8 @@ def compute_derived_classifications(
                 "discovery": representative.lens_coverage.discovery
             },
             "activity_evidence": {
-                "latest_activity_at": rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else None
+                "latest_activity_at": rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else None,
+                "activity_status": activity_status.value
             },
             "entity_count": rollup.entity_count,
             "aliases": rollup.entity_names if rollup.entity_count > 1 else [],
@@ -558,7 +695,8 @@ def compute_derived_classifications(
                 "has_cmdb": rollup.has_cmdb,
                 "has_finance": rollup.has_finance,
                 "has_cloud": rollup.has_cloud,
-                "has_discovery": rollup.has_discovery
+                "has_discovery": rollup.has_discovery,
+                "is_anchored": rollup.is_anchored()
             }
         }
         
@@ -570,17 +708,37 @@ def compute_derived_classifications(
                 "evidence_summary": [
                     f"Presence: {', '.join(filter(None, ['finance' if rollup.has_finance else None, 'cloud' if rollup.has_cloud else None, 'discovery' if rollup.has_discovery else None]))}",
                     "Gaps: No IdP match; No CMDB match",
-                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}"
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}"
                 ]
             })
         elif rollup.is_zombie(activity_window_days):
+            anchored_sources = filter(None, [
+                'IdP' if rollup.has_idp else None, 
+                'CMDB' if rollup.has_cmdb else None,
+                'Finance' if rollup.has_finance else None,
+                'Cloud' if rollup.has_cloud else None
+            ])
             zombie_assets.append({
                 **base_entry,
                 "classification": "zombie",
-                "reason": f"Zombie: {domain_key} in official systems but stale/no activity",
+                "reason": f"Zombie: {domain_key} anchored in systems but has stale activity",
                 "evidence_summary": [
-                    f"Official presence: {', '.join(filter(None, ['IdP' if rollup.has_idp else None, 'CMDB' if rollup.has_cmdb else None]))}",
-                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'none'}"
+                    f"Anchored in: {', '.join(anchored_sources)}",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}"
+                ]
+            })
+        elif rollup.is_parked(activity_window_days):
+            parked_assets.append({
+                **base_entry,
+                "classification": "parked",
+                "reason": f"Parked: {domain_key} not anchored in any system and has stale activity - non-actionable",
+                "evidence_summary": [
+                    "Not anchored: No IdP, CMDB, Finance, or Cloud presence",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}",
+                    "Non-actionable: Cannot deprovision what isn't managed"
                 ]
             })
         elif not rollup.is_domain_canonical:
@@ -591,9 +749,11 @@ def compute_derived_classifications(
     return DerivedClassificationSummary(
         shadow_count=len(shadow_assets),
         zombie_count=len(zombie_assets),
+        parked_count=len(parked_assets),
         indeterminate_count=indeterminate_count,
         shadow_assets=shadow_assets,
         zombie_assets=zombie_assets,
+        parked_assets=parked_assets,
         distribution=distribution,
         domain_rollups=domain_rollups
     )

@@ -78,14 +78,28 @@ def build_reconcile_payload(
             "aod_reason_codes": reason_codes,
             "is_shadow": details.get("is_shadow", False),
             "is_zombie": details.get("is_zombie", False),
+            "is_parked": details.get("is_parked", False),
+            "domain_aliases": details.get("domain_aliases", []),
+            "registered_domain": details.get("registered_domain"),
             "evidence_summary": details.get("evidence_summary", {})
         }
     
     shadow_asset_keys = sorted([k for k, v in asset_summaries.items() if v.get("is_shadow")])
     zombie_asset_keys = sorted([k for k, v in asset_summaries.items() if v.get("is_zombie")])
+    parked_asset_keys = sorted([k for k, v in asset_summaries.items() if v.get("is_parked")])
+    
+    domain_alias_map = {}
+    for key, summary in asset_summaries.items():
+        aliases = summary.get("domain_aliases", [])
+        registered = summary.get("registered_domain")
+        for alias in aliases:
+            if alias and alias != key:
+                domain_alias_map[alias] = key
+        if registered and registered != key:
+            domain_alias_map[registered] = key
     
     return {
-        "payload_version": 2,
+        "payload_version": 3,
         "has_asset_summaries": len(asset_summaries) > 0,
         "asset_summaries_count": len(asset_summaries),
         "snapshot_id": snapshot_id,
@@ -103,14 +117,18 @@ def build_reconcile_payload(
             "ambiguous_matches": run_log.counts.ambiguous_matches,
             "findings_generated": run_log.counts.findings_generated,
             "shadow_count": len(shadow_asset_keys),
-            "zombie_count": len(zombie_asset_keys)
+            "zombie_count": len(zombie_asset_keys),
+            "parked_count": len(parked_asset_keys)
         },
         "shadow_asset_keys": shadow_asset_keys,
         "zombie_asset_keys": zombie_asset_keys,
+        "parked_asset_keys": parked_asset_keys,
         "asset_summaries": asset_summaries,
+        "domain_alias_map": domain_alias_map,
         "aod_lists": {
             "shadow_asset_keys_sample": shadow_asset_keys[:10],
             "zombie_asset_keys_sample": zombie_asset_keys[:10],
+            "parked_asset_keys_sample": parked_asset_keys[:10],
             "high_priority_findings": high_priority_findings,
             "actual_reason_codes": actual_results.actual_reasons,
             "asset_summaries": asset_summaries

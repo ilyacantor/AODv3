@@ -103,19 +103,43 @@ Single DB selection rule (no fallbacks):
 
 ## Derived Classifications
 
+### Activity Status (Dec 2025)
+- **RECENT** = has activity timestamp within 90-day window
+- **STALE** = has activity timestamp outside 90-day window
+- **NONE** = no activity timestamps (indeterminate, not actionable)
+
+### Anchored Predicate
+An asset is "anchored" if it has ANY of:
+- IdP match (SSO/SCIM/service principal)
+- CMDB match
+- Recurring finance spend
+- Cloud resource presence
+
 ### Shadow Asset
-- Has activity evidence (Finance, Cloud, or Discovery)
-- AND no IdP match (no SSO / SCIM / service principal)
-- AND no CMDB match
-- AND has **recent activity** within 90 days
+- **ungoverned** (no IdP AND no CMDB)
+- AND **activity_status == RECENT**
+- AND has **valid existence evidence**:
+  - Cloud resource presence, OR
+  - Discovery with **≥2 corroborating sources** (browser + proxy, dns + endpoint, etc.)
+
+**Note**: Finance evidence is neither existence evidence NOR an exclusion. An asset with finance + single-source discovery but no IdP/CMDB is NOT shadow because single-source discovery doesn't meet the corroboration threshold.
 
 *Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
 
 ### Zombie Asset
-- CMDB or IdP presence (officially managed)
-- AND (**no activity timestamps** OR activity **outside 90-day window**)
+- **anchored** (IdP OR CMDB OR finance OR cloud)
+- AND **activity_status == STALE**
 
-*Interpretation: "This is in our official systems but we have no evidence anyone is actually using it."*
+*Interpretation: "This is anchored in our official systems but has stale activity - candidate for deprovision."*
+
+### Parked Asset (NEW Dec 2025)
+- **NOT anchored** (ungoverned)
+- AND **activity_status == STALE**
+
+*Interpretation: "Ungoverned + stale = non-actionable. Can't deprovision what isn't managed. Not counted as zombie."*
+
+### Key Rule
+- `NO_ACTIVITY_TIMESTAMPS` = indeterminate, NOT stale. Cannot be zombie, shadow, or parked without evidence.
 
 ## Traffic Light Provisioning
 A fail-closed asset provisioning system that controls flow to DCL:
@@ -184,7 +208,7 @@ pytest tests/ -v
 
 ## Known Issues (Current Status)
 *   **Admission Noise Floor Bug**: ✅ FIXED (Dec 2025) - Discovery admission now counts distinct **sources** (browser, proxy, dns = 3) instead of planes. Assets like asana.com with 3 network sources are now correctly admitted. Plane diversity retained as annotation (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`).
-*   **Key Normalization Mismatch**: Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys, causing KEY_NORMALIZATION_MISMATCH errors. Fix: Emit alias metadata or update reconciliation to use canonical keys.
+*   **Key Normalization Mismatch**: ✅ FIXED (Dec 2025) - Reconcile payload now emits `domain_aliases`, `registered_domain`, and `domain_alias_map` for Farm to match against any key variant. KEY_NORMALIZATION_MISMATCH = 0 verified.
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.

@@ -60,6 +60,11 @@ class ReasonCode(str, Enum):
     ADMITTED_VIA_DISCOVERY = "ADMITTED_VIA_DISCOVERY"
     REJECTED_NO_GATE = "REJECTED_NO_GATE"
     NOT_RECONCILIATION_ELIGIBLE = "NOT_RECONCILIATION_ELIGIBLE"
+    ANCHORED = "ANCHORED"
+    NOT_ANCHORED = "NOT_ANCHORED"
+    SHADOW_CLASSIFICATION = "SHADOW_CLASSIFICATION"
+    ZOMBIE_CLASSIFICATION = "ZOMBIE_CLASSIFICATION"
+    PARKED_CLASSIFICATION = "PARKED_CLASSIFICATION"
 
 
 @dataclass
@@ -71,6 +76,7 @@ class AssetActualResult:
     admission: str
     is_shadow: bool
     is_zombie: bool
+    is_parked: bool
     reasons: list[ReasonCode]
     evidence_summary: dict
 
@@ -85,6 +91,7 @@ class ActualResultsOutput:
     run_id: str
     shadow_actual: list[str]
     zombie_actual: list[str]
+    parked_actual: list[str]
     admission_actual: dict[str, str]
     actual_reasons: dict[str, list[str]]
     asset_details: dict[str, dict]
@@ -120,6 +127,8 @@ def _deduplicate_reason_codes(reasons: set) -> set:
         ("HAS_CLOUD", "NO_CLOUD"),
         ("HAS_DISCOVERY", "NO_DISCOVERY"),
         ("RECENT_ACTIVITY", "STALE_ACTIVITY"),
+        ("RECENT_ACTIVITY", "NO_ACTIVITY_TIMESTAMPS"),
+        ("STALE_ACTIVITY", "NO_ACTIVITY_TIMESTAMPS"),
         ("DISCOVERY_SOURCE_COUNT_GE_2", "DISCOVERY_SOURCE_COUNT_LT_2"),
     ]
     
@@ -392,11 +401,19 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
     This is AOD's view of what the asset IS - not what it should be.
     
     IMPORTANT: Only reconciliation-eligible assets (registered domains, known SaaS)
-    are classified as shadow/zombie. Internal identifiers are excluded to prevent
+    are classified as shadow/zombie/parked. Internal identifiers are excluded to prevent
     false positives.
     
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
+    
+    NEW LOGIC (Dec 2025) - Farm grading alignment:
+    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+    - is_shadow = NOT has_governance (idp/cmdb) AND activity_status==RECENT
+    - is_zombie = is_anchored AND activity_status==STALE (NOT NONE!)
+    - is_parked = NOT is_anchored AND activity_status==STALE
+    
+    Key rule: NO_ACTIVITY_TIMESTAMPS is indeterminate, not stale.
     
     Args:
         asset: The asset to classify
@@ -417,39 +434,83 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
     has_cloud = ReasonCode.HAS_CLOUD in reasons
     has_discovery = ReasonCode.HAS_DISCOVERY in reasons
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
+    has_stale_activity = ReasonCode.STALE_ACTIVITY in reasons
+    has_no_activity = ReasonCode.NO_ACTIVITY_TIMESTAMPS in reasons
+    
+    has_governance = has_idp or has_cmdb
+    is_anchored = has_idp or has_cmdb or has_finance or has_cloud
+    
+    if is_anchored:
+        reasons.append(ReasonCode.ANCHORED)
+    else:
+        reasons.append(ReasonCode.NOT_ANCHORED)
+    
+    evidence["is_anchored"] = is_anchored
+    evidence["has_governance"] = has_governance
     
     is_shadow = False
     is_zombie = False
+    is_parked = False
+    
+    has_corroborated_discovery = has_discovery and ReasonCode.DISCOVERY_SOURCE_COUNT_GE_2 in reasons
     
     if eligible:
-        if not has_idp and not has_cmdb:
-            if (has_cloud or has_discovery) and has_recent_activity:
+        if not has_governance:
+            if (has_cloud or has_corroborated_discovery) and has_recent_activity:
                 is_shadow = True
+                reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
         
-        if has_idp or has_cmdb:
-            if not has_recent_activity:
-                is_zombie = True
+        if is_anchored and has_stale_activity:
+            is_zombie = True
+            reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
+        
+        if not is_anchored and has_stale_activity:
+            is_parked = True
+            reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     
     raw_domain = _extract_raw_domain(asset)
+    all_domain_variants = set()
+    
+    if asset.identifiers and asset.identifiers.domains:
+        for d in asset.identifiers.domains:
+            if d and "." in d:
+                all_domain_variants.add(d.lower().strip())
+    
+    name_lower = asset.name.lower().strip()
+    if "." in name_lower:
+        parts = name_lower.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            all_domain_variants.add(name_lower)
+    
     if raw_domain:
         asset_key = raw_domain
         registered = extract_registered_domain(raw_domain)
+        all_domain_variants.add(raw_domain)
+        if registered:
+            all_domain_variants.add(registered)
         evidence["key_source"] = "domain"
+        evidence["raw_domain"] = raw_domain
         evidence["registered_domain"] = registered
         evidence["name_variant"] = asset.name
+        evidence["all_domain_variants"] = sorted(all_domain_variants)
     else:
         normalized_name = _normalize_name_for_vendor_lookup(asset.name)
         if normalized_name in VENDOR_TO_DOMAIN:
             asset_key = VENDOR_TO_DOMAIN[normalized_name]
+            all_domain_variants.add(asset_key)
             evidence["key_source"] = "vendor_alias"
             evidence["original_name"] = asset.name
+            evidence["all_domain_variants"] = sorted(all_domain_variants)
         elif asset.vendor and asset.vendor.lower() in VENDOR_TO_DOMAIN:
             asset_key = VENDOR_TO_DOMAIN[asset.vendor.lower()]
+            all_domain_variants.add(asset_key)
             evidence["key_source"] = "vendor_lookup"
             evidence["original_name"] = asset.name
+            evidence["all_domain_variants"] = sorted(all_domain_variants)
         else:
             asset_key = _normalize_key(asset.name)
             evidence["key_source"] = "name_derived"
+            evidence["all_domain_variants"] = sorted(all_domain_variants) if all_domain_variants else []
     
     return AssetActualResult(
         asset_key=asset_key,
@@ -458,6 +519,7 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         admission="admitted",
         is_shadow=is_shadow,
         is_zombie=is_zombie,
+        is_parked=is_parked,
         reasons=reasons,
         evidence_summary=evidence
     )
@@ -548,15 +610,21 @@ def emit_actual_results(
         result = classify_actual(asset, activity_window_days, mode=mode)
         key = result.asset_key
         
+        registered_domain = result.evidence_summary.get("registered_domain")
+        all_variants = set(result.evidence_summary.get("all_domain_variants", []))
+        
         if key not in asset_results:
             asset_results[key] = {
                 "admission": result.admission,
                 "reasons": set(r.value for r in result.reasons),
                 "asset_ids": [result.asset_id],
                 "names": [result.name],
+                "all_domain_variants": all_variants,
+                "registered_domain": registered_domain,
                 "evidence_summary": result.evidence_summary,
                 "is_shadow": result.is_shadow,
                 "is_zombie": result.is_zombie,
+                "is_parked": result.is_parked,
                 "is_canonical": result.evidence_summary.get("key_source") == "domain"
             }
         else:
@@ -564,8 +632,10 @@ def emit_actual_results(
             agg["reasons"].update(r.value for r in result.reasons)
             agg["asset_ids"].append(result.asset_id)
             agg["names"].append(result.name)
+            agg["all_domain_variants"].update(all_variants)
             agg["is_shadow"] = agg["is_shadow"] or result.is_shadow
             agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
+            agg["is_parked"] = agg["is_parked"] or result.is_parked
     
     for key, agg in asset_results.items():
         reasons = agg["reasons"]
@@ -574,6 +644,7 @@ def emit_actual_results(
     
     shadow_actual = []
     zombie_actual = []
+    parked_actual = []
     admission_actual = {}
     actual_reasons = {}
     asset_details = {}
@@ -587,11 +658,20 @@ def emit_actual_results(
             evidence["aliases"] = agg["names"]
             evidence["asset_ids"] = agg["asset_ids"]
         
+        domain_aliases = sorted(agg.get("all_domain_variants", set()))
+        if domain_aliases:
+            evidence["domain_aliases"] = domain_aliases
+        if agg.get("registered_domain"):
+            evidence["registered_domain"] = agg["registered_domain"]
+        
         asset_details[key] = {
             "asset_id": agg["asset_ids"][0],
             "name": agg["names"][0],
             "is_shadow": agg["is_shadow"],
             "is_zombie": agg["is_zombie"],
+            "is_parked": agg["is_parked"],
+            "domain_aliases": domain_aliases,
+            "registered_domain": agg.get("registered_domain"),
             "evidence_summary": evidence
         }
         
@@ -599,6 +679,8 @@ def emit_actual_results(
             shadow_actual.append(key)
         if agg["is_zombie"]:
             zombie_actual.append(key)
+        if agg["is_parked"]:
+            parked_actual.append(key)
     
     if rejections:
         for rej in rejections:
@@ -616,6 +698,7 @@ def emit_actual_results(
                 "name": rej.get("entity_name", entity_key),
                 "is_shadow": False,
                 "is_zombie": False,
+                "is_parked": False,
                 "evidence_summary": {
                     "rejection_reason": rej.get("reason_code", "unknown"),
                     "rejection_detail": rej.get("reason_detail", ""),
@@ -625,6 +708,7 @@ def emit_actual_results(
     
     shadow_actual = sorted(set(shadow_actual))
     zombie_actual = sorted(set(zombie_actual))
+    parked_actual = sorted(set(parked_actual))
     
     summary = {
         "total_assets": len(assets),
@@ -632,6 +716,7 @@ def emit_actual_results(
         "asset_keys": len(asset_results),
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
+        "parked_actual_count": len(parked_actual),
         "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),
         "rejected_count": len([v for v in admission_actual.values() if v == "rejected"])
     }
@@ -640,6 +725,7 @@ def emit_actual_results(
         run_id=run_id,
         shadow_actual=shadow_actual,
         zombie_actual=zombie_actual,
+        parked_actual=parked_actual,
         admission_actual=admission_actual,
         actual_reasons=actual_reasons,
         asset_details=asset_details,

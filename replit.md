@@ -44,6 +44,16 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 1. **Domain Normalization**: Only ALIAS domains are normalized to canonical vendor domain. Uses ALIAS_DOMAINS_TO_COLLAPSE set to identify aliases. Example: `microsoftonline.com` → `microsoft.com` (known alias). Primary domains like `atlassian.net`, `notion.so`, `sentry.io` are preserved as-is since they are legitimate SaaS keys.
 2. **Zombie vs Parked**: CMDB presence indicates registered ownership. Stale assets with CMDB entry are Parked (owned but inactive), not Zombie. Only orphaned (no CMDB owner) stale assets become Zombies.
 
+**Performance Optimizations (Dec 2025):**
+The correlation pipeline was optimized to reduce large snapshot processing time:
+1. **Memoization**: Added `@functools.lru_cache(maxsize=10000)` to:
+   - `normalize_string()` in normalize_observations.py
+   - `extract_registered_domain()` in vendor_inference.py
+   - `get_normalization_token()` in utils/normalization.py
+   - `_levenshtein_distance()` in correlate_entities.py
+2. **Pre-computation**: Entity normalization tokens (registered_domain, domain_token, canonical_vendor, normalization_token) are computed once before plane correlation loop via `PrecomputedEntityData` dataclass.
+3. **Timing Instrumentation**: Per-stage timing logged for precompute, idp, cmdb, cloud, finance phases to identify remaining bottlenecks.
+
 **Traffic Light Provisioning**: A fail-closed system for asset provisioning, controlling flow to DCL with statuses like ACTIVE (Green), REVIEW (Amber), QUARANTINE (Red), BLOCKED, RETIRED, and IGNORED.
 
 **UI Design**: Adheres to the AutonomOS palette, featuring cyan and purple accents, a dark slate foundation, and the Quicksand font.

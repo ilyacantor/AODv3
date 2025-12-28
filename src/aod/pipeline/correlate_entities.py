@@ -51,19 +51,34 @@ LEGACY_MARKERS = {
 }
 
 
-@functools.lru_cache(maxsize=10000)
 def _levenshtein_distance(s1: str, s2: str) -> int:
-    """Compute Levenshtein edit distance between two strings (memoized)."""
-    if len(s1) < len(s2):
+    """Compute Levenshtein edit distance between two strings (memoized).
+    
+    Uses a wrapper to normalize argument order before caching, ensuring
+    that (a, b) and (b, a) hit the same cache entry since distance is symmetric.
+    """
+    # Normalize order to maximize cache hits (distance is symmetric)
+    if s1 > s2:
         s1, s2 = s2, s1
+    return _levenshtein_distance_cached(s1, s2)
+
+
+@functools.lru_cache(maxsize=10000)
+def _levenshtein_distance_cached(s1: str, s2: str) -> int:
+    """Internal cached implementation of Levenshtein distance."""
+    # Ensure s1 is the longer string for algorithm efficiency
+    if len(s1) < len(s2):
+        longer, shorter = s2, s1
+    else:
+        longer, shorter = s1, s2
     
-    if len(s2) == 0:
-        return len(s1)
+    if len(shorter) == 0:
+        return len(longer)
     
-    prev_row = list(range(len(s2) + 1))
-    for i, c1 in enumerate(s1):
+    prev_row = list(range(len(shorter) + 1))
+    for i, c1 in enumerate(longer):
         curr_row = [i + 1]
-        for j, c2 in enumerate(s2):
+        for j, c2 in enumerate(shorter):
             insertions = prev_row[j + 1] + 1
             deletions = curr_row[j] + 1
             substitutions = prev_row[j] + (c1 != c2)

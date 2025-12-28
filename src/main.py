@@ -47,6 +47,20 @@ async def favicon():
     return Response(status_code=204)
 
 
+@app.get("/static/overview/index.html", response_class=HTMLResponse)
+async def serve_overview(response: Response):
+    """Serve overview with no-cache headers to prevent stale content"""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    overview_path = STATIC_DIR / "overview" / "index.html"
+    if overview_path.exists():
+        with open(overview_path, "r") as f:
+            content = f.read()
+        return HTMLResponse(content=content, status_code=200)
+    return HTMLResponse(content="<h1>Overview not found</h1>", status_code=404)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(response: Response):
     """Serve the AOD Console UI"""

@@ -249,10 +249,24 @@ The `lens_match_debug` field provides diagnostic information for CMDB/IdP/Cloud/
 - `FIRST_WINS` - Multiple candidates, first was selected
 - `UNRESOLVED` - Multiple candidates, no clear winner
 
+## Performance Optimizations (Dec 2025)
+
+### Pipeline Stage Timing
+- Added `PipelineStageTimings` model tracking 10 stages: fetch_snapshot, validate_snapshot, normalize, build_indexes, correlate, artifacts, admission, findings, persist, total
+- Timing stored in `runs.stage_timings` JSON column and exposed via API
+- Dashboard header shows "Last Run: X.XXs" in top right corner
+- Each run in Discovery Runs list shows timing badge (e.g., "2.3s")
+
+### Correlation Performance
+- Pre-computed fuzzy indexes at build_plane_indexes time to eliminate O(n×m) loops
+- New PlaneIndex fields: `by_name_prefix`, `by_name_bigrams`, `by_name_words`
+- Fuzzy/contains matching now uses O(1) lookups with fallback to original loops
+
 ## Known Issues (Current Status)
 *   **CMDB Debug Fields Missing**: ✅ FIXED (Dec 2025) - The `lens_match_debug` field was not being saved in batch inserts. Now correctly populated for all assets.
 *   **Admission Noise Floor Bug**: ✅ FIXED (Dec 2025) - Discovery admission now counts distinct **sources** (browser, proxy, dns = 3) instead of planes. Assets like asana.com with 3 network sources are now correctly admitted. Plane diversity retained as annotation (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`).
 *   **Key Normalization Mismatch**: ✅ FIXED (Dec 2025) - Reconcile payload now emits `domain_aliases`, `registered_domain`, and `domain_alias_map` for Farm to match against any key variant. KEY_NORMALIZATION_MISMATCH = 0 verified.
+*   **Pipeline Performance Optimized**: ✅ FIXED (Dec 2025) - Correlation O(n×m) loops replaced with pre-computed fuzzy indexes for O(1) lookups. Timing instrumentation added for all pipeline stages.
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.

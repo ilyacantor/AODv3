@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from ..models.output_contracts import RunCounts
+from ..models.output_contracts import RunCounts, PipelineStageTimings
 
 
 class FarmRunRequest(BaseModel):
@@ -34,6 +34,7 @@ class RunDetailResponse(BaseModel):
     completed_at: Optional[str]
     input_meta: dict
     counts: RunCounts
+    stage_timings: Optional[PipelineStageTimings] = None
     failure_reasons: list[str]
     sync_status: str = "not_applicable"
     sync_error: Optional[str] = None

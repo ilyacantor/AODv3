@@ -172,7 +172,7 @@ async def execute_pipeline(
             fallback_tenant_id=fallback_tenant_id,
             snapshot_id=snapshot_id
         )
-        timings['validate'] = time.perf_counter() - t_start
+        timings['validate_snapshot'] = time.perf_counter() - t_start
         
         observations = snapshot.planes.discovery.observations
         run_log.counts.observations_in = len(observations)

@@ -317,7 +317,7 @@ class RunCounts(BaseModel):
 class PipelineStageTimings(BaseModel):
     """Timing measurements for each pipeline stage in seconds"""
     fetch_snapshot: float = 0.0
-    validate: float = 0.0
+    validate_snapshot: float = 0.0
     normalize: float = 0.0
     build_indexes: float = 0.0
     correlate: float = 0.0

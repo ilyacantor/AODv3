@@ -2118,10 +2118,10 @@
             const timingDisplay = document.getElementById('timingDisplay');
             const timingTotal = document.getElementById('timingTotal');
             if (runs && runs.length > 0) {
-                const latestRun = runs[0];
-                if (latestRun.stage_timings && latestRun.stage_timings.total) {
+                const runWithTiming = runs.find(r => r.stage_timings && r.stage_timings.total);
+                if (runWithTiming) {
                     timingDisplay.style.display = 'flex';
-                    timingTotal.textContent = latestRun.stage_timings.total.toFixed(2);
+                    timingTotal.textContent = runWithTiming.stage_timings.total.toFixed(2);
                 } else {
                     timingDisplay.style.display = 'none';
                 }

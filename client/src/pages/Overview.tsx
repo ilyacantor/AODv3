@@ -111,41 +111,42 @@ export default function Overview() {
 
       {/* --- SECTION 1.5: LEGACY STACK EMBED --- */}
       <section id="section-legacy" className="w-full border-t border-slate-800">
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-8">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-3xl md:text-4xl font-bold text-white mb-8 text-center"
-          >
-            Inside the Broken Legacy Stack
-          </motion.h2>
-        </div>
-        <div className="w-full h-[70vh] bg-slate-900/30">
-          <iframe
-            src="https://overview.autonomos.software/legacy/embed"
-            className="w-full h-full border-none"
-            title="Legacy Stack Visualization"
-            loading="lazy"
-          />
-        </div>
-        <div className="max-w-4xl mx-auto px-6 py-12 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="space-y-6"
-          >
-            <p className="text-lg text-slate-400 leading-relaxed">
-              Over decades, enterprises accumulated SaaS, on-prem systems, spreadsheets, bots, and human glue.
-              Each layer solved a local problem — none solved the system.
-            </p>
-            <p className="text-xl md:text-2xl text-white font-semibold">
-              autonomOS makes broken enterprise IT usable — without replacing it.
-            </p>
-          </motion.div>
+        <div className="flex flex-col md:flex-row min-h-[70vh]">
+          {/* Main iframe area */}
+          <div className="flex-1 bg-slate-900/30">
+            <iframe
+              src="https://overview.autonomos.software/legacy/embed"
+              className="w-full h-full min-h-[50vh] md:min-h-[70vh] border-none"
+              title="Legacy Stack Visualization"
+              loading="lazy"
+            />
+          </div>
+          
+          {/* Sidebar */}
+          <div className="w-full md:w-80 lg:w-96 bg-slate-900/50 border-l border-slate-800 p-8 flex flex-col justify-center">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="space-y-6"
+            >
+              <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">
+                Inside the Broken Legacy Stack
+              </h2>
+              <p className="text-base text-slate-400 leading-relaxed">
+                Over decades, enterprises accumulated SaaS, on-prem systems, spreadsheets, bots, and human glue.
+              </p>
+              <p className="text-base text-slate-400 leading-relaxed">
+                Each layer solved a local problem — none solved the system.
+              </p>
+              <div className="pt-4 border-t border-slate-700">
+                <p className="text-lg text-white font-semibold leading-relaxed">
+                  autonomOS makes broken enterprise IT usable — without replacing it.
+                </p>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 

@@ -137,11 +137,34 @@ class CorrelationResult:
     finance: PlaneMatch = field(default_factory=lambda: PlaneMatch(status=MatchStatus.UNMATCHED))
     
     def all_evidence_refs(self) -> list[str]:
-        """Get all evidence references from matched planes"""
+        """Get all evidence references from matched planes.
+        
+        For finance plane, ALSO adds 'recurring_' prefixed refs for records
+        with is_recurring=True. Original IDs are always preserved for
+        downstream consumers (findings, UI).
+        """
+        from ..models.input_contracts import Contract, Transaction
+        
         refs = list(self.entity.observation_ids)
-        for plane_match in [self.idp, self.cmdb, self.cloud, self.finance]:
+        for plane_match in [self.idp, self.cmdb, self.cloud]:
             if plane_match.status == MatchStatus.MATCHED:
                 refs.extend(plane_match.matched_ids)
+        
+        if self.finance.status == MatchStatus.MATCHED:
+            refs.extend(self.finance.matched_ids)
+            
+            for i, record_id in enumerate(self.finance.matched_ids):
+                record = self.finance.matched_records[i] if i < len(self.finance.matched_records) else None
+                is_recurring = False
+                if record:
+                    if isinstance(record, Contract):
+                        is_recurring = record.is_recurring
+                    elif isinstance(record, Transaction):
+                        is_recurring = record.is_recurring
+                
+                if is_recurring:
+                    refs.append(f"recurring_{record_id}")
+        
         return refs
 
 

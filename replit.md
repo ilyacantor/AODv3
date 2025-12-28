@@ -117,9 +117,23 @@ An asset is "anchored" if it has ANY of:
 
 ### Shadow Asset
 - **ungoverned** (no IdP AND no CMDB)
+- AND **NOT financially_anchored** (no ongoing/recurring finance contract)
 - AND **activity_status == RECENT**
 
+**Financial Anchoring Exclusion**: If an asset is ungoverned (NO_IDP + NO_CMDB) but has HAS_ONGOING_FINANCE, it is NOT shadow. Instead, it gets tagged with `FINANCIAL_ANCHOR_GOVERNANCE_GAP` (onboarding queue, not shadow triage).
+
 *Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
+
+### Financially Anchored, Governance Gap
+- **ungoverned** (no IdP AND no CMDB)
+- AND **HAS_ONGOING_FINANCE** (active contract exists)
+- AND **activity_status == RECENT**
+
+This is NOT shadow IT. It's procurement-known but not access-integrated. Tagged with:
+- `SHADOW_EXCLUDED_BY_ONGOING_FINANCE`
+- `FINANCIAL_ANCHOR_GOVERNANCE_GAP`
+
+*Interpretation: "Procurement is tracking this, but SSO/CMDB onboarding is needed."*
 
 ### Zombie Asset
 - **anchored** (IdP OR CMDB OR finance OR cloud)

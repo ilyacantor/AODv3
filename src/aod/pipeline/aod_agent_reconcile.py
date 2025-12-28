@@ -41,11 +41,13 @@ class ReasonCode(str, Enum):
     HAS_IDP = "HAS_IDP"
     HAS_CMDB = "HAS_CMDB"
     HAS_FINANCE = "HAS_FINANCE"
+    HAS_ONGOING_FINANCE = "HAS_ONGOING_FINANCE"
     HAS_CLOUD = "HAS_CLOUD"
     HAS_DISCOVERY = "HAS_DISCOVERY"
     NO_IDP = "NO_IDP"
     NO_CMDB = "NO_CMDB"
     NO_FINANCE = "NO_FINANCE"
+    NO_ONGOING_FINANCE = "NO_ONGOING_FINANCE"
     NO_CLOUD = "NO_CLOUD"
     NO_DISCOVERY = "NO_DISCOVERY"
     RECENT_ACTIVITY = "RECENT_ACTIVITY"
@@ -62,7 +64,10 @@ class ReasonCode(str, Enum):
     NOT_RECONCILIATION_ELIGIBLE = "NOT_RECONCILIATION_ELIGIBLE"
     ANCHORED = "ANCHORED"
     NOT_ANCHORED = "NOT_ANCHORED"
+    FINANCIALLY_ANCHORED = "FINANCIALLY_ANCHORED"
     SHADOW_CLASSIFICATION = "SHADOW_CLASSIFICATION"
+    SHADOW_EXCLUDED_BY_ONGOING_FINANCE = "SHADOW_EXCLUDED_BY_ONGOING_FINANCE"
+    FINANCIAL_ANCHOR_GOVERNANCE_GAP = "FINANCIAL_ANCHOR_GOVERNANCE_GAP"
     ZOMBIE_CLASSIFICATION = "ZOMBIE_CLASSIFICATION"
     PARKED_CLASSIFICATION = "PARKED_CLASSIFICATION"
 
@@ -124,6 +129,7 @@ def _deduplicate_reason_codes(reasons: set) -> set:
         ("HAS_IDP", "NO_IDP"),
         ("HAS_CMDB", "NO_CMDB"),
         ("HAS_FINANCE", "NO_FINANCE"),
+        ("HAS_ONGOING_FINANCE", "NO_ONGOING_FINANCE"),
         ("HAS_CLOUD", "NO_CLOUD"),
         ("HAS_DISCOVERY", "NO_DISCOVERY"),
         ("RECENT_ACTIVITY", "STALE_ACTIVITY"),
@@ -244,6 +250,14 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
         for ref in asset.evidence_refs
     ) or asset.activity_evidence.discovery_observed_at is not None
     
+    has_ongoing_finance = any(
+        isinstance(ref, str) and (
+            ref.startswith("recurring_contract:") or 
+            ref.startswith("recurring_transaction:")
+        )
+        for ref in asset.evidence_refs
+    )
+    
     if has_idp:
         reasons.append(ReasonCode.HAS_IDP)
     else:
@@ -258,6 +272,11 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
         reasons.append(ReasonCode.HAS_FINANCE)
     else:
         reasons.append(ReasonCode.NO_FINANCE)
+    
+    if has_ongoing_finance:
+        reasons.append(ReasonCode.HAS_ONGOING_FINANCE)
+    else:
+        reasons.append(ReasonCode.NO_ONGOING_FINANCE)
     
     if has_cloud:
         reasons.append(ReasonCode.HAS_CLOUD)
@@ -431,6 +450,7 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
     has_idp = ReasonCode.HAS_IDP in reasons
     has_cmdb = ReasonCode.HAS_CMDB in reasons
     has_finance = ReasonCode.HAS_FINANCE in reasons
+    has_ongoing_finance = ReasonCode.HAS_ONGOING_FINANCE in reasons
     has_cloud = ReasonCode.HAS_CLOUD in reasons
     has_discovery = ReasonCode.HAS_DISCOVERY in reasons
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
@@ -439,23 +459,34 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
     
     has_governance = has_idp or has_cmdb
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
+    financially_anchored = has_ongoing_finance
     
     if is_anchored:
         reasons.append(ReasonCode.ANCHORED)
     else:
         reasons.append(ReasonCode.NOT_ANCHORED)
     
+    if financially_anchored:
+        reasons.append(ReasonCode.FINANCIALLY_ANCHORED)
+    
     evidence["is_anchored"] = is_anchored
     evidence["has_governance"] = has_governance
+    evidence["financially_anchored"] = financially_anchored
     
     is_shadow = False
     is_zombie = False
     is_parked = False
     
     if eligible:
-        if not has_governance and has_recent_activity:
-            is_shadow = True
-            reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
+        ungoverned_access_inventory = not has_governance
+        
+        if ungoverned_access_inventory and has_recent_activity:
+            if financially_anchored:
+                reasons.append(ReasonCode.SHADOW_EXCLUDED_BY_ONGOING_FINANCE)
+                reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
+            else:
+                is_shadow = True
+                reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
         
         if is_anchored and has_stale_activity:
             is_zombie = True

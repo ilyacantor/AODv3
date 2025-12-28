@@ -1,0 +1,134 @@
+### Decision (CTO)
+
+Adopt **Option A: Fix AOD**, but do it *cleanly*:
+
+* **HAS_ONGOING_FINANCE is an anchor** (procurement/contract governance). It should **exclude SHADOW**.
+* It is **not equivalent to IdP/CMDB governance**. It creates a separate state: **“Financially Anchored, Governance Gap.”**
+
+This matches Farm’s “correct semantics over green-test theater” principle: don’t paper over mismatches; encode IRL meaning explicitly. 
+
+---
+
+## Why this is the right contract
+
+### Shadow (urgent security risk)
+
+A tool that is:
+
+* **Ungoverned in access + inventory**: `NO_IDP && NO_CMDB`
+* **Not financially anchored**: `NO_ONGOING_FINANCE`
+* **Active**: `RECENT_ACTIVITY`
+
+### Financially anchored but unmanaged (not shadow)
+
+A tool that is:
+
+* `NO_IDP && NO_CMDB`
+* **HAS_ONGOING_FINANCE**
+* `RECENT_ACTIVITY`
+
+This is **not “clean.”** It is *procurement-known but not integrated*. It should become a **governance onboarding queue**, not shadow triage.
+
+So the FP list (canva, box, hubspot, asana, okta, workday, zapier, etc.) should move out of Shadow into a new bucket/finding, not be called “clean.”
+
+---
+
+## Concrete changes required (no hand-waving)
+
+### 1) AOD: expand “anchoring,” not “governance”
+
+Implement these booleans in classification:
+
+* `anchored = has_cmdb || has_idp || has_ongoing_finance || has_cloud_evidence`
+* `governed_access = has_idp`
+* `governed_inventory = has_cmdb`
+* `financially_anchored = has_ongoing_finance`
+
+Then:
+
+* `SHADOW = (NO_IDP && NO_CMDB) && !financially_anchored && recent`
+* `ZOMBIE = anchored && stale` (per earlier zombie anchor semantics)
+* `CLEAN = everything else`
+
+And emit **explicit reason codes**:
+
+* `HAS_ONGOING_FINANCE` (distinct from `HAS_FINANCE`)
+* `FINANCIALLY_ANCHORED_UNGOVERNED` (or similar)
+* `SHADOW_EXCLUDED_BY_ONGOING_FINANCE`
+
+### 2) Evidence contract: ensure HAS_ONGOING_FINANCE is real input, not derived wishfully
+
+Right now AOD may only see “finance yes/no.” If so, you must ensure Farm snapshots include an explicit **ongoing/recurring** signal in the finance plane, and AOD mapping preserves it.
+
+This is *exactly* the kind of “contract clarity” Farm calls for. 
+
+### 3) microsoft.com discrepancy: treat as a correlation bug until proven otherwise
+
+This is likely one of:
+
+* canonical key mismatch (`microsoft.com` vs “Microsoft 365” / “office.com” / “microsoftonline.com”)
+* CMDB evidence not being ingested/mapped
+* merge logic dropping CMDB match on entity merge
+
+**Fix path:**
+
+* Ensure canonical domain key + aliases are carried through candidate entity merge.
+* When CMDB provides name-based keys, create alias candidates (domain/name) and correlate deterministically.
+* Add a debug line in classification output for `cmdb_match_key` and `cmdb_match_reason` so you can prove where it broke.
+
+---
+
+## Replit agent prompt (AOD + Farm contract alignment)
+
+Copy/paste:
+
+```text
+You are the Replit coding agent. Implement finance anchoring semantics to eliminate shadow false positives without “making things pass” via hacks.
+
+Non-negotiables:
+- No “green-test theater.” Encode real-world meaning explicitly. (See Farm policy.)
+- AOD never consumes Farm __expected__.
+- Outputs must be provable via a real Farm→AOD run + reconciliation diff.
+
+Task 1 — Add explicit finance anchoring signal
+- Confirm AOD receives HAS_ONGOING_FINANCE distinctly from HAS_FINANCE.
+- If missing, update the Farm snapshot finance plane + AOD ingestion/mapping so HAS_ONGOING_FINANCE is present as a first-class evidence flag.
+
+Task 2 — Update AOD classification semantics
+Implement:
+- financially_anchored = HAS_ONGOING_FINANCE
+- ungoverned_access_inventory = (NO_IDP && NO_CMDB)
+- SHADOW = ungoverned_access_inventory && !financially_anchored && RECENT_ACTIVITY
+- If ungoverned_access_inventory && financially_anchored && RECENT_ACTIVITY:
+  - classify as CLEAN (for now) BUT emit a Finding/Reason: FINANCIAL_ANCHOR_GOVERNANCE_GAP
+  - (Do NOT call it shadow.)
+Emit reason codes:
+- HAS_ONGOING_FINANCE
+- SHADOW_EXCLUDED_BY_ONGOING_FINANCE
+- FINANCIAL_ANCHOR_GOVERNANCE_GAP
+
+Task 3 — microsoft.com CMDB mismatch investigation
+- Add structured debug fields for CMDB matching:
+  cmdb_present, cmdb_match_key, cmdb_match_reason, cmdb_candidate_keys
+- Verify canonical key + aliases are preserved through normalization/merge.
+- Fix correlation so microsoft.com (or its alias) resolves to the CMDB record deterministically.
+
+Task 4 — Proof
+- Run the exact failing run run_940c242ebb08 (or same seed/profile).
+- Report before/after:
+  - Shadow FP count (must drop by the 16 finance-anchored cases)
+  - Number of assets tagged FINANCIAL_ANCHOR_GOVERNANCE_GAP
+  - microsoft.com CMDB status (must match Farm if evidence exists)
+- Include a short reconciliation diff excerpt for 3 representative assets (canva.com, okta.com, microsoft.com).
+
+Deliver output in Farm “Fix Proposal Format”:
+What broke; Why; What I changed; Why IRL-correct; Tempting cheat avoided; How I proved it.
+```
+
+---
+
+## One thing to be careful about (so we don’t create new nonsense)
+
+If you treat ongoing finance as governance, you might accidentally hide *real* shadow IT that has recurring spend but no access controls. That’s why we need the **separate “Financially Anchored, Governance Gap”** category (onboarding queue), not “clean and forget.”
+
+If you want, I’ll propose the **exact UI buckets** and workflow buttons for this category (triage vs onboarding) — but the core fix above is the contract decision you need.

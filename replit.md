@@ -118,11 +118,6 @@ An asset is "anchored" if it has ANY of:
 ### Shadow Asset
 - **ungoverned** (no IdP AND no CMDB)
 - AND **activity_status == RECENT**
-- AND has **valid existence evidence**:
-  - Cloud resource presence, OR
-  - Discovery with **≥2 corroborating sources** (browser + proxy, dns + endpoint, etc.)
-
-**Note**: Finance evidence is neither existence evidence NOR an exclusion. An asset with finance + single-source discovery but no IdP/CMDB is NOT shadow because single-source discovery doesn't meet the corroboration threshold.
 
 *Interpretation: "We know this software is actively used, but it's not being managed through official channels."*
 

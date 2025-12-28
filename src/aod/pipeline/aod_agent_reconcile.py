@@ -452,13 +452,10 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
     is_zombie = False
     is_parked = False
     
-    has_corroborated_discovery = has_discovery and ReasonCode.DISCOVERY_SOURCE_COUNT_GE_2 in reasons
-    
     if eligible:
-        if not has_governance:
-            if (has_cloud or has_corroborated_discovery) and has_recent_activity:
-                is_shadow = True
-                reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
+        if not has_governance and has_recent_activity:
+            is_shadow = True
+            reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
         
         if is_anchored and has_stale_activity:
             is_zombie = True

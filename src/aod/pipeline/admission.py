@@ -351,6 +351,8 @@ def source_to_plane(source: str) -> Optional[str]:
 
 DISCOVERY_CORROBORATION_PLANES = {"network", "endpoint", "idp", "cloud", "discovery"}
 
+MULTI_SOURCE_CORROBORATION_THRESHOLD = 3
+
 def check_discovery_admission(
     observations: Optional[list[Observation]],
     min_planes: int = 2
@@ -359,11 +361,19 @@ def check_discovery_admission(
     Check discovery-only admission criteria.
     
     Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct DISCOVERY CORROBORATION PLANES (not all planes!)
+    - Evidence from ≥2 distinct DISCOVERY CORROBORATION PLANES, OR
+    - Evidence from 3+ distinct SOURCES within a single plane (multi-source corroboration)
     - Recent activity ≤ 90 days
     
+    MULTI-SOURCE CORROBORATION:
+    - If an asset has 3+ distinct sources from the same plane (e.g., dns, proxy, network_scan 
+      all from "network" plane), this counts as corroborated evidence.
+    - This prevents false negatives for assets that are heavily observed through network
+      monitoring but not yet visible in endpoint/cloud/idp.
+    
     CRITICAL: 
-    - Count distinct planes, not distinct sources (dns + proxy = 1 network plane)
+    - Count distinct planes for plane diversity
+    - Also count distinct sources per plane for multi-source corroboration
     - Only count discovery-corroborating planes: network, endpoint, idp, cloud, discovery
     - Finance and CMDB do NOT count as discovery corroboration (they are governance evidence)
     """
@@ -371,8 +381,10 @@ def check_discovery_admission(
         return False, ""
     
     from datetime import datetime, timedelta, timezone
+    from collections import defaultdict
     
     planes = set()
+    sources_by_plane: dict[str, set[str]] = defaultdict(set)
     latest_activity: Optional[datetime] = None
     
     for obs in observations:
@@ -380,11 +392,24 @@ def check_discovery_admission(
             plane = source_to_plane(obs.source)
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
                 planes.add(plane)
+                sources_by_plane[plane].add(obs.source.lower())
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
                 latest_activity = obs.observed_at
     
-    if len(planes) < min_planes:
+    has_plane_diversity = len(planes) >= min_planes
+    
+    has_multi_source = False
+    multi_source_plane = None
+    multi_source_count = 0
+    for plane, sources in sources_by_plane.items():
+        if len(sources) >= MULTI_SOURCE_CORROBORATION_THRESHOLD:
+            has_multi_source = True
+            multi_source_plane = plane
+            multi_source_count = len(sources)
+            break
+    
+    if not has_plane_diversity and not has_multi_source:
         return False, ""
     
     if latest_activity is None:
@@ -397,7 +422,10 @@ def check_discovery_admission(
     if latest_activity < cutoff:
         return False, ""
     
-    return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
+    if has_plane_diversity:
+        return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
+    else:
+        return True, f"Discovery: multi-source corroboration ({multi_source_count} sources in {multi_source_plane} plane), last activity {latest_activity.date()}"
 
 
 def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:

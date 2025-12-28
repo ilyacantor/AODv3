@@ -353,18 +353,26 @@ DISCOVERY_CORROBORATION_PLANES = {"network", "endpoint", "idp", "cloud", "discov
 
 def check_discovery_admission(
     observations: Optional[list[Observation]],
+    min_sources: int = 2,
     min_planes: int = 2
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
     
     Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct DISCOVERY CORROBORATION PLANES (not all planes!)
+    - Evidence from ≥2 distinct SOURCES OR ≥2 distinct PLANES
     - Recent activity ≤ 90 days
     
-    CRITICAL: 
-    - Count distinct planes, not distinct sources (dns + proxy = 1 network plane)
-    - Only count discovery-corroborating planes: network, endpoint, idp, cloud, discovery
+    UPDATED FIX (Dec 2025):
+    - Count BOTH distinct sources AND distinct planes
+    - Admit if EITHER threshold is met (sources >= 2 OR planes >= 2)
+    - This fixes the issue where browser/proxy/dns all map to "network" plane
+      but represent 3 distinct corroborating sources
+    
+    RATIONALE:
+    - Multi-source corroboration (browser + proxy + dns) is valid triangulation
+      even if all sources are in the same plane
+    - Multi-plane corroboration (network + endpoint) is also valid
     - Finance and CMDB do NOT count as discovery corroboration (they are governance evidence)
     """
     if not observations:
@@ -372,19 +380,25 @@ def check_discovery_admission(
     
     from datetime import datetime, timedelta, timezone
     
+    sources = set()
     planes = set()
     latest_activity: Optional[datetime] = None
     
     for obs in observations:
         if obs.source:
+            source_lower = obs.source.lower()
             plane = source_to_plane(obs.source)
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                sources.add(source_lower)
                 planes.add(plane)
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
                 latest_activity = obs.observed_at
     
-    if len(planes) < min_planes:
+    sources_ok = len(sources) >= min_sources
+    planes_ok = len(planes) >= min_planes
+    
+    if not sources_ok and not planes_ok:
         return False, ""
     
     if latest_activity is None:
@@ -397,7 +411,10 @@ def check_discovery_admission(
     if latest_activity < cutoff:
         return False, ""
     
-    return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
+    if sources_ok:
+        return True, f"Discovery: {len(sources)} corroborating sources ({', '.join(sorted(sources))}), last activity {latest_activity.date()}"
+    else:
+        return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
 
 
 def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:
@@ -757,8 +774,15 @@ def apply_admission_criteria(
         discovery=discovery_admitted
     )
     
+    all_domains = []
+    if entity.domain:
+        all_domains.append(entity.domain)
+    for alias in entity.observed_aliases:
+        if alias and alias not in all_domains:
+            all_domains.append(alias)
+    
     identifiers = AssetIdentifiers(
-        domains=[entity.domain] if entity.domain else [],
+        domains=all_domains,
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )
@@ -797,6 +821,9 @@ def apply_admission_criteria(
     
     asset_key = canonical_domain
     display_name = entity.original_name
+    
+    if canonical_domain not in identifiers.domains:
+        identifiers.domains.append(canonical_domain)
     
     # Add traffic light status tag
     tags.append(f"traffic_light:{provisioning_status.value}")

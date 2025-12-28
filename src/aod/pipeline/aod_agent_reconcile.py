@@ -26,7 +26,7 @@ Outputs per run:
 """
 
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
@@ -73,6 +73,7 @@ class AssetActualResult:
     is_zombie: bool
     reasons: list[ReasonCode]
     evidence_summary: dict
+    observed_aliases: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -451,6 +452,12 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
             asset_key = _normalize_key(asset.name)
             evidence["key_source"] = "name_derived"
     
+    observed_aliases = []
+    if asset.identifiers and asset.identifiers.domains:
+        for domain in asset.identifiers.domains:
+            if domain and domain.lower() != asset_key.lower():
+                observed_aliases.append(domain.lower())
+    
     return AssetActualResult(
         asset_key=asset_key,
         asset_id=str(asset.asset_id),
@@ -459,7 +466,8 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         is_shadow=is_shadow,
         is_zombie=is_zombie,
         reasons=reasons,
-        evidence_summary=evidence
+        evidence_summary=evidence,
+        observed_aliases=observed_aliases
     )
 
 
@@ -557,7 +565,8 @@ def emit_actual_results(
                 "evidence_summary": result.evidence_summary,
                 "is_shadow": result.is_shadow,
                 "is_zombie": result.is_zombie,
-                "is_canonical": result.evidence_summary.get("key_source") == "domain"
+                "is_canonical": result.evidence_summary.get("key_source") == "domain",
+                "observed_aliases": set(result.observed_aliases)
             }
         else:
             agg = asset_results[key]
@@ -566,6 +575,7 @@ def emit_actual_results(
             agg["names"].append(result.name)
             agg["is_shadow"] = agg["is_shadow"] or result.is_shadow
             agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
+            agg["observed_aliases"].update(result.observed_aliases)
     
     for key, agg in asset_results.items():
         reasons = agg["reasons"]
@@ -584,14 +594,17 @@ def emit_actual_results(
         
         evidence = agg["evidence_summary"].copy()
         if len(agg["names"]) > 1:
-            evidence["aliases"] = agg["names"]
+            evidence["name_aliases"] = agg["names"]
             evidence["asset_ids"] = agg["asset_ids"]
+        
+        observed_aliases = sorted(list(agg.get("observed_aliases", set())))
         
         asset_details[key] = {
             "asset_id": agg["asset_ids"][0],
             "name": agg["names"][0],
             "is_shadow": agg["is_shadow"],
             "is_zombie": agg["is_zombie"],
+            "observed_aliases": observed_aliases,
             "evidence_summary": evidence
         }
         

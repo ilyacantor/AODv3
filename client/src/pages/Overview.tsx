@@ -140,11 +140,6 @@ export default function Overview() {
               <p className="text-base text-slate-400 leading-relaxed">
                 Each layer solved a local problem — none solved the system.
               </p>
-              <div className="pt-4 border-t border-slate-700">
-                <p className="text-lg text-white font-semibold leading-relaxed">
-                  autonomOS makes broken enterprise IT usable — without replacing it.
-                </p>
-              </div>
             </motion.div>
           </div>
         </div>
@@ -327,6 +322,13 @@ export default function Overview() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Key message */}
+          <div className="mt-6 pt-4 border-t border-slate-700">
+            <p className="text-base text-white font-semibold leading-relaxed">
+              autonomOS makes broken enterprise IT usable — without replacing it.
+            </p>
           </div>
         </div>
       </section>

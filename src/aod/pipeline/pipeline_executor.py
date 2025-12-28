@@ -164,6 +164,9 @@ async def execute_pipeline(
     
     timings = {}
     
+    if provenance and provenance.get("fetch_duration_ms"):
+        timings['fetch_snapshot'] = provenance["fetch_duration_ms"] / 1000.0
+    
     try:
         t_start = time.perf_counter()
         snapshot = validate_snapshot(

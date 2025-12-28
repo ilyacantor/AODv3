@@ -4,26 +4,36 @@ Derived Classifications Module
 Computes Shadow, Zombie, and Parked classifications from evidence AFTER the main pipeline.
 These are computed on-read, not stored as flags.
 
+GOVERNANCE POLICY (Dec 2025):
+The Governance Trinity defines "governed":
+  - Visibility: Registered in CMDB
+  - Validation: Present in IdP (sanctioned/SSO)
+  - Control: Managed lifecycle tied to owner
+
+Finance presence does NOT equal governance. An organization can pay for
+unsanctioned tools. There is no "Grey IT" - binary classification only.
+
 Activity Status (ActivityStatus enum):
   - RECENT = has activity timestamp within activity_window_days (default 90)
   - STALE = has activity timestamp outside activity_window_days
   - NONE = no activity timestamps at all (indeterminate)
 
-Anchored Predicate:
+Anchored Predicate (for zombie classification):
   - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
-  - This is broader than just governance (IdP/CMDB) - includes finance and cloud evidence
+  - Used to determine zombie eligibility - only anchored assets can be zombies
 
 Shadow Asset = admitted asset with:
   - ungoverned (NOT has_idp AND NOT has_cmdb)
   - AND activity_status == RECENT
   - Interpretation: Active ungoverned SaaS that needs to be sanctioned or banned
+  - NOTE: Finance does NOT exempt from shadow - pay doesn't equal governance
 
 Zombie Asset = admitted asset with:
   - anchored (has_idp OR has_cmdb OR has_finance OR has_cloud)
   - AND activity_status == STALE (NOT NONE - "no evidence" ≠ "stale evidence")
   - Interpretation: Governed/tracked asset with stale activity that may need deprovisioning
 
-Parked Asset (NEW) = admitted asset with:
+Parked Asset = admitted asset with:
   - NOT anchored (ungoverned AND no finance AND no cloud)
   - AND activity_status == STALE
   - Interpretation: Non-actionable - can't deprovision what isn't managed

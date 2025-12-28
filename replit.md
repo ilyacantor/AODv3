@@ -24,11 +24,19 @@ The system uses a 7-stage sequential pipeline for processing:
 6. **Artifact Handling**: Processing non-asset related data.
 7. **Findings Generation**: Producing explainable findings.
 
+**Governance Trinity (Dec 2025):**
+Shadow IT is defined by the absence of explicit sanctioning, not by malicious intent or utility. Any asset that fails the Governance Trinity is Shadow:
+- **Visibility**: Registered in CMDB
+- **Validation**: Present in IdP (sanctioned/SSO)
+- **Control**: Managed lifecycle tied to owner
+
+Finance presence does NOT equal governance. You can pay for unsanctioned tools. There is no "Grey IT" - binary classification only.
+
 **Derived Classifications:**
 - **Activity Status**: Classifies assets as RECENT (active within 90 days), STALE (inactive beyond 90 days), or NONE (no activity timestamps).
-- **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, recurring finance, or cloud resource match.
-- **Shadow Asset**: Ungoverned (no IdP/CMDB) AND not financially anchored AND RECENT activity.
-- **Financially Anchored, Governance Gap**: Ungoverned (no IdP/CMDB) AND has ongoing finance AND RECENT activity. Not considered shadow IT.
+- **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match. Used for zombie eligibility.
+- **Shadow Asset**: Ungoverned (no IdP/CMDB) AND RECENT activity. Finance does NOT exempt from shadow.
+- **Financial Anchor Governance Gap**: Shadow asset with ongoing finance - needs governance review despite being paid for.
 - **Zombie Asset**: Anchored AND STALE activity.
 - **Parked Asset**: Not anchored AND STALE activity.
 

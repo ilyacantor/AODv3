@@ -116,7 +116,11 @@ class TestFinanceAnchoringReasonCodes:
 
 
 class TestFinanceAnchoringClassification:
-    """Test that financially anchored assets are excluded from Shadow IT"""
+    """Test shadow classification per Governance Trinity policy.
+    
+    Finance does NOT equal governance. Only IdP/CMDB presence determines governance.
+    Shadow = ungoverned + recent activity (regardless of finance).
+    """
     
     def test_ungoverned_onetime_finance_is_shadow(self):
         """Ungoverned asset with one-time finance IS shadow"""
@@ -135,8 +139,13 @@ class TestFinanceAnchoringClassification:
         assert "SHADOW_CLASSIFICATION" in reason_values
         assert "FINANCIAL_ANCHOR_GOVERNANCE_GAP" not in reason_values
     
-    def test_ungoverned_recurring_finance_is_not_shadow(self):
-        """Ungoverned asset with recurring finance is NOT shadow - gets governance gap"""
+    def test_ungoverned_recurring_finance_is_shadow_with_governance_gap(self):
+        """Ungoverned asset with recurring finance IS shadow - finance does NOT equal governance.
+        
+        Per Governance Trinity (Dec 2025): Shadow IT is defined by absence of explicit
+        sanctioning (IdP/CMDB). Finance presence does NOT equal governance - you can pay
+        for unsanctioned tools. There is no 'Grey IT' - binary classification only.
+        """
         asset = make_asset(
             has_idp=False,
             has_cmdb=False,
@@ -148,9 +157,10 @@ class TestFinanceAnchoringClassification:
         result = classify_actual(asset)
         reason_values = [r.value for r in result.reasons]
         
-        assert result.is_shadow is False
-        assert "SHADOW_CLASSIFICATION" not in reason_values
-        assert "SHADOW_EXCLUDED_BY_ONGOING_FINANCE" in reason_values
+        # IS shadow because ungoverned (no IdP/CMDB) + RECENT activity
+        assert result.is_shadow is True
+        assert "SHADOW_CLASSIFICATION" in reason_values
+        # Also tagged with governance gap since it has ongoing finance
         assert "FINANCIAL_ANCHOR_GOVERNANCE_GAP" in reason_values
     
     def test_governed_with_idp_is_not_shadow(self):

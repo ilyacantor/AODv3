@@ -68,7 +68,6 @@ class ReasonCode(str, Enum):
     NOT_ANCHORED = "NOT_ANCHORED"
     FINANCIALLY_ANCHORED = "FINANCIALLY_ANCHORED"
     SHADOW_CLASSIFICATION = "SHADOW_CLASSIFICATION"
-    SHADOW_EXCLUDED_BY_ONGOING_FINANCE = "SHADOW_EXCLUDED_BY_ONGOING_FINANCE"
     FINANCIAL_ANCHOR_GOVERNANCE_GAP = "FINANCIAL_ANCHOR_GOVERNANCE_GAP"
     ZOMBIE_CLASSIFICATION = "ZOMBIE_CLASSIFICATION"
     PARKED_CLASSIFICATION = "PARKED_CLASSIFICATION"
@@ -449,8 +448,20 @@ def classify_actual(
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
     
-    NEW LOGIC (Dec 2025) - Farm grading alignment:
-    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+    GOVERNANCE POLICY (Dec 2025):
+    Shadow = NOT governed (no IdP/CMDB) AND activity_status==RECENT
+    
+    The Governance Trinity defines "governed":
+    - Visibility: Registered in CMDB
+    - Validation: Present in IdP (sanctioned/SSO)
+    - Control: Managed lifecycle tied to owner
+    
+    Finance presence does NOT equal governance. An organization can pay for
+    unsanctioned tools. Shadow classification surfaces these for governance review.
+    There is no "Grey IT" - binary classification only.
+    
+    Classification rules:
+    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud (for zombie)
     - is_shadow = NOT has_governance (idp/cmdb) AND activity_status==RECENT
     - is_zombie = is_anchored AND activity_status==STALE (NOT NONE!)
     - is_parked = NOT is_anchored AND activity_status==STALE
@@ -506,12 +517,14 @@ def classify_actual(
         ungoverned_access_inventory = not has_governance
         
         if ungoverned_access_inventory and has_recent_activity:
+            # Per governance policy: Shadow = NOT governed (no IdP/CMDB), regardless of finance
+            # Finance presence does NOT equal governance - you can pay for unsanctioned tools
+            is_shadow = True
+            reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
+            
+            # Tag governance gap if has ongoing finance but still ungoverned
             if financially_anchored:
-                reasons.append(ReasonCode.SHADOW_EXCLUDED_BY_ONGOING_FINANCE)
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
-            else:
-                is_shadow = True
-                reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
         
         if is_anchored and has_stale_activity:
             is_zombie = True

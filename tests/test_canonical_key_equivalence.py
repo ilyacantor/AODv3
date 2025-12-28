@@ -118,18 +118,52 @@ class TestAssetKeyExtraction:
             result = _extract_registered_domain(asset)
             assert result == expected, f"Typosquat {name} was altered to {result} by vendor {vendor}"
     
-    def test_variant_domains_preserved(self):
-        """Vendor variant domains must not be normalized to parent vendor domain"""
+    def test_alias_domains_normalized_to_canonical(self):
+        """Known alias domains should be normalized to canonical vendor domain.
+        
+        Dec 2025 Fix: Only domains in ALIAS_DOMAINS_TO_COLLAPSE are normalized.
+        This fixes KEY_NORMALIZATION_MISMATCH for Microsoft/Google/Zoom aliases
+        while preserving legitimate SaaS keys like atlassian.net, notion.so.
+        """
         test_cases = [
-            ("slack-hq.com", "Slack", "slack-hq.com"),
-            ("slackapp.com", "Slack", "slackapp.com"),
-            ("sfdc.io", "Salesforce", "sfdc.io"),
-            ("zoom-video.com", "Zoom", "zoom-video.com"),
+            # Domain-like name with known alias -> canonical domain
+            ("zoom-video.com", "Zoom", "zoom.us"),  # zoom-video.com is alias -> zoom.us
+            ("microsoftonline.com", "Microsoft", "microsoft.com"),  # alias -> canonical
+            ("googleapis.com", "Google", "google.com"),  # alias -> canonical
+        ]
+        for name, vendor, expected_canonical in test_cases:
+            asset = self._make_asset(name, domains=[], vendor=vendor)
+            result = _extract_registered_domain(asset)
+            assert result == expected_canonical, f"Alias domain {name} should normalize to {expected_canonical}, got {result}"
+    
+    def test_primary_domains_preserved(self):
+        """Legitimate primary SaaS domains should NOT be normalized to vendor canonical.
+        
+        atlassian.net, notion.so, etc are legitimate primary domains, not aliases.
+        They should be preserved as-is even though they're in DOMAIN_TO_VENDOR.
+        """
+        test_cases = [
+            ("atlassian.net", "Atlassian", "atlassian.net"),  # Primary domain, NOT collapsed
+            ("notion.so", "Notion", "notion.so"),  # Primary domain, preserved
+            ("intercom.io", "Intercom", "intercom.io"),  # Primary domain, preserved
+            ("sentry.io", "Sentry", "sentry.io"),  # Primary domain, preserved
         ]
         for name, vendor, expected in test_cases:
             asset = self._make_asset(name, domains=[], vendor=vendor)
             result = _extract_registered_domain(asset)
-            assert result == expected, f"Variant {name} was altered to {result}"
+            assert result == expected, f"Primary domain {name} should be preserved as {expected}, got {result}"
+    
+    def test_unknown_variant_domains_preserved(self):
+        """Variant domains NOT in DOMAIN_TO_VENDOR must be preserved as-is"""
+        test_cases = [
+            ("slack-hq.com", "Slack", "slack-hq.com"),  # Not in DOMAIN_TO_VENDOR
+            ("slackapp.com", "Slack", "slackapp.com"),  # Not in DOMAIN_TO_VENDOR
+            ("sfdc.io", "Salesforce", "sfdc.io"),  # Not in DOMAIN_TO_VENDOR
+        ]
+        for name, vendor, expected in test_cases:
+            asset = self._make_asset(name, domains=[], vendor=vendor)
+            result = _extract_registered_domain(asset)
+            assert result == expected, f"Unknown variant {name} was altered to {result}"
     
     def test_vendor_fallback_when_no_domain(self):
         """Vendor lookup should only apply when there's no domain evidence"""
@@ -146,15 +180,16 @@ class TestAssetKeyExtraction:
 
 class TestTwoPathEquivalence:
     """
-    Test that reconciliation code and pipeline code produce identical keys.
+    Test that reconciliation code produces correct canonical keys.
     
-    This catches "two canonicalizers exist" bugs where different code paths
-    produce different keys for the same input.
+    Dec 2025 Update: The reconcile path now normalizes known vendor domains
+    to their canonical vendor domain (e.g., zoom-video.com -> zoom.us).
+    This is intentional to fix KEY_NORMALIZATION_MISMATCH errors.
     """
     
-    TEST_DOMAINS = [
+    # Domains NOT in DOMAIN_TO_VENDOR - should match extract_registered_domain exactly
+    UNKNOWN_DOMAINS = [
         "images75.edge.com",
-        "app.slack.com",
         "slack-hq.com",
         "slackapp.com",
         "s1ack.com",
@@ -163,17 +198,28 @@ class TestTwoPathEquivalence:
         "micros0ft.com",
         "z00m.us",
         "sfdc.io",
-        "zoom-video.com",
-        "notion.so",
-        "atlassian.net",
     ]
     
-    def test_reconcile_vs_vendor_inference_path(self):
-        """Compare extract_registered_domain from both modules"""
+    # Domains with vendor mapping - test alias normalization vs primary preservation
+    ALIAS_DOMAINS = [
+        ("app.slack.com", "slack.com"),  # subdomain -> registered -> canonical (same)
+        ("zoom-video.com", "zoom.us"),   # alias domain -> normalized to zoom.us
+        ("microsoftonline.com", "microsoft.com"),  # alias -> normalized
+    ]
+    
+    # Primary domains that should be PRESERVED (not in ALIAS_DOMAINS_TO_COLLAPSE)
+    PRIMARY_DOMAINS = [
+        ("atlassian.net", "atlassian.net"),  # Primary domain, NOT collapsed
+        ("notion.so", "notion.so"),  # Primary domain, preserved
+        ("sentry.io", "sentry.io"),  # Primary domain, preserved
+    ]
+    
+    def test_unknown_domains_match_extract_registered(self):
+        """Unknown domains should match extract_registered_domain exactly"""
         from src.aod.pipeline.vendor_inference import extract_registered_domain as vendor_extract
         
         mismatches = []
-        for domain in self.TEST_DOMAINS:
+        for domain in self.UNKNOWN_DOMAINS:
             vendor_result = vendor_extract(domain)
             
             asset = Asset(
@@ -191,11 +237,43 @@ class TestTwoPathEquivalence:
             if vendor_result != reconcile_result:
                 mismatches.append({
                     "domain": domain,
-                    "vendor_inference": vendor_result,
-                    "reconcile": reconcile_result,
+                    "expected": vendor_result,
+                    "got": reconcile_result,
                 })
         
-        assert not mismatches, f"Path divergence detected:\n{mismatches}"
+        assert not mismatches, f"Unknown domain mismatch:\n{mismatches}"
+    
+    def test_alias_domains_normalize_to_canonical(self):
+        """Alias domains should normalize to canonical vendor domain"""
+        for domain, expected_canonical in self.ALIAS_DOMAINS:
+            asset = Asset(
+                asset_id=uuid.uuid4(),
+                tenant_id="test-tenant",
+                run_id="test",
+                name=domain,
+                identifiers=AssetIdentifiers(domains=[]),
+                vendor=None,
+                lens_status=LensStatuses(),
+                lens_coverage=LensCoverage(),
+            )
+            result = _extract_registered_domain(asset)
+            assert result == expected_canonical, f"Alias domain {domain} should normalize to {expected_canonical}, got {result}"
+    
+    def test_primary_domains_are_preserved(self):
+        """Primary domains should NOT be normalized (preserved as-is)"""
+        for domain, expected in self.PRIMARY_DOMAINS:
+            asset = Asset(
+                asset_id=uuid.uuid4(),
+                tenant_id="test-tenant",
+                run_id="test",
+                name=domain,
+                identifiers=AssetIdentifiers(domains=[]),
+                vendor=None,
+                lens_status=LensStatuses(),
+                lens_coverage=LensCoverage(),
+            )
+            result = _extract_registered_domain(asset)
+            assert result == expected, f"Primary domain {domain} should be preserved as {expected}, got {result}"
     
     def test_name_normalization_consistency(self):
         """Test that name normalization is consistent across paths"""

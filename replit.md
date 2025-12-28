@@ -37,8 +37,12 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 - **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match. Used for zombie eligibility.
 - **Shadow Asset**: Ungoverned (no IdP/CMDB) AND RECENT activity. Finance does NOT exempt from shadow.
 - **Financial Anchor Governance Gap**: Shadow asset with ongoing finance - needs governance review despite being paid for.
-- **Zombie Asset**: Anchored AND STALE activity.
-- **Parked Asset**: Not anchored AND STALE activity.
+- **Zombie Asset**: Anchored AND STALE activity AND NO registered owner (orphaned). CMDB presence = owned = not zombie.
+- **Parked Asset**: STALE activity AND (has registered owner in CMDB OR not anchored). Owned but inactive, or non-actionable.
+
+**Dec 2025 Logic Fixes:**
+1. **Domain Normalization**: Only ALIAS domains are normalized to canonical vendor domain. Uses ALIAS_DOMAINS_TO_COLLAPSE set to identify aliases. Example: `microsoftonline.com` → `microsoft.com` (known alias). Primary domains like `atlassian.net`, `notion.so`, `sentry.io` are preserved as-is since they are legitimate SaaS keys.
+2. **Zombie vs Parked**: CMDB presence indicates registered ownership. Stale assets with CMDB entry are Parked (owned but inactive), not Zombie. Only orphaned (no CMDB owner) stale assets become Zombies.
 
 **Traffic Light Provisioning**: A fail-closed system for asset provisioning, controlling flow to DCL with statuses like ACTIVE (Green), REVIEW (Amber), QUARANTINE (Red), BLOCKED, RETIRED, and IGNORED.
 

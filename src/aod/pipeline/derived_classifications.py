@@ -197,11 +197,28 @@ class DomainRollup:
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.RECENT
     
+    def has_registered_owner(self) -> bool:
+        """
+        Check if asset has a registered owner (in CMDB or explicitly assigned).
+        
+        CMDB presence indicates registered ownership/control - the asset is
+        cataloged in the configuration management system.
+        
+        Used to distinguish Zombie (orphaned) from Parked (owned but inactive).
+        """
+        return self.has_cmdb
+    
     def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level zombie: anchored AND activity_status==STALE.
+        Domain-level zombie: anchored but ORPHANED (no registered owner) AND stale.
         
-        Zombie = (has_idp OR has_cmdb OR has_finance OR has_cloud) AND activity_status==STALE
+        Zombie = anchored AND NOT has_registered_owner AND activity_status==STALE
+        
+        Dec 2025 Fix: Zombie means ORPHANED (no owner to manage deprovisioning).
+        If asset is in CMDB, it has a registered owner and is Parked, not Zombie.
+        
+        - anchored (IdP/Finance/Cloud) + stale + no CMDB owner = Zombie (can terminate)
+        - has_cmdb + stale = Parked (owned but inactive - don't kill)
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
@@ -216,18 +233,24 @@ class DomainRollup:
         if not self.is_anchored():
             return False
         
+        # If has registered owner (CMDB), it's Parked, not Zombie
+        if self.has_registered_owner():
+            return False
+        
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.STALE
     
     def is_parked(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level parked: NOT anchored AND activity_status==STALE.
+        Domain-level parked: stale AND (has registered owner OR not anchored).
         
-        Parked = NOT is_anchored() AND activity_status==STALE
+        Parked = activity_status==STALE AND (has_registered_owner OR NOT is_anchored)
         
-        Parked assets are non-actionable - they have stale activity but no governance
-        or tracking, so there's nothing to deprovision. These are explicitly excluded
-        from zombie counts.
+        Dec 2025 Fix: Parked means either:
+        1. Owned but inactive - has CMDB entry (registered owner), stale activity
+        2. Non-actionable - not anchored, can't deprovision what isn't managed
+        
+        These are explicitly excluded from zombie counts.
         
         INVARIANT: Only domain-canonical assets count as parked.
         Internal identifiers (name-derived keys) are excluded.
@@ -238,11 +261,12 @@ class DomainRollup:
         if not self.is_domain_canonical:
             return False
         
-        if self.is_anchored():
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
+        if activity_status != ActivityStatus.STALE:
             return False
         
-        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
-        return activity_status == ActivityStatus.STALE
+        # Parked if has registered owner OR not anchored
+        return self.has_registered_owner() or not self.is_anchored()
     
     def get_reason_codes(self) -> list[str]:
         """Generate canonical reason codes for this domain"""
@@ -780,27 +804,114 @@ def compute_derived_classifications(
     )
 
 
+# Domains that are ALIASES and should collapse to the vendor canonical domain.
+# Only domains in this set will be normalized. Other domains in DOMAIN_TO_VENDOR
+# that are legitimate primary SaaS keys (atlassian.net, notion.so) are preserved.
+ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
+    # Microsoft family - collapse to microsoft.com
+    "microsoftonline.com",
+    "azure.com",
+    "office.com",
+    "office365.com",
+    "sharepoint.com",
+    "live.com",
+    "outlook.com",
+    "onedrive.com",
+    "powerbi.com",
+    # Google family - collapse to google.com
+    "googleapis.com",
+    "gstatic.com",
+    "googleusercontent.com",
+    # Zoom family - collapse to zoom.us
+    "zoom.com",
+    "zoom-video.com",
+    "zoom-meetings.net",
+    "zoomapp.io",
+    # Atlassian aliases - collapse to atlassian.com
+    # Note: atlassian.net is a legitimate primary domain (Jira Cloud), NOT collapsed
+    "jira.com",
+    "confluence.com",
+    "opsgenie.com",
+    # GitHub aliases
+    "github.io",
+    "githubusercontent.com",
+    # Other aliases
+    "slackb2b.com",  # Slack
+    "dropboxapi.com",  # Dropbox
+    "boxcdn.net",  # Box
+    "oktapreview.com",  # Okta
+    "sendgrid.net",  # Twilio
+    "stripe.network",  # Stripe
+    "zdassets.com",  # Zendesk
+    "hubspotusercontent.com",  # HubSpot
+    "datadoghq.com",  # Datadog
+    "splunkcloud.com",  # Splunk
+    "docusign.net",  # DocuSign
+    "adobelogin.com",  # Adobe
+}
+
+
+def _normalize_to_canonical_vendor_domain(registered_domain: str) -> str | None:
+    """
+    Normalize a registered domain to its canonical vendor domain (only for known aliases).
+    
+    This handles cases like:
+    - microsoftonline.com -> microsoft.com (known alias)
+    - office365.com -> microsoft.com (known alias)
+    - googleapis.com -> google.com (known alias)
+    
+    BUT PRESERVES:
+    - atlassian.net (legitimate primary domain, not an alias)
+    - notion.so (canonical domain)
+    - segment.io (canonical domain)
+    
+    Only domains in ALIAS_DOMAINS_TO_COLLAPSE are normalized.
+    Other domains in DOMAIN_TO_VENDOR that are legitimate SaaS keys are preserved.
+    """
+    from .vendor_inference import DOMAIN_TO_VENDOR
+    
+    # Only normalize if this is a known alias domain
+    if registered_domain not in ALIAS_DOMAINS_TO_COLLAPSE:
+        return None
+    
+    if registered_domain in DOMAIN_TO_VENDOR:
+        vendor_name = DOMAIN_TO_VENDOR[registered_domain]
+        vendor_key = vendor_name.lower().strip()
+        if vendor_key in VENDOR_TO_DOMAIN:
+            canonical = VENDOR_TO_DOMAIN[vendor_key]
+            if canonical != registered_domain:
+                return canonical
+    return None
+
+
 def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
     """
     Resolve the canonical domain key for an asset.
     
     Returns:
         Tuple of (domain_key, is_canonical, alias_keys) where:
-        - domain_key: The canonical registered domain (e.g., asana.com)
+        - domain_key: The canonical vendor domain (e.g., microsoft.com for microsoftonline.com)
         - is_canonical: True if key is a registered domain, False if name-derived
         - alias_keys: List of original domains/subdomains that map to this canonical key
     
-    Priority order (DOMAIN PROMOTION):
-    1. asset.identifiers.domains (explicit domain from evidence) -> extract registered domain
+    Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
+    1. asset.identifiers.domains -> extract registered domain -> normalize to vendor canonical
     2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
     3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
-    4. Asset name if it looks like a domain -> extract registered domain
+    4. Asset name if it looks like a domain -> extract registered -> normalize to vendor canonical
     5. Fallback: normalized name -> NOT canonical
+    
+    NORMALIZATION FIX (Dec 2025): After extracting registered domain, we now also
+    check DOMAIN_TO_VENDOR to map vendor-related domains to a single canonical key.
+    e.g., login.microsoftonline.com -> microsoftonline.com -> microsoft.com
+    
+    This fixes KEY_NORMALIZATION_MISMATCH errors where governance checks failed
+    because microsoftonline.com and microsoft.com were treated as different assets.
     
     INVARIANT: This must match the key resolution in aod_agent_reconcile.py
     to ensure UI counts match reconciliation counts.
     
-    INVARIANT: If raw domain != registered domain, both are preserved in alias_keys.
+    INVARIANT: If raw domain != registered domain != canonical, all are preserved in alias_keys.
     """
     from .vendor_inference import extract_registered_domain
     
@@ -812,8 +923,14 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
                 raw_domain = domain.lower().strip()
                 alias_keys.append(raw_domain)
                 registered = extract_registered_domain(raw_domain)
-                if registered and registered != raw_domain:
-                    alias_keys.append(registered)
+                if registered:
+                    if registered != raw_domain:
+                        alias_keys.append(registered)
+                    # NEW: Check if registered domain maps to a canonical vendor domain
+                    canonical = _normalize_to_canonical_vendor_domain(registered)
+                    if canonical:
+                        alias_keys.append(canonical)
+                        return (canonical, True, alias_keys)
                     return (registered, True, alias_keys)
                 return (raw_domain, True, alias_keys)
     
@@ -834,8 +951,14 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
         if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
             alias_keys.append(name)
             registered = extract_registered_domain(name)
-            if registered and registered != name:
-                alias_keys.append(registered)
+            if registered:
+                if registered != name:
+                    alias_keys.append(registered)
+                # NEW: Check if registered domain maps to a canonical vendor domain
+                canonical = _normalize_to_canonical_vendor_domain(registered)
+                if canonical:
+                    alias_keys.append(canonical)
+                    return (canonical, True, alias_keys)
                 return (registered, True, alias_keys)
             return (name, True, alias_keys)
     

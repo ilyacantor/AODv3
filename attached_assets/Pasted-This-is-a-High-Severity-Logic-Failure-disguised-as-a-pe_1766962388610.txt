@@ -1,0 +1,59 @@
+This is a **High-Severity Logic Failure** disguised as a performance issue.
+
+While the "FAIL" verdict and 82.7% accuracy look bad on the surface, the specific error codes (`KEY_NORMALIZATION_MISMATCH`) tell a much more specific story: **Your AOD Agent is not blind; it is dyslexic.**
+
+It *sees* the assets (evidence exists) but fails to map them to the canonical identity expected by the Farm. It is also **"trigger happy"** on Zombies, classifying valid "Parked" assets as dead because they are essentially in a coma.
+
+Here is the evaluation of Run `45526fb42c6b`:
+
+### 1. The Shadow Failure: Identity Crisis (159 Misses)
+
+**The Problem:**
+You missed 159 Shadows, but for ~155 of them, the RCA Hint is `KEY_NORMALIZATION_MISMATCH`.
+
+* **What happened:** The Farm expects `microsoft.com`. The AOD found evidence for `microsoft.com` but failed to "normalize to domain key."
+* **Interpretation:** The AOD likely found the asset (perhaps as `www.microsoft.com`, `login.microsoftonline.com`, or just raw traffic) but failed to strip the subdomains or map aliases to the root domain before checking the Governance list.
+* **The Fix:** This is not a reasoning error; it is a **string manipulation/regex error**. You do not need to retrain the agent on what "Shadow" means; you need to force a standard "Domain Normalization" step *before* the classification logic runs.
+
+### 2. The Zombie Failure: Aggressive Termination (58 False Positives)
+
+**The Problem:**
+The AOD flagged 58 assets as Zombies that the Farm considers "Clean" (26) or "Parked" (31).
+
+* **What happened:** The AOD saw `STALE_ACTIVITY` and `NO_ONGOING_FINANCE` and immediately assumed "Zombie."
+* **The Logic Gap:** AOD failed to distinguish between a **Coma** (Parked/Stale but Owned) and **Death** (Orphaned/Zombie).
+* *Farm Definition:* A "Parked" asset is inactive but explicitly cataloged (valid).
+* *AOD Definition:* "If it's not moving and we aren't paying for it, kill it."
+
+
+* **The Fix:** You must patch the Zombie definition. **Staleness alone does not equal Zombification.** The deciding factor must be **Orphaned Control**. If a "Parked" asset has a registered owner in the CMDB, it is **not** a Zombie.
+
+### 3. The "Governance Trinity" Disconnect
+
+The Farm flagged assets like `corelabs.com` as `GOVERNANCE_TRINITY_FAIL` (Missing Visibility, Validation, or Control). The AOD missed these because of the normalization error, but the underlying logic needs to be sharper:
+
+* **Current AOD Behavior:** Looks for "Bad Signals" (e.g., suspicious traffic).
+* **Required AOD Behavior:** Look for **Missing Good Signals**. If `IDP_Link == Null` AND `CMDB_Entry == Null`, it is Shadow, even if the traffic looks benign.
+
+---
+
+### Corrective System Prompt Patch
+
+Here is the adjustment needed for your AOD System Prompt to fix these two specific failures:
+
+**1. Normalization Protocol (Pre-Processing)**
+
+> "Before classifying any asset, you MUST normalize the identifier to its **Root Domain** (e.g., `api.corelabs.com` -> `corelabs.com`). All Governance checks (CMDB lookup, IDP verification) must be performed against this Root Key. Failure to normalize is a failure to govern."
+
+**2. Refined Zombie Logic (The "Coma" Clause)**
+
+> "Distinguish between **Zombie** (Unowned) and **Parked** (Inactive but Owned).
+> * IF `Activity == Stale` AND `Owner == Known/Registered`: Status is **PARKED** (Do Not Kill).
+> * IF `Activity == Stale` AND `Owner == Unknown/Disconnected`: Status is **ZOMBIE** (Terminate).
+> * **Rule:** Staleness is a symptom, but **Orphaned Status** is the verdict."
+> 
+> 
+
+### Next Step
+
+Would you like me to generate the **Python Regex pattern** for that domain normalization to ensure your AOD strips subdomains correctly in the next run?

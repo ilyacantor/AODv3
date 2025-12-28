@@ -34,6 +34,7 @@ from ..models.output_contracts import Asset, LensStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
 from ..constants import INFRASTRUCTURE_DOMAINS
 from ..utils.normalization import normalize_key as _normalize_key, normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
+from .derived_classifications import _resolve_domain_key
 
 
 class ReasonCode(str, Enum):
@@ -496,8 +497,9 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
             is_parked = True
             reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     
-    raw_domain = _extract_raw_domain(asset)
-    all_domain_variants = set()
+    domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
+    
+    all_domain_variants = set(alias_keys)
     
     if asset.identifiers and asset.identifiers.domains:
         for d in asset.identifiers.domains:
@@ -510,35 +512,30 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
             all_domain_variants.add(name_lower)
     
-    if raw_domain:
-        asset_key = raw_domain
-        registered = extract_registered_domain(raw_domain)
-        all_domain_variants.add(raw_domain)
-        if registered:
-            all_domain_variants.add(registered)
-        evidence["key_source"] = "domain"
+    all_domain_variants.add(domain_key)
+    
+    if is_canonical:
+        raw_domain = None
+        if asset.identifiers and asset.identifiers.domains:
+            for d in asset.identifiers.domains:
+                if d and "." in d:
+                    raw_domain = d.lower().strip()
+                    break
+        
+        registered = extract_registered_domain(raw_domain) if raw_domain else domain_key
+        evidence["key_source"] = "domain" if raw_domain else "vendor_canonical"
         evidence["raw_domain"] = raw_domain
-        evidence["registered_domain"] = registered
+        evidence["registered_domain"] = registered or domain_key
         evidence["name_variant"] = asset.name
+        evidence["alias_keys"] = alias_keys
         evidence["all_domain_variants"] = sorted(all_domain_variants)
+        asset_key = domain_key
     else:
-        normalized_name = _normalize_name_for_vendor_lookup(asset.name)
-        if normalized_name in VENDOR_TO_DOMAIN:
-            asset_key = VENDOR_TO_DOMAIN[normalized_name]
-            all_domain_variants.add(asset_key)
-            evidence["key_source"] = "vendor_alias"
-            evidence["original_name"] = asset.name
-            evidence["all_domain_variants"] = sorted(all_domain_variants)
-        elif asset.vendor and asset.vendor.lower() in VENDOR_TO_DOMAIN:
-            asset_key = VENDOR_TO_DOMAIN[asset.vendor.lower()]
-            all_domain_variants.add(asset_key)
-            evidence["key_source"] = "vendor_lookup"
-            evidence["original_name"] = asset.name
-            evidence["all_domain_variants"] = sorted(all_domain_variants)
-        else:
-            asset_key = _normalize_key(asset.name)
-            evidence["key_source"] = "name_derived"
-            evidence["all_domain_variants"] = sorted(all_domain_variants) if all_domain_variants else []
+        asset_key = domain_key
+        evidence["key_source"] = "name_derived"
+        evidence["original_name"] = asset.name
+        evidence["alias_keys"] = alias_keys
+        evidence["all_domain_variants"] = sorted(all_domain_variants) if all_domain_variants else []
     
     return AssetActualResult(
         asset_key=asset_key,
@@ -615,12 +612,16 @@ def emit_actual_results(
     This ensures Farm reconciliation always has aod_reason_codes for every
     asset it asks about.
     
-    HOST-LEVEL CLASSIFICATION: Each asset is classified individually based on
-    its OWN evidence. Keys preserve subdomains (login498.edge.com stays separate
-    from admin.edge.com) to match Farm's host-level granularity.
+    DOMAIN-LEVEL AGGREGATION: Assets are aggregated by registered domain key
+    (e.g., app.asana.com and api.asana.com both map to asana.com key).
+    Uses _resolve_domain_key() from derived_classifications for consistent
+    key resolution across UI and reconciliation.
     
-    Shadow/zombie status is determined per-asset in classify_actual(), not
-    by aggregating governance across sibling hosts.
+    ALIAS PROPAGATION: All original subdomains and domain variants are preserved
+    in domain_aliases and alias_keys fields, enabling Farm to match against
+    any key variant (canonical domain OR original subdomain).
+    
+    Shadow/zombie status is OR'd across assets sharing the same domain key.
     
     Args:
         run_id: The run ID
@@ -692,6 +693,8 @@ def emit_actual_results(
         if agg.get("registered_domain"):
             evidence["registered_domain"] = agg["registered_domain"]
         
+        alias_keys = evidence.get("alias_keys", [])
+        
         asset_details[key] = {
             "asset_id": agg["asset_ids"][0],
             "name": agg["names"][0],
@@ -699,6 +702,7 @@ def emit_actual_results(
             "is_zombie": agg["is_zombie"],
             "is_parked": agg["is_parked"],
             "domain_aliases": domain_aliases,
+            "alias_keys": alias_keys,
             "registered_domain": agg.get("registered_domain"),
             "evidence_summary": evidence
         }

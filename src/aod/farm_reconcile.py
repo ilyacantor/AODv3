@@ -80,6 +80,7 @@ def build_reconcile_payload(
             "is_zombie": details.get("is_zombie", False),
             "is_parked": details.get("is_parked", False),
             "domain_aliases": details.get("domain_aliases", []),
+            "alias_keys": details.get("alias_keys", []),
             "registered_domain": details.get("registered_domain"),
             "evidence_summary": details.get("evidence_summary", {})
         }

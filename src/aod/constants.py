@@ -4,52 +4,6 @@ Constants used across the AOD codebase.
 Consolidates hardcoded values and configuration data.
 """
 
-# Major vendor/platform domains excluded from zombie classification
-# These are large platform providers whose domains appear in enterprise data
-# but are not individually managed assets (e.g., google.com hosts many services)
-VENDOR_PLATFORM_DOMAINS = {
-    "google.com",
-    "googleapis.com",
-    "gstatic.com",
-    "googlevideo.com",
-    "googleusercontent.com",
-    "microsoft.com",
-    "microsoftonline.com",
-    "azure.com",
-    "live.com",
-    "office.com",
-    "office365.com",
-    "sharepoint.com",
-    "apple.com",
-    "icloud.com",
-    "amazon.com",
-    "amazonaws.com",
-    "cloudfront.net",
-    "facebook.com",
-    "fbcdn.net",
-    "meta.com",
-    "twitter.com",
-    "x.com",
-    "linkedin.com",
-    "licdn.com",
-    "github.com",
-    "githubusercontent.com",
-    "cloudflare.com",
-    "cloudflare.net",
-    "akamai.com",
-    "akamaized.net",
-    "fastly.net",
-    "youtube.com",
-    "youtu.be",
-    "vimeo.com",
-    "adobe.com",
-    "typekit.net",
-    "fonts.googleapis.com",
-    "cdnjs.cloudflare.com",
-    "unpkg.com",
-    "jsdelivr.net",
-}
-
 # Infrastructure domains excluded from shadow/zombie SaaS reconciliation
 # These represent tooling and infrastructure, not SaaS applications
 INFRASTRUCTURE_DOMAINS = {

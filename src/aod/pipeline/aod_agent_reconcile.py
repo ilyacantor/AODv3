@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from ..models.output_contracts import Asset, LensStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
 from ..constants import INFRASTRUCTURE_DOMAINS
-from ..utils.normalization import normalize_key as _normalize_key, normalize_canonical_key as _normalize_canonical_key, normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
+from ..utils.normalization import normalize_key as _normalize_key, normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 
 
 class ReasonCode(str, Enum):
@@ -448,7 +448,7 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
             evidence["key_source"] = "vendor_lookup"
             evidence["original_name"] = asset.name
         else:
-            asset_key = _normalize_canonical_key(asset.name)
+            asset_key = _normalize_key(asset.name)
             evidence["key_source"] = "name_derived"
     
     return AssetActualResult(

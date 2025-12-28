@@ -23,24 +23,6 @@ from ..models.output_contracts import Asset, LensStatus, ProvisioningStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 from .cache import get_domain_rollups_cache
-from ..constants import VENDOR_PLATFORM_DOMAINS
-from .admission import extract_registered_domain
-
-
-def is_vendor_platform_domain(domain: Optional[str]) -> bool:
-    """
-    Check if domain belongs to a major vendor/platform.
-    
-    Vendor platform domains (google.com, microsoft.com, etc.) should be
-    excluded from zombie classification because they are platform providers,
-    not individually managed enterprise assets.
-    """
-    if not domain:
-        return False
-    registered = extract_registered_domain(domain)
-    if not registered:
-        return False
-    return registered.lower() in VENDOR_PLATFORM_DOMAINS
 
 
 def _utc_now() -> datetime:
@@ -121,15 +103,8 @@ class DomainRollup:
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
-        
-        EXCLUSION: Vendor platform domains (google.com, microsoft.com, etc.)
-        are excluded from zombie classification as they are platform providers,
-        not individually managed assets.
         """
         if not self.is_domain_canonical:
-            return False
-        
-        if is_vendor_platform_domain(self.domain_key):
             return False
         
         has_governance = self.has_idp or self.has_cmdb
@@ -310,9 +285,6 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Zombie = (idp_present OR cmdb_present) AND (no timestamps within window)
     If there are NO timestamps at all, that still counts as "no timestamps within window"
     
-    EXCLUSION: Vendor platform domains (google.com, microsoft.com, etc.)
-    are excluded from zombie classification.
-    
     Args:
         asset: The asset to check
         window_days: Activity window in days (default 90)
@@ -321,10 +293,6 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
         Tuple of (is_zombie, is_indeterminate, reason)
     """
     from datetime import timedelta
-    
-    primary_domain = asset.identifiers.domains[0] if asset.identifiers and asset.identifiers.domains else None
-    if is_vendor_platform_domain(primary_domain):
-        return False, False, f"Vendor platform domain ({primary_domain}) - excluded from zombie classification"
     
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
@@ -359,25 +327,12 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
     - REVIEW → Zombie Review (Tier 2 triage item)
     - ACTIVE/QUARANTINE/BLOCKED/RETIRED → Not zombie
     
-    EXCLUSION: Vendor platform domains (google.com, microsoft.com, etc.)
-    are excluded from zombie classification.
-    
     Interpretation: "Zombie candidate needs cleanup - has governance but stale activity."
     
     Args:
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
-    primary_domain = asset.identifiers.domains[0] if asset.identifiers and asset.identifiers.domains else None
-    if is_vendor_platform_domain(primary_domain):
-        return ClassificationResult(
-            is_classified=False,
-            is_indeterminate=False,
-            classification_type="zombie",
-            reason=f"Vendor platform domain ({primary_domain}) - excluded from zombie classification",
-            evidence_summary=[f"Vendor platform: {primary_domain}"]
-        )
-    
     if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
         return ClassificationResult(
             is_classified=False,

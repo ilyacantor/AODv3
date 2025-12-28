@@ -9,7 +9,7 @@ from uuid import UUID
 
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
-    AssetType, Environment, LensStatus, LensStatuses, LensCoverage,
+    AssetType, Environment, LensStatus, LensStatuses, LensCoverage, LensMatchDebug,
     AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
     VendorHypothesis, Confidence, Materiality, TriagePriority
 )
@@ -175,6 +175,11 @@ class Database:
             
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner TEXT")
+            except Exception:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lens_match_debug TEXT")
             except Exception:
                 pass
             
@@ -434,8 +439,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, owner, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                    lens_match_debug, activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, owner, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -446,6 +451,7 @@ class Database:
                     evidence_refs = EXCLUDED.evidence_refs,
                     lens_status = EXCLUDED.lens_status,
                     lens_coverage = EXCLUDED.lens_coverage,
+                    lens_match_debug = EXCLUDED.lens_match_debug,
                     activity_evidence = EXCLUDED.activity_evidence,
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,
@@ -466,6 +472,7 @@ class Database:
                 json.dumps(asset.evidence_refs),
                 asset.lens_status.model_dump_json(),
                 asset.lens_coverage.model_dump_json(),
+                asset.lens_match_debug.model_dump_json() if asset.lens_match_debug else None,
                 asset.activity_evidence.model_dump_json(),
                 json.dumps(asset.tags),
                 asset.admission_reason,
@@ -490,9 +497,13 @@ class Database:
         for row in rows:
             activity_evidence_data = row.get("activity_evidence", "{}")
             vendor_hypothesis_data = row.get("vendor_hypothesis")
+            lens_match_debug_data = row.get("lens_match_debug")
             vendor_hypothesis = None
+            lens_match_debug = None
             if vendor_hypothesis_data:
                 vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
+            if lens_match_debug_data:
+                lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
             
             from aod.models.output_contracts import ProvisioningStatus
             prov_status_raw = row.get("provisioning_status", "quarantine")
@@ -514,6 +525,7 @@ class Database:
                 evidence_refs=json.loads(row["evidence_refs"]),
                 lens_status=LensStatuses.model_validate_json(row["lens_status"]),
                 lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
+                lens_match_debug=lens_match_debug,
                 activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
                 tags=json.loads(row["tags"]),
                 admission_reason=row["admission_reason"],
@@ -539,9 +551,13 @@ class Database:
         
         activity_evidence_data = row.get("activity_evidence", "{}")
         vendor_hypothesis_data = row.get("vendor_hypothesis")
+        lens_match_debug_data = row.get("lens_match_debug")
         vendor_hypothesis = None
+        lens_match_debug = None
         if vendor_hypothesis_data:
             vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
+        if lens_match_debug_data:
+            lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
         
         from aod.models.output_contracts import ProvisioningStatus
         prov_status_raw = row.get("provisioning_status", "quarantine")
@@ -563,6 +579,7 @@ class Database:
             evidence_refs=json.loads(row["evidence_refs"]),
             lens_status=LensStatuses.model_validate_json(row["lens_status"]),
             lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
+            lens_match_debug=lens_match_debug,
             activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
             tags=json.loads(row["tags"]),
             admission_reason=row["admission_reason"],
@@ -944,6 +961,7 @@ class Database:
                 json.dumps(asset.evidence_refs),
                 asset.lens_status.model_dump_json(),
                 asset.lens_coverage.model_dump_json(),
+                asset.lens_match_debug.model_dump_json() if asset.lens_match_debug else None,
                 asset.activity_evidence.model_dump_json(),
                 json.dumps(asset.tags),
                 asset.admission_reason,
@@ -958,8 +976,8 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, owner, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                    lens_match_debug, activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, owner, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -970,6 +988,7 @@ class Database:
                     evidence_refs = EXCLUDED.evidence_refs,
                     lens_status = EXCLUDED.lens_status,
                     lens_coverage = EXCLUDED.lens_coverage,
+                    lens_match_debug = EXCLUDED.lens_match_debug,
                     activity_evidence = EXCLUDED.activity_evidence,
                     tags = EXCLUDED.tags,
                     admission_reason = EXCLUDED.admission_reason,

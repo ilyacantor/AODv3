@@ -78,6 +78,24 @@ class LensCoverage(BaseModel):
     discovery: bool = False
 
 
+class MatchDebugInfo(BaseModel):
+    """Debug info for plane matching - helps diagnose false positives/negatives"""
+    match_method: Optional[str] = Field(default=None, description="How match was made: domain, name, vendor, etc.")
+    match_key: Optional[str] = Field(default=None, description="The key value that matched")
+    matched_record_id: Optional[str] = Field(default=None, description="The matched record ID from the plane")
+    matched_record_name: Optional[str] = Field(default=None, description="The matched record name from the plane")
+    ambiguity_code: Optional[str] = Field(default=None, description="Disambiguation code if multiple matches")
+    disambiguation_detail: Optional[str] = Field(default=None, description="Detail about disambiguation resolution")
+
+
+class LensMatchDebug(BaseModel):
+    """Debug info for all plane matches"""
+    idp: Optional[MatchDebugInfo] = None
+    cmdb: Optional[MatchDebugInfo] = None
+    cloud: Optional[MatchDebugInfo] = None
+    finance: Optional[MatchDebugInfo] = None
+
+
 class AssetIdentifiers(BaseModel):
     """Asset identifiers"""
     domains: list[str] = Field(default_factory=list)
@@ -151,6 +169,7 @@ class Asset(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     lens_status: LensStatuses = Field(default_factory=LensStatuses)
     lens_coverage: LensCoverage = Field(default_factory=LensCoverage)
+    lens_match_debug: Optional[LensMatchDebug] = Field(default=None, description="Debug info for plane matching - helps diagnose mismatches")
     activity_evidence: ActivityEvidence = Field(default_factory=ActivityEvidence)
     tags: list[str] = Field(default_factory=list)
     admission_reason: str = ""

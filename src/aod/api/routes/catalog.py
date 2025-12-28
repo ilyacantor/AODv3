@@ -59,6 +59,7 @@ async def get_catalog(
                 "identifiers": a.identifiers.model_dump(),
                 "lens_status": a.lens_status.model_dump(),
                 "lens_coverage": a.lens_coverage.model_dump(),
+                "lens_match_debug": a.lens_match_debug.model_dump() if a.lens_match_debug else None,
                 "tags": a.tags,
                 "admission_reason": a.admission_reason,
                 "evidence_refs": a.evidence_refs,

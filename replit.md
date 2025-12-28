@@ -215,7 +215,42 @@ python -m uvicorn src.main:app --host 0.0.0.0 --port 5000 --reload
 pytest tests/ -v
 ```
 
+## Lens Match Debug (CMDB/IdP Diagnostics)
+
+The `lens_match_debug` field provides diagnostic information for CMDB/IdP/Cloud/Finance matching, helping identify why matches might be incorrect:
+
+```json
+{
+  "lens_match_debug": {
+    "cmdb": {
+      "match_method": "domain",      // How the match was made
+      "match_key": "box.com",        // Key used for matching
+      "matched_record_id": "CI596977", // CMDB record ID
+      "matched_record_name": "Box",  // CMDB record name
+      "ambiguity_code": "NONE",      // NONE, UNRESOLVED, or FIRST_WINS
+      "disambiguation_detail": null  // Why disambiguation was needed
+    },
+    "idp": { ... },
+    "cloud": null,
+    "finance": { ... }
+  }
+}
+```
+
+**Match Methods** (reliability order):
+1. `domain` - Highest confidence (exact domain match)
+2. `canonical_name` - High confidence (normalized name match)
+3. `uri` - Medium confidence (URL-based match)
+4. `fuzzy` - Lower confidence (fuzzy string matching)
+5. `vendor_fallback` - Lowest confidence (matched via vendor only)
+
+**Ambiguity Codes**:
+- `NONE` - Single clear match
+- `FIRST_WINS` - Multiple candidates, first was selected
+- `UNRESOLVED` - Multiple candidates, no clear winner
+
 ## Known Issues (Current Status)
+*   **CMDB Debug Fields Missing**: ✅ FIXED (Dec 2025) - The `lens_match_debug` field was not being saved in batch inserts. Now correctly populated for all assets.
 *   **Admission Noise Floor Bug**: ✅ FIXED (Dec 2025) - Discovery admission now counts distinct **sources** (browser, proxy, dns = 3) instead of planes. Assets like asana.com with 3 network sources are now correctly admitted. Plane diversity retained as annotation (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`).
 *   **Key Normalization Mismatch**: ✅ FIXED (Dec 2025) - Reconcile payload now emits `domain_aliases`, `registered_domain`, and `domain_alias_map` for Farm to match against any key variant. KEY_NORMALIZATION_MISMATCH = 0 verified.
 

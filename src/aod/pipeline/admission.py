@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..models.output_contracts import (
     Asset, AssetType, Environment, LensStatus, LensStatuses, LensCoverage, AssetIdentifiers,
-    ActivityEvidence, ProvisioningStatus
+    ActivityEvidence, ProvisioningStatus, MatchDebugInfo, LensMatchDebug
 )
 from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction, Observation
 from .correlate_entities import CorrelationResult, MatchStatus
@@ -18,6 +18,57 @@ import tldextract
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
 VALID_LIFECYCLES = {"prod", "production", "staging", "stage", "live", "active"}
+
+
+def _get_record_name(record) -> str:
+    """Extract name from a plane record."""
+    if hasattr(record, 'name'):
+        return record.name
+    if hasattr(record, 'app_name'):
+        return record.app_name
+    if hasattr(record, 'vendor_name'):
+        return record.vendor_name
+    return str(record) if record else ""
+
+
+def build_match_debug_info(plane_match) -> Optional[MatchDebugInfo]:
+    """Build debug info from a PlaneMatch for debugging CMDB/IdP matching issues."""
+    if plane_match.status == MatchStatus.UNMATCHED:
+        return None
+    
+    matched_record_id = plane_match.matched_ids[0] if plane_match.matched_ids else None
+    matched_record_name = None
+    if plane_match.matched_records:
+        first_record = plane_match.matched_records[0]
+        if first_record:
+            matched_record_name = _get_record_name(first_record)
+    
+    return MatchDebugInfo(
+        match_method=plane_match.match_method,
+        match_key=plane_match.match_key,
+        matched_record_id=matched_record_id,
+        matched_record_name=matched_record_name,
+        ambiguity_code=plane_match.ambiguity_code.value if plane_match.ambiguity_code else None,
+        disambiguation_detail=plane_match.disambiguation_detail
+    )
+
+
+def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatchDebug]:
+    """Build lens match debug info from a correlation result."""
+    idp_debug = build_match_debug_info(correlation.idp)
+    cmdb_debug = build_match_debug_info(correlation.cmdb)
+    cloud_debug = build_match_debug_info(correlation.cloud)
+    finance_debug = build_match_debug_info(correlation.finance)
+    
+    if not any([idp_debug, cmdb_debug, cloud_debug, finance_debug]):
+        return None
+    
+    return LensMatchDebug(
+        idp=idp_debug,
+        cmdb=cmdb_debug,
+        cloud=cloud_debug,
+        finance=finance_debug
+    )
 
 # Banned domains - immediately BLOCKED (not QUARANTINE)
 # These are domains that are policy-forbidden regardless of governance status
@@ -925,6 +976,7 @@ def apply_admission_criteria(
         evidence_refs=correlation.all_evidence_refs(),
         lens_status=lens_status,
         lens_coverage=lens_coverage,
+        lens_match_debug=build_lens_match_debug(correlation),
         activity_evidence=activity_evidence,
         tags=tags,
         admission_reason="; ".join(admission_reasons),

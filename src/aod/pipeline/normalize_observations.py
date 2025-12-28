@@ -136,15 +136,33 @@ def normalize_string(s: str) -> str:
 
 
 def normalize_domain(domain: str) -> str:
-    """Normalize a domain for matching"""
+    """Normalize a domain for matching.
+    
+    Dec 2025 Fix: Use extract_registered_domain() to strip ALL subdomains
+    (not just www.) to ensure domains like api.primebox.io → primebox.io.
+    This fixes KEY_NORMALIZATION_MISMATCH errors where discovery subdomains
+    don't match the Farm's canonical base domain.
+    """
     if not domain:
         return ""
+    
+    # Clean up the domain first
     normalized = domain.lower().strip()
-    normalized = normalized.removeprefix("www.")
     normalized = normalized.removeprefix("http://")
     normalized = normalized.removeprefix("https://")
-    normalized = normalized.split("/")[0]
-    return normalized
+    normalized = normalized.split("/")[0]  # Remove path
+    normalized = normalized.split(":")[0]  # Remove port
+    
+    if not normalized:
+        return ""
+    
+    # Use extract_registered_domain to get the eTLD+1 (base domain)
+    # This strips ALL subdomains: api.primebox.io → primebox.io
+    from .vendor_inference import extract_registered_domain
+    registered = extract_registered_domain(normalized)
+    
+    # Fall back to original if extraction fails (e.g., IP addresses, localhost)
+    return registered if registered else normalized
 
 
 def extract_domain_from_uri(uri: str) -> Optional[str]:

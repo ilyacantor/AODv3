@@ -807,8 +807,8 @@ def _get_parent_domain(domain: str) -> Optional[str]:
     e.g., mail.google.com -> google.com
     Returns None if already a root domain or invalid.
     """
-    import tldextract
-    extracted = tldextract.extract(domain)
+    from .domain_cache import extract_domain
+    extracted = extract_domain(domain)
     if not extracted.suffix:
         return None
     registered_domain = f"{extracted.domain}.{extracted.suffix}"

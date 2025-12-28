@@ -38,6 +38,15 @@ async def startup():
     await get_db_direct()
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon"""
+    favicon_path = STATIC_DIR / "favicon.png"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/png")
+    return Response(status_code=204)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(response: Response):
     """Serve the AOD Console UI"""

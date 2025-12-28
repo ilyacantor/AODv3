@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-import tldextract
+from .domain_cache import extract_domain
 
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult, VENDOR_TO_DOMAIN
@@ -44,7 +44,7 @@ def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
     if invalid_chars:
         return False, f"Key contains invalid characters: {key}"
     
-    extracted = tldextract.extract(key)
+    extracted = extract_domain(key)
     
     if not extracted.suffix:
         return False, f"No valid TLD suffix (internal hostname): {key}"

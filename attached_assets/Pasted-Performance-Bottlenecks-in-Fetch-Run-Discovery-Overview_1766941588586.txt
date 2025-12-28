@@ -1,0 +1,88 @@
+Performance Bottlenecks in Fetch/Run Discovery
+Overview of the Flow
+Fetch: HTTP GET to Farm for snapshot
+Pipeline: 7-stage processing (validate → normalize → index → correlate → artifacts → admission → findings)
+Persist: Batch database inserts
+Reconcile: Re-read data, POST back to Farm
+Critical Bottleneck #1: Correlation - O(n × m) Complexity
+Location: src/aod/pipeline/correlate_entities.py, lines 647-736
+
+The correlation stage iterates through EVERY entity and for EACH entity does:
+
+Domain match: O(1) hash lookup ✓
+URI match: O(1) hash lookup ✓
+Canonical name match: O(1) hash lookup ✓
+Fuzzy match: O(m) - iterates through ALL indexed names
+Contains match: O(m) - iterates through ALL indexed names
+Token match: O(m) - iterates through ALL indexed names
+# Lines 647-651 - EXPENSIVE LOOP
+fuzzy_matches: list[str] = []
+for indexed_name, record_ids in plane_index.by_canonical_name.items():
+    if _is_fuzzy_match(canonical, indexed_name):
+        fuzzy_matches.extend(record_ids)
+Impact: With 500 entities and 500 CMDB records, worst case = 500 × 500 × 4 planes × 3 passes = 3 million comparisons
+
+Critical Bottleneck #2: Sequential Database Operations
+Location: src/aod/pipeline/pipeline_executor.py, lines 162-377
+
+The pipeline does 9+ sequential await calls to the database:
+
+await db.create_run(run_log)                    # Line 162
+await db.create_rejections_batch(iron_dome)     # Line 193  
+await db.create_observation_samples_batch()     # Line 213
+await db.create_ambiguous_matches_batch()       # Line 271
+await db.create_rejections_batch()              # Line 349
+await db.create_assets_batch(assets)            # Line 368
+await db.create_artifacts_batch(artifacts)      # Line 369
+await db.create_findings_batch(findings)        # Line 370
+await db.update_run(run_log)                    # Line 377
+Problem: These could be parallelized (assets/artifacts/findings inserts are independent).
+
+Critical Bottleneck #3: Farm Reconciliation Re-Reads
+Location: src/aod/api/routes/runs.py, lines 232-243
+
+After the pipeline completes, we RE-READ all data we just wrote:
+
+assets = await db.get_assets_by_run(run_id)      # Re-reads assets
+findings = await db.get_findings_by_run(run_id)  # Re-reads findings
+rejections, _ = await db.get_rejections_by_run(run_id)  # Re-reads rejections
+success, error = await reconcile_to_farm(...)    # Then POST to Farm
+Problem: We already have result.assets and result.findings from the pipeline result - why read again?
+
+Moderate Bottleneck #4: No Timing Instrumentation
+There's no way to measure where time is actually spent. Adding stage-level timing would help identify actual vs theoretical bottlenecks.
+
+Moderate Bottleneck #5: tldextract Calls
+Location: src/aod/pipeline/admission.py, line 782
+
+For EVERY entity being evaluated for admission:
+
+if entity.domain:
+    extracted = tldextract.extract(entity.domain)
+tldextract can do DNS lookups if the public suffix list isn't cached.
+
+Moderate Bottleneck #6: Dual Policy Engine Evaluation
+Location: src/aod/pipeline/pipeline_executor.py, lines 316-330
+
+Every candidate runs through BOTH legacy admission AND new policy engine for validation:
+
+admission_result = apply_admission_criteria(correlation, ...)
+policy_decision = policy_engine.evaluate(policy_asset_data)
+if admission_result.admitted != policy_decision.admitted:
+    # Log mismatch
+This doubles the work during the transition period.
+
+Summary Table
+Bottleneck	Severity	Location	Complexity
+Correlation fuzzy/contains loops	HIGH	correlate_entities.py:647-736	O(n × m) per plane
+Sequential DB writes	MEDIUM	pipeline_executor.py:368-370	Could parallelize 3 inserts
+Reconciliation re-reads	MEDIUM	runs.py:232-234	Unnecessary SELECT queries
+No timing instrumentation	LOW	Throughout pipeline	Hard to measure actual impact
+tldextract per entity	LOW	admission.py:782	Potential DNS lookups
+Dual policy engine	LOW	pipeline_executor.py:316-330	2x admission logic
+Recommendations (For Future Work)
+Add timing instrumentation to measure actual stage durations
+Pre-compute fuzzy indexes at build_plane_indexes time instead of linear scan
+Parallelize independent DB inserts (assets + artifacts + findings)
+Remove reconciliation re-reads - use pipeline result directly
+Cache tldextract results per domain

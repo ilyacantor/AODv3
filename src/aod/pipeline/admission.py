@@ -13,7 +13,7 @@ from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
-import tldextract
+from .domain_cache import extract_domain
 
 
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
@@ -779,7 +779,7 @@ def apply_admission_criteria(
     # GATE 0: Reject invalid TLDs / internal hostnames
     # Must have a valid public suffix (e.g., .com, .io, .org)
     if entity.domain:
-        extracted = tldextract.extract(entity.domain)
+        extracted = extract_domain(entity.domain)
         if not extracted.suffix:
             return AdmissionResult(
                 admitted=False,

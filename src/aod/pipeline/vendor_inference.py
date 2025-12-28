@@ -246,8 +246,8 @@ def extract_registered_domain(domain: str) -> Optional[str]:
     domain = domain.lower().strip()
     
     try:
-        import tldextract
-        extracted = tldextract.extract(domain)
+        from .domain_cache import extract_domain
+        extracted = extract_domain(domain)
         if extracted.domain and extracted.suffix:
             return f"{extracted.domain}.{extracted.suffix}"
         return None

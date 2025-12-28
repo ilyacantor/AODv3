@@ -267,6 +267,8 @@ The `lens_match_debug` field provides diagnostic information for CMDB/IdP/Cloud/
 *   **Admission Noise Floor Bug**: ✅ FIXED (Dec 2025) - Discovery admission now counts distinct **sources** (browser, proxy, dns = 3) instead of planes. Assets like asana.com with 3 network sources are now correctly admitted. Plane diversity retained as annotation (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`).
 *   **Key Normalization Mismatch**: ✅ FIXED (Dec 2025) - Reconcile payload now emits `domain_aliases`, `registered_domain`, and `domain_alias_map` for Farm to match against any key variant. KEY_NORMALIZATION_MISMATCH = 0 verified.
 *   **Pipeline Performance Optimized**: ✅ FIXED (Dec 2025) - Correlation O(n×m) loops replaced with pre-computed fuzzy indexes for O(1) lookups. Timing instrumentation added for all pipeline stages.
+*   **Finance Signal Format Mismatch**: ✅ FIXED (Dec 2025) - Evidence refs now correctly emit `recurring_contract:{id}` and `recurring_transaction:{id}` prefixes (was incorrectly using `recurring_{id}`). This enables proper HAS_ONGOING_FINANCE derivation for financial anchoring exclusion from shadow classification.
+*   **Domain Key Resolution**: ✅ FIXED (Dec 2025) - `_resolve_domain_key()` now extracts registered domains (e.g., app.asana.com → asana.com) and preserves original domains in alias_keys. DomainRollup includes alias_keys for Farm matching. Reconciliation outputs include domain_alias_map for alias→canonical lookups.
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.

@@ -1,6 +1,5 @@
 """Pipeline Executor - Orchestrate all pipeline stages"""
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -384,11 +383,9 @@ async def execute_pipeline(
         run_log.counts.findings_generated = len(findings)
         
         t_start = time.perf_counter()
-        await asyncio.gather(
-            db.create_assets_batch(assets),
-            db.create_artifacts_batch(artifacts),
-            db.create_findings_batch(findings)
-        )
+        await db.create_assets_batch(assets)
+        await db.create_artifacts_batch(artifacts)
+        await db.create_findings_batch(findings)
         timings['persist'] = time.perf_counter() - t_start
         
         timings['total'] = sum(timings.values())

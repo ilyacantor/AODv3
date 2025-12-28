@@ -38,10 +38,13 @@
     
     <div id="overviewTabContent" class="main-tab-content">
         <iframe 
-            src="/static/overview/index.html" 
+            id="overviewIframe"
             class="overview-iframe"
             title="autonomOS Overview"
         ></iframe>
+        <script>
+            document.getElementById('overviewIframe').src = '/static/overview/index.html?v=' + Date.now();
+        </script>
     </div>
     
     <div id="discoveryTabContent" class="main-tab-content active">

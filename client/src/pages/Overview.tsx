@@ -61,7 +61,7 @@ export default function Overview() {
           transition={{ duration: 0.6 }}
         >
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-12">
-            The Market is Fundamentally Broken
+            Enterprise IT Is Structurally Broken
           </h2>
 
           <div className="grid md:grid-cols-2 gap-12">
@@ -69,11 +69,16 @@ export default function Overview() {
             <div className="space-y-6">
               <h3 className="text-2xl font-bold text-cyan-400">The Enterprise Crisis</h3>
               <p className="text-lg text-slate-400 leading-relaxed">
-                Organizations are drowning in disconnected systems and digital chaos. Despite massive technology investments, enterprises remain{" "}
+                Organizations are drowning in disconnected systems and unmanaged digital sprawl.
+                Despite massive technology investment, enterprises remain{" "}
                 <strong className="text-white">data-rich but action-poor</strong>.
               </p>
               <p className="text-lg text-slate-400 leading-relaxed">
-                The result? A massive "Insight-to-Action Gap" paralyzing modern businesses.
+                This isn't a tooling problem.{" "}
+                <strong className="text-white">It's an operating failure.</strong>
+              </p>
+              <p className="text-lg text-slate-400 leading-relaxed">
+                The result is a widening Insight-to-Action Gap that paralyzes decision-making, slows execution, and increases risk.
               </p>
             </div>
 

@@ -645,9 +645,20 @@ def correlate_to_plane(
         )
     
     fuzzy_matches: list[str] = []
-    for indexed_name, record_ids in plane_index.by_canonical_name.items():
-        if _is_fuzzy_match(canonical, indexed_name):
-            fuzzy_matches.extend(record_ids)
+    if len(canonical) >= 4 and hasattr(plane_index, 'by_name_prefix'):
+        prefix = canonical[:4]
+        prefix_candidates = set(plane_index.by_name_prefix.get(prefix, []))
+        for candidate_id in prefix_candidates:
+            record = plane_index.records.get(candidate_id)
+            if record:
+                record_name = normalize_string(_get_record_name(record))
+                if _is_fuzzy_match(canonical, record_name):
+                    if candidate_id not in fuzzy_matches:
+                        fuzzy_matches.append(candidate_id)
+    else:
+        for indexed_name, record_ids in plane_index.by_canonical_name.items():
+            if _is_fuzzy_match(canonical, indexed_name):
+                fuzzy_matches.extend(record_ids)
     
     fuzzy_matches = list(set(fuzzy_matches))
     
@@ -686,9 +697,22 @@ def correlate_to_plane(
         )
     
     contains_matches: list[str] = []
-    for indexed_name, record_ids in plane_index.by_canonical_name.items():
-        if _is_valid_contains_match(canonical, indexed_name):
-            contains_matches.extend(record_ids)
+    if hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+        canonical_words = {w for w in re.split(r'[\s\-_./]+', canonical) if len(w) >= 4}
+        candidate_ids = set()
+        for word in canonical_words:
+            candidate_ids.update(plane_index.by_name_words.get(word, []))
+        for candidate_id in candidate_ids:
+            record = plane_index.records.get(candidate_id)
+            if record:
+                record_name = normalize_string(_get_record_name(record))
+                if _is_valid_contains_match(canonical, record_name):
+                    if candidate_id not in contains_matches:
+                        contains_matches.append(candidate_id)
+    else:
+        for indexed_name, record_ids in plane_index.by_canonical_name.items():
+            if _is_valid_contains_match(canonical, indexed_name):
+                contains_matches.extend(record_ids)
     
     contains_matches = list(set(contains_matches))
     
@@ -731,9 +755,12 @@ def correlate_to_plane(
         domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
         if domain_token and len(domain_token) >= 6:
             token_matches: list[str] = []
-            for indexed_name, record_ids in plane_index.by_canonical_name.items():
-                if domain_token in indexed_name:
-                    token_matches.extend(record_ids)
+            if hasattr(plane_index, 'by_name_words') and domain_token in plane_index.by_name_words:
+                token_matches = list(plane_index.by_name_words[domain_token])
+            else:
+                for indexed_name, record_ids in plane_index.by_canonical_name.items():
+                    if domain_token in indexed_name:
+                        token_matches.extend(record_ids)
             
             token_matches = list(set(token_matches))
             

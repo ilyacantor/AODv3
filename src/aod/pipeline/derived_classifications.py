@@ -135,6 +135,7 @@ class DomainRollup:
     entity_names: list[str]
     entity_count: int
     is_domain_canonical: bool = True
+    alias_keys: list[str] = field(default_factory=list)
     
     def get_activity_status(self, activity_window_days: int = 90) -> ActivityStatus:
         """Get the activity status for this domain rollup."""
@@ -618,7 +619,7 @@ def compute_derived_classifications(
             if latest is not None and latest > cutoff_date:
                 distribution.with_activity_last_30_days += 1
         
-        domain_key, _ = _resolve_domain_key(asset)
+        domain_key, _, _ = _resolve_domain_key(asset)
         if domain_key not in domain_to_assets:
             domain_to_assets[domain_key] = []
         domain_to_assets[domain_key].append(asset)
@@ -759,46 +760,66 @@ def compute_derived_classifications(
     )
 
 
-def _resolve_domain_key(asset: Asset) -> tuple[str, bool]:
+def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
     """
     Resolve the canonical domain key for an asset.
     
     Returns:
-        Tuple of (domain_key, is_canonical) where is_canonical indicates
-        whether the key represents a registered domain (True) or is name-derived (False).
+        Tuple of (domain_key, is_canonical, alias_keys) where:
+        - domain_key: The canonical registered domain (e.g., asana.com)
+        - is_canonical: True if key is a registered domain, False if name-derived
+        - alias_keys: List of original domains/subdomains that map to this canonical key
     
     Priority order (DOMAIN PROMOTION):
-    1. asset.identifiers.domains (explicit domain from evidence) -> canonical
+    1. asset.identifiers.domains (explicit domain from evidence) -> extract registered domain
     2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
     3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
-    4. Asset name if it looks like a domain -> canonical
+    4. Asset name if it looks like a domain -> extract registered domain
     5. Fallback: normalized name -> NOT canonical
     
     INVARIANT: This must match the key resolution in aod_agent_reconcile.py
     to ensure UI counts match reconciliation counts.
+    
+    INVARIANT: If raw domain != registered domain, both are preserved in alias_keys.
     """
+    from .vendor_inference import extract_registered_domain
+    
+    alias_keys = []
+    
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:
-                return (domain.lower().strip(), True)
+                raw_domain = domain.lower().strip()
+                alias_keys.append(raw_domain)
+                registered = extract_registered_domain(raw_domain)
+                if registered and registered != raw_domain:
+                    alias_keys.append(registered)
+                    return (registered, True, alias_keys)
+                return (raw_domain, True, alias_keys)
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = asset.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
-            return (VENDOR_TO_DOMAIN[vendor_key], True)
+            canonical = VENDOR_TO_DOMAIN[vendor_key]
+            return (canonical, True, [canonical])
     
     normalized_name = _normalize_name_for_vendor_lookup(asset.name)
     if normalized_name in VENDOR_TO_DOMAIN:
-        return (VENDOR_TO_DOMAIN[normalized_name], True)
+        canonical = VENDOR_TO_DOMAIN[normalized_name]
+        return (canonical, True, [canonical])
     
     name = asset.name.lower().strip()
     if "." in name:
         parts = name.split(".")
-        if len(parts) >= 2 and len(parts[-1]) in (2, 3) and parts[-1].isalpha():
-            return (name, True)
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            alias_keys.append(name)
+            registered = extract_registered_domain(name)
+            if registered and registered != name:
+                alias_keys.append(registered)
+                return (registered, True, alias_keys)
+            return (name, True, alias_keys)
     
-    import re
-    return (re.sub(r'[^a-z0-9]', '', name.lower()), False)
+    return (re.sub(r'[^a-z0-9]', '', name.lower()), False, [])
 
 
 def _get_parent_domain(domain: str) -> Optional[str]:
@@ -862,7 +883,7 @@ def compute_domain_rollups(
     rollups: dict[str, DomainRollup] = {}
     
     for asset in assets:
-        domain_key, is_canonical = _resolve_domain_key(asset)
+        domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
         
         has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
@@ -883,6 +904,9 @@ def compute_domain_rollups(
             r.has_discovery = r.has_discovery or has_discovery
             r.entity_names.append(asset.name)
             r.entity_count += 1
+            for ak in alias_keys:
+                if ak not in r.alias_keys:
+                    r.alias_keys.append(ak)
             if latest_activity is not None:
                 if r.latest_activity_at is None or latest_activity > r.latest_activity_at:
                     r.latest_activity_at = latest_activity
@@ -897,7 +921,8 @@ def compute_domain_rollups(
                 latest_activity_at=latest_activity,
                 entity_names=[asset.name],
                 entity_count=1,
-                is_domain_canonical=is_canonical
+                is_domain_canonical=is_canonical,
+                alias_keys=list(alias_keys)
             )
     
     # ACTIVITY ROLLUP (Zombie Cure): Propagate activity from subdomains to parent domains

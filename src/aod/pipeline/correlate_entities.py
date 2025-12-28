@@ -155,15 +155,13 @@ class CorrelationResult:
             
             for i, record_id in enumerate(self.finance.matched_ids):
                 record = self.finance.matched_records[i] if i < len(self.finance.matched_records) else None
-                is_recurring = False
                 if record:
                     if isinstance(record, Contract):
-                        is_recurring = record.is_recurring
+                        if record.is_recurring:
+                            refs.append(f"recurring_contract:{record_id}")
                     elif isinstance(record, Transaction):
-                        is_recurring = record.is_recurring
-                
-                if is_recurring:
-                    refs.append(f"recurring_{record_id}")
+                        if record.is_recurring:
+                            refs.append(f"recurring_transaction:{record_id}")
         
         return refs
 

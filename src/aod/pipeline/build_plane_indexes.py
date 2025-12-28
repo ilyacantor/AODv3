@@ -82,8 +82,66 @@ def populate_fuzzy_indexes(index: PlaneIndex):
                     index.by_name_words[word].append(rid)
 
 
+def _get_raw_domain(domain: str) -> str:
+    """Get cleaned raw domain without registered-domain extraction.
+    
+    This preserves tenant-specific subdomains like flowsoft.okta.com
+    while still cleaning protocol/path/port.
+    """
+    if not domain:
+        return ""
+    cleaned = domain.lower().strip()
+    cleaned = cleaned.removeprefix("http://")
+    cleaned = cleaned.removeprefix("https://")
+    cleaned = cleaned.split("/")[0]  # Remove path
+    cleaned = cleaned.split(":")[0]  # Remove port
+    cleaned = cleaned.removeprefix("www.")
+    return cleaned
+
+
+def _extract_tenant_token(domain: str) -> str:
+    """Extract tenant token from subdomain-based tenant identifiers.
+    
+    Dec 2025 Fix: For domains like flowsoft.okta.com, extract 'flowsoft'
+    as a searchable token. This enables cross-matching where:
+    - Discovery has domain flowsoft.org → token 'flowsoft'
+    - IdP has domain flowsoft.okta.com → tenant token 'flowsoft'
+    
+    Examples:
+        flowsoft.okta.com → flowsoft
+        acme-corp.servicenow.com → acmecorp
+        company.salesforce.com → company
+        simple.io → (empty, no subdomain)
+    """
+    if not domain:
+        return ""
+    
+    raw = _get_raw_domain(domain)
+    if not raw:
+        return ""
+    
+    parts = raw.split(".")
+    # Need at least 3 parts for subdomain.vendor.tld pattern
+    if len(parts) < 3:
+        return ""
+    
+    # First part is the tenant identifier
+    tenant = parts[0]
+    # Clean up: remove hyphens/underscores for matching
+    tenant = tenant.replace("-", "").replace("_", "")
+    
+    # Only return if substantial (4+ chars)
+    return tenant if len(tenant) >= 4 else ""
+
+
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
-    """Build IdP index: by domain, by canonical name, by vendor (if present)"""
+    """Build IdP index: by domain, by canonical name, by vendor (if present).
+    
+    Dec 2025 Fix: Index BOTH registered domain AND raw domain to support:
+    - Registered domain: vendor matching (okta.com, servicenow.com)
+    - Raw domain: tenant-specific matching (flowsoft.okta.com)
+    - Tenant token: cross-matching (flowsoft.okta.com → 'flowsoft' in by_name_words)
+    """
     index = PlaneIndex()
     
     for obj in idp_plane.objects:
@@ -94,8 +152,19 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
         if obj.domain:
-            domain = normalize_domain(obj.domain)
-            add_to_index(index.by_domain, domain, record_id)
+            # Index BOTH the registered domain AND raw domain
+            registered = normalize_domain(obj.domain)
+            raw = _get_raw_domain(obj.domain)
+            
+            add_to_index(index.by_domain, registered, record_id)
+            if raw and raw != registered:
+                add_to_index(index.by_domain, raw, record_id)
+            
+            # Dec 2025: Also index tenant token for cross-matching
+            # flowsoft.okta.com → 'flowsoft' in by_name_words
+            tenant_token = _extract_tenant_token(obj.domain)
+            if tenant_token:
+                add_to_index(index.by_name_words, tenant_token, record_id)
         
         vendor = getattr(obj, 'vendor', None) or (obj.raw_data.get('vendor') if obj.raw_data else None)
         if vendor:
@@ -107,7 +176,13 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
 
 
 def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
-    """Build CMDB index: by canonical name, by domain (external_ref), by vendor"""
+    """Build CMDB index: by canonical name, by domain (external_ref), by vendor.
+    
+    Dec 2025 Fix: Index BOTH registered domain AND raw domain to support:
+    - Registered domain: vendor matching
+    - Raw domain: tenant-specific matching (company.servicenow.com)
+    - Tenant token: cross-matching (company.servicenow.com → 'company' in by_name_words)
+    """
     index = PlaneIndex()
     
     for ci in cmdb_plane.cis:
@@ -118,8 +193,18 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
         if ci.domain:
-            domain = normalize_domain(ci.domain)
-            add_to_index(index.by_domain, domain, record_id)
+            # Index BOTH the registered domain AND raw domain
+            registered = normalize_domain(ci.domain)
+            raw = _get_raw_domain(ci.domain)
+            
+            add_to_index(index.by_domain, registered, record_id)
+            if raw and raw != registered:
+                add_to_index(index.by_domain, raw, record_id)
+            
+            # Dec 2025: Also index tenant token for cross-matching
+            tenant_token = _extract_tenant_token(ci.domain)
+            if tenant_token:
+                add_to_index(index.by_name_words, tenant_token, record_id)
         
         if ci.vendor:
             vendor_key = normalize_string(ci.vendor)

@@ -43,7 +43,8 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 **Dec 2025 Logic Fixes:**
 1. **Generic Subdomain Stripping**: `normalize_domain()` now uses `extract_registered_domain()` (PSL-backed) to strip ALL subdomains to eTLD+1. Example: `api.primebox.io` → `primebox.io`, `login.microsoft.com` → `microsoft.com`. This fixes KEY_NORMALIZATION_MISMATCH errors (174 errors) by ensuring discovery and CMDB domains normalize to the same base domain.
 2. **Alias Domain Normalization**: After subdomain stripping, ALIAS_DOMAINS_TO_COLLAPSE further normalizes known aliases. Example: `microsoftonline.com` → `microsoft.com`. Primary domains like `atlassian.net`, `notion.so`, `sentry.io` are preserved as legitimate SaaS keys.
-3. **Zombie vs Parked**: CMDB matching now works correctly since both sides normalize consistently. Stale assets with CMDB entry are Parked (owned but inactive), not Zombie. This fixes FP_FROM_PARKED (36 false positives). Only orphaned (no CMDB owner) stale assets become Zombies.
+3. **Tenant Token Indexing**: IdP/CMDB plane indexes now extract and index tenant tokens from subdomain-based patterns. Example: `flowsoft.okta.com` → tenant token `flowsoft` indexed in `by_name_words`. This enables cross-matching where discovery domain `flowsoft.org` (token `flowsoft`) matches IdP tenant `flowsoft.okta.com`. Fixes NO_IDP/NO_CMDB misclassifications.
+4. **Zombie vs Parked**: CMDB matching now works correctly since both sides normalize consistently. Stale assets with CMDB entry are Parked (owned but inactive), not Zombie. This fixes FP_FROM_PARKED (36 false positives). Only orphaned (no CMDB owner) stale assets become Zombies.
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

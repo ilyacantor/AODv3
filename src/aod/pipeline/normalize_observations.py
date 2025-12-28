@@ -119,7 +119,6 @@ class CandidateEntity:
     vendor_hypothesis: Optional[VendorHypothesisResult] = None
     observation_ids: list[str] = field(default_factory=list)
     source: str = "discovery"
-    observed_aliases: list[str] = field(default_factory=list)
     
     def __hash__(self):
         return hash(self.entity_id)
@@ -327,13 +326,6 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
                 existing_entity.uri = uri
             if vendor and not existing_entity.vendor:
                 existing_entity.vendor = vendor
-            if domain and domain != existing_entity.domain and domain not in existing_entity.observed_aliases:
-                existing_entity.observed_aliases.append(domain)
-                logger.debug("normalize.alias_added", extra={
-                    "observation_id": obs.observation_id,
-                    "entity_domain": existing_entity.domain,
-                    "alias_domain": domain
-                })
         else:
             vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
             entity = CandidateEntity(

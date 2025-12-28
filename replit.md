@@ -183,8 +183,8 @@ pytest tests/ -v
 ```
 
 ## Known Issues (Current Status)
-*   **RESOLVED - Admission Noise Floor Bug**: Fixed. Discovery admission now counts distinct sources OR distinct planes (≥2 threshold). Assets with 3 sources (browser, proxy, dns) mapping to same plane now admit correctly.
-*   **RESOLVED - Key Normalization Mismatch**: Fixed. Original subdomains (e.g., `app.asana.com`) are now preserved as asset_key. Canonical domains (e.g., `asana.com`) are stored in `identifiers.domains` and exposed as `observed_aliases` in reconciliation output. Farm can match against both the original key and aliases.
+*   **Admission Noise Floor Bug**: Discovery admission counts distinct **planes** instead of distinct **sources**. Assets with 3 discovery sources (browser, proxy, dns) all mapping to `network` plane get rejected despite meeting the ≥2 sources policy. Fix: Change `check_discovery_admission()` to count sources, not planes.
+*   **Key Normalization Mismatch**: Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys, causing KEY_NORMALIZATION_MISMATCH errors. Fix: Emit alias metadata or update reconciliation to use canonical keys.
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.

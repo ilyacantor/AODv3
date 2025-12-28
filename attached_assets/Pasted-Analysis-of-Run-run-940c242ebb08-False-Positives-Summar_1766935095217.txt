@@ -1,0 +1,65 @@
+Analysis of Run run_940c242ebb08 - False Positives
+Summary
+Metric	Farm Expected	AOD Found	Issue
+Shadows	7	22	16 false positives
+Zombies	12	13	Minor
+The 16 False Positive Shadows
+AOD classified these as SHADOW, but Farm expected them to be CLEAN:
+
+Asset	Key Difference
+canva.com	HAS_ONGOING_FINANCE
+box.com	HAS_ONGOING_FINANCE
+hubspot.com	HAS_ONGOING_FINANCE
+asana.com	HAS_ONGOING_FINANCE
+microsoft.com	HAS_CMDB + GOVERNED_VIA_VENDOR
+okta.com	HAS_ONGOING_FINANCE
+workday.com	HAS_ONGOING_FINANCE
+notion.so	HAS_ONGOING_FINANCE
+zapier.com	HAS_ONGOING_FINANCE
+... (7 more)	HAS_ONGOING_FINANCE
+Root Cause: Semantic Disagreement on Finance Governance
+Farm's Classification Logic:
+
+Expected SHADOW (grammarly.com):
+  NO_IDP, NO_CMDB, HAS_FINANCE, RECENT_ACTIVITY
+  → No ongoing finance contract = ungoverned = SHADOW
+Expected CLEAN (canva.com):
+  NO_IDP, NO_CMDB, HAS_FINANCE, HAS_ONGOING_FINANCE, RECENT_ACTIVITY
+  → Ongoing finance contract = financially governed = CLEAN
+Farm's position: If there's an active/ongoing finance contract (HAS_ONGOING_FINANCE), the asset has financial oversight and is NOT shadow IT.
+
+AOD's position: Only looks at NO_IDP + NO_CMDB = ungoverned → SHADOW. Ignores finance governance signal.
+
+Special Case: microsoft.com
+Farm: HAS_CMDB, GOVERNED_VIA_VENDOR
+AOD:  NO_CMDB
+This is a data disagreement - AOD and Farm disagree on whether microsoft.com is in CMDB. This suggests either:
+
+Key normalization mismatch (microsoft.com vs different key in CMDB)
+AOD didn't receive/process the CMDB evidence correctly
+Proposed Fixes (No Code Changes Yet)
+Option A: Fix AOD (Preferred)
+AOD should treat HAS_ONGOING_FINANCE as an anchoring/governance signal:
+
+IF HAS_ONGOING_FINANCE THEN
+  asset is "financially anchored" → NOT shadow
+Rationale: An active financial contract implies procurement awareness and ongoing budget allocation - this IS a form of governance.
+
+Option B: Fix Farm's Classification
+If the business decision is that finance ≠ governance, Farm should NOT expect these as CLEAN:
+
+Remove HAS_ONGOING_FINANCE as a governance signal
+These would become expected shadows
+Risk: This would be a semantic change to what "governed" means.
+
+Option C: Add RCA Hints for FP Analysis
+Regardless of which fix is chosen, Farm should populate rca_hint for false positives:
+
+rca_hint: "FINANCE_GOVERNANCE_MISMATCH"
+Currently these have RCA=None.
+
+Recommendation
+Clarify business rule: Does ongoing finance = governance? (I believe yes)
+If yes → Fix AOD: Add HAS_ONGOING_FINANCE to AOD's anchoring logic
+Add diagnostic: Populate rca_hint for FPs to aid debugging
+Fix microsoft.com discrepancy: Investigate CMDB key mismatch between Farm and AOD

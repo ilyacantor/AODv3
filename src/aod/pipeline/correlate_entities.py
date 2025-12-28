@@ -142,15 +142,18 @@ class CorrelationResult:
         For finance plane, ALSO adds 'recurring_' prefixed refs for records
         with is_recurring=True. Original IDs are always preserved for
         downstream consumers (findings, UI).
+        
+        NOTE: Both MATCHED and AMBIGUOUS statuses count as having evidence,
+        consistent with admission logic in check_*_admission functions.
         """
         from ..models.input_contracts import Contract, Transaction
         
         refs = list(self.entity.observation_ids)
         for plane_match in [self.idp, self.cmdb, self.cloud]:
-            if plane_match.status == MatchStatus.MATCHED:
+            if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
                 refs.extend(plane_match.matched_ids)
         
-        if self.finance.status == MatchStatus.MATCHED:
+        if self.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             refs.extend(self.finance.matched_ids)
             
             for i, record_id in enumerate(self.finance.matched_ids):

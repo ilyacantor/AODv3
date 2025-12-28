@@ -136,30 +136,34 @@ Findings are **issues detected about admitted assets**. One asset can trigger mu
 
 ---
 
-## TRIAGE
+## TRIAGE (Gatekeeper UI)
 
-Triage aggregates **everything needing human review**:
+Triage uses a **three-section workflow** based on provisioning status and risk type:
 
-| Item Type | Source | Count Relationship |
-|-----------|--------|-------------------|
-| Findings | `generate_findings()` | Many per asset possible |
-| Shadow Assets | `classify_shadow()` | 1 per shadow asset |
-| Zombie Assets | `classify_zombie()` | 1 per zombie asset |
+### Section Structure
 
-### Why item count > asset count?
+| Section | Color | Contains | Actions |
+|---------|-------|----------|---------|
+| **Firewall** | 🔴 Red | QUARANTINE shadow IT | Approve, Ban |
+| **Risk** | 🟡 Yellow | REVIEW zombies + ACTIVE with identity_gap (toxic) | Deprovision, Sanction, Dismiss Risk |
+| **Hygiene** | 🟢 Green | ACTIVE with other findings | Acknowledge, Assign Owner |
 
-- 1 asset can generate 5+ findings (identity + cmdb + data_conflict × N fields)
-- Shadow/Zombie classifications add more items
-- Each item → exactly 1 tier (mutually exclusive tiers)
-- Same asset → can appear multiple times as different items
+### Routing Logic
 
-### Tier Prioritization
+```
+Asset Status + Finding Type → Section
+─────────────────────────────────────────
+QUARANTINE (shadow IT)          → Red (Firewall)
+REVIEW (zombie)                 → Yellow (Risk)
+ACTIVE + identity_gap (toxic)   → Yellow (Risk)
+ACTIVE + other findings         → Green (Hygiene)
+```
 
-| Tier | Contains |
-|------|----------|
-| **Tier 1** | P0/P1 findings, identity_gap, finance_gap, financially-backed shadow |
-| **Tier 2** | Data conflicts, ambiguous lens status |
-| **Tier 3** | Everything else (backlog) |
+### Special Behaviors
+
+- **High-Value Shadow**: QUARANTINE assets with FINANCE_GAP show ($) badge and sort to top of Red queue
+- **Toxic Assets**: ACTIVE assets with identity_gap (trusted by CMDB but missing IdP) route to Yellow with "Dismiss Risk" option
+- **Batch Operations**: Green section supports batch acknowledgment via checkboxes
 
 ---
 

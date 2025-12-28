@@ -47,13 +47,18 @@ The UI is a single-page application using the AutonomOS color palette and Quicks
 *   **Product Name Aliases**: Maps common product names to canonical domains.
 *   **Triage Category Standardization**: Standardized Triage categories to Security Risks, Governance, Shadow IT, and Zombie IT for improved clarity.
 *   **Aggressive Domain Merging**: Prevents "split brain" where name-only entities (e.g., "Airtable" from finance) and domain entities (e.g., "airtable.com" from discovery) create separate rows. Uses base token extraction and cross-referencing to ensure single unified record per tool.
-*   **Gatekeeper Triage UI**: Workflow-oriented triage replacing tier-based system with three sections:
-    - Blocked Assets (Shadow IT): `provisioning_status == QUARANTINE`, actions: Approve for AAM, Ban
-    - Zombie Assets (Cleanup): `provisioning_status == REVIEW`, actions: Deprovision, Sanction
-    - Governance Gaps: `provisioning_status == ACTIVE AND has_findings`, shows specific issues
+*   **Gatekeeper Triage UI**: Workflow-oriented triage with three color-coded sections:
+    - **Red (Firewall)**: `QUARANTINE` shadow IT, actions: Approve, Ban. High-value shadows (FINANCE_GAP) sorted first with ($) badge.
+    - **Yellow (Risk)**: `REVIEW` zombies + `ACTIVE` with identity_gap (toxic assets), actions: Deprovision, Sanction, Dismiss Risk.
+    - **Green (Hygiene)**: `ACTIVE` with other findings (CMDB gap, governance gap, data conflict), actions: Acknowledge, Assign Owner.
 *   **Asset Ownership Persistence**: Triage "Assign Owner" updates `asset.owner` directly, fixing the underlying data issue. The governance_gap finding short-circuits when asset.owner is set - no finding generated. On-conflict uses COALESCE to preserve existing owners.
 *   **AAM Handoff API**: Architecture-correct endpoint at `/api/handoff/aam-manifest` provides Target Manifest for AAM (Adaptive API Mesh). AOD identifies assets, AAM executes connections, DCL receives streams. Payload includes `target_asset`, `provisioning_status`, `governance` (owner, auth_method), and `action_required`. Old `/catalog/dcl` endpoint deprecated.
 *   **Status-Based Finding Suppression**: QUARANTINE, BLOCKED, IGNORED, and RETIRED assets do NOT generate secondary findings (Identity Gap, CMDB Gap, Governance Gap, etc.). Only ACTIVE and REVIEW assets are scanned for hygiene gaps. This prevents noise - users don't need 500 "Missing Owner" alerts for blocked malware.
+*   **Risk Routing & Toxic Assets**: ACTIVE assets with identity_gap (trusted by CMDB but missing IdP) route to Yellow queue as "toxic assets" with Dismiss Risk option. High-value shadow assets (QUARANTINE + FINANCE_GAP) display green ($) badge and sort to top of Red queue.
+
+## Known Issues (Current Status)
+*   **Admission Noise Floor Bug**: Discovery admission counts distinct **planes** instead of distinct **sources**. Assets with 3 discovery sources (browser, proxy, dns) all mapping to `network` plane get rejected despite meeting the ≥2 sources policy. Fix: Change `check_discovery_admission()` to count sources, not planes.
+*   **Key Normalization Mismatch**: Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys, causing KEY_NORMALIZATION_MISMATCH errors. Fix: Emit alias metadata or update reconciliation to use canonical keys.
 
 ## Documentation
 *   **docs/AOD_DISCOVER_LOGIC.md**: Executive summary of discovery logic, lifecycle, admission gates, classifications, traffic light provisioning, and findings.

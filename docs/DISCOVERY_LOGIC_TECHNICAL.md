@@ -284,6 +284,32 @@ Each plane match includes explainability fields:
 
 ---
 
+## Known Issues (Current Status)
+
+### 1. Admission Noise Floor Bug
+**Problem:** `check_discovery_admission()` counts distinct **planes** instead of distinct **sources**.
+
+**Impact:** Assets with multiple discovery sources (browser, proxy, dns) that all map to the `network` plane get rejected despite meeting the ≥2 sources policy.
+
+**Example:**
+```
+asana.com: 3 sources (browser, proxy, dns) → all map to "network" plane
+Result: len(planes) = 1 → REJECTED (should be ADMITTED with 3 sources)
+```
+
+**Fix:** Modify `check_discovery_admission()` to count distinct sources, not distinct planes.
+
+### 2. Key Normalization Mismatch
+**Problem:** Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys.
+
+**Impact:** Reconciliation marks assets as KEY_NORMALIZATION_MISMATCH even when correctly admitted.
+
+**Fix Options:**
+1. Emit alias metadata so Farm treats canonicalized keys as same asset
+2. Update reconciliation to use canonical keys
+
+---
+
 ## Version History
 
 | Date | Change |
@@ -294,3 +320,5 @@ Each plane match includes explainability fields:
 | Dec 2025 | Vendor fallback matching for CMDB and IdP |
 | Dec 2025 | Infrastructure domain exclusion list expanded |
 | Dec 2025 | Fuzzy matching ratio gate (≤ 0.20) |
+| Dec 2025 | Risk Routing: Toxic assets (ACTIVE + identity_gap) route to Yellow queue |
+| Dec 2025 | Finance badge: High-value shadows sort first in Red queue |

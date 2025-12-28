@@ -183,7 +183,7 @@ pytest tests/ -v
 ```
 
 ## Known Issues (Current Status)
-*   **Admission Noise Floor Bug**: Discovery admission counts distinct **planes** instead of distinct **sources**. Assets with 3 discovery sources (browser, proxy, dns) all mapping to `network` plane get rejected despite meeting the ≥2 sources policy. Fix: Change `check_discovery_admission()` to count sources, not planes.
+*   **Admission Noise Floor Bug**: ✅ FIXED (Dec 2025) - Discovery admission now counts distinct **sources** (browser, proxy, dns = 3) instead of planes. Assets like asana.com with 3 network sources are now correctly admitted. Plane diversity retained as annotation (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`).
 *   **Key Normalization Mismatch**: Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys, causing KEY_NORMALIZATION_MISMATCH errors. Fix: Emit alias metadata or update reconciliation to use canonical keys.
 
 ## Documentation

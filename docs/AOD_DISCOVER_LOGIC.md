@@ -45,9 +45,9 @@ An entity must pass ALL rejection gates, then satisfy at least ONE admission cri
 | **CMDB** | Any CMDB match (app/service/database/infra in prod/staging preferred) |
 | **Cloud** | Any cloud resource match |
 | **Finance** | Any spend > $0 (recurring preferred) |
-| **Discovery** | ≥2 distinct corroborating planes + activity within 90 days |
+| **Discovery** | ≥2 distinct sources + activity within 90 days |
 
-**Note:** Discovery corroboration planes are: network, endpoint, idp, cloud, discovery. Finance and CMDB do NOT count as discovery corroboration.
+**Note (Dec 2025 fix):** Discovery admission gates on distinct **sources** (browser, proxy, dns = 3 sources), NOT distinct planes. Plane diversity (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`) is an annotation only, not a blocker.
 
 ---
 

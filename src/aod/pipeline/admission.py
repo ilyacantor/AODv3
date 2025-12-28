@@ -351,53 +351,158 @@ def source_to_plane(source: str) -> Optional[str]:
 
 DISCOVERY_CORROBORATION_PLANES = {"network", "endpoint", "idp", "cloud", "discovery"}
 
+MIN_DISCOVERY_SOURCES = 2
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DiscoveryFootprint:
+    """Evidence footprint for discovery admission."""
+    discovery_sources: set
+    planes_present: set
+    recent_activity: bool
+    latest_activity_at: Optional[datetime]
+    reason_codes: list
+
+
+def build_discovery_footprint(
+    observations: Optional[list[Observation]],
+    canonical_key: Optional[str] = None
+) -> DiscoveryFootprint:
+    """
+    Build an evidence footprint for a CandidateEntity's discovery observations.
+    
+    Returns:
+        DiscoveryFootprint with:
+        - discovery_sources: set of distinct source names (e.g., {"browser", "proxy", "dns"})
+        - planes_present: set of mapped planes (e.g., {"network"})
+        - recent_activity: True if latest observation is within 90 days
+        - latest_activity_at: timestamp of most recent observation
+        - reason_codes: list of reason codes for this footprint
+    """
+    from datetime import timedelta, timezone
+    
+    discovery_sources: set = set()
+    planes_present: set = set()
+    latest_activity: Optional[datetime] = None
+    reason_codes: list = []
+    
+    if not observations:
+        return DiscoveryFootprint(
+            discovery_sources=discovery_sources,
+            planes_present=planes_present,
+            recent_activity=False,
+            latest_activity_at=None,
+            reason_codes=["NO_DISCOVERY"]
+        )
+    
+    for obs in observations:
+        if obs.source:
+            source_lower = obs.source.lower()
+            discovery_sources.add(source_lower)
+            plane = source_to_plane(source_lower)
+            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                planes_present.add(plane)
+        if obs.observed_at:
+            if latest_activity is None or obs.observed_at > latest_activity:
+                latest_activity = obs.observed_at
+    
+    recent_activity = False
+    if latest_activity:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
+        if latest_activity.tzinfo is None:
+            latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+        recent_activity = latest_activity >= cutoff
+    
+    if len(discovery_sources) >= MIN_DISCOVERY_SOURCES:
+        reason_codes.append("DISCOVERY_SOURCE_COUNT_GE_2")
+    else:
+        reason_codes.append("DISCOVERY_SOURCE_COUNT_LT_2")
+    
+    if len(planes_present) >= 2:
+        reason_codes.append("PLANE_DIVERSITY_GE_2")
+    else:
+        reason_codes.append("PLANE_DIVERSITY_LT_2")
+    
+    if discovery_sources:
+        reason_codes.append("HAS_DISCOVERY")
+    else:
+        reason_codes.append("NO_DISCOVERY")
+    
+    if recent_activity:
+        reason_codes.append("RECENT_ACTIVITY")
+    elif latest_activity:
+        reason_codes.append("STALE_ACTIVITY")
+    else:
+        reason_codes.append("NO_ACTIVITY_TIMESTAMPS")
+    
+    return DiscoveryFootprint(
+        discovery_sources=discovery_sources,
+        planes_present=planes_present,
+        recent_activity=recent_activity,
+        latest_activity_at=latest_activity,
+        reason_codes=reason_codes
+    )
+
+
 def check_discovery_admission(
     observations: Optional[list[Observation]],
-    min_planes: int = 2
+    min_sources: int = MIN_DISCOVERY_SOURCES,
+    canonical_key: Optional[str] = None
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
     
     Admit discovery-only candidates when usage is corroborated and recent:
-    - Evidence from ≥2 distinct DISCOVERY CORROBORATION PLANES (not all planes!)
+    - Evidence from ≥2 distinct DISCOVERY SOURCES (not planes!)
     - Recent activity ≤ 90 days
     
-    CRITICAL: 
-    - Count distinct planes, not distinct sources (dns + proxy = 1 network plane)
-    - Only count discovery-corroborating planes: network, endpoint, idp, cloud, discovery
-    - Finance and CMDB do NOT count as discovery corroboration (they are governance evidence)
+    CRITICAL FIX (Dec 2025):
+    - Gate on distinct SOURCES (browser, proxy, dns = 3 sources) NOT distinct planes
+    - Plane diversity is an annotation/confidence signal, NOT an admission blocker
+    - This fixes shadow misses where assets like asana.com with 3 sources
+      (browser, proxy, dns) were rejected because they all map to "network" plane
+    
+    Args:
+        observations: List of discovery observations
+        min_sources: Minimum distinct sources required (default: 2)
+        canonical_key: Entity key for debug logging
+        
+    Returns:
+        Tuple of (admitted: bool, reason: str)
     """
-    if not observations:
+    footprint = build_discovery_footprint(observations, canonical_key)
+    
+    source_count = len(footprint.discovery_sources)
+    plane_count = len(footprint.planes_present)
+    
+    if source_count < min_sources:
+        if canonical_key:
+            logger.debug(
+                f"DISCOVERY_ADMISSION_FAIL: {canonical_key} | "
+                f"sources={sorted(footprint.discovery_sources)} (count={source_count}) | "
+                f"planes={sorted(footprint.planes_present)} (count={plane_count}) | "
+                f"recent_activity={footprint.recent_activity}"
+            )
         return False, ""
     
-    from datetime import datetime, timedelta, timezone
-    
-    planes = set()
-    latest_activity: Optional[datetime] = None
-    
-    for obs in observations:
-        if obs.source:
-            plane = source_to_plane(obs.source)
-            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
-                planes.add(plane)
-        if obs.observed_at:
-            if latest_activity is None or obs.observed_at > latest_activity:
-                latest_activity = obs.observed_at
-    
-    if len(planes) < min_planes:
+    if not footprint.recent_activity:
+        if canonical_key:
+            logger.debug(
+                f"DISCOVERY_ADMISSION_FAIL: {canonical_key} | "
+                f"sources={sorted(footprint.discovery_sources)} (count={source_count}) | "
+                f"planes={sorted(footprint.planes_present)} (count={plane_count}) | "
+                f"recent_activity={footprint.recent_activity} | "
+                f"latest_activity={footprint.latest_activity_at}"
+            )
         return False, ""
     
-    if latest_activity is None:
-        return False, ""
+    plane_note = f", {plane_count} planes" if plane_count >= 2 else ""
+    activity_date = footprint.latest_activity_at.date() if footprint.latest_activity_at else "unknown"
     
-    cutoff = datetime.now(timezone.utc) - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
-    if latest_activity.tzinfo is None:
-        latest_activity = latest_activity.replace(tzinfo=timezone.utc)
-    
-    if latest_activity < cutoff:
-        return False, ""
-    
-    return True, f"Discovery: {len(planes)} corroborating planes ({', '.join(sorted(planes))}), last activity {latest_activity.date()}"
+    return True, f"Discovery: {source_count} sources ({', '.join(sorted(footprint.discovery_sources))}){plane_note}, last activity {activity_date}"
 
 
 def determine_asset_type(correlation: CorrelationResult, entity: Optional[CandidateEntity] = None) -> AssetType:
@@ -590,7 +695,10 @@ def apply_admission_criteria(
     - CMDB plane: CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
     - Cloud plane: cloud match AND resource_type indicates real system/resource
     - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
-    - Discovery plane: ≥2 distinct sources AND recent activity ≤90 days (allows shadow IT admission)
+    - Discovery plane: ≥2 distinct SOURCES AND recent activity ≤90 days (allows shadow IT admission)
+    
+    NOTE (Dec 2025 fix): Discovery admission gates on distinct SOURCES (browser, proxy, dns = 3),
+    NOT distinct planes. Plane diversity is an annotation/confidence signal only.
     
     INVARIANTS:
     - Vendor governance NEVER causes admission (only explains/classifies)
@@ -678,7 +786,10 @@ def apply_admission_criteria(
     cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
-    discovery_admitted, discovery_reason = check_discovery_admission(observations)
+    discovery_admitted, discovery_reason = check_discovery_admission(
+        observations, 
+        canonical_key=entity.domain or entity.canonical_name if entity else None
+    )
     
     # NOTE: Vendor governance propagation does NOT cause admission
     # It is recorded as metadata for classification/explanation only

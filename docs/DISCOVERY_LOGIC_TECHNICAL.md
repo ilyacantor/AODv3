@@ -286,18 +286,14 @@ Each plane match includes explainability fields:
 
 ## Known Issues (Current Status)
 
-### 1. Admission Noise Floor Bug
-**Problem:** `check_discovery_admission()` counts distinct **planes** instead of distinct **sources**.
+### 1. Admission Noise Floor Bug - ✅ FIXED (Dec 2025)
+**Problem:** `check_discovery_admission()` was counting distinct **planes** instead of distinct **sources**.
 
-**Impact:** Assets with multiple discovery sources (browser, proxy, dns) that all map to the `network` plane get rejected despite meeting the ≥2 sources policy.
+**Solution:** Now gates on distinct SOURCES (browser, proxy, dns = 3 sources). Plane diversity is retained as an annotation/confidence signal (`PLANE_DIVERSITY_GE_2`/`PLANE_DIVERSITY_LT_2`) but does NOT block admission.
 
-**Example:**
-```
-asana.com: 3 sources (browser, proxy, dns) → all map to "network" plane
-Result: len(planes) = 1 → REJECTED (should be ADMITTED with 3 sources)
-```
-
-**Fix:** Modify `check_discovery_admission()` to count distinct sources, not distinct planes.
+**New Reason Codes:**
+- `DISCOVERY_SOURCE_COUNT_GE_2` / `DISCOVERY_SOURCE_COUNT_LT_2` - Source count gate
+- `PLANE_DIVERSITY_GE_2` / `PLANE_DIVERSITY_LT_2` - Informational annotation only
 
 ### 2. Key Normalization Mismatch
 **Problem:** Domain canonicalization upgrades keys (e.g., `app.asana.com` → `asana.com`) but Farm reconciliation expects original keys.

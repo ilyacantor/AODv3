@@ -118,9 +118,12 @@ def get_normalization_token(name: str) -> str:
 
 def normalize_key(key: str) -> str:
     """
-    Normalize an asset key for matching.
+    Normalize an asset key for fuzzy matching (strips dots).
+    
+    WARNING: Do NOT use this for canonical key generation!
+    Use normalize_canonical_key() for storage/reconciliation keys.
 
-    Removes special chars, lowercases, strips whitespace.
+    Removes special chars including dots, lowercases, strips whitespace.
 
     Examples:
         "Slack.com" -> "slackcom"
@@ -131,9 +134,38 @@ def normalize_key(key: str) -> str:
         key: The string to normalize
 
     Returns:
-        Normalized lowercase alphanumeric string
+        Normalized lowercase alphanumeric string (no dots)
     """
     return re.sub(r'[^a-z0-9]', '', key.lower())
+
+
+def normalize_canonical_key(key: str) -> str:
+    """
+    Normalize an asset key for storage/reconciliation (PRESERVES dots).
+    
+    This is the correct function for generating canonical asset keys
+    that will be used for AAM connectivity and Farm reconciliation.
+    
+    Lowercases, strips whitespace, removes invalid chars but KEEPS dots.
+    
+    Examples:
+        "Slack.com" -> "slack.com"
+        "YAMMER.COM" -> "yammer.com"
+        "Notion-prod" -> "notion-prod"
+        "My App (Legacy)" -> "my app legacy"
+
+    Args:
+        key: The string to normalize
+
+    Returns:
+        Normalized lowercase string with dots preserved
+    """
+    if not key:
+        return ""
+    normalized = key.lower().strip()
+    normalized = re.sub(r'[<>"\'\{\}\[\]\\]', '', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized)
+    return normalized
 
 
 def normalize_name_for_vendor_lookup(name: str) -> str:

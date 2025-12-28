@@ -172,8 +172,8 @@ export default function Overview() {
           </div>
 
           <p className="text-xl md:text-2xl text-slate-300 text-center font-medium leading-relaxed max-w-4xl mx-auto">
-            The enterprise is transitioning from a software-centric model to an intelligence-centric model.{" "}
-            <strong className="text-white">This shift demands a new operating system.</strong>
+            The Intelligence Shift Is Inevitable. Enterprise systems were never designed for it.{" "}
+            <strong className="text-white">A new operating system is required.</strong>
           </p>
         </motion.div>
       </section>

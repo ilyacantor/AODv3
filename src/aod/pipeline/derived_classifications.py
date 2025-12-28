@@ -72,7 +72,8 @@ class ActivityStatus(str, Enum):
 
 def get_activity_status(
     latest_activity_at: Optional[datetime],
-    activity_window_days: int = 90
+    activity_window_days: int = 90,
+    snapshot_as_of: Optional[datetime] = None
 ) -> ActivityStatus:
     """
     Determine the activity status based on the latest activity timestamp.
@@ -80,6 +81,9 @@ def get_activity_status(
     Args:
         latest_activity_at: The latest activity timestamp (may be None)
         activity_window_days: Number of days for the activity window (default 90)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
     
     Returns:
         ActivityStatus.RECENT if activity is within window
@@ -93,7 +97,8 @@ def get_activity_status(
     if latest is None:
         return ActivityStatus.NONE
     
-    cutoff = _utc_now() - timedelta(days=activity_window_days)
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    cutoff = reference_time - timedelta(days=activity_window_days)
     
     if latest >= cutoff:
         return ActivityStatus.RECENT
@@ -137,9 +142,9 @@ class DomainRollup:
     is_domain_canonical: bool = True
     alias_keys: list[str] = field(default_factory=list)
     
-    def get_activity_status(self, activity_window_days: int = 90) -> ActivityStatus:
+    def get_activity_status(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
         """Get the activity status for this domain rollup."""
-        return get_activity_status(self.latest_activity_at, activity_window_days)
+        return get_activity_status(self.latest_activity_at, activity_window_days, snapshot_as_of)
     
     def is_anchored(self) -> bool:
         """
@@ -159,7 +164,7 @@ class DomainRollup:
         """
         return self.has_idp or self.has_cmdb or self.has_finance or self.has_cloud
     
-    def is_shadow(self, activity_window_days: int = 90) -> bool:
+    def is_shadow(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level shadow: ungoverned AND activity_status==RECENT.
         
@@ -179,10 +184,10 @@ class DomainRollup:
         if has_governance or not has_existence:
             return False
         
-        activity_status = self.get_activity_status(activity_window_days)
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.RECENT
     
-    def is_zombie(self, activity_window_days: int = 90) -> bool:
+    def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level zombie: anchored AND activity_status==STALE.
         
@@ -201,10 +206,10 @@ class DomainRollup:
         if not self.is_anchored():
             return False
         
-        activity_status = self.get_activity_status(activity_window_days)
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.STALE
     
-    def is_parked(self, activity_window_days: int = 90) -> bool:
+    def is_parked(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level parked: NOT anchored AND activity_status==STALE.
         
@@ -226,7 +231,7 @@ class DomainRollup:
         if self.is_anchored():
             return False
         
-        activity_status = self.get_activity_status(activity_window_days)
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.STALE
     
     def get_reason_codes(self) -> list[str]:
@@ -583,7 +588,8 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
 def compute_derived_classifications(
     assets: list[Asset],
     activity_window_days: int = 90,
-    run_id: Optional[str] = None
+    run_id: Optional[str] = None,
+    snapshot_as_of: Optional[datetime] = None
 ) -> DerivedClassificationSummary:
     """
     Compute derived classifications for all assets.
@@ -602,8 +608,12 @@ def compute_derived_classifications(
         assets: List of assets to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
         run_id: Optional run ID for caching (recommended for API routes)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
     """
-    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    cutoff_date = reference_time - timedelta(days=activity_window_days)
     distribution = DistributionDiagnostic(total_assets=len(assets))
     
     domain_to_assets: dict[str, list[Asset]] = {}
@@ -658,7 +668,7 @@ def compute_derived_classifications(
                 all_hostnames.update(a.identifiers.hostnames)
                 all_uris.update(a.identifiers.uris)
         
-        activity_status = rollup.get_activity_status(activity_window_days)
+        activity_status = rollup.get_activity_status(activity_window_days, snapshot_as_of)
         
         base_entry = {
             "asset_id": str(representative.asset_id),
@@ -701,7 +711,7 @@ def compute_derived_classifications(
             }
         }
         
-        if rollup.is_shadow(activity_window_days):
+        if rollup.is_shadow(activity_window_days, snapshot_as_of):
             shadow_assets.append({
                 **base_entry,
                 "classification": "shadow",
@@ -713,7 +723,7 @@ def compute_derived_classifications(
                     f"Activity status: {activity_status.value}"
                 ]
             })
-        elif rollup.is_zombie(activity_window_days):
+        elif rollup.is_zombie(activity_window_days, snapshot_as_of):
             anchored_sources = filter(None, [
                 'IdP' if rollup.has_idp else None, 
                 'CMDB' if rollup.has_cmdb else None,
@@ -730,7 +740,7 @@ def compute_derived_classifications(
                     f"Activity status: {activity_status.value}"
                 ]
             })
-        elif rollup.is_parked(activity_window_days):
+        elif rollup.is_parked(activity_window_days, snapshot_as_of):
             parked_assets.append({
                 **base_entry,
                 "classification": "parked",

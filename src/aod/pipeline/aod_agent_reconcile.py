@@ -25,6 +25,7 @@ Outputs per run:
 - actual_reasons[asset_key]: List of reason codes (canonical enum only)
 """
 
+import os
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
@@ -222,7 +223,11 @@ def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
     return False
 
 
-def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple[list[ReasonCode], dict]:
+def compute_asset_reasons(
+    asset: Asset,
+    activity_window_days: int = 90,
+    snapshot_as_of: Optional[datetime] = None
+) -> tuple[list[ReasonCode], dict]:
     """
     Compute the canonical reason codes for an asset's current state.
     
@@ -235,6 +240,13 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     Uses lens_status (raw matching) for CMDB/IDP governance to ensure any match
     counts as governed, regardless of whether admission criteria are met.
     Uses lens_coverage for finance/cloud to respect policy filters.
+    
+    Args:
+        asset: The asset to compute reasons for
+        activity_window_days: Activity window in days (default 90)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
     
     Returns:
         Tuple of (reasons list, evidence summary dict)
@@ -290,7 +302,8 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
         reasons.append(ReasonCode.NO_DISCOVERY)
     
     latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
-    cutoff = _utc_now() - timedelta(days=activity_window_days)
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    cutoff = reference_time - timedelta(days=activity_window_days)
     
     if latest_activity is None:
         reasons.append(ReasonCode.NO_ACTIVITY_TIMESTAMPS)
@@ -301,6 +314,9 @@ def compute_asset_reasons(asset: Asset, activity_window_days: int = 90) -> tuple
     else:
         reasons.append(ReasonCode.RECENT_ACTIVITY)
         evidence["activity"] = f"recent:{latest_activity.isoformat()}"
+    
+    evidence["snapshot_as_of"] = reference_time.isoformat() if reference_time else None
+    evidence["activity_cutoff"] = cutoff.isoformat() if cutoff else None
     
     discovery_sources = set()
     for ref in asset.evidence_refs:
@@ -414,7 +430,13 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     return None
 
 
-def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "sprawl") -> AssetActualResult:
+def classify_actual(
+    asset: Asset,
+    activity_window_days: int = 90,
+    mode: str = "sprawl",
+    snapshot_as_of: Optional[datetime] = None,
+    debug_keys: Optional[set[str]] = None
+) -> AssetActualResult:
     """
     Produce the actual classification result for an asset.
     
@@ -439,8 +461,10 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         asset: The asset to classify
         activity_window_days: Activity window for classification
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now)
+        debug_keys: Set of asset keys to dump diagnostic info for (from DEBUG_RECONCILE_ASSETS)
     """
-    reasons, evidence = compute_asset_reasons(asset, activity_window_days)
+    reasons, evidence = compute_asset_reasons(asset, activity_window_days, snapshot_as_of)
     
     eligible = is_reconciliation_eligible(asset, mode=mode)
     evidence["reconciliation_eligible"] = eligible
@@ -537,6 +561,30 @@ def classify_actual(asset: Asset, activity_window_days: int = 90, mode: str = "s
         evidence["alias_keys"] = alias_keys
         evidence["all_domain_variants"] = sorted(all_domain_variants) if all_domain_variants else []
     
+    if debug_keys and (asset_key in debug_keys or any(ak in debug_keys for ak in alias_keys)):
+        has_finance_flag = ReasonCode.HAS_FINANCE in reasons
+        has_ongoing_finance_flag = ReasonCode.HAS_ONGOING_FINANCE in reasons
+        finance_refs = [r for r in asset.evidence_refs if isinstance(r, str) and ('finance' in r.lower() or 'contract' in r.lower() or 'transaction' in r.lower())]
+        recurring_refs = [r for r in asset.evidence_refs if isinstance(r, str) and (r.startswith("recurring_contract:") or r.startswith("recurring_transaction:"))]
+        
+        activity_status = "RECENT" if ReasonCode.RECENT_ACTIVITY in reasons else ("STALE" if ReasonCode.STALE_ACTIVITY in reasons else "NONE")
+        
+        print(f"\n=== DEBUG_RECONCILE_ASSETS: {asset_key} ===")
+        print(f"  canonical_key: {asset_key}")
+        print(f"  alias_keys: {alias_keys}")
+        print(f"  first 20 evidence_refs: {asset.evidence_refs[:20]}")
+        print(f"  has_finance: {has_finance_flag}")
+        print(f"  has_ongoing_finance: {has_ongoing_finance_flag}")
+        print(f"  finance_refs: {finance_refs}")
+        print(f"  recurring_refs (triggers HAS_ONGOING_FINANCE): {recurring_refs}")
+        print(f"  snapshot_as_of: {evidence.get('snapshot_as_of', 'N/A')}")
+        print(f"  activity_cutoff: {evidence.get('activity_cutoff', 'N/A')}")
+        print(f"  latest_activity_at: {asset.activity_evidence.latest_activity_at}")
+        print(f"  activity_status: {activity_status}")
+        print(f"  final_class: shadow={is_shadow}, zombie={is_zombie}, parked={is_parked}")
+        print(f"  all_reasons: {[r.value for r in reasons]}")
+        print(f"=== END DEBUG ===\n")
+    
     return AssetActualResult(
         asset_key=asset_key,
         asset_id=str(asset.asset_id),
@@ -600,7 +648,8 @@ def emit_actual_results(
     assets: list[Asset],
     activity_window_days: int = 90,
     rejections: list[dict] | None = None,
-    mode: str = "sprawl"
+    mode: str = "sprawl",
+    snapshot_as_of: Optional[datetime] = None
 ) -> ActualResultsOutput:
     """
     Emit AOD's actual results for a run.
@@ -629,14 +678,27 @@ def emit_actual_results(
         activity_window_days: Activity window for classification
         rejections: Optional list of rejected candidates with their metadata
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
     
     Returns:
         ActualResultsOutput with all actual classifications and reason codes
     """
+    debug_keys_env = os.environ.get("DEBUG_RECONCILE_ASSETS", "")
+    debug_keys: Optional[set[str]] = None
+    if debug_keys_env:
+        debug_keys = set(k.strip().lower() for k in debug_keys_env.split(",") if k.strip())
+        if debug_keys:
+            print(f"\n=== DEBUG_RECONCILE_ASSETS enabled for: {debug_keys} ===")
+            print(f"  snapshot_as_of: {snapshot_as_of.isoformat() if snapshot_as_of else 'wall-clock now'}")
+            print(f"  activity_window_days: {activity_window_days}")
+            print(f"  mode: {mode}")
+    
     asset_results: dict[str, dict] = {}
     
     for asset in assets:
-        result = classify_actual(asset, activity_window_days, mode=mode)
+        result = classify_actual(asset, activity_window_days, mode=mode, snapshot_as_of=snapshot_as_of, debug_keys=debug_keys)
         key = result.asset_key
         
         registered_domain = result.evidence_summary.get("registered_domain")

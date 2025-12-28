@@ -29,7 +29,8 @@ def build_reconcile_payload(
     findings: list[Finding],
     snapshot_id: str,
     rejections: list[dict] | None = None,
-    mode: str = "sprawl"
+    mode: str = "sprawl",
+    snapshot_as_of: Optional[datetime] = None
 ) -> dict[str, Any]:
     """
     Build the reconcile payload for Farm.
@@ -44,6 +45,7 @@ def build_reconcile_payload(
         snapshot_id: The source snapshot ID
         rejections: Optional list of rejected candidates
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
+        snapshot_as_of: Reference time for recency calculation (use snapshot's generated_at)
     
     Returns:
         The reconcile payload dict ready to be sent to Farm or returned via API
@@ -53,7 +55,8 @@ def build_reconcile_payload(
         assets=assets,
         activity_window_days=90,
         rejections=rejections,
-        mode=mode
+        mode=mode,
+        snapshot_as_of=snapshot_as_of
     )
     
     high_priority_findings = [
@@ -144,7 +147,8 @@ async def reconcile_to_farm(
     snapshot_id: str,
     farm_url: Optional[str] = None,
     rejections: list[dict] | None = None,
-    mode: str = "sprawl"
+    mode: str = "sprawl",
+    snapshot_as_of: Optional[datetime] = None
 ) -> tuple[bool, Optional[str]]:
     """
     Reconcile AOD results back to Farm.
@@ -162,6 +166,7 @@ async def reconcile_to_farm(
         farm_url: Optional Farm URL override (uses FARM_URL env var if not provided)
         rejections: Optional list of rejected candidates
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
+        snapshot_as_of: Reference time for recency calculation (use snapshot's generated_at)
     
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -176,7 +181,8 @@ async def reconcile_to_farm(
         findings=findings,
         snapshot_id=snapshot_id,
         rejections=rejections,
-        mode=mode
+        mode=mode,
+        snapshot_as_of=snapshot_as_of
     )
     
     headers = {"Content-Type": "application/json"}

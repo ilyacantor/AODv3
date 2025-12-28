@@ -5,6 +5,7 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 
@@ -27,6 +28,31 @@ from ...config import policy
 
 
 router = APIRouter(prefix="/runs")
+
+
+def _parse_iso_datetime(dt_str: str) -> Optional[datetime]:
+    """Parse an ISO datetime string, handling various formats."""
+    if not dt_str:
+        return None
+    try:
+        dt_str = dt_str.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(dt_str)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_snapshot_generated_at(snapshot_data: dict) -> Optional[datetime]:
+    """Parse generated_at from snapshot meta to use as snapshot_as_of for recency calculation."""
+    try:
+        meta = snapshot_data.get("meta", {})
+        generated_at_str = meta.get("generated_at")
+        return _parse_iso_datetime(generated_at_str)
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def _generate_ambiguous_explanation(item: dict) -> str:
@@ -206,12 +232,15 @@ async def create_run_from_farm(request: FarmRunRequest):
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()
     
+    snapshot_generated_at = _parse_snapshot_generated_at(snapshot_data)
+    
     provenance = {
         "source": "farm",
         "farm_url": farm_url,
         "snapshot_id": request.snapshot_id,
         "schema_version": schema_version,
-        "fetch_duration_ms": fetch_duration_ms
+        "fetch_duration_ms": fetch_duration_ms,
+        "snapshot_generated_at": snapshot_generated_at.isoformat() if snapshot_generated_at else None
     }
     
     db = await get_db_direct()
@@ -231,13 +260,16 @@ async def create_run_from_farm(request: FarmRunRequest):
         
         rejections, _ = await db.get_rejections_by_run(run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
         
+        snapshot_as_of = snapshot_generated_at
+        
         success, error = await reconcile_to_farm(
             run_log=result.run_log,
             assets=result.assets,
             findings=result.findings,
             snapshot_id=request.snapshot_id,
             farm_url=farm_url,
-            rejections=rejections
+            rejections=rejections,
+            snapshot_as_of=snapshot_as_of
         )
         
         if success:
@@ -292,6 +324,11 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     mode = request.mode or "sprawl"
     
+    snapshot_as_of: Optional[datetime] = None
+    snapshot_generated_at_str = run.input_meta.get("snapshot_generated_at")
+    if snapshot_generated_at_str:
+        snapshot_as_of = _parse_iso_datetime(snapshot_generated_at_str)
+    
     success, error = await reconcile_to_farm(
         run_log=run,
         assets=assets,
@@ -299,7 +336,8 @@ async def resync_run_to_farm(request: ResyncRequest):
         snapshot_id=snapshot_id,
         farm_url=farm_url,
         rejections=rejections,
-        mode=mode
+        mode=mode,
+        snapshot_as_of=snapshot_as_of
     )
     
     if success:
@@ -317,7 +355,8 @@ async def resync_run_to_farm(request: ResyncRequest):
         assets=assets,
         activity_window_days=90,
         rejections=rejections,
-        mode=mode
+        mode=mode,
+        snapshot_as_of=snapshot_as_of
     )
     
     return ResyncResponse(

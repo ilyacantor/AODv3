@@ -3,13 +3,14 @@
 import hashlib
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from ..models.input_contracts import Snapshot, Observation
 from ..models.output_contracts import (
-    Asset, Artifact, Finding, RunLog, RunStatus, RunCounts
+    Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, PipelineStageTimings
 )
 from ..db.database import Database
 from ..core.policy import PolicyEngine, get_current_config
@@ -161,18 +162,24 @@ async def execute_pipeline(
     
     await db.create_run(run_log)
     
+    timings = {}
+    
     try:
+        t_start = time.perf_counter()
         snapshot = validate_snapshot(
             data,
             normalize=is_farm_source,
             fallback_tenant_id=fallback_tenant_id,
             snapshot_id=snapshot_id
         )
+        timings['validate'] = time.perf_counter() - t_start
         
         observations = snapshot.planes.discovery.observations
         run_log.counts.observations_in = len(observations)
         
+        t_start = time.perf_counter()
         candidates, iron_dome_rejections = normalize_observations(observations)
+        timings['normalize'] = time.perf_counter() - t_start
         
         if iron_dome_rejections:
             logger.info("pipeline.iron_dome_rejections", extra={
@@ -212,9 +219,13 @@ async def execute_pipeline(
             ))
         await db.create_observation_samples_batch(obs_samples)
         
+        t_start = time.perf_counter()
         indexes = build_plane_indexes(snapshot.planes)
+        timings['build_indexes'] = time.perf_counter() - t_start
         
+        t_start = time.perf_counter()
         correlations = correlate_entities_to_planes(candidates, indexes)
+        timings['correlate'] = time.perf_counter() - t_start
         
         def is_finance_truly_ambiguous(plane_match) -> bool:
             """
@@ -271,7 +282,9 @@ async def execute_pipeline(
         await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
         
+        t_start = time.perf_counter()
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
+        timings['artifacts'] = time.perf_counter() - t_start
         run_log.counts.artifacts_recorded = len(artifacts)
         run_log.counts.candidates_out = len(filtered_candidates)
         
@@ -287,6 +300,7 @@ async def execute_pipeline(
         if use_policy_engine:
             logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
         
+        t_start = time.perf_counter()
         assets = []
         rejections_batch = []
         
@@ -347,6 +361,7 @@ async def execute_pipeline(
                 ))
         
         await db.create_rejections_batch(rejections_batch)
+        timings['admission'] = time.perf_counter() - t_start
         run_log.counts.assets_admitted = len(assets)
         run_log.counts.rejected = len(rejections_batch)
         
@@ -362,12 +377,19 @@ async def execute_pipeline(
                 "candidates_evaluated": len(filtered_candidates),
             })
         
+        t_start = time.perf_counter()
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
+        timings['findings'] = time.perf_counter() - t_start
         run_log.counts.findings_generated = len(findings)
         
+        t_start = time.perf_counter()
         await db.create_assets_batch(assets)
         await db.create_artifacts_batch(artifacts)
         await db.create_findings_batch(findings)
+        timings['persist'] = time.perf_counter() - t_start
+        
+        timings['total'] = sum(timings.values())
+        run_log.stage_timings = PipelineStageTimings(**timings)
         
         if len(assets) > 0:
             run_log.status = RunStatus.COMPLETED_WITH_RESULTS

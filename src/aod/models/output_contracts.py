@@ -314,6 +314,20 @@ class RunCounts(BaseModel):
     findings_generated: int = 0
 
 
+class PipelineStageTimings(BaseModel):
+    """Timing measurements for each pipeline stage in seconds"""
+    fetch_snapshot: float = 0.0
+    validate: float = 0.0
+    normalize: float = 0.0
+    build_indexes: float = 0.0
+    correlate: float = 0.0
+    artifacts: float = 0.0
+    admission: float = 0.0
+    findings: float = 0.0
+    persist: float = 0.0
+    total: float = 0.0
+
+
 class RunLog(BaseModel):
     """Run log entry"""
     run_id: str
@@ -323,6 +337,7 @@ class RunLog(BaseModel):
     completed_at: Optional[datetime] = None
     input_meta: dict = Field(default_factory=dict)
     counts: RunCounts = Field(default_factory=RunCounts)
+    stage_timings: Optional[PipelineStageTimings] = Field(default=None, description="Pipeline stage timing in seconds")
     failure_reasons: list[str] = Field(default_factory=list)
     sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
     sync_error: Optional[str] = None

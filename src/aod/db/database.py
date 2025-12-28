@@ -11,7 +11,7 @@ from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage, LensMatchDebug,
     AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
-    VendorHypothesis, Confidence, Materiality, TriagePriority
+    VendorHypothesis, Confidence, Materiality, TriagePriority, PipelineStageTimings
 )
 
 
@@ -183,6 +183,11 @@ class Database:
             except Exception:
                 pass
             
+            try:
+                await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT")
+            except Exception:
+                pass
+            
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
                     artifact_id TEXT PRIMARY KEY,
@@ -317,8 +322,8 @@ class Database:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 """,
                 run.run_id,
                 run.tenant_id,
@@ -329,7 +334,8 @@ class Database:
                 run.counts.model_dump_json(),
                 json.dumps(run.failure_reasons),
                 run.sync_status.value,
-                run.sync_error
+                run.sync_error,
+                run.stage_timings.model_dump_json() if run.stage_timings else None
             )
         return run
     
@@ -346,8 +352,9 @@ class Database:
                     counts = $3,
                     failure_reasons = $4,
                     sync_status = $5,
-                    sync_error = $6
-                WHERE run_id = $7
+                    sync_error = $6,
+                    stage_timings = $7
+                WHERE run_id = $8
                 """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -355,6 +362,7 @@ class Database:
                 json.dumps(run.failure_reasons),
                 run.sync_status.value,
                 run.sync_error,
+                run.stage_timings.model_dump_json() if run.stage_timings else None,
                 run.run_id
             )
         return run
@@ -374,6 +382,7 @@ class Database:
         
         sync_status_val = row.get("sync_status", "not_applicable")
         sync_error_val = row.get("sync_error")
+        stage_timings_data = row.get("stage_timings")
         
         return RunLog(
             run_id=row["run_id"],
@@ -383,6 +392,7 @@ class Database:
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             input_meta=json.loads(row["input_meta"]),
             counts=RunCounts.model_validate_json(row["counts"]),
+            stage_timings=PipelineStageTimings.model_validate_json(stage_timings_data) if stage_timings_data else None,
             failure_reasons=json.loads(row["failure_reasons"]),
             sync_status=SyncStatus(sync_status_val),
             sync_error=sync_error_val
@@ -401,6 +411,7 @@ class Database:
         for row in rows:
             sync_status_val = row.get("sync_status", "not_applicable")
             sync_error_val = row.get("sync_error")
+            stage_timings_data = row.get("stage_timings")
             runs.append(RunLog(
                 run_id=row["run_id"],
                 tenant_id=row["tenant_id"],
@@ -409,6 +420,7 @@ class Database:
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
                 input_meta=json.loads(row["input_meta"]),
                 counts=RunCounts.model_validate_json(row["counts"]),
+                stage_timings=PipelineStageTimings.model_validate_json(stage_timings_data) if stage_timings_data else None,
                 failure_reasons=json.loads(row["failure_reasons"]),
                 sync_status=SyncStatus(sync_status_val),
                 sync_error=sync_error_val

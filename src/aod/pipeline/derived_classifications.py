@@ -205,14 +205,19 @@ class DomainRollup:
     
     def has_registered_owner(self) -> bool:
         """
-        Check if asset has a registered owner (in CMDB or explicitly assigned).
+        Check if asset has a registered owner (in CMDB or IdP).
         
         CMDB presence indicates registered ownership/control - the asset is
         cataloged in the configuration management system.
         
+        IdP presence indicates SSO validation - someone provisioned this via
+        corporate identity, creating a contact point for deprovisioning.
+        
         Used to distinguish Zombie (orphaned) from Parked (owned but inactive).
+        An asset with EITHER IdP OR CMDB has a known contact point, preventing
+        zombie classification.
         """
-        return self.has_cmdb
+        return self.has_cmdb or self.has_idp
     
     def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """

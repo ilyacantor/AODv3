@@ -626,16 +626,15 @@ def classify_actual(
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
         
         # Zombie vs Parked Logic (Dec 2025 Fix):
-        # Zombie = stale + orphaned (no registered owner)
-        # Parked = stale + owned (has registered owner in CMDB)
-        #
-        # If has_cmdb = True, asset is cataloged with registered owner → Parked
-        # If anchored (IdP/Finance/Cloud) but NOT has_cmdb → Zombie (orphaned)
-        # If not anchored → Parked (non-actionable, can't deprovision)
+        # Zombie = stale + orphaned (no registered owner / contact point)
+        # Parked = stale + owned (has registered owner / contact point)
         #
         # Key insight: CMDB presence indicates registered ownership/control.
-        # Owner can also be set explicitly on asset (from triage or CMDB).
-        has_registered_owner = has_cmdb or (asset.owner is not None and asset.owner.strip() != "")
+        # IdP presence indicates SSO validation - creates a contact point (whoever provisioned).
+        # If we can identify WHO to contact about deprovisioning, it's NOT zombie.
+        #
+        # has_registered_owner = has_cmdb OR has_idp OR explicit owner
+        has_registered_owner = has_cmdb or has_idp or (asset.owner is not None and asset.owner.strip() != "")
         
         if has_stale_activity:
             if has_registered_owner:
@@ -925,16 +924,22 @@ def emit_actual_results(
             
             # SHADOW CLASSIFICATION FOR REJECTED ASSETS:
             # Rejected assets can still be Shadow IT if they are ungoverned AND have RECENT activity.
-            # FAIL-CLOSED: Require explicit RECENT activity evidence. No activity = not shadow.
             evidence = rej.get("evidence_summary", {})
             has_idp = evidence.get("has_idp", False) or "HAS_IDP" in reasons
             has_cmdb = evidence.get("has_cmdb", False) or "HAS_CMDB" in reasons
+            has_discovery = evidence.get("has_discovery", False) or "HAS_DISCOVERY" in reasons
             
-            # Check for activity status - require EXPLICIT recent activity
+            # Check for activity status
             has_recent = evidence.get("has_recent_activity", False)
             has_stale = "STALE_ACTIVITY" in reasons or evidence.get("has_stale_activity", False)
             
-            # If stale activity is indicated, definitely not shadow
+            # DISCOVERY = RECENT ACTIVITY for rejected assets
+            # If an asset was seen in discovery plane, it has recent observation evidence
+            # This is a reasonable proxy for recency when explicit timestamps are missing
+            if has_discovery and not has_stale:
+                has_recent = True
+            
+            # If stale activity is explicitly indicated, not shadow
             if has_stale:
                 has_recent = False
             

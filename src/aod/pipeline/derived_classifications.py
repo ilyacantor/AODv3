@@ -203,33 +203,31 @@ class DomainRollup:
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.RECENT
     
-    def has_registered_owner(self) -> bool:
+    def has_contact_point(self) -> bool:
         """
-        Check if asset has a registered owner (in CMDB or IdP).
+        Check if asset has a contact point for deprovisioning.
         
-        CMDB presence indicates registered ownership/control - the asset is
-        cataloged in the configuration management system.
+        Contact points include any means to identify who to reach out to:
+        - CMDB: registered owner in asset catalog
+        - IdP: SSO record of who provisioned via corporate identity
+        - Finance: expense record of who is paying (traceable via finance system)
         
-        IdP presence indicates SSO validation - someone provisioned this via
-        corporate identity, creating a contact point for deprovisioning.
-        
-        Used to distinguish Zombie (orphaned) from Parked (owned but inactive).
-        An asset with EITHER IdP OR CMDB has a known contact point, preventing
-        zombie classification.
+        Used to distinguish Zombie (orphaned) from Parked (has contact point).
+        An asset with ANY contact point prevents zombie classification.
         """
-        return self.has_cmdb or self.has_idp
+        return self.has_cmdb or self.has_idp or self.has_finance
     
     def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level zombie: anchored but ORPHANED (no registered owner) AND stale.
+        Domain-level zombie: anchored but NO CONTACT POINT AND stale.
         
-        Zombie = anchored AND NOT has_registered_owner AND activity_status==STALE
+        Zombie = anchored AND NOT has_contact_point AND activity_status==STALE
         
-        Dec 2025 Fix: Zombie means ORPHANED (no owner to manage deprovisioning).
-        If asset is in CMDB, it has a registered owner and is Parked, not Zombie.
+        Dec 2025 Fix: Zombie means NO CONTACT POINT (no one to reach for deprovisioning).
+        Contact points include: CMDB (owner), IdP (provisioner), Finance (payer).
         
-        - anchored (IdP/Finance/Cloud) + stale + no CMDB owner = Zombie (can terminate)
-        - has_cmdb + stale = Parked (owned but inactive - don't kill)
+        - anchored + stale + no contact point = Zombie (truly orphaned)
+        - has any contact point + stale = Parked (can reach out)
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
@@ -244,8 +242,8 @@ class DomainRollup:
         if not self.is_anchored():
             return False
         
-        # If has registered owner (CMDB), it's Parked, not Zombie
-        if self.has_registered_owner():
+        # If has contact point (CMDB/IdP/Finance), it's Parked, not Zombie
+        if self.has_contact_point():
             return False
         
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
@@ -253,12 +251,12 @@ class DomainRollup:
     
     def is_parked(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level parked: stale AND (has registered owner OR not anchored).
+        Domain-level parked: stale AND (has contact point OR not anchored).
         
-        Parked = activity_status==STALE AND (has_registered_owner OR NOT is_anchored)
+        Parked = activity_status==STALE AND (has_contact_point OR NOT is_anchored)
         
         Dec 2025 Fix: Parked means either:
-        1. Owned but inactive - has CMDB entry (registered owner), stale activity
+        1. Has contact point - someone to reach out to (CMDB/IdP/Finance owner)
         2. Non-actionable - not anchored, can't deprovision what isn't managed
         
         These are explicitly excluded from zombie counts.
@@ -276,8 +274,8 @@ class DomainRollup:
         if activity_status != ActivityStatus.STALE:
             return False
         
-        # Parked if has registered owner OR not anchored
-        return self.has_registered_owner() or not self.is_anchored()
+        # Parked if has contact point OR not anchored
+        return self.has_contact_point() or not self.is_anchored()
     
     def get_reason_codes(self) -> list[str]:
         """Generate canonical reason codes for this domain"""

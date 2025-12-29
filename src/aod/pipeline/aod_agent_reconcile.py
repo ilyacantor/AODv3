@@ -626,19 +626,26 @@ def classify_actual(
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
         
         # Zombie vs Parked Logic (Dec 2025 Fix):
-        # Zombie = stale + orphaned (no registered owner / contact point)
-        # Parked = stale + owned (has registered owner / contact point)
+        # Zombie = stale + orphaned (no contact point for deprovisioning)
+        # Parked = stale + has contact point
         #
-        # Key insight: CMDB presence indicates registered ownership/control.
-        # IdP presence indicates SSO validation - creates a contact point (whoever provisioned).
+        # Contact points (any means to identify who to contact about deprovisioning):
+        # - CMDB: registered owner in asset catalog
+        # - IdP: SSO record of who provisioned via corporate identity
+        # - Finance: expense record of who is paying (can trace via finance system)
+        # - Explicit owner: manually assigned owner
+        #
         # If we can identify WHO to contact about deprovisioning, it's NOT zombie.
-        #
-        # has_registered_owner = has_cmdb OR has_idp OR explicit owner
-        has_registered_owner = has_cmdb or has_idp or (asset.owner is not None and asset.owner.strip() != "")
+        has_contact_point = (
+            has_cmdb or 
+            has_idp or 
+            has_finance or  # Any finance record = traceable contact via expense system
+            (asset.owner is not None and asset.owner.strip() != "")
+        )
         
         if has_stale_activity:
-            if has_registered_owner:
-                # Has CMDB entry or explicit owner = Parked (owned but inactive)
+            if has_contact_point:
+                # Has contact point (CMDB/IdP/Finance/owner) = Parked (can reach out)
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
             elif is_anchored:

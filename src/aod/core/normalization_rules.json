@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "version": "2.0",
+    "type": "curated_top_100",
+    "description": "Governance rules for semantic SaaS identity resolution."
+  },
+  "policy": {
+    "paas_roots": [
+      "atlassian.net", "myshopify.com", "github.io", "gitlab.io", 
+      "herokuapp.com", "sharepoint.com", "service-now.com", 
+      "force.com", "blob.core.windows.net", "s3.amazonaws.com",
+      "azurewebsites.net", "appspot.com", "firebaseapp.com",
+      "statuspage.io", "zendesk.com", "freshdesk.com"
+    ],
+    "alias_map": {
+      "zoom-video.com": "zoom.us", "zoom.com": "zoom.us", "zoom.cn": "zoom.us", "zoomgov.com": "zoom.us",
+      
+      "microsoftonline.com": "microsoft.com", "office365.com": "microsoft.com", 
+      "live.com": "microsoft.com", "office.com": "microsoft.com", 
+      "windows.net": "microsoft.com", "azure.com": "microsoft.com",
+      "msn.com": "microsoft.com", "visualstudio.com": "microsoft.com",
+      "lync.com": "microsoft.com", "yammer.com": "microsoft.com",
+      
+      "googleusercontent.com": "google.com", "youtu.be": "google.com", 
+      "youtube.com": "google.com", "googleapis.com": "google.com", 
+      "ggpht.com": "google.com", "1e100.net": "google.com",
+      
+      "slack-edge.com": "slack.com", "slack-msgs.com": "slack.com", 
+      "slack-core.com": "slack.com", "slack-redir.net": "slack.com",
+      
+      "salesforce.com": "salesforce.com", "lightning.force.com": "salesforce.com", 
+      "my.salesforce.com": "salesforce.com", "pardot.com": "salesforce.com", 
+      "tableau.com": "salesforce.com", "mulesoft.com": "salesforce.com",
+      
+      "fb.com": "facebook.com", "messenger.com": "facebook.com", 
+      "whatsapp.com": "facebook.com", "instagram.com": "facebook.com",
+      
+      "aws.amazon.com": "amazon.com", "amazon.co.uk": "amazon.com", 
+      "media-amazon.com": "amazon.com",
+      
+      "webex.co": "webex.com", "ciscospark.com": "webex.com", "wbx2.com": "webex.com",
+      
+      "box.net": "box.com", "boxcloud.com": "box.com",
+      "dropboxstatic.com": "dropbox.com", "getdropbox.com": "dropbox.com",
+      
+      "twitter.com": "x.com", "t.co": "x.com", "twimg.com": "x.com",
+      "linkedin.com": "linkedin.com", "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
+      
+      "adobe.io": "adobe.com", "behance.net": "adobe.com", "typekit.net": "adobe.com",
+      "paypalobjects.com": "paypal.com", "paypal.me": "paypal.com"
+    }
+  }
+}

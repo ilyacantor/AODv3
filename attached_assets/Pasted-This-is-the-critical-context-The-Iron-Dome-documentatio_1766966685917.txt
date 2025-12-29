@@ -1,0 +1,120 @@
+This is the critical context. The "Iron Dome" documentation you shared reveals that you already have a `validate_key_integrity` function to reject internal hostnames (like `cdn674`), but you lack the **Identity Normalization** to handle valid-but-messy SaaS domains (like `api.primebox.io` vs `primebox.io`).
+
+Here is the **Revised, Battle-Ready Refactoring Plan**. It respects the separation of concerns (AOD vs. Farm) and integrates the "Iron Dome" and "Policy" concepts you shared.
+
+---
+
+### 🏛️ AOD Logic Refactoring Command Prompt
+
+**Role:** Senior Backend Architect (AOD Module)
+**Objective:** Replace the fragile, ad-hoc domain normalization logic with a deterministic **Hybrid Identity Pipeline**. This will resolve the 174 `KEY_NORMALIZATION_MISMATCH` errors and the 36 `FP_FROM_PARKED` Zombie errors.
+
+**Constraint:** You are modifying **AOD (AutonomOS Discover)** only. You cannot see or touch the Farm code. You must align AOD's behavior to correctly classify the raw evidence Farm provides.
+
+---
+
+### 📦 Phase 1: The Data Layer (Configuration)
+
+**Action:** Create `src/aod/core/normalization_rules.json`.
+**Purpose:** Externalize "Knowledge" so code remains "Logic-only". This replaces hardcoded vendor lists.
+
+**Content:**
+Initialize with the **Top 100 SaaS Definitions** (Microsoft, Google, Salesforce, Zoom, etc.) and the **PaaS Roots** (Atlassian, Shopify).
+
+* *Key mappings:* `zoom-video.com` → `zoom.us`, `microsoftonline.com` → `microsoft.com`.
+* *PaaS protection:* `atlassian.net` (preserve subdomain), `myshopify.com` (preserve subdomain).
+
+---
+
+### ⚙️ Phase 2: The Logic Engine (IdentityNormalizer)
+
+**Action:** Create `src/aod/core/identity_normalizer.py`.
+**Dependency:** `tldextract` (Ensure it is in `requirements.txt`).
+
+**Requirements:**
+Implement a class `IdentityNormalizer` with a single public method `.normalize(raw_input) -> str`.
+The pipeline must execute in this exact order:
+
+1. **Sanitize:** Strip protocols (`https://`), paths (`/login`), and query params using `urllib.parse`. Lowercase everything.
+2. **Iron Dome Check (Integration):** Call existing `validate_key_integrity(domain)`. If it fails (invalid TLD), return `None` immediately. (Do not normalize garbage).
+3. **Alias Map:** Check if the sanitized domain exists in `normalization_rules.json['alias_map']`. If yes, return the mapped value (e.g., `zoom.us`).
+4. **Extraction:** Use `tldextract` to separate `subdomain`, `domain`, `suffix`.
+5. **PaaS Logic:** Check if `domain.suffix` is in `normalization_rules.json['paas_roots']`.
+* *If Yes:* Return `subdomain.domain.suffix` (keep tenant identity).
+* *If No:* Return `domain.suffix` (collapse to root).
+
+
+
+---
+
+### 🧹 Phase 3: The Purge (Search & Destroy)
+
+**Action:** Remove legacy logic from `src/aod/pipeline/normalize_observations.py` and `src/aod/utils/governance_utils.py`.
+
+**Delete patterns:**
+
+* `if "zoom" in...` (String sniffing)
+* `re.sub(r'api\.', '', ...)` (Ad-hoc regex)
+* Any hardcoded lists of vendors (`["slack", "trello", "asana"]`).
+* Any function named `get_service_name` or `map_aliases`.
+
+**Refactor:**
+Inject `IdentityNormalizer` into the `normalize_observation` function. Ensure every domain passing through the pipeline is processed by this single source of truth.
+
+---
+
+### 🧟 Phase 4: Zombie Logic Repair
+
+**Action:** Update `src/aod/pipeline/derived_classifications.py`.
+**Context:** The report shows 36 `FP_FROM_PARKED`. AOD is killing assets that are Stale but Owned.
+
+**New Logic:**
+
+```python
+def classify_zombie(asset, activity_window=90):
+    is_anchored = asset.has_idp or asset.has_cmdb
+    is_stale = asset.last_activity_days > activity_window
+    
+    # FIX: Check if the asset has a specific owner in CMDB before killing it.
+    # If it is anchored but has NO owner, it is a Zombie.
+    # If it is anchored AND has an owner, it is PARKED (Review status).
+    
+    if is_anchored and is_stale:
+        if asset.cmdb_owner: 
+            return Classification.PARKED 
+        return Classification.ZOMBIE
+        
+    return None
+
+```
+
+---
+
+### 🧪 Phase 5: Verification (The "No Green-Test Theater" Rule)
+
+**Action:**
+
+1. **Update Tests:** Existing tests asserting `zoom-video.com` should fail. Update them to expect `zoom.us`.
+2. **Add Negative Tests:**
+* Input: `https://internal-billing-api` → Output: `None` (Rejected by Iron Dome).
+* Input: `api.primebox.io` → Output: `primebox.io` (Long Tail fallback).
+* Input: `jira.atlassian.net` → Output: `jira.atlassian.net` (PaaS protection).
+
+
+
+---
+
+### 🚀 Execution Command
+
+*Copy and paste this block to your agent:*
+
+> **Task:** Refactor AOD Identity & Governance Logic.
+> **Context:** We are seeing high false positives/negatives in reconciliation because normalization logic is fragmented and Zombie logic is too aggressive.
+> **Steps:**
+> 1. Create `src/aod/core/normalization_rules.json` with the Top 100 aliases and PaaS roots provided in the chat history.
+> 2. Create `src/aod/core/identity_normalizer.py` implementing the Hybrid Pipeline (Sanitize -> Iron Dome -> Alias -> TLD Extraction -> PaaS Check).
+> 3. Refactor `normalize_observations.py` to use `IdentityNormalizer`. Delete all old ad-hoc regex/lists.
+> 4. Modify `derived_classifications.py` to differentiate between **ZOMBIE** (Stale + Orphaned) and **PARKED** (Stale + Owned).
+> 5. Run tests and update expectations. Do not suppress failures; fix the test data to match the new canonical output.
+> 
+>

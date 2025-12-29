@@ -80,30 +80,35 @@ class PolicyEngine:
             )
         
         gates_passed = []
+        all_codes = []
         
         finance_pass, finance_codes = self._check_finance_gate(asset_data)
+        all_codes.extend(finance_codes)
         if finance_pass:
             gates_passed.append("finance")
             reason_codes.extend(finance_codes)
         
         governance_pass, gov_codes = self._check_governance_gate(asset_data)
+        all_codes.extend(gov_codes)
         if governance_pass:
             gates_passed.append("governance")
             reason_codes.extend(gov_codes)
         
         discovery_pass, disc_codes = self._check_discovery_gate(asset_data)
+        all_codes.extend(disc_codes)
         if discovery_pass:
             gates_passed.append("discovery")
             reason_codes.extend(disc_codes)
         
         if not gates_passed:
             no_codes = self._compute_negative_codes(asset_data)
+            all_codes.extend(no_codes)
             return PolicyDecision(
                 admitted=False,
                 classification=None,
                 rejection_reason="No admission criteria satisfied",
                 admission_reason=None,
-                reason_codes=no_codes
+                reason_codes=all_codes
             )
         
         classification, class_codes = self._classify(asset_data)
@@ -143,9 +148,18 @@ class PolicyEngine:
     
     def _check_governance_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Governance Gate: IdP OR CMDB OR Cloud (with optional strictness).
+        Governance Gate: (IdP OR CMDB) WITH discovery corroboration, OR Cloud alone.
+        
+        GOVERNANCE ADMISSION GATE (Dec 2025):
+        - IdP/CMDB alone is NOT sufficient for admission - requires discovery
+        - IdP/CMDB + discovery_planes_count >= noise_floor = admitted
+        - IdP/CMDB without discovery corroboration = NOT admitted
+        - Cloud can admit independently (no discovery required)
+        This prevents governance-only assets with weak evidence from cluttering catalog.
         """
         codes = []
+        has_idp_match = False
+        has_cmdb_match = False
         
         in_idp = data.get("in_idp", False)
         if in_idp:
@@ -154,6 +168,7 @@ class PolicyEngine:
                 has_scim = data.get("has_scim", False)
                 is_sp = data.get("is_service_principal", False)
                 if has_sso or has_scim or is_sp:
+                    has_idp_match = True
                     codes.append("HAS_IDP")
                     if has_sso:
                         codes.append("HAS_SSO")
@@ -162,6 +177,7 @@ class PolicyEngine:
                     if is_sp:
                         codes.append("IS_SERVICE_PRINCIPAL")
             else:
+                has_idp_match = True
                 codes.append("HAS_IDP")
         
         in_cmdb = data.get("in_cmdb", False)
@@ -172,21 +188,34 @@ class PolicyEngine:
                 valid_ci = ci_type in {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
                 valid_lc = lifecycle in {"prod", "production", "staging", "stage", "live", "active"} if self.config.admission.require_valid_lifecycle else True
                 if valid_ci and valid_lc:
+                    has_cmdb_match = True
                     codes.append("HAS_CMDB")
             else:
+                has_cmdb_match = True
                 codes.append("HAS_CMDB")
         
         in_cloud = data.get("in_cloud", False)
         if in_cloud:
             codes.append("HAS_CLOUD")
+            return True, codes
         
         if self.config.scope.treat_directory_as_idp:
             in_directory = data.get("in_directory", False)
             if in_directory:
+                has_idp_match = True
                 codes.append("HAS_DIRECTORY")
         
-        passed = len(codes) > 0
-        return passed, codes
+        if has_idp_match or has_cmdb_match:
+            plane_count = data.get("discovery_planes_count", 0) or 0
+            has_sufficient_discovery = plane_count >= self.config.admission.noise_floor
+            if has_sufficient_discovery:
+                codes.append(f"DISCOVERY_CORROBORATED_{plane_count}_PLANES")
+                return True, codes
+            else:
+                codes.append("NO_DISCOVERY_CORROBORATION")
+                return False, codes
+        
+        return False, codes
     
     def _check_discovery_gate(self, data: dict) -> tuple[bool, list[str]]:
         """

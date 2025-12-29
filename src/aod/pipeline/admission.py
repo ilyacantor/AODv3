@@ -455,6 +455,48 @@ def source_to_plane(source: str) -> Optional[str]:
 
 DISCOVERY_CORROBORATION_PLANES = {"network", "endpoint", "idp", "cloud", "discovery"}
 
+# FARM_CREDITED_DISCOVERY_SOURCES: Sources Farm recognizes as "hard discovery"
+# Excludes user-activity exhaust like proxy, browser, saas_audit_log which are too noisy
+# Farm policy only credits sources that represent:
+# - Direct system/network scans (dns, network_scan)
+# - Endpoint agent telemetry (edr, mdm, endpoint)
+# - Cloud API discovery (cloud_api, cloud_trail)
+# Ref: Farm assessment discrepancy - 51 FPs from proxy/browser sources Farm ignores
+FARM_CREDITED_DISCOVERY_SOURCES = {
+    # Network hard discovery (not user activity)
+    "dns", "network_scan", "firewall", "netflow", "packet_capture",
+    "zscaler_gre", "paloalto_panorama",
+    # Endpoint agents
+    "edr", "mdm", "av", "agent", "endpoint", "endpoint_protection",
+    "crowdstrike", "sentinelone", "carbonblack", "defender",
+    "jamf", "intune", "workspace_one", "kandji",
+    # Cloud API discovery
+    "cloud_api", "cloud_trail", "cloudtrail", "aws_config", "azure_monitor", "gcp_audit",
+    "aws", "azure", "gcp",
+    # IdP (for SSO discovery)
+    "sso", "oauth", "saml", "directory", "ldap", "okta", "azure_ad", "entra_id",
+    "onelogin", "ping", "jumpcloud",
+    # Explicit discovery sources
+    "discovery",
+    # Simulated/test variants
+    "simulated_dns", "simulated_endpoint", "simulated_cloud", "simulated_idp",
+    "farm_dns", "farm_endpoint", "farm_cloud", "farm_idp",
+    "synthetic_dns", "synthetic_endpoint", "synthetic_cloud", "synthetic_idp",
+    "test_dns", "test_endpoint", "test_cloud", "test_idp",
+}
+
+# USER_ACTIVITY_EXHAUST: Sources that are user-behavior/proxy data
+# Farm ignores these as they don't represent "real" discovery evidence
+USER_ACTIVITY_EXHAUST = {
+    "proxy", "browser", "saas_audit_log", "casb", "swg", "dlp", "siem",
+    "web_filter", "zscaler", "zscaler_proxy", "zscaler_zia", "netskope",
+    "netskope_casb", "symantec_proxy", "bluecoat", "fortigate",
+    "cisco_umbrella", "cato", "cloudflare_gateway", "menlo", "iboss",
+    "simulated_proxy", "farm_proxy", "synthetic_proxy", "test_proxy",
+    "simulated_network", "farm_network", "synthetic_network", "test_network",
+    "network",  # Generic "network" is too ambiguous
+}
+
 MIN_DISCOVERY_SOURCES = 2
 
 import logging
@@ -505,9 +547,11 @@ def build_discovery_footprint(
     for obs in observations:
         if obs.source:
             source_lower = obs.source.lower()
-            discovery_sources.add(source_lower)
             plane = source_to_plane(source_lower)
+            # Only count sources that map to discovery-corroboration planes
+            # Exclude CMDB and finance sources as they aren't "real" discovery evidence
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                discovery_sources.add(source_lower)
                 planes_present.add(plane)
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
@@ -746,9 +790,14 @@ def extract_activity_timestamps(
     
     if observations:
         for obs in observations:
-            if obs.observed_at:
-                if discovery_observed_at is None or obs.observed_at > discovery_observed_at:
-                    discovery_observed_at = obs.observed_at
+            if obs.observed_at and obs.source:
+                source_lower = obs.source.lower()
+                plane = source_to_plane(source_lower)
+                # Only count observations from discovery-corroboration planes
+                # Exclude CMDB and finance sources as they aren't "real" discovery
+                if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                    if discovery_observed_at is None or obs.observed_at > discovery_observed_at:
+                        discovery_observed_at = obs.observed_at
         if discovery_observed_at:
             timestamps.append(discovery_observed_at)
     
@@ -915,6 +964,20 @@ def apply_admission_criteria(
     # It is recorded as metadata for classification/explanation only
     
     # =========================================================================
+    # DISCOVERY CORROBORATION CHECK (Dec 2025)
+    # Count discovery observations to verify actual usage evidence
+    # NOTE: Every candidate has ≥1 observation (that's how they become candidates)
+    # so we require ≥2 distinct sources for governance to admit
+    # =========================================================================
+    footprint = build_discovery_footprint(
+        observations, 
+        canonical_key=effective_domain or entity.canonical_name if entity else None
+    )
+    # Require at least 2 distinct discovery sources for corroboration
+    # Single-source assets (often vendor-inferred) lack sufficient evidence
+    has_sufficient_discovery = len(footprint.discovery_sources) >= 2
+    
+    # =========================================================================
     # FINANCE ADMISSION GATE (Dec 2025)
     # Finance alone is NOT sufficient for admission - requires corroboration:
     # - Finance + Governance (IdP/CMDB) = admitted
@@ -928,9 +991,19 @@ def apply_admission_criteria(
         discovery_admitted  # discovery_admitted already requires >= 2 sources
     )
     
-    # Admission: IdP, CMDB, Cloud, or Discovery can admit independently
-    # Finance requires corroboration (governance or sufficient discovery)
-    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_can_admit, discovery_admitted]):
+    # =========================================================================
+    # GOVERNANCE ADMISSION GATE (Dec 2025)
+    # IdP/CMDB alone is NOT sufficient for admission - requires discovery:
+    # - IdP/CMDB + at least 2 discovery sources = admitted
+    # - IdP/CMDB with only 1 source (often inferred) = NOT admitted
+    # This prevents governance-only assets with weak evidence from cluttering catalog
+    # =========================================================================
+    idp_can_admit = idp_admitted and has_sufficient_discovery
+    cmdb_can_admit = cmdb_admitted and has_sufficient_discovery
+    
+    # Admission: Cloud or Discovery (≥2 sources) can admit independently
+    # IdP/CMDB/Finance require discovery corroboration
+    if not any([idp_can_admit, cmdb_can_admit, cloud_admitted, finance_can_admit, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,
@@ -942,9 +1015,9 @@ def apply_admission_criteria(
     # Strict precedence order: GREEN (ACTIVE) > AMBER (REVIEW) > RED (QUARANTINE)
     # =========================================================================
     
-    # STEP 1: GREEN LANE (Trusted) - IdP OR CMDB = ACTIVE
+    # STEP 1: GREEN LANE (Trusted) - IdP OR CMDB (with discovery corroboration) = ACTIVE
     # These flow to DCL automatically
-    has_governance = idp_admitted or cmdb_admitted
+    has_governance = idp_can_admit or cmdb_can_admit
     
     # STEP 2: AMBER LANE (Review) - CMDB + Stale Activity = REVIEW
     # Check if activity is stale (zombie indicator)
@@ -964,7 +1037,7 @@ def apply_admission_criteria(
     
     # Determine provisioning status based on Traffic Light rules
     if has_governance:
-        if cmdb_admitted and is_stale_activity and not idp_admitted:
+        if cmdb_can_admit and is_stale_activity and not idp_can_admit:
             # STEP 2: AMBER - CMDB but stale activity (zombie candidate)
             provisioning_status = ProvisioningStatus.REVIEW
         else:

@@ -125,11 +125,20 @@ class PolicyEngine:
     
     def _check_finance_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Finance Gate: spend >= minimum_spend threshold.
+        Finance Gate: spend >= minimum_spend threshold OR finance correlation match.
+        
+        If correlation determined a finance match (in_finance=True), admit even if
+        monthly_spend data isn't available. This trusts the upstream correlation.
         """
         spend = data.get("monthly_spend", 0) or 0
         if spend >= self.config.admission.minimum_spend:
             return True, ["HAS_FINANCE", "SPEND_ABOVE_THRESHOLD"]
+        
+        # Trust finance correlation status even if spend data is missing
+        in_finance = data.get("in_finance", False)
+        if in_finance:
+            return True, ["HAS_FINANCE", "FINANCE_CORRELATION_MATCH"]
+        
         return False, []
     
     def _check_governance_gate(self, data: dict) -> tuple[bool, list[str]]:

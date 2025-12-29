@@ -243,30 +243,38 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     Recurring spend provides stronger confidence but is not required.
     
     NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
-    If correlation determined a match, trust it for admission.
+    Vendor-only matches are NOT sufficient for finance admission.
     """
     if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
-    # First, try to extract detailed reason from records
+    # Check for actual finance records (Contract or Transaction)
+    has_actual_finance_record = False
     for record in correlation.finance.matched_records:
         if isinstance(record, Contract):
+            has_actual_finance_record = True
             if record.is_recurring and record.amount > 0:
                 return True, f"Finance match: Recurring contract ${record.amount}"
             elif record.amount > 0:
                 return True, f"Finance match: Contract ${record.amount}"
         elif isinstance(record, Transaction):
+            has_actual_finance_record = True
             if record.is_recurring and record.amount > 0:
                 return True, f"Finance match: Recurring transaction ${record.amount}"
             elif record.amount > 0:
                 return True, f"Finance match: Transaction ${record.amount}"
     
-    if correlation.finance.matched_records:
+    # If we found Contract/Transaction records (even with amount=0), admit
+    if has_actual_finance_record:
         return True, "Finance match (spend evidence)"
     
-    # Trust correlation status - if correlation found a match, admit
-    # This handles cases where matched_records is empty but status is MATCHED
-    return True, "Finance match (correlation status)"
+    # Check match_method - only trust non-vendor finance matches
+    # Vendor-only matches don't indicate actual finance evidence
+    if correlation.finance.match_method and correlation.finance.match_method != "vendor":
+        return True, "Finance match (correlation status)"
+    
+    # Vendor-only match or empty records - not sufficient for finance admission
+    return False, ""
 
 
 DISCOVERY_ACTIVITY_WINDOW_DAYS = 90

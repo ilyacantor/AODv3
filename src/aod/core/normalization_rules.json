@@ -20,7 +20,7 @@
       "live.com": "microsoft.com", "office.com": "microsoft.com", 
       "windows.net": "microsoft.com", "azure.com": "microsoft.com",
       "msn.com": "microsoft.com", "visualstudio.com": "microsoft.com",
-      "lync.com": "microsoft.com", "yammer.com": "microsoft.com",
+      "lync.com": "microsoft.com",
       
       "googleusercontent.com": "google.com", "youtu.be": "google.com", 
       "youtube.com": "google.com", "googleapis.com": "google.com", 
@@ -29,12 +29,10 @@
       "slack-edge.com": "slack.com", "slack-msgs.com": "slack.com", 
       "slack-core.com": "slack.com", "slack-redir.net": "slack.com",
       
-      "salesforce.com": "salesforce.com", "lightning.force.com": "salesforce.com", 
-      "my.salesforce.com": "salesforce.com", "pardot.com": "salesforce.com", 
-      "tableau.com": "salesforce.com", "mulesoft.com": "salesforce.com",
+      "lightning.force.com": "salesforce.com", 
+      "my.salesforce.com": "salesforce.com", "pardot.com": "salesforce.com",
       
-      "fb.com": "facebook.com", "messenger.com": "facebook.com", 
-      "whatsapp.com": "facebook.com", "instagram.com": "facebook.com",
+      "fb.com": "facebook.com", "messenger.com": "facebook.com",
       
       "aws.amazon.com": "amazon.com", "amazon.co.uk": "amazon.com", 
       "media-amazon.com": "amazon.com",
@@ -45,7 +43,7 @@
       "dropboxstatic.com": "dropbox.com", "getdropbox.com": "dropbox.com",
       
       "twitter.com": "x.com", "t.co": "x.com", "twimg.com": "x.com",
-      "linkedin.com": "linkedin.com", "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
+      "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
       
       "adobe.io": "adobe.com", "behance.net": "adobe.com", "typekit.net": "adobe.com",
       "paypalobjects.com": "paypal.com", "paypal.me": "paypal.com"

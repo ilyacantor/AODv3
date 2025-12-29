@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": "2.0",
-    "type": "curated_top_100",
-    "description": "Governance rules for semantic SaaS identity resolution."
+    "version": "2.1",
+    "type": "calibrated_top_100",
+    "description": " Governance rules. distinct products are preserved; technical aliases are merged."
   },
   "policy": {
     "paas_roots": [
@@ -10,8 +10,7 @@
       "herokuapp.com", "sharepoint.com", "service-now.com", 
       "force.com", "blob.core.windows.net", "s3.amazonaws.com",
       "azurewebsites.net", "appspot.com", "firebaseapp.com",
-      "statuspage.io", "zendesk.com", "freshdesk.com",
-      "okta.com", "oktapreview.com", "servicenow.com", "salesforce.com"
+      "statuspage.io", "zendesk.com", "freshdesk.com"
     ],
     "alias_map": {
       "zoom-video.com": "zoom.us", "zoom.com": "zoom.us", "zoom.cn": "zoom.us", "zoomgov.com": "zoom.us",
@@ -32,7 +31,7 @@
       "lightning.force.com": "salesforce.com", 
       "my.salesforce.com": "salesforce.com", "pardot.com": "salesforce.com",
       
-      "fb.com": "facebook.com", "messenger.com": "facebook.com",
+      "fb.com": "facebook.com", "messenger.com": "facebook.com", 
       
       "aws.amazon.com": "amazon.com", "amazon.co.uk": "amazon.com", 
       "media-amazon.com": "amazon.com",
@@ -45,7 +44,7 @@
       "twitter.com": "x.com", "t.co": "x.com", "twimg.com": "x.com",
       "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
       
-      "adobe.io": "adobe.com", "behance.net": "adobe.com", "typekit.net": "adobe.com",
+      "adobe.io": "adobe.com", "typekit.net": "adobe.com",
       "paypalobjects.com": "paypal.com", "paypal.me": "paypal.com"
     }
   }

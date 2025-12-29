@@ -914,9 +914,23 @@ def apply_admission_criteria(
     # NOTE: Vendor governance propagation does NOT cause admission
     # It is recorded as metadata for classification/explanation only
     
-    # Admission: ANY plane can admit (IdP, CMDB, Cloud, Finance, or Discovery)
-    # Discovery-only admission is CRITICAL for Shadow IT detection
-    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_admitted, discovery_admitted]):
+    # =========================================================================
+    # FINANCE ADMISSION GATE (Dec 2025)
+    # Finance alone is NOT sufficient for admission - requires corroboration:
+    # - Finance + Governance (IdP/CMDB) = admitted
+    # - Finance + Discovery (>= 2 sources) = admitted
+    # - Finance alone with minimal discovery (< 2 sources) = NOT admitted
+    # This prevents low-confidence finance-only assets from cluttering catalog
+    # =========================================================================
+    finance_can_admit = finance_admitted and (
+        idp_admitted or 
+        cmdb_admitted or 
+        discovery_admitted  # discovery_admitted already requires >= 2 sources
+    )
+    
+    # Admission: IdP, CMDB, Cloud, or Discovery can admit independently
+    # Finance requires corroboration (governance or sufficient discovery)
+    if not any([idp_admitted, cmdb_admitted, cloud_admitted, finance_can_admit, discovery_admitted]):
         return AdmissionResult(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,

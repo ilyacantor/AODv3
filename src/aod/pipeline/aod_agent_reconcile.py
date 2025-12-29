@@ -923,18 +923,35 @@ def emit_actual_results(
             
             reasons = _compute_rejection_reasons(rej)
             
+            # SHADOW CLASSIFICATION FOR REJECTED ASSETS:
+            # Rejected assets can still be Shadow IT if they are ungoverned.
+            # Check evidence_summary for governance signals.
+            evidence = rej.get("evidence_summary", {})
+            has_idp = evidence.get("has_idp", False) or "HAS_IDP" in reasons
+            has_cmdb = evidence.get("has_cmdb", False) or "HAS_CMDB" in reasons
+            has_recent = evidence.get("has_recent_activity", True)  # Default to recent if unknown
+            
+            # GOVERNANCE TRINITY: Both IdP AND CMDB required
+            has_governance = has_idp and has_cmdb
+            is_rejection_shadow = (not has_governance) and has_recent
+            
+            if is_rejection_shadow:
+                shadow_actual.append(entity_key)
+                if "SHADOW_CLASSIFICATION" not in reasons:
+                    reasons.append("SHADOW_CLASSIFICATION")
+            
             admission_actual[entity_key] = "rejected"
             actual_reasons[entity_key] = reasons
             asset_details[entity_key] = {
                 "asset_id": None,
                 "name": rej.get("entity_name", entity_key),
-                "is_shadow": False,
+                "is_shadow": is_rejection_shadow,
                 "is_zombie": False,
                 "is_parked": False,
                 "evidence_summary": {
                     "rejection_reason": rej.get("reason_code", "unknown"),
                     "rejection_detail": rej.get("reason_detail", ""),
-                    "original_evidence": rej.get("evidence_summary", {})
+                    "original_evidence": evidence
                 }
             }
     

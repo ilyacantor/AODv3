@@ -1,0 +1,57 @@
+Diagnostic Prompt for Replit Agent
+Task: Verify the current behavior of IdentityNormalizer. Instructions: Create and run a temporary script debug_normalization.py with the following content. This will tell us if the Fallback is running and if the JSON is loading.
+
+Python
+
+import os
+import sys
+
+# Ensure we can import from src
+sys.path.append(os.getcwd())
+
+try:
+    from src.aod.core.identity_normalizer import IdentityNormalizer
+    print("✅ Successfully imported IdentityNormalizer")
+except ImportError as e:
+    print(f"❌ Failed to import: {e}")
+    exit(1)
+
+def test_drive():
+    try:
+        norm = IdentityNormalizer()
+        print(f"✅ Loaded Rules: {len(norm.rules.get('alias_map', {}))} aliases found.")
+    except Exception as e:
+        print(f"❌ Failed to initialize: {e}")
+        return
+
+    # THE TEST CASES
+    scenarios = [
+        # 1. The Top 100 Check (Should map to parent)
+        ("zoom-video.com", "zoom.us", "Alias Map (Zoom)"),
+        ("yammer.com", "microsoft.com", "Alias Map (Yammer -> Microsoft)"),
+        
+        # 2. The Long Tail Check (Should strip subdomain via Fallback)
+        ("api.netforce.io", "netforce.io", "Fallback (Strip 'api.')"),
+        ("www.cloudhub.org", "cloudhub.org", "Fallback (Strip 'www.')"),
+        
+        # 3. The PaaS Protection (Should keep subdomain)
+        ("jira.atlassian.net", "jira.atlassian.net", "PaaS Protection"),
+        
+        # 4. The Garbage Check (Should result in None/Original)
+        ("internal-server-01", "internal-server-01", "Internal Hostname")
+    ]
+
+    print("\n" + "="*60)
+    print(f"{'INPUT':<25} | {'ACTUAL OUTPUT':<20} | {'EXPECTED'}")
+    print("="*60)
+
+    for raw, expected, desc in scenarios:
+        try:
+            result = norm.normalize(raw)
+            status = "✅" if result == expected else "❌"
+            print(f"{raw:<25} | {str(result):<20} | {expected} {status}")
+        except Exception as e:
+            print(f"{raw:<25} | {'ERROR':<20} | {e}")
+
+if __name__ == "__main__":
+    test_drive()

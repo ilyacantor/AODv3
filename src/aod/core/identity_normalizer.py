@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import tldextract
 
-from ..pipeline.normalize_observations import validate_key_integrity
+from .validators import validate_key_integrity
 
 logger = logging.getLogger(__name__)
 

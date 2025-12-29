@@ -11,6 +11,7 @@ from .domain_cache import extract_domain
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult, VENDOR_TO_DOMAIN
 from ..utils.normalization import get_normalization_token
+from ..core.validators import validate_key_integrity as _core_validate_key_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,8 @@ def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
     """
     Iron Dome: Unified admission gate for key/domain validation.
     
-    This function MUST be called for ALL evidence streams before entity creation.
-    Nothing bypasses this check - Discovery, Finance, CMDB, IdP, Endpoint.
-    
-    Rules:
-    1. If suffix is empty (internal hostname like 'auth-service', 'images694'), reject
-    2. If key contains spaces or invalid characters, reject
-    3. Must have a valid public TLD suffix (.com, .io, .org, etc.)
+    This is a wrapper for backward compatibility - delegates to core.validators.
+    See core.validators.validate_key_integrity for full documentation.
     
     Args:
         key: Domain or key to validate
@@ -33,27 +29,7 @@ def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
     Returns:
         (is_valid, reason) tuple
     """
-    if not key:
-        return False, "Empty key"
-    
-    key = key.lower().strip()
-    
-    if ' ' in key or '\t' in key or '\n' in key:
-        return False, f"Key contains whitespace: {key}"
-    
-    invalid_chars = re.search(r'[<>"\'\{\}\[\]\\]', key)
-    if invalid_chars:
-        return False, f"Key contains invalid characters: {key}"
-    
-    extracted = extract_domain(key)
-    
-    if not extracted.suffix:
-        return False, f"No valid TLD suffix (internal hostname): {key}"
-    
-    if not extracted.domain:
-        return False, f"No domain component: {key}"
-    
-    return True, ""
+    return _core_validate_key_integrity(key)
 
 
 def normalize_name_to_domain(name: str) -> Optional[str]:

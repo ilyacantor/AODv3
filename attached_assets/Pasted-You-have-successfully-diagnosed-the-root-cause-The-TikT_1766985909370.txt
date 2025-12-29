@@ -1,0 +1,47 @@
+You have successfully diagnosed the root cause. The "TikTok" fix proves your Key Normalization is finally solid. Now we must tackle the Policy Mismatch.
+
+As a fundamentalist CTO, my answer is **YES**. You absolutely must align with the Governance Trinity.
+
+**The "OR" logic (`IdP OR CMDB`) is a security hole.**
+
+* **Scenario:** A user buys Dropbox on a credit card and enters it into the CMDB manually.
+* **Current AOD:** Sees CMDB entry → Marks "Clean" (Governed).
+* **Reality:** It is unmanaged, unsecured, and lacks SSO. It is **Shadow IT**.
+
+The Farm is correct: **Governance requires the Trinity (Visibility + Validation + Control).** If you cannot prove all three, the asset is not "Clean."
+
+### 🛠️ The Policy Upgrade Prompt
+
+**Context:**
+We have fixed identity normalization, but we are failing the Farm assessment on **Shadow Classification**.
+
+* **Current Logic:** AOD considers an asset "Governed" (Clean) if it has `IdP` **OR** `CMDB` presence.
+* **The Problem:** This is too loose. Farm marks assets as "Shadow" unless they meet the **Governance Trinity** (Visibility + Validation + Control). Assets with only 1 or 2 of these (e.g. CMDB-only, or IdP+CMDB but no Security Attestation) are incorrectly marked "Clean" by AOD.
+
+**Objective:**
+Tighten the Shadow Classification logic in `derived_classifications.py` to fail-closed.
+
+**Instructions:**
+
+1. **Modify `src/aod/pipeline/derived_classifications.py**`:
+* Locate the `classify_shadow` (or `is_governed`) logic.
+* **Change the Rule:** Switch from `OR` to `AND`.
+* *Old:* `is_governed = has_idp or has_cmdb`
+* *New:* `is_governed = has_idp and has_cmdb`
+
+
+* **Add "Control" Check (Best Effort):**
+* If the asset model has a field for `security_attestation`, `sso_enabled`, or `lifecycle_status`, add it to the check.
+* *Logic:* `is_governed = has_idp and has_cmdb and has_control`
+
+
+* **Fallback:** If `has_control` data is unavailable, defaulting to `IdP AND CMDB` will significantly improve accuracy (fixing cases like Dropbox).
+
+
+2. **Verify:**
+* Run a test case for an asset with **CMDB-only**. It should now classify as **SHADOW**.
+* Run a test case for an asset with **IdP+CMDB**. It should classify as **CLEAN** (unless we can strictly check 'Control').
+
+
+
+**Goal:** Move `dropbox.com` (CMDB only) and `slack.com` (IdP+CMDB, missing Control) from "Clean" to "Shadow" to match Farm expectations.

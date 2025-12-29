@@ -178,7 +178,12 @@ class DomainRollup:
         """
         Domain-level shadow: ungoverned AND activity_status==RECENT.
         
-        Shadow = NOT has_idp AND NOT has_cmdb AND activity_status==RECENT
+        GOVERNANCE TRINITY POLICY (Dec 2025 - Trinity Enforcement):
+        Shadow = NOT (has_idp AND has_cmdb) AND activity_status==RECENT
+        
+        FAIL-CLOSED: An asset is only "governed" if it has BOTH IdP AND CMDB.
+        Having just CMDB (e.g., manually entered) is NOT sufficient - this is Shadow IT.
+        Having just IdP (e.g., user-provisioned SSO) is NOT sufficient - this is Shadow IT.
         
         INVARIANT: Only domain-canonical assets count as shadow.
         Internal identifiers (name-derived keys) are excluded from shadow counts.
@@ -188,7 +193,8 @@ class DomainRollup:
         if not self.is_domain_canonical:
             return False
         
-        has_governance = self.has_idp or self.has_cmdb
+        # GOVERNANCE TRINITY: Both IdP AND CMDB required for governance
+        has_governance = self.has_idp and self.has_cmdb
         has_existence = self.has_cloud or self.has_discovery
         
         if has_governance or not has_existence:
@@ -377,12 +383,13 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     has_cloud = asset.lens_coverage.cloud
     has_discovery = asset.lens_coverage.discovery
     
-    if has_idp or has_cmdb:
+    # GOVERNANCE TRINITY: Both IdP AND CMDB required for governance
+    if has_idp and has_cmdb:
         return ClassificationResult(
             is_classified=False,
             is_indeterminate=False,
             classification_type="shadow",
-            reason="Asset has IdP or CMDB presence - not shadow",
+            reason="Asset has both IdP AND CMDB presence - governed, not shadow",
             evidence_summary=[]
         )
     

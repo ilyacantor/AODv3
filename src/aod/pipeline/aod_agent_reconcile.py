@@ -538,21 +538,25 @@ def classify_actual(
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
     
-    GOVERNANCE POLICY (Dec 2025):
-    Shadow = NOT governed (no IdP/CMDB) AND activity_status==RECENT
+    GOVERNANCE POLICY (Dec 2025 - Trinity Enforcement):
+    Shadow = NOT governed AND activity_status==RECENT
     
-    The Governance Trinity defines "governed":
+    The Governance Trinity defines "governed" - ALL THREE required:
     - Visibility: Registered in CMDB
     - Validation: Present in IdP (sanctioned/SSO)
-    - Control: Managed lifecycle tied to owner
+    - Control: Managed lifecycle tied to owner (checked via security attestation when available)
+    
+    FAIL-CLOSED: An asset is only "governed" if it has BOTH IdP AND CMDB.
+    Having just CMDB (e.g., manually entered) is NOT sufficient - this is Shadow IT.
+    Having just IdP (e.g., user-provisioned SSO) is NOT sufficient - this is Shadow IT.
     
     Finance presence does NOT equal governance. An organization can pay for
     unsanctioned tools. Shadow classification surfaces these for governance review.
     There is no "Grey IT" - binary classification only.
     
     Classification rules:
-    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud (for zombie)
-    - is_shadow = NOT has_governance (idp/cmdb) AND activity_status==RECENT
+    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud (for zombie eligibility)
+    - is_shadow = NOT (has_idp AND has_cmdb) AND activity_status==RECENT
     - is_zombie = is_anchored AND activity_status==STALE (NOT NONE!)
     - is_parked = NOT is_anchored AND activity_status==STALE
     
@@ -583,7 +587,12 @@ def classify_actual(
     has_stale_activity = ReasonCode.STALE_ACTIVITY in reasons
     has_no_activity = ReasonCode.NO_ACTIVITY_TIMESTAMPS in reasons
     
-    has_governance = has_idp or has_cmdb
+    # GOVERNANCE TRINITY POLICY (Dec 2025):
+    # An asset is only "governed" if it has BOTH IdP (Validation) AND CMDB (Visibility).
+    # This is fail-closed: Having just CMDB (e.g., manually entered) or just IdP is NOT sufficient.
+    # Control (3rd pillar) checked via security_attestation/SSO when available.
+    # Finance does NOT equal governance - you can pay for unsanctioned tools.
+    has_governance = has_idp and has_cmdb
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     

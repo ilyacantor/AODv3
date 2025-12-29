@@ -35,10 +35,17 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 **Derived Classifications:**
 - **Activity Status**: Classifies assets as RECENT (active within 90 days), STALE (inactive beyond 90 days), or NONE (no activity timestamps).
 - **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match. Used for zombie eligibility.
-- **Shadow Asset**: Ungoverned (no IdP/CMDB) AND RECENT activity. Finance does NOT exempt from shadow.
+- **Shadow Asset**: Ungoverned (NOT both IdP AND CMDB) AND RECENT activity. Finance does NOT exempt from shadow.
 - **Financial Anchor Governance Gap**: Shadow asset with ongoing finance - needs governance review despite being paid for.
 - **Zombie Asset**: Anchored AND STALE activity AND NO registered owner (orphaned). CMDB presence = owned = not zombie.
 - **Parked Asset**: STALE activity AND (has registered owner in CMDB OR not anchored). Owned but inactive, or non-actionable.
+
+**Dec 2025 - Governance Trinity Enforcement:**
+Shadow classification upgraded from `OR` to `AND` logic for fail-closed policy:
+- **OLD (insecure)**: `is_governed = has_idp OR has_cmdb` - CMDB-only assets marked Clean
+- **NEW (secure)**: `is_governed = has_idp AND has_cmdb` - Both required for governance
+
+This fixes the security hole where CMDB-only assets (e.g., user manually enters Dropbox) were incorrectly marked as "Clean" when they should be Shadow IT. Now both IdP (Validation) AND CMDB (Visibility) are required for an asset to be considered governed.
 
 **Dec 2025 Logic Fixes:**
 1. **Generic Subdomain Stripping**: `normalize_domain()` now uses `extract_registered_domain()` (PSL-backed) to strip ALL subdomains to eTLD+1. Example: `api.primebox.io` → `primebox.io`, `login.microsoft.com` → `microsoft.com`. This fixes KEY_NORMALIZATION_MISMATCH errors (174 errors) by ensuring discovery and CMDB domains normalize to the same base domain.

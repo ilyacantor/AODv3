@@ -924,12 +924,19 @@ def emit_actual_results(
             reasons = _compute_rejection_reasons(rej)
             
             # SHADOW CLASSIFICATION FOR REJECTED ASSETS:
-            # Rejected assets can still be Shadow IT if they are ungoverned.
-            # Check evidence_summary for governance signals.
+            # Rejected assets can still be Shadow IT if they are ungoverned AND have RECENT activity.
+            # FAIL-CLOSED: Require explicit RECENT activity evidence. No activity = not shadow.
             evidence = rej.get("evidence_summary", {})
             has_idp = evidence.get("has_idp", False) or "HAS_IDP" in reasons
             has_cmdb = evidence.get("has_cmdb", False) or "HAS_CMDB" in reasons
-            has_recent = evidence.get("has_recent_activity", True)  # Default to recent if unknown
+            
+            # Check for activity status - require EXPLICIT recent activity
+            has_recent = evidence.get("has_recent_activity", False)
+            has_stale = "STALE_ACTIVITY" in reasons or evidence.get("has_stale_activity", False)
+            
+            # If stale activity is indicated, definitely not shadow
+            if has_stale:
+                has_recent = False
             
             # GOVERNANCE TRINITY: Both IdP AND CMDB required
             has_governance = has_idp and has_cmdb

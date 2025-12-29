@@ -1,0 +1,111 @@
+Here is the **comprehensive repair prompt** for your Replit agent. This single instruction set fixes the broken fallback code and calibrates the configuration data in one go.
+
+---
+
+### 🛠️ AOD Critical Repair: Normalization Logic & Data
+
+**Context:**
+Our Identity Normalization logic has two critical failures causing widespread classification errors in the Farm assessment:
+
+1. **Code Bug (The "Long Tail" Blindness):** The `IdentityNormalizer` class is failing to run `tldextract` on unknown domains. If a domain isn't in our alias map, it returns the raw input (e.g., `api.netforce.io`) instead of the root (`netforce.io`). This causes ~48 Shadow Misses.
+2. **Data Bug (Over-Normalization):** Our `normalization_rules.json` is too aggressive. It merges distinct products (Yammer, Slack) into parent vendors (Microsoft, Salesforce), causing ~7 Zombie Misses because the Farm expects the product name.
+
+**Objective:**
+Fix the fallback code to handle random domains and tune the JSON configuration to preserve product identity.
+
+**Instructions:**
+
+#### 1. Overwrite `src/aod/core/normalization_rules.json`
+
+Replace the entire file with this calibrated version.
+
+* **Change:** Removed product merges (Yammer, Slack, GitHub, LinkedIn).
+* **Kept:** Technical aliases (`zoom-video.com`, `microsoftonline.com`) and PaaS roots.
+
+```json
+{
+  "meta": { "version": "2.1", "type": "calibrated_top_100" },
+  "policy": {
+    "paas_roots": [
+      "atlassian.net", "myshopify.com", "github.io", "gitlab.io", 
+      "herokuapp.com", "sharepoint.com", "service-now.com", 
+      "force.com", "blob.core.windows.net", "s3.amazonaws.com",
+      "azurewebsites.net", "appspot.com", "firebaseapp.com",
+      "statuspage.io", "zendesk.com", "freshdesk.com"
+    ],
+    "alias_map": {
+      "zoom-video.com": "zoom.us", "zoom.com": "zoom.us", "zoom.cn": "zoom.us", "zoomgov.com": "zoom.us",
+      "microsoftonline.com": "microsoft.com", "office365.com": "microsoft.com", 
+      "live.com": "microsoft.com", "office.com": "microsoft.com", 
+      "windows.net": "microsoft.com", "azure.com": "microsoft.com",
+      "msn.com": "microsoft.com", "visualstudio.com": "microsoft.com",
+      "lync.com": "microsoft.com",
+      "googleusercontent.com": "google.com", "youtu.be": "google.com", 
+      "youtube.com": "google.com", "googleapis.com": "google.com", 
+      "ggpht.com": "google.com", "1e100.net": "google.com",
+      "slack-edge.com": "slack.com", "slack-msgs.com": "slack.com", 
+      "slack-core.com": "slack.com", "slack-redir.net": "slack.com",
+      "lightning.force.com": "salesforce.com", "my.salesforce.com": "salesforce.com", 
+      "pardot.com": "salesforce.com",
+      "fb.com": "facebook.com", "messenger.com": "facebook.com", 
+      "aws.amazon.com": "amazon.com", "amazon.co.uk": "amazon.com", 
+      "media-amazon.com": "amazon.com",
+      "webex.co": "webex.com", "ciscospark.com": "webex.com", "wbx2.com": "webex.com",
+      "box.net": "box.com", "boxcloud.com": "box.com",
+      "dropboxstatic.com": "dropbox.com", "getdropbox.com": "dropbox.com",
+      "twitter.com": "x.com", "t.co": "x.com", "twimg.com": "x.com",
+      "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
+      "adobe.io": "adobe.com", "typekit.net": "adobe.com",
+      "paypalobjects.com": "paypal.com", "paypal.me": "paypal.com"
+    }
+  }
+}
+
+```
+
+#### 2. Rewrite `src/aod/core/identity_normalizer.py`
+
+Replace the `normalize` method with this robust logic. **Ensure the fallback step is reachable.**
+
+```python
+    def normalize(self, raw_input):
+        # 1. Sanitize
+        domain = self._sanitize(raw_input)
+        if not domain: return None
+
+        # 2. ALIAS CHECK (Technical Aliases Only)
+        if domain in self.rules['alias_map']:
+            return self.rules['alias_map'][domain]
+
+        # 3. FALLBACK EXTRACTION (The Fix for 'netforce.io')
+        # This MUST execute if step 2 did not return.
+        try:
+            extracted = tldextract.extract(domain)
+            
+            # Guard: If no valid suffix (e.g. localhost), return cleaned input
+            if not extracted.suffix:
+                return domain
+
+            # Construct Standard Root (primebox.io)
+            standard_root = f"{extracted.domain}.{extracted.suffix}"
+
+            # 4. PAAS CHECK
+            # If the root is a known Platform (myshopify.com), keep the subdomain.
+            if standard_root in self.rules['paas_roots']:
+                return domain 
+
+            # Default: Return the Root (Collapses 'api.netforce.io' -> 'netforce.io')
+            return standard_root
+
+        except Exception:
+            return domain 
+
+```
+
+#### 3. Verify
+
+Run the existing diagnostic script or create a new test case asserting:
+
+* `api.netforce.io` -> `netforce.io` (Matches Farm)
+* `yammer.com` -> `yammer.com` (Matches Farm)
+* `zoom-video.com` -> `zoom.us` (Matches Farm)

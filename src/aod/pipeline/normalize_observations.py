@@ -281,16 +281,20 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
                 existing_by_token = entities_by_base_token[base_token]
                 if not existing_by_token.domain:
                     existing_entity = existing_by_token
+                    old_canonical = existing_entity.canonical_name
                     existing_entity.domain = domain
                     existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
+                    # DOMAIN-FIRST KEYING: Upgrade entity to use domain as canonical key
+                    existing_entity.entity_id = f"entity:{domain}"
+                    existing_entity.canonical_name = domain
                     entities_by_domain[domain] = existing_entity
-                    if existing_entity.canonical_name in entities_by_name:
-                        del entities_by_name[existing_entity.canonical_name]
+                    if old_canonical in entities_by_name:
+                        del entities_by_name[old_canonical]
                     logger.debug("normalize.base_token_merge_domain_wins", extra={
                         "observation_id": obs.observation_id,
                         "base_token": base_token,
                         "domain": domain,
-                        "absorbed_name": existing_entity.canonical_name
+                        "absorbed_name": old_canonical
                     })
         else:
             if canonical_name in entities_by_name:
@@ -316,9 +320,19 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
                 existing_entity.vendor = vendor
         else:
             vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
+            
+            # DOMAIN-FIRST KEYING: When domain exists, use it as the canonical key
+            # This ensures assets are keyed by domain, not by observation ID or name
+            if domain:
+                entity_key = domain
+                entity_canonical = domain
+            else:
+                entity_key = canonical_name
+                entity_canonical = canonical_name
+            
             entity = CandidateEntity(
-                entity_id=f"entity:{obs.observation_id}",
-                canonical_name=canonical_name,
+                entity_id=f"entity:{entity_key}",
+                canonical_name=entity_canonical,
                 original_name=obs.name or "",
                 domain=domain,
                 hostname=hostname,

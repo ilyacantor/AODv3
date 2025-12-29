@@ -243,10 +243,12 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     Recurring spend provides stronger confidence but is not required.
     
     NOTE: Both MATCHED and AMBIGUOUS count as having finance evidence.
+    If correlation determined a match, trust it for admission.
     """
     if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
+    # First, try to extract detailed reason from records
     for record in correlation.finance.matched_records:
         if isinstance(record, Contract):
             if record.is_recurring and record.amount > 0:
@@ -262,7 +264,9 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     if correlation.finance.matched_records:
         return True, "Finance match (spend evidence)"
     
-    return False, ""
+    # Trust correlation status - if correlation found a match, admit
+    # This handles cases where matched_records is empty but status is MATCHED
+    return True, "Finance match (correlation status)"
 
 
 DISCOVERY_ACTIVITY_WINDOW_DAYS = 90

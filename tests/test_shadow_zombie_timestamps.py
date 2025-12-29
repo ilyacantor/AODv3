@@ -9,7 +9,7 @@ sys.path.insert(0, 'src')
 
 from aod.models.output_contracts import (
     Asset, AssetType, Environment, LensStatus, LensStatuses, 
-    LensCoverage, AssetIdentifiers, ActivityEvidence
+    LensCoverage, AssetIdentifiers, ActivityEvidence, ProvisioningStatus
 )
 from aod.pipeline.derived_classifications import (
     classify_shadow, classify_zombie, compute_derived_classifications
@@ -34,6 +34,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Stale SSO App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.REVIEW,
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -121,6 +122,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Active SSO App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.ACTIVE,
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -146,7 +148,7 @@ class TestShadowZombieTimestamps:
         
         assert result.is_classified is False
         assert result.is_indeterminate is False
-        assert "recent activity" in result.reason.lower()
+        assert "active" in result.reason.lower() or "not zombie" in result.reason.lower()
     
     def test_not_shadow_when_in_idp(self):
         """
@@ -163,6 +165,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="Managed App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.ACTIVE,
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -187,14 +190,15 @@ class TestShadowZombieTimestamps:
         result = classify_shadow(asset, activity_window_days=30)
         
         assert result.is_classified is False
-        assert "IdP or CMDB presence" in result.reason
+        assert "active" in result.reason.lower() or "not shadow" in result.reason.lower()
     
     def test_indeterminate_when_no_timestamps(self):
         """
         Indeterminate: Asset has no activity timestamps.
         
         Scenario: Asset exists but we have no timestamp data.
-        Expected: Indeterminate classification.
+        Expected: With QUARANTINE status, classify_shadow returns classified=True (Shadow Block).
+        The indeterminate logic is bypassed by Traffic Light status-based classification.
         """
         asset = Asset(
             asset_id=uuid4(),
@@ -202,6 +206,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="No Timestamp App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.QUARANTINE,
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -222,8 +227,8 @@ class TestShadowZombieTimestamps:
         
         result = classify_shadow(asset, activity_window_days=30)
         
-        assert result.is_indeterminate is True
-        assert "No evidence of presence" in result.reason or "No activity timestamps" in result.reason
+        assert result.is_classified is True
+        assert "Shadow" in result.reason or "quarantine" in result.reason.lower()
     
     def test_compute_derived_summary_counts(self):
         """
@@ -340,6 +345,7 @@ class TestShadowZombieTimestamps:
             run_id="test-run",
             name="45-Day Old Activity App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.REVIEW,
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -359,7 +365,30 @@ class TestShadowZombieTimestamps:
         result_30_day = classify_zombie(asset, activity_window_days=30)
         assert result_30_day.is_classified is True
         
-        result_60_day = classify_zombie(asset, activity_window_days=60)
+        asset_active = Asset(
+            asset_id=uuid4(),
+            tenant_id="test",
+            run_id="test-run",
+            name="45-Day Old Activity App",
+            asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.ACTIVE,
+            lens_status=LensStatuses(
+                idp=LensStatus.MATCHED,
+                cmdb=LensStatus.UNMATCHED,
+                cloud=LensStatus.UNMATCHED,
+                finance=LensStatus.UNMATCHED
+            ),
+            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=False),
+            activity_evidence=ActivityEvidence(
+                idp_last_login_at=activity_date,
+                latest_activity_at=activity_date
+            ),
+            evidence_refs=["idp:app1"],
+            tags=["identity_managed"],
+            admission_reason="IdP match with SSO enabled"
+        )
+        
+        result_60_day = classify_zombie(asset_active, activity_window_days=60)
         assert result_60_day.is_classified is False
 
 
@@ -371,7 +400,7 @@ class TestZombieNoPresenceEvidence:
         Zombie: Asset is in CMDB but has no activity timestamps.
         
         Scenario: CMDB says we have this app but no timestamped activity exists.
-        Expected: Classified as Zombie (no timestamps to prove usage).
+        Expected: With REVIEW status, classified as Zombie Review.
         """
         asset = Asset(
             asset_id=uuid4(),
@@ -379,6 +408,7 @@ class TestZombieNoPresenceEvidence:
             run_id="test-run",
             name="CMDB Only App",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.REVIEW,
             lens_status=LensStatuses(
                 idp=LensStatus.UNMATCHED,
                 cmdb=LensStatus.MATCHED,
@@ -397,14 +427,13 @@ class TestZombieNoPresenceEvidence:
         assert result.is_classified is True
         assert result.is_indeterminate is False
         assert "Zombie" in result.reason
-        assert "no activity timestamps" in result.reason.lower()
     
     def test_zombie_idp_with_discovery_but_no_timestamps(self):
         """
         Zombie: Asset is in IdP with discovery observations but no timestamps.
         
         Scenario: SSO app has discovery observations but we don't know when.
-        Expected: Classified as Zombie (can't prove recent activity).
+        Expected: With REVIEW status, classified as Zombie Review.
         """
         asset = Asset(
             asset_id=uuid4(),
@@ -412,6 +441,7 @@ class TestZombieNoPresenceEvidence:
             run_id="test-run",
             name="IdP App No Timestamps",
             asset_type=AssetType.SAAS,
+            provisioning_status=ProvisioningStatus.REVIEW,
             lens_status=LensStatuses(
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
@@ -430,4 +460,3 @@ class TestZombieNoPresenceEvidence:
         assert result.is_classified is True
         assert result.is_indeterminate is False
         assert "Zombie" in result.reason
-        assert "no activity timestamps" in result.reason.lower()

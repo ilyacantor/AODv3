@@ -147,15 +147,8 @@ class IdentityNormalizer:
         
         registered_domain = f"{extracted.domain}.{extracted.suffix}"
         
-        if registered_domain in self.alias_map:
-            canonical = self.alias_map[registered_domain]
-            logger.debug("identity_normalizer.alias_matched_registered", extra={
-                "input": sanitized,
-                "registered": registered_domain,
-                "canonical": canonical
-            })
-            return canonical
-        
+        # PaaS check FIRST - preserve tenant subdomains before alias collapsing
+        # This ensures flowsoft.okta.com stays as-is even though okta.com might be in alias_map
         if registered_domain in self.paas_roots:
             if extracted.subdomain:
                 full_domain = f"{extracted.subdomain}.{registered_domain}"
@@ -165,6 +158,16 @@ class IdentityNormalizer:
                 })
                 return full_domain
             return registered_domain
+        
+        # Alias map for registered domain - only if NOT a PaaS root
+        if registered_domain in self.alias_map:
+            canonical = self.alias_map[registered_domain]
+            logger.debug("identity_normalizer.alias_matched_registered", extra={
+                "input": sanitized,
+                "registered": registered_domain,
+                "canonical": canonical
+            })
+            return canonical
         
         logger.debug("identity_normalizer.collapsed_to_root", extra={
             "input": sanitized,

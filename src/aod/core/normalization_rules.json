@@ -10,7 +10,8 @@
       "herokuapp.com", "sharepoint.com", "service-now.com", 
       "force.com", "blob.core.windows.net", "s3.amazonaws.com",
       "azurewebsites.net", "appspot.com", "firebaseapp.com",
-      "statuspage.io", "zendesk.com", "freshdesk.com"
+      "statuspage.io", "zendesk.com", "freshdesk.com",
+      "okta.com", "oktapreview.com", "servicenow.com", "salesforce.com"
     ],
     "alias_map": {
       "zoom-video.com": "zoom.us", "zoom.com": "zoom.us", "zoom.cn": "zoom.us", "zoomgov.com": "zoom.us",

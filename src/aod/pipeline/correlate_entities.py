@@ -10,9 +10,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from .normalize_observations import CandidateEntity, normalize_string
+from .normalize_observations import CandidateEntity, normalize_string, normalize_domain
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
-from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_registered_domain
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..config import policy
 from ..models.input_contracts import PlaneRecord
 from ..utils.normalization import get_normalization_token
@@ -625,8 +625,8 @@ def correlate_to_plane(
         if precomputed and precomputed.canonical_vendor:
             expected_vendor = precomputed.canonical_vendor
         elif entity.domain:
-            registered_domain = extract_registered_domain(entity.domain.lower().strip()) or entity.domain.lower().strip()
-            expected_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
+            normalized_domain = normalize_domain(entity.domain) or entity.domain.lower().strip()
+            expected_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
         if not expected_vendor:
             canonical_lower = entity.canonical_name.lower().strip()
             if canonical_lower in VENDOR_TO_DOMAIN:
@@ -878,11 +878,10 @@ def correlate_to_plane(
     if use_vendor and entity.domain and plane_index.by_vendor_product:
         domain_vendor = precomputed.canonical_vendor if precomputed else None
         if not domain_vendor:
-            normalized_domain = entity.domain.lower().strip()
-            registered_domain = extract_registered_domain(normalized_domain) or normalized_domain
-            domain_vendor = DOMAIN_TO_VENDOR.get(registered_domain)
-            if not domain_vendor and registered_domain != normalized_domain:
-                domain_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
+            entity_normalized_domain = normalize_domain(entity.domain) or entity.domain.lower().strip()
+            domain_vendor = DOMAIN_TO_VENDOR.get(entity_normalized_domain)
+            if not domain_vendor and entity_normalized_domain != entity.domain.lower().strip():
+                domain_vendor = DOMAIN_TO_VENDOR.get(entity.domain.lower().strip())
         if domain_vendor:
             vendor_key = normalize_string(domain_vendor)
             vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
@@ -1037,14 +1036,14 @@ def _precompute_entity_data(entity: CandidateEntity) -> PrecomputedEntityData:
     data = PrecomputedEntityData()
     
     if entity.domain:
-        domain_normalized = entity.domain.lower().strip()
-        data.registered_domain = extract_registered_domain(domain_normalized)
+        domain_normalized = normalize_domain(entity.domain) or entity.domain.lower().strip()
+        data.registered_domain = domain_normalized
         data.domain_token = normalize_string(_extract_domain_base_token(entity.domain))
         
         if data.registered_domain:
             data.canonical_vendor = DOMAIN_TO_VENDOR.get(data.registered_domain)
         if not data.canonical_vendor:
-            data.canonical_vendor = DOMAIN_TO_VENDOR.get(domain_normalized)
+            data.canonical_vendor = DOMAIN_TO_VENDOR.get(entity.domain.lower().strip())
     
     data.normalization_token = get_normalization_token(entity.canonical_name)
     if not data.normalization_token and entity.domain:

@@ -138,31 +138,23 @@ def normalize_string(s: str) -> str:
 def normalize_domain(domain: str) -> str:
     """Normalize a domain for matching.
     
-    Dec 2025 Fix: Use extract_registered_domain() to strip ALL subdomains
-    (not just www.) to ensure domains like api.primebox.io → primebox.io.
-    This fixes KEY_NORMALIZATION_MISMATCH errors where discovery subdomains
-    don't match the Farm's canonical base domain.
+    Dec 2025 Iron Dome Refactor: Uses IdentityNormalizer for consistent
+    domain normalization across the entire pipeline.
+    
+    The IdentityNormalizer applies:
+    1. Sanitize: Strip protocols, paths, query params, ports
+    2. Iron Dome check: Validate key integrity (rejects internal hostnames)
+    3. Alias Map: Map known aliases (zoom-video.com → zoom.us)
+    4. PaaS Logic: Preserve tenant subdomains (jira.atlassian.net stays intact)
+    5. Long Tail: Collapse unknown domains to eTLD+1 (api.primebox.io → primebox.io)
     """
     if not domain:
         return ""
     
-    # Clean up the domain first
-    normalized = domain.lower().strip()
-    normalized = normalized.removeprefix("http://")
-    normalized = normalized.removeprefix("https://")
-    normalized = normalized.split("/")[0]  # Remove path
-    normalized = normalized.split(":")[0]  # Remove port
+    from ..core.identity_normalizer import normalize_identity
     
-    if not normalized:
-        return ""
-    
-    # Use extract_registered_domain to get the eTLD+1 (base domain)
-    # This strips ALL subdomains: api.primebox.io → primebox.io
-    from .vendor_inference import extract_registered_domain
-    registered = extract_registered_domain(normalized)
-    
-    # Fall back to original if extraction fails (e.g., IP addresses, localhost)
-    return registered if registered else normalized
+    result = normalize_identity(domain)
+    return result if result else ""
 
 
 def extract_domain_from_uri(uri: str) -> Optional[str]:

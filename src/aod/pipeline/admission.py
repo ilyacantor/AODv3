@@ -70,6 +70,47 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
         finance=finance_debug
     )
 
+def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional[str]:
+    """
+    Extract a canonical domain from correlation match keys.
+    
+    POST-CORRELATION REKEYING: When an entity doesn't have a domain from normalization,
+    check if any plane correlation found a domain-based match. If so, use that as
+    the canonical domain key.
+    
+    This fixes KEY_NORMALIZATION_MISMATCH where entities keyed by name during normalization
+    had valid plane correlations with domain matches, but were rejected at admission.
+    
+    Priority order (most authoritative first):
+    1. IdP match_key (SSO domains are authoritative)
+    2. CMDB match_key (IT-registered domains)
+    3. Cloud match_key (cloud resource URIs)
+    4. Finance match_key (contract/billing domains)
+    
+    Only returns a domain if match_key looks like a valid domain (contains '.')
+    and can be extracted to a registered domain.
+    
+    SAFETY: Rejects match_keys that look like emails or URIs to avoid mis-keying.
+    """
+    for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            match_key = plane_match.match_key
+            if match_key and '.' in match_key:
+                # Reject emails (contain @)
+                if '@' in match_key:
+                    continue
+                # Reject URIs (contain :// or start with http)
+                if '://' in match_key or match_key.startswith('http'):
+                    continue
+                # Reject paths (contain /)
+                if '/' in match_key:
+                    continue
+                domain = extract_registered_domain(match_key)
+                if domain:
+                    return domain
+    return None
+
+
 # Banned domains - immediately BLOCKED (not QUARANTINE)
 # These are domains that are policy-forbidden regardless of governance status
 BANNED_DOMAINS = {
@@ -784,19 +825,35 @@ def apply_admission_criteria(
     entity = correlation.entity
     
     # =========================================================================
+    # PRE-STEP 0: POST-CORRELATION DOMAIN RECOVERY
+    # If entity has no domain, try to recover from correlation match keys
+    # This fixes KEY_NORMALIZATION_MISMATCH where name-keyed entities have plane matches
+    # =========================================================================
+    effective_domain = entity.domain
+    recovered_from_correlation = False
+    
+    if not effective_domain:
+        recovered_domain = _extract_domain_from_correlation(correlation)
+        if recovered_domain:
+            effective_domain = recovered_domain
+            recovered_from_correlation = True
+            # Persist recovered domain onto entity for downstream consistency
+            entity.domain = effective_domain
+    
+    # =========================================================================
     # STEP 0: HARD REJECTION (The Filter) - Results in IGNORED status
     # These assets are dropped and do not enter Triage
     # =========================================================================
     
     # GATE 0: Reject invalid TLDs / internal hostnames
     # Must have a valid public suffix (e.g., .com, .io, .org)
-    if entity.domain:
-        extracted = extract_domain(entity.domain)
+    if effective_domain:
+        extracted = extract_domain(effective_domain)
         if not extracted.suffix:
             return AdmissionResult(
                 admitted=False,
                 provisioning_status=ProvisioningStatus.IGNORED,
-                rejection_reason=f"Invalid TLD / Internal hostname: {entity.domain}"
+                rejection_reason=f"Invalid TLD / Internal hostname: {effective_domain}"
             )
     else:
         # No domain at all - reject
@@ -808,12 +865,12 @@ def apply_admission_criteria(
     
     # Compute registered domain (eTLD+1) ONCE for all subsequent gates
     # This ensures mail.google.com -> google.com for gate checks
-    registered_domain = extract_registered_domain(entity.domain)
+    registered_domain = extract_registered_domain(effective_domain)
     if not registered_domain:
         return AdmissionResult(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Cannot extract registered domain from: {entity.domain}"
+            rejection_reason=f"Cannot extract registered domain from: {effective_domain}"
         )
     
     # GATE 0.5: BANNED_DOMAINS policy - immediately BLOCKED (not QUARANTINE/IGNORED)
@@ -832,7 +889,7 @@ def apply_admission_criteria(
         return AdmissionResult(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Corporate root domain: {registered_domain} (from {entity.domain})"
+            rejection_reason=f"Corporate root domain: {registered_domain} (from {effective_domain})"
         )
     
     # GATE 2: Reject infrastructure/tooling domains unconditionally
@@ -841,7 +898,7 @@ def apply_admission_criteria(
         return AdmissionResult(
             admitted=False,
             provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Infrastructure domain: {registered_domain} (from {entity.domain})"
+            rejection_reason=f"Infrastructure domain: {registered_domain} (from {effective_domain})"
         )
     
     # Check each admission criterion
@@ -851,7 +908,7 @@ def apply_admission_criteria(
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(
         observations, 
-        canonical_key=entity.domain or entity.canonical_name if entity else None
+        canonical_key=effective_domain or entity.canonical_name if entity else None
     )
     
     # NOTE: Vendor governance propagation does NOT cause admission
@@ -932,7 +989,7 @@ def apply_admission_criteria(
     )
     
     identifiers = AssetIdentifiers(
-        domains=[entity.domain] if entity.domain else [],
+        domains=[effective_domain] if effective_domain else [],
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )
@@ -960,14 +1017,7 @@ def apply_admission_criteria(
             basis=entity.vendor_hypothesis.basis
         )
     
-    canonical_domain = extract_registered_domain(entity.domain) if entity.domain else None
-    
-    if not canonical_domain:
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason="No resolvable domain - requires domain-first identity"
-        )
+    canonical_domain = registered_domain
     
     asset_key = canonical_domain
     display_name = entity.original_name

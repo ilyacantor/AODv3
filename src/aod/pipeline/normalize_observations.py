@@ -1,4 +1,14 @@
-"""Stage 2: NormalizeObservations - Normalize names/domains and derive candidate entities"""
+"""Stage 2: NormalizeObservations - Normalize names/domains and derive candidate entities
+
+ARCHITECTURE (Dec 2025 Iron Dome Refactor):
+This module uses IdentityNormalizer as the SINGLE SOURCE OF TRUTH for all domain normalization.
+
+Key Design:
+- resolve_domain_from_observation() is the ONLY entry point for domain resolution
+- All domain sources (obs.domain, obs.uri, obs.name, VENDOR_TO_DOMAIN) flow through IdentityNormalizer
+- Domain-first keying: entities with domains use domain as entity_id and canonical_name
+- Base-token merging rekeys name-only entities when domain is discovered later
+"""
 
 import functools
 import re
@@ -6,14 +16,15 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .domain_cache import extract_domain
-
+from ..core.identity_normalizer import IdentityNormalizer
 from ..models.input_contracts import Observation
 from .vendor_inference import infer_vendor_from_domain, VendorHypothesisResult, VENDOR_TO_DOMAIN
 from ..utils.normalization import get_normalization_token
 from ..core.validators import validate_key_integrity as _core_validate_key_integrity
 
 logger = logging.getLogger(__name__)
+
+_NORMALIZER = IdentityNormalizer()
 
 
 def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
@@ -32,25 +43,101 @@ def validate_key_integrity(key: Optional[str]) -> tuple[bool, str]:
     return _core_validate_key_integrity(key)
 
 
-def normalize_name_to_domain(name: str) -> Optional[str]:
+def resolve_domain_from_observation(obs: Observation) -> Optional[str]:
     """
-    Attempt to resolve a product name to its canonical domain.
+    SINGLE SOURCE OF TRUTH for domain resolution from an observation.
     
-    Uses VENDOR_TO_DOMAIN mapping to convert product names like:
+    Tries all possible domain sources in priority order, normalizing each
+    through IdentityNormalizer. Returns the FIRST valid normalized domain.
+    
+    Resolution order:
+    1. obs.domain (if present) → IdentityNormalizer.normalize()
+    2. obs.uri (extract domain) → IdentityNormalizer.normalize()
+    3. obs.name (if looks like domain) → IdentityNormalizer.normalize()
+    4. obs.name → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
+    5. obs.vendor → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
+    
+    Args:
+        obs: Observation object to resolve domain for
+        
+    Returns:
+        Normalized canonical domain, or None if no valid domain found
+    """
+    if obs.domain:
+        normalized = _NORMALIZER.normalize(obs.domain)
+        if normalized:
+            logger.debug("resolve_domain.from_domain", extra={
+                "observation_id": obs.observation_id,
+                "raw": obs.domain,
+                "normalized": normalized
+            })
+            return normalized
+    
+    if obs.uri:
+        normalized = _NORMALIZER.normalize(obs.uri)
+        if normalized:
+            logger.debug("resolve_domain.from_uri", extra={
+                "observation_id": obs.observation_id,
+                "raw": obs.uri,
+                "normalized": normalized
+            })
+            return normalized
+    
+    if obs.name and _looks_like_domain(obs.name.lower().strip()):
+        normalized = _NORMALIZER.normalize(obs.name)
+        if normalized:
+            logger.debug("resolve_domain.from_name_as_domain", extra={
+                "observation_id": obs.observation_id,
+                "raw": obs.name,
+                "normalized": normalized
+            })
+            return normalized
+    
+    if obs.name:
+        vendor_domain = _lookup_vendor_domain(obs.name)
+        if vendor_domain:
+            normalized = _NORMALIZER.normalize(vendor_domain)
+            if normalized:
+                logger.debug("resolve_domain.from_name_vendor_lookup", extra={
+                    "observation_id": obs.observation_id,
+                    "name": obs.name,
+                    "vendor_domain": vendor_domain,
+                    "normalized": normalized
+                })
+                return normalized
+    
+    if obs.vendor:
+        vendor_domain = _lookup_vendor_domain(obs.vendor)
+        if vendor_domain:
+            normalized = _NORMALIZER.normalize(vendor_domain)
+            if normalized:
+                logger.debug("resolve_domain.from_vendor_lookup", extra={
+                    "observation_id": obs.observation_id,
+                    "vendor": obs.vendor,
+                    "vendor_domain": vendor_domain,
+                    "normalized": normalized
+                })
+                return normalized
+    
+    return None
+
+
+def _lookup_vendor_domain(name: str) -> Optional[str]:
+    """
+    Attempt to resolve a product/vendor name to its canonical domain.
+    
+    Uses VENDOR_TO_DOMAIN mapping to convert names like:
     - "Okta" -> "okta.com"
     - "Okta (Legacy)" -> "okta.com"
     - "Workday" -> "workday.com"
     - "Microsoft 365" -> "microsoft.com"
     - "PagerDuty-prod" -> "pagerduty.com"
     
-    This normalization MUST happen BEFORE the validate_key_integrity check.
-    Strips common suffixes like (Legacy), -prod, -dev etc. before matching.
-    
     Args:
         name: Raw product/vendor name
         
     Returns:
-        Canonical domain if found, None otherwise
+        Domain from VENDOR_TO_DOMAIN if found, None otherwise
     """
     if not name:
         return None
@@ -83,6 +170,19 @@ def normalize_name_to_domain(name: str) -> Optional[str]:
     return None
 
 
+def normalize_name_to_domain(name: str) -> Optional[str]:
+    """
+    Attempt to resolve a product name to its canonical domain.
+    
+    DEPRECATED: Use resolve_domain_from_observation() instead.
+    This wrapper is kept for backward compatibility.
+    """
+    vendor_domain = _lookup_vendor_domain(name)
+    if vendor_domain:
+        return _NORMALIZER.normalize(vendor_domain)
+    return None
+
+
 @dataclass
 class CandidateEntity:
     """A candidate system entity derived from observations"""
@@ -112,39 +212,22 @@ def normalize_string(s: str) -> str:
 
 
 def normalize_domain(domain: str) -> str:
-    """Normalize a domain for matching.
+    """Normalize a domain using IdentityNormalizer.
     
-    Dec 2025 Iron Dome Refactor: Uses IdentityNormalizer for consistent
-    domain normalization across the entire pipeline.
-    
-    The IdentityNormalizer applies:
-    1. Sanitize: Strip protocols, paths, query params, ports
-    2. Iron Dome check: Validate key integrity (rejects internal hostnames)
-    3. Alias Map: Map known aliases (zoom-video.com → zoom.us)
-    4. PaaS Logic: Preserve tenant subdomains (jira.atlassian.net stays intact)
-    5. Long Tail: Collapse unknown domains to eTLD+1 (api.primebox.io → primebox.io)
+    DEPRECATED: Use _NORMALIZER.normalize() directly or resolve_domain_from_observation().
+    This wrapper is kept for backward compatibility.
     """
     if not domain:
         return ""
-    
-    from ..core.identity_normalizer import normalize_identity
-    
-    result = normalize_identity(domain)
+    result = _NORMALIZER.normalize(domain)
     return result if result else ""
 
 
 def extract_domain_from_uri(uri: str) -> Optional[str]:
-    """Extract domain from a URI"""
+    """Extract and normalize domain from a URI using IdentityNormalizer."""
     if not uri:
         return None
-    uri = uri.lower().strip()
-    uri = uri.removeprefix("http://")
-    uri = uri.removeprefix("https://")
-    parts = uri.split("/")
-    if parts:
-        domain = parts[0].split(":")[0]
-        return normalize_domain(domain)
-    return None
+    return _NORMALIZER.normalize(uri)
 
 
 ENV_SUFFIXES = {
@@ -159,7 +242,7 @@ ENV_SUFFIXES = {
 
 
 def derive_canonical_name(observation: Observation) -> str:
-    """Derive a canonical name from an observation"""
+    """Derive a canonical name from an observation (used when no domain available)"""
     name = observation.name or ""
     canonical = normalize_string(name)
     canonical = re.sub(r'\([^)]*\)', '', canonical).strip()
@@ -183,23 +266,21 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     """
     Normalize observations and derive candidate system entities.
     
-    IRON DOME: All entities MUST pass validate_key_integrity() before creation.
-    Internal hostnames (no valid TLD) are rejected at this stage.
+    ARCHITECTURE (Dec 2025 Iron Dome Refactor):
+    This function uses resolve_domain_from_observation() as the SINGLE entry point
+    for domain resolution. All entities with resolvable domains have:
+    - entity_id = "entity:{normalized_domain}"
+    - canonical_name = normalized_domain
+    - domain = normalized_domain
     
-    - Normalize names/domains/hostnames
-    - Derive candidate "system entities" from raw observations
-    - Apply validate_key_integrity() to filter invalid entities
-    - Maintain provenance (observation IDs)
-    - Merge observations that represent the same entity
-    - Domain-first keying: if entity has domain, use domain as canonical key
+    Base-token merging ensures name-only entities get REKEYED when a domain
+    is discovered for the same product later.
     
     Args:
         observations: List of raw observations
         
     Returns:
         Tuple of (valid_entities, rejected_observations)
-        - valid_entities: List of candidate entities with normalized identifiers
-        - rejected_observations: List of rejected observations with reasons
     """
     entities_by_domain: dict[str, CandidateEntity] = {}
     entities_by_name: dict[str, CandidateEntity] = {}
@@ -207,46 +288,21 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     rejected: list[dict] = []
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
-        domain = normalize_domain(obs.domain) if obs.domain else None
-        if not domain and obs.uri:
-            domain = extract_domain_from_uri(obs.uri)
-        if not domain and obs.name and _looks_like_domain(obs.name.lower().strip()):
-            domain = normalize_domain(obs.name.lower().strip())
+        domain = resolve_domain_from_observation(obs)
         
         canonical_name = derive_canonical_name(obs)
         
         if not canonical_name and domain:
             canonical_name = _extract_base_name(domain) or domain
         
-        if not canonical_name:
+        if not canonical_name and not domain:
             rejected.append({
                 "observation_id": obs.observation_id,
                 "name": obs.name,
-                "domain": domain,
+                "domain": None,
                 "reason": "Empty canonical name and no domain"
             })
             continue
-        
-        if not domain and obs.name:
-            resolved_domain = normalize_name_to_domain(obs.name)
-            if resolved_domain:
-                domain = resolved_domain
-                logger.debug("normalize.product_name_resolved", extra={
-                    "observation_id": obs.observation_id,
-                    "name": obs.name,
-                    "resolved_domain": domain
-                })
-        
-        if not domain:
-            if obs.vendor:
-                resolved_domain = normalize_name_to_domain(obs.vendor)
-                if resolved_domain:
-                    domain = resolved_domain
-                    logger.debug("normalize.vendor_name_resolved", extra={
-                        "observation_id": obs.observation_id,
-                        "vendor": obs.vendor,
-                        "resolved_domain": domain
-                    })
         
         is_valid, rejection_reason = validate_key_integrity(domain)
         if not is_valid:
@@ -268,8 +324,6 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
         uri = obs.uri.lower().strip() if obs.uri else None
         vendor = normalize_string(obs.vendor) if obs.vendor else None
         
-        # Use get_normalization_token for consistent base token extraction
-        # This ensures "Airtable" (name) and "airtable.com" (domain) produce the same token
         base_token = get_normalization_token(domain) if domain else get_normalization_token(canonical_name)
         
         existing_entity = None
@@ -282,18 +336,26 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
                 if not existing_by_token.domain:
                     existing_entity = existing_by_token
                     old_canonical = existing_entity.canonical_name
+                    old_entity_id = existing_entity.entity_id
+                    
                     existing_entity.domain = domain
                     existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
-                    # DOMAIN-FIRST KEYING: Upgrade entity to use domain as canonical key
                     existing_entity.entity_id = f"entity:{domain}"
                     existing_entity.canonical_name = domain
+                    
                     entities_by_domain[domain] = existing_entity
+                    
                     if old_canonical in entities_by_name:
                         del entities_by_name[old_canonical]
-                    logger.debug("normalize.base_token_merge_domain_wins", extra={
+                    
+                    entities_by_base_token[base_token] = existing_entity
+                    
+                    logger.debug("normalize.base_token_merge_rekey", extra={
                         "observation_id": obs.observation_id,
                         "base_token": base_token,
                         "domain": domain,
+                        "old_entity_id": old_entity_id,
+                        "new_entity_id": existing_entity.entity_id,
                         "absorbed_name": old_canonical
                     })
         else:
@@ -321,8 +383,6 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
         else:
             vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
             
-            # DOMAIN-FIRST KEYING: When domain exists, use it as the canonical key
-            # This ensures assets are keyed by domain, not by observation ID or name
             if domain:
                 entity_key = domain
                 entity_canonical = domain
@@ -391,12 +451,7 @@ def extract_base_token(value: str, is_domain: bool = False) -> Optional[str]:
     This enables aggressive domain merging by creating a common key that allows
     matching between name-only entities and domain entities.
     
-    For domains: "airtable.com" → "airtable"
-    For names: "Airtable" → "airtable", "Airtable (Legacy)" → "airtable"
-    
-    NOTE: This function now uses the shared get_normalization_token() for consistency
-    across the codebase. The is_domain parameter is retained for backward compatibility
-    but the same token extraction logic is used for both.
+    NOTE: This function now uses the shared get_normalization_token() for consistency.
     
     Args:
         value: Domain string or product name
@@ -407,10 +462,6 @@ def extract_base_token(value: str, is_domain: bool = False) -> Optional[str]:
     """
     if not value:
         return None
-    
-    # Use the shared get_normalization_token() for consistent token extraction
-    # This ensures domains and names that represent the same product
-    # produce the same token (e.g., "airtable.com" and "Airtable" both -> "airtable")
     token = get_normalization_token(value)
     return token if token else None
 

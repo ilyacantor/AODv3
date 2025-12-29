@@ -899,10 +899,18 @@ def emit_actual_results(
     
     if rejections:
         for rej in rejections:
-            raw_key = (rej.get("entity_name", "") or rej.get("entity_key", "")).lower().strip()
-            if not raw_key or raw_key in admission_actual:
+            # CRITICAL FIX: Extract domain from entity_key (format: "entity:{domain}")
+            # entity_key has the canonical domain, entity_name has the display name
+            raw_entity_key = rej.get("entity_key", "")
+            if raw_entity_key and raw_entity_key.startswith("entity:"):
+                # Use domain from entity_key (e.g., "entity:tiktok.com" -> "tiktok.com")
+                entity_key = raw_entity_key[7:].lower().strip()
+            else:
+                # Fallback to entity_name only if no entity_key
+                entity_key = (rej.get("entity_name", "") or raw_entity_key).lower().strip()
+            
+            if not entity_key or entity_key in admission_actual:
                 continue
-            entity_key = raw_key
             
             reasons = _compute_rejection_reasons(rej)
             

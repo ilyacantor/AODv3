@@ -637,6 +637,16 @@ def classify_actual(
         if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
             all_domain_variants.add(name_lower)
     
+    for ref in asset.evidence_refs:
+        if isinstance(ref, str) and ":" in ref:
+            parts = ref.split(":")
+            if len(parts) >= 2:
+                potential_domain = parts[1].lower().strip()
+                if "." in potential_domain and not potential_domain.startswith("obs_"):
+                    domain_parts = potential_domain.split(".")
+                    if len(domain_parts) >= 2 and len(domain_parts[-1]) in (2, 3, 4) and domain_parts[-1].isalpha():
+                        all_domain_variants.add(potential_domain)
+    
     all_domain_variants.add(domain_key)
     
     if is_canonical:

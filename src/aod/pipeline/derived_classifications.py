@@ -174,16 +174,24 @@ class DomainRollup:
         """
         return self.has_idp or self.has_cmdb or self.has_finance or self.has_cloud
     
+    def is_governed(self) -> bool:
+        """
+        Check if asset is governed (aligned with Policy Engine).
+        
+        Governed = has_idp OR has_cmdb
+        
+        This is the single source of truth for governance status,
+        matching the PolicyEngine._classify() logic.
+        """
+        return self.has_idp or self.has_cmdb
+    
     def is_shadow(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level shadow: ungoverned AND activity_status==RECENT.
         
-        GOVERNANCE TRINITY POLICY (Dec 2025 - Trinity Enforcement):
-        Shadow = NOT (has_idp AND has_cmdb) AND activity_status==RECENT
-        
-        FAIL-CLOSED: An asset is only "governed" if it has BOTH IdP AND CMDB.
-        Having just CMDB (e.g., manually entered) is NOT sufficient - this is Shadow IT.
-        Having just IdP (e.g., user-provisioned SSO) is NOT sufficient - this is Shadow IT.
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Shadow = NOT is_governed AND activity_status==RECENT
+        Where is_governed = has_idp OR has_cmdb
         
         INVARIANT: Only domain-canonical assets count as shadow.
         Internal identifiers (name-derived keys) are excluded from shadow counts.
@@ -193,11 +201,7 @@ class DomainRollup:
         if not self.is_domain_canonical:
             return False
         
-        # GOVERNANCE TRINITY: Both IdP AND CMDB required for governance
-        has_governance = self.has_idp and self.has_cmdb
-        has_existence = self.has_cloud or self.has_discovery
-        
-        if has_governance or not has_existence:
+        if self.is_governed():
             return False
         
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
@@ -219,15 +223,14 @@ class DomainRollup:
     
     def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level zombie: anchored but NO CONTACT POINT AND stale.
+        Domain-level zombie: governed AND stale.
         
-        Zombie = anchored AND NOT has_contact_point AND activity_status==STALE
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Zombie = is_governed AND activity_status==STALE
+        Where is_governed = has_idp OR has_cmdb
         
-        Dec 2025 Fix: Zombie means NO CONTACT POINT (no one to reach for deprovisioning).
-        Contact points include: CMDB (owner), IdP (provisioner), Finance (payer).
-        
-        - anchored + stale + no contact point = Zombie (truly orphaned)
-        - has any contact point + stale = Parked (can reach out)
+        Interpretation: Asset is in governance systems but shows no recent activity.
+        Candidates for cleanup/deprovisioning review.
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
@@ -239,11 +242,7 @@ class DomainRollup:
         if not self.is_domain_canonical:
             return False
         
-        if not self.is_anchored():
-            return False
-        
-        # If has contact point (CMDB/IdP/Finance), it's Parked, not Zombie
-        if self.has_contact_point():
+        if not self.is_governed():
             return False
         
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)

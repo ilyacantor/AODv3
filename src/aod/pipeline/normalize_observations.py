@@ -429,7 +429,13 @@ def _looks_like_domain(name: str) -> bool:
     parts = name.split('.')
     if len(parts) >= 2:
         tld = parts[-1]
-        if tld in ('com', 'org', 'net', 'io', 'co', 'dev', 'app', 'us', 'cloud'):
+        if tld in (
+            'com', 'org', 'net', 'io', 'co', 'dev', 'app', 'us', 'cloud',
+            'ai', 'tech', 'biz', 'info', 'xyz', 'me', 'cc', 'tv', 'so',
+            'gg', 'fm', 'ly', 'to', 'sh', 'in', 'uk', 'de', 'fr', 'jp',
+            'ca', 'au', 'br', 'it', 'es', 'nl', 'ru', 'eu', 'pro', 'edu',
+            'gov', 'mil', 'int', 'name'
+        ):
             return True
     return False
 

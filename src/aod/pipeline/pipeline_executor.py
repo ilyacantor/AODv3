@@ -37,15 +37,18 @@ def _extract_plane_timestamps(correlation: 'CorrelationResult') -> list[datetime
     When discovery observations lack timestamps, we can use timestamps from
     governance plane records (IdP, CMDB, Cloud, Finance) to determine activity.
     
+    IMPORTANT: Only use actual ACTIVITY fields, NOT created_at/updated_at which
+    represent when the record was created/modified, not when the asset was used.
+    
     Returns list of UTC-aware datetime objects from matched plane records.
     """
     timestamps = []
     
     planes = [
-        (correlation.idp, ['last_login', 'last_access', 'last_activity', 'created_at', 'updated_at']),
-        (correlation.cmdb, ['last_seen', 'last_updated', 'updated_at', 'created_at']),
-        (correlation.cloud, ['last_activity', 'last_access', 'updated_at', 'created_at']),
-        (correlation.finance, ['last_invoice_date', 'transaction_date', 'updated_at', 'created_at']),
+        (correlation.idp, ['last_login', 'last_access', 'last_activity']),
+        (correlation.cmdb, ['last_seen']),
+        (correlation.cloud, ['last_activity', 'last_access']),
+        (correlation.finance, ['last_invoice_date', 'transaction_date']),
     ]
     
     for plane_match, timestamp_fields in planes:

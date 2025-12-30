@@ -71,6 +71,7 @@ This fixes the security hole where CMDB-only assets (e.g., user manually enters 
     - Removed conflicting "Governance Trinity" (AND) logic from derived_classifications.py and aod_agent_reconcile.py
     - Removed complex "contact point" logic that prevented zombie classification when IdP/CMDB existed
 14. **Fail-Safe to Clean (Dec 2025)**: When no activity timestamps are available (from observations or plane records), assets fail-safe to CLEAN instead of being classified as STALE. Principle: **"You can't prove abandonment without evidence."** This prevents false positive zombie classification when timestamp data is missing. Only assets with PROVEN stale activity (timestamps > 90 days old) can become zombies.
+15. **Cloud Reason Codes Removed (Dec 2025)**: Removed `HAS_CLOUD`/`NO_CLOUD` reason codes from reconciliation output. Cloud presence is NOT used in shadow/zombie/parked classification (governance = IdP OR CMDB only). Including cloud codes in reason output was causing confusion where assets appeared to be flagged as zombie "because of NO_CLOUD" when cloud is actually irrelevant to classification. Cloud presence is still used for the "anchored" predicate but not emitted as a reason code.
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

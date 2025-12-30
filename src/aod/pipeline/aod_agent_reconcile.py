@@ -131,7 +131,7 @@ def _deduplicate_reason_codes(reasons: set) -> set:
         ("HAS_CMDB", "NO_CMDB"),
         ("HAS_FINANCE", "NO_FINANCE"),
         ("HAS_ONGOING_FINANCE", "NO_ONGOING_FINANCE"),
-        ("HAS_CLOUD", "NO_CLOUD"),
+        # NOTE: HAS_CLOUD/NO_CLOUD removed - not used in classification
         ("HAS_DISCOVERY", "NO_DISCOVERY"),
         ("RECENT_ACTIVITY", "STALE_ACTIVITY"),
         ("RECENT_ACTIVITY", "NO_ACTIVITY_TIMESTAMPS"),
@@ -290,10 +290,9 @@ def compute_asset_reasons(
     else:
         reasons.append(ReasonCode.NO_ONGOING_FINANCE)
     
-    if has_cloud:
-        reasons.append(ReasonCode.HAS_CLOUD)
-    else:
-        reasons.append(ReasonCode.NO_CLOUD)
+    # NOTE: Cloud presence (HAS_CLOUD/NO_CLOUD) is NOT used in classification
+    # (shadow/zombie/parked). Governance is IdP OR CMDB only. We do NOT emit
+    # cloud codes to avoid confusing reconciliation reports with irrelevant info.
     
     if has_discovery:
         reasons.append(ReasonCode.HAS_DISCOVERY)
@@ -568,11 +567,13 @@ def classify_actual(
     has_cmdb = ReasonCode.HAS_CMDB in reasons
     has_finance = ReasonCode.HAS_FINANCE in reasons
     has_ongoing_finance = ReasonCode.HAS_ONGOING_FINANCE in reasons
-    has_cloud = ReasonCode.HAS_CLOUD in reasons
     has_discovery = ReasonCode.HAS_DISCOVERY in reasons
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
     has_stale_activity = ReasonCode.STALE_ACTIVITY in reasons
     has_no_activity = ReasonCode.NO_ACTIVITY_TIMESTAMPS in reasons
+    
+    # Cloud presence for anchoring (not used in governance/classification)
+    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
     
     # ALIGNED WITH POLICY ENGINE (Dec 2025):
     # Governed = has_idp OR has_cmdb (consistent with PolicyEngine._classify)

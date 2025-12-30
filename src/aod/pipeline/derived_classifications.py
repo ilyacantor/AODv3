@@ -34,7 +34,8 @@ Shadow Asset = admitted asset with:
 Zombie Asset = admitted asset with:
   - governed (has_idp OR has_cmdb)
   - AND activity_status == STALE (NOT NONE - "no evidence" ≠ "stale evidence")
-  - Interpretation: Governed asset with stale activity that may need deprovisioning
+  - AND has_ongoing_finance (recurring spend - contracts/subscriptions)
+  - Interpretation: "Paying for something you don't use" - requires ongoing spend to be a zombie
 
 Parked Asset = admitted asset with:
   - ungoverned (NOT has_idp AND NOT has_cmdb)
@@ -154,6 +155,7 @@ class DomainRollup:
     entity_count: int
     is_domain_canonical: bool = True
     alias_keys: list[str] = field(default_factory=list)
+    has_ongoing_finance: bool = False  # Recurring spend (contracts/subscriptions)
     
     def get_activity_status(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
         """Get the activity status for this domain rollup."""
@@ -226,14 +228,14 @@ class DomainRollup:
     
     def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level zombie: governed AND stale.
+        Domain-level zombie: governed AND stale AND ongoing finance.
         
         ALIGNED WITH POLICY ENGINE (Dec 2025):
-        Zombie = is_governed AND activity_status==STALE
+        Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
         Where is_governed = has_idp OR has_cmdb
         
-        Interpretation: Asset is in governance systems but shows no recent activity.
-        Candidates for cleanup/deprovisioning review.
+        Interpretation: "Paying for something you don't use" - requires ongoing spend.
+        Without ongoing finance, stale governed assets are just inactive (not wasting money).
         
         INVARIANT: Only domain-canonical assets count as zombie.
         Internal identifiers (name-derived keys) are excluded from zombie counts.
@@ -246,6 +248,9 @@ class DomainRollup:
             return False
         
         if not self.is_governed():
+            return False
+        
+        if not self.has_ongoing_finance:
             return False
         
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
@@ -453,14 +458,16 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
     ALIGNED WITH POLICY ENGINE (Dec 2025):
-    Zombie = is_governed AND activity_status==STALE
+    Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
     
     Where:
     - is_governed = has_idp OR has_cmdb (matches PolicyEngine._classify)
     - activity_status==STALE means we have timestamps outside the window
+    - has_ongoing_finance = recurring contracts/subscriptions (paying for it)
     - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
     
-    This is a key semantic change: "no evidence" ≠ "stale evidence"
+    Interpretation: "Paying for something you don't use" - requires ongoing spend.
+    Without ongoing finance, stale governed assets are just inactive (not wasting money).
     
     Args:
         asset: The asset to check
@@ -477,6 +484,18 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     if not is_governed:
         return False, False, "Not governed (no IdP or CMDB) - cannot be zombie"
     
+    # Check for ongoing finance (recurring spend)
+    has_ongoing_finance = any(
+        isinstance(ref, str) and (
+            ref.startswith("recurring_contract:") or 
+            ref.startswith("recurring_transaction:")
+        )
+        for ref in asset.evidence_refs
+    )
+    
+    if not has_ongoing_finance:
+        return False, False, "No ongoing finance - stale but not wasting money (not zombie)"
+    
     governance_sources = []
     if has_idp:
         governance_sources.append("IdP")
@@ -490,7 +509,7 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
         return False, True, f"Indeterminate: Governed in {', '.join(governance_sources)} but no activity timestamps (cannot prove stale)"
     
     if activity_status == ActivityStatus.STALE:
-        return True, False, f"Zombie: Governed in {', '.join(governance_sources)} with stale activity ({latest.isoformat() if latest else 'unknown'})"
+        return True, False, f"Zombie: Governed in {', '.join(governance_sources)} with ongoing finance but stale activity ({latest.isoformat() if latest else 'unknown'})"
     
     return False, False, f"Not zombie: Recent activity at {latest.isoformat() if latest else 'unknown'}"
 
@@ -1039,6 +1058,13 @@ def compute_domain_rollups(
             isinstance(ref, str) and ref.startswith("discovery:")
             for ref in asset.evidence_refs
         ) or asset.activity_evidence.discovery_observed_at is not None
+        has_ongoing_finance = any(
+            isinstance(ref, str) and (
+                ref.startswith("recurring_contract:") or 
+                ref.startswith("recurring_transaction:")
+            )
+            for ref in asset.evidence_refs
+        )
         latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
         
         if domain_key in rollups:
@@ -1048,6 +1074,7 @@ def compute_domain_rollups(
             r.has_finance = r.has_finance or has_finance
             r.has_cloud = r.has_cloud or has_cloud
             r.has_discovery = r.has_discovery or has_discovery
+            r.has_ongoing_finance = r.has_ongoing_finance or has_ongoing_finance
             r.entity_names.append(asset.name)
             r.entity_count += 1
             for ak in alias_keys:
@@ -1068,7 +1095,8 @@ def compute_domain_rollups(
                 entity_names=[asset.name],
                 entity_count=1,
                 is_domain_canonical=is_canonical,
-                alias_keys=list(alias_keys)
+                alias_keys=list(alias_keys),
+                has_ongoing_finance=has_ongoing_finance
             )
     
     # ACTIVITY ROLLUP (Zombie Cure): Propagate activity from subdomains to parent domains

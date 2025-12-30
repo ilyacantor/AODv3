@@ -611,13 +611,14 @@ def classify_actual(
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
         
         # ALIGNED WITH POLICY ENGINE (Dec 2025):
-        # Zombie = is_governed AND activity_status==STALE
-        # Parked = NOT is_governed AND activity_status==STALE (or no activity timestamps)
+        # Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
+        # "Paying for something you don't use" - requires ongoing spend
+        # Without ongoing finance, stale governed assets are just inactive (not wasting money)
         if has_stale_activity:
-            if has_governance:
+            if has_governance and has_ongoing_finance:
                 is_zombie = True
                 reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
-            else:
+            elif not has_governance:
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     

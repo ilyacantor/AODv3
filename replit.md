@@ -35,10 +35,10 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 **Derived Classifications:**
 - **Activity Status**: Classifies assets as RECENT (active within 90 days), STALE (inactive beyond 90 days), or NONE (no activity timestamps).
 - **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match. Used for zombie eligibility.
-- **Shadow Asset**: Ungoverned (NOT both IdP AND CMDB) AND RECENT activity. Finance does NOT exempt from shadow.
+- **Shadow Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND RECENT activity. Finance does NOT exempt from shadow.
 - **Financial Anchor Governance Gap**: Shadow asset with ongoing finance - needs governance review despite being paid for.
-- **Zombie Asset**: Anchored AND STALE activity AND NO registered owner (orphaned). CMDB presence = owned = not zombie.
-- **Parked Asset**: STALE activity AND (has registered owner in CMDB OR not anchored). Owned but inactive, or non-actionable.
+- **Zombie Asset**: Governed (has_idp OR has_cmdb) AND STALE activity AND ongoing_finance. "Paying for something you don't use" - requires ongoing spend. Without ongoing finance, stale governed assets are just inactive (not wasting money).
+- **Parked Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND STALE activity. Non-actionable since nothing to deprovision.
 
 **Dec 2025 - Governance Policy (OR Logic):**
 Governance is defined as: `is_governed = has_idp OR has_cmdb`
@@ -67,10 +67,10 @@ This policy applies consistently across all admission, discovery, recognition, a
 13. **Classification Logic Alignment (Dec 2025)**: Unified all classification logic across the codebase to match Policy Engine exactly:
     - **is_governed = has_idp OR has_cmdb** (single definition used everywhere)
     - **SHADOW = NOT is_governed AND activity_status==RECENT**
-    - **ZOMBIE = is_governed AND activity_status==STALE**
-    - **PARKED = NOT is_governed AND activity_status==STALE**
+    - **ZOMBIE = is_governed AND activity_status==STALE AND has_ongoing_finance** ("paying for something you don't use")
+    - **PARKED = NOT is_governed AND activity_status==STALE** (informational only)
     - Removed conflicting "Governance Trinity" (AND) logic from derived_classifications.py and aod_agent_reconcile.py
-    - Removed complex "contact point" logic that prevented zombie classification when IdP/CMDB existed
+    - Zombie requires ongoing_finance - stale governed assets without spend are just inactive, not wasting money
 14. **Fail-Safe to Clean (Dec 2025)**: When no activity timestamps are available (from observations or plane records), assets fail-safe to CLEAN instead of being classified as STALE. Principle: **"You can't prove abandonment without evidence."** This prevents false positive zombie classification when timestamp data is missing. Only assets with PROVEN stale activity (timestamps > 90 days old) can become zombies.
 15. **Cloud Reason Codes Removed (Dec 2025)**: Removed `HAS_CLOUD`/`NO_CLOUD` reason codes from reconciliation output. Cloud presence is NOT used in shadow/zombie/parked classification (governance = IdP OR CMDB only). Including cloud codes in reason output was causing confusion where assets appeared to be flagged as zombie "because of NO_CLOUD" when cloud is actually irrelevant to classification. Cloud presence is still used for the "anchored" predicate but not emitted as a reason code.
 

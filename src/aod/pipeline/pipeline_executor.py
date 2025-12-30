@@ -142,7 +142,10 @@ def _build_policy_asset_data(
         cutoff = datetime.now(timezone.utc) - timedelta(days=activity_window_days)
         is_active = latest_observed_at >= cutoff
     else:
-        is_active = False
+        # No activity timestamps = INDETERMINATE, not stale
+        # Design principle: "no evidence" ≠ "stale evidence"
+        # Treat as active to prevent false positive zombie classification
+        is_active = True
     
     return {
         "domain": candidate.domain or "",

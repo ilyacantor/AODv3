@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..models.input_contracts import Snapshot, Observation
@@ -74,11 +74,23 @@ def _build_policy_asset_data(
     from .admission import source_to_plane, DISCOVERY_CORROBORATION_PLANES
     
     discovery_planes = set()
+    latest_observed_at: datetime | None = None
     for obs in observations:
         if obs.source:
             plane = source_to_plane(obs.source)
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
                 discovery_planes.add(plane)
+        if obs.observed_at:
+            obs_ts = obs.observed_at if obs.observed_at.tzinfo else obs.observed_at.replace(tzinfo=timezone.utc)
+            if latest_observed_at is None or obs_ts > latest_observed_at:
+                latest_observed_at = obs_ts
+    
+    activity_window_days = 90
+    if latest_observed_at is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=activity_window_days)
+        is_active = latest_observed_at >= cutoff
+    else:
+        is_active = False
     
     return {
         "domain": candidate.domain or "",
@@ -93,7 +105,7 @@ def _build_policy_asset_data(
         "lifecycle": lifecycle,
         "monthly_spend": monthly_spend,
         "discovery_planes_count": len(discovery_planes),
-        "is_active": True,
+        "is_active": is_active,
     }
 
 

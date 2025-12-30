@@ -70,6 +70,7 @@ This fixes the security hole where CMDB-only assets (e.g., user manually enters 
     - **PARKED = NOT is_governed AND activity_status==STALE**
     - Removed conflicting "Governance Trinity" (AND) logic from derived_classifications.py and aod_agent_reconcile.py
     - Removed complex "contact point" logic that prevented zombie classification when IdP/CMDB existed
+14. **Fail-Safe to Clean (Dec 2025)**: When no activity timestamps are available (from observations or plane records), assets fail-safe to CLEAN instead of being classified as STALE. Principle: **"You can't prove abandonment without evidence."** This prevents false positive zombie classification when timestamp data is missing. Only assets with PROVEN stale activity (timestamps > 90 days old) can become zombies.
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

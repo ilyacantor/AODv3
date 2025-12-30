@@ -250,15 +250,13 @@ class DomainRollup:
     
     def is_parked(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
-        Domain-level parked: stale AND (has contact point OR not anchored).
+        Domain-level parked: ungoverned AND stale.
         
-        Parked = activity_status==STALE AND (has_contact_point OR NOT is_anchored)
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Parked = NOT is_governed AND activity_status==STALE
+        Where is_governed = has_idp OR has_cmdb
         
-        Dec 2025 Fix: Parked means either:
-        1. Has contact point - someone to reach out to (CMDB/IdP/Finance owner)
-        2. Non-actionable - not anchored, can't deprovision what isn't managed
-        
-        These are explicitly excluded from zombie counts.
+        Parked assets are stale but not in governance systems (not zombie candidates).
         
         INVARIANT: Only domain-canonical assets count as parked.
         Internal identifiers (name-derived keys) are excluded.
@@ -269,12 +267,11 @@ class DomainRollup:
         if not self.is_domain_canonical:
             return False
         
-        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
-        if activity_status != ActivityStatus.STALE:
+        if self.is_governed():
             return False
         
-        # Parked if has contact point OR not anchored
-        return self.has_contact_point() or not self.is_anchored()
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
+        return activity_status == ActivityStatus.STALE
     
     def get_reason_codes(self) -> list[str]:
         """Generate canonical reason codes for this domain"""
@@ -452,11 +449,11 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     """
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
-    NEW LOGIC (Dec 2025):
-    Zombie = anchored AND activity_status==STALE
+    ALIGNED WITH POLICY ENGINE (Dec 2025):
+    Zombie = is_governed AND activity_status==STALE
     
     Where:
-    - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+    - is_governed = has_idp OR has_cmdb (matches PolicyEngine._classify)
     - activity_status==STALE means we have timestamps outside the window
     - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
     
@@ -471,32 +468,26 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     """
     has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_finance = asset.lens_coverage.finance
-    has_cloud = asset.lens_coverage.cloud
     
-    is_anchored = has_idp or has_cmdb or has_finance or has_cloud
+    is_governed = has_idp or has_cmdb
     
-    if not is_anchored:
-        return False, False, "Not anchored (no IdP, CMDB, Finance, or Cloud) - cannot be zombie"
+    if not is_governed:
+        return False, False, "Not governed (no IdP or CMDB) - cannot be zombie"
     
-    anchored_sources = []
+    governance_sources = []
     if has_idp:
-        anchored_sources.append("IdP")
+        governance_sources.append("IdP")
     if has_cmdb:
-        anchored_sources.append("CMDB")
-    if has_finance:
-        anchored_sources.append("Finance")
-    if has_cloud:
-        anchored_sources.append("Cloud")
+        governance_sources.append("CMDB")
     
     latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     activity_status = get_activity_status(latest, window_days)
     
     if activity_status == ActivityStatus.NONE:
-        return False, True, f"Indeterminate: Anchored in {', '.join(anchored_sources)} but no activity timestamps (cannot prove stale)"
+        return False, True, f"Indeterminate: Governed in {', '.join(governance_sources)} but no activity timestamps (cannot prove stale)"
     
     if activity_status == ActivityStatus.STALE:
-        return True, False, f"Zombie: Anchored in {', '.join(anchored_sources)} with stale activity ({latest.isoformat() if latest else 'unknown'})"
+        return True, False, f"Zombie: Governed in {', '.join(governance_sources)} with stale activity ({latest.isoformat() if latest else 'unknown'})"
     
     return False, False, f"Not zombie: Recent activity at {latest.isoformat() if latest else 'unknown'}"
 

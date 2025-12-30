@@ -538,27 +538,14 @@ def classify_actual(
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
     
-    GOVERNANCE POLICY (Dec 2025 - Trinity Enforcement):
-    Shadow = NOT governed AND activity_status==RECENT
+    ALIGNED WITH POLICY ENGINE (Dec 2025):
+    Classification rules match PolicyEngine._classify() exactly:
+    - is_governed = has_idp OR has_cmdb
+    - is_shadow = NOT is_governed AND activity_status==RECENT
+    - is_zombie = is_governed AND activity_status==STALE
+    - is_parked = NOT is_governed AND activity_status==STALE
     
-    The Governance Trinity defines "governed" - ALL THREE required:
-    - Visibility: Registered in CMDB
-    - Validation: Present in IdP (sanctioned/SSO)
-    - Control: Managed lifecycle tied to owner (checked via security attestation when available)
-    
-    FAIL-CLOSED: An asset is only "governed" if it has BOTH IdP AND CMDB.
-    Having just CMDB (e.g., manually entered) is NOT sufficient - this is Shadow IT.
-    Having just IdP (e.g., user-provisioned SSO) is NOT sufficient - this is Shadow IT.
-    
-    Finance presence does NOT equal governance. An organization can pay for
-    unsanctioned tools. Shadow classification surfaces these for governance review.
-    There is no "Grey IT" - binary classification only.
-    
-    Classification rules:
-    - is_anchored = has_idp OR has_cmdb OR has_finance OR has_cloud (for zombie eligibility)
-    - is_shadow = NOT (has_idp AND has_cmdb) AND activity_status==RECENT
-    - is_zombie = is_anchored AND activity_status==STALE (NOT NONE!)
-    - is_parked = NOT is_anchored AND activity_status==STALE
+    This is the single source of truth for classification logic.
     
     Key rule: NO_ACTIVITY_TIMESTAMPS is indeterminate, not stale.
     
@@ -587,12 +574,10 @@ def classify_actual(
     has_stale_activity = ReasonCode.STALE_ACTIVITY in reasons
     has_no_activity = ReasonCode.NO_ACTIVITY_TIMESTAMPS in reasons
     
-    # GOVERNANCE TRINITY POLICY (Dec 2025):
-    # An asset is only "governed" if it has BOTH IdP (Validation) AND CMDB (Visibility).
-    # This is fail-closed: Having just CMDB (e.g., manually entered) or just IdP is NOT sufficient.
-    # Control (3rd pillar) checked via security_attestation/SSO when available.
-    # Finance does NOT equal governance - you can pay for unsanctioned tools.
-    has_governance = has_idp and has_cmdb
+    # ALIGNED WITH POLICY ENGINE (Dec 2025):
+    # Governed = has_idp OR has_cmdb (consistent with PolicyEngine._classify)
+    # This is the single source of truth for governance status.
+    has_governance = has_idp or has_cmdb
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     
@@ -615,45 +600,23 @@ def classify_actual(
     if eligible:
         ungoverned_access_inventory = not has_governance
         
+        # ALIGNED WITH POLICY ENGINE (Dec 2025):
+        # Shadow = NOT is_governed AND activity_status==RECENT
         if ungoverned_access_inventory and has_recent_activity:
-            # Per governance policy: Shadow = NOT governed (no IdP/CMDB), regardless of finance
-            # Finance presence does NOT equal governance - you can pay for unsanctioned tools
             is_shadow = True
             reasons.append(ReasonCode.SHADOW_CLASSIFICATION)
             
-            # Tag governance gap if has ongoing finance but still ungoverned
             if financially_anchored:
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
         
-        # Zombie vs Parked Logic (Dec 2025 Fix):
-        # Zombie = stale + orphaned (no contact point for deprovisioning)
-        # Parked = stale + has contact point
-        #
-        # Contact points (any means to identify who to contact about deprovisioning):
-        # - CMDB: registered owner in asset catalog
-        # - IdP: SSO record of who provisioned via corporate identity
-        # - Finance: expense record of who is paying (can trace via finance system)
-        # - Explicit owner: manually assigned owner
-        #
-        # If we can identify WHO to contact about deprovisioning, it's NOT zombie.
-        has_contact_point = (
-            has_cmdb or 
-            has_idp or 
-            has_finance or  # Any finance record = traceable contact via expense system
-            (asset.owner is not None and asset.owner.strip() != "")
-        )
-        
+        # ALIGNED WITH POLICY ENGINE (Dec 2025):
+        # Zombie = is_governed AND activity_status==STALE
+        # Parked = NOT is_governed AND activity_status==STALE (or no activity timestamps)
         if has_stale_activity:
-            if has_contact_point:
-                # Has contact point (CMDB/IdP/Finance/owner) = Parked (can reach out)
-                is_parked = True
-                reasons.append(ReasonCode.PARKED_CLASSIFICATION)
-            elif is_anchored:
-                # Anchored but no owner = Zombie (orphaned)
+            if has_governance:
                 is_zombie = True
                 reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
             else:
-                # Not anchored = Parked (non-actionable)
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     

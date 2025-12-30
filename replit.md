@@ -63,6 +63,13 @@ This fixes the security hole where CMDB-only assets (e.g., user manually enters 
 10. **TLD Recognition Fix (Dec 2025)**: Expanded `_looks_like_domain()` in `normalize_observations.py` to recognize additional TLDs including `.ai`, `.tech`, `.biz`, `.info`, `.xyz`, `.me`, etc. This fixes KEY_NORMALIZATION_MISMATCH for domains like `hubforce.tech`, `ultraly.ai` that were not being recognized as domains when passed via observation name field.
 11. **Post-Correlation Domain Recovery (Dec 2025)**: When discovery observations lack domain fields (e.g., name="OpenSuite"), entities are keyed by name. After correlation, if matched IdP/CMDB/Cloud records have domains, we now adopt that domain as the entity's canonical key via `_recover_domain_from_planes()`. Priority: IdP→CMDB→Cloud→Finance. Fixes KEY_NORMALIZATION_MISMATCH for assets like `opensuite.net` where the name-only entity correlated to governance records with domains.
 12. **Plane Timestamp Fallback for Activity (Dec 2025)**: When discovery observations lack timestamps, `_build_policy_asset_data()` now extracts activity timestamps from correlated plane records (IdP: last_login/last_access, CMDB: last_seen, Cloud: last_activity, Finance: last_invoice_date) via `_extract_plane_timestamps()`. This ensures `is_active` can be calculated even after domain recovery re-keys entities. Fixes zombie detection where governed stale assets were marked as clean due to missing observation timestamps.
+13. **Classification Logic Alignment (Dec 2025)**: Unified all classification logic across the codebase to match Policy Engine exactly:
+    - **is_governed = has_idp OR has_cmdb** (single definition used everywhere)
+    - **SHADOW = NOT is_governed AND activity_status==RECENT**
+    - **ZOMBIE = is_governed AND activity_status==STALE**
+    - **PARKED = NOT is_governed AND activity_status==STALE**
+    - Removed conflicting "Governance Trinity" (AND) logic from derived_classifications.py and aod_agent_reconcile.py
+    - Removed complex "contact point" logic that prevented zombie classification when IdP/CMDB existed
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

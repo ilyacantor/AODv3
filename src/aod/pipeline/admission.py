@@ -70,6 +70,54 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
         finance=finance_debug
     )
 
+def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> set[str]:
+    """
+    Extract ALL domains from correlation - both match_keys and matched_records.
+    
+    This ensures domains from IdP/CMDB matched records are captured even when
+    the match was made by name token rather than domain. These domains are
+    critical for Farm reconciliation to avoid KEY_NORMALIZATION_MISMATCH.
+    
+    Sources checked (priority order):
+    1. PlaneMatch.match_key - if it looks like a domain
+    2. PlaneMatch.matched_records[].domain - IdPObject/CMDBConfigItem domain fields
+    
+    Returns a set of all valid domains found.
+    """
+    from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource
+    
+    domains = set()
+    
+    for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
+        if plane_match.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            continue
+            
+        # Check match_key for domain
+        match_key = plane_match.match_key
+        if match_key and '.' in match_key:
+            if '@' not in match_key and '://' not in match_key and '/' not in match_key:
+                domain = extract_registered_domain(match_key)
+                if domain:
+                    domains.add(domain.lower())
+        
+        # Check matched_records for domain fields
+        for record in plane_match.matched_records:
+            record_domain = None
+            if isinstance(record, IdPObject):
+                record_domain = record.domain
+            elif isinstance(record, CMDBConfigItem):
+                record_domain = record.domain
+            elif isinstance(record, CloudResource):
+                record_domain = getattr(record, 'domain', None)
+            
+            if record_domain and '.' in record_domain:
+                extracted = extract_registered_domain(record_domain)
+                if extracted:
+                    domains.add(extracted.lower())
+    
+    return domains
+
+
 def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional[str]:
     """
     Extract a canonical domain from correlation match keys.
@@ -92,6 +140,9 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
     
     SAFETY: Rejects match_keys that look like emails or URIs to avoid mis-keying.
     """
+    from ..models.input_contracts import IdPObject, CMDBConfigItem
+    
+    # First try match_keys (most authoritative)
     for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             match_key = plane_match.match_key
@@ -108,6 +159,22 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
                 domain = extract_registered_domain(match_key)
                 if domain:
                     return domain
+    
+    # Fallback: check matched_records for domain fields (IdP/CMDB priority)
+    for plane_match in [correlation.idp, correlation.cmdb]:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            for record in plane_match.matched_records:
+                record_domain = None
+                if isinstance(record, IdPObject):
+                    record_domain = record.domain
+                elif isinstance(record, CMDBConfigItem):
+                    record_domain = record.domain
+                
+                if record_domain and '.' in record_domain:
+                    extracted = extract_registered_domain(record_domain)
+                    if extracted:
+                        return extracted
+    
     return None
 
 
@@ -1075,8 +1142,16 @@ def apply_admission_criteria(
         discovery=discovery_admitted
     )
     
+    all_domains = set()
+    if effective_domain:
+        all_domains.add(effective_domain.lower())
+    correlation_domains = _extract_all_domains_from_correlation(correlation)
+    all_domains.update(correlation_domains)
+    if entity.domain and '.' in entity.domain:
+        all_domains.add(entity.domain.lower())
+    
     identifiers = AssetIdentifiers(
-        domains=[effective_domain] if effective_domain else [],
+        domains=sorted(all_domains) if all_domains else [],
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )

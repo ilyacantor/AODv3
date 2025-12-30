@@ -148,18 +148,11 @@ class PolicyEngine:
     
     def _check_governance_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Governance Gate: (IdP OR CMDB) WITH discovery corroboration, OR Cloud alone.
+        Governance Gate: IdP OR CMDB OR Cloud.
         
-        GOVERNANCE ADMISSION GATE (Dec 2025):
-        - IdP/CMDB alone is NOT sufficient for admission - requires discovery
-        - IdP/CMDB + discovery_planes_count >= noise_floor = admitted
-        - IdP/CMDB without discovery corroboration = NOT admitted
-        - Cloud can admit independently (no discovery required)
-        This prevents governance-only assets with weak evidence from cluttering catalog.
+        If an asset is in IdP or CMDB, it should be admitted regardless of discovery.
         """
         codes = []
-        has_idp_match = False
-        has_cmdb_match = False
         
         in_idp = data.get("in_idp", False)
         if in_idp:
@@ -168,7 +161,6 @@ class PolicyEngine:
                 has_scim = data.get("has_scim", False)
                 is_sp = data.get("is_service_principal", False)
                 if has_sso or has_scim or is_sp:
-                    has_idp_match = True
                     codes.append("HAS_IDP")
                     if has_sso:
                         codes.append("HAS_SSO")
@@ -177,7 +169,6 @@ class PolicyEngine:
                     if is_sp:
                         codes.append("IS_SERVICE_PRINCIPAL")
             else:
-                has_idp_match = True
                 codes.append("HAS_IDP")
         
         in_cmdb = data.get("in_cmdb", False)
@@ -188,34 +179,21 @@ class PolicyEngine:
                 valid_ci = ci_type in {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
                 valid_lc = lifecycle in {"prod", "production", "staging", "stage", "live", "active"} if self.config.admission.require_valid_lifecycle else True
                 if valid_ci and valid_lc:
-                    has_cmdb_match = True
                     codes.append("HAS_CMDB")
             else:
-                has_cmdb_match = True
                 codes.append("HAS_CMDB")
         
         in_cloud = data.get("in_cloud", False)
         if in_cloud:
             codes.append("HAS_CLOUD")
-            return True, codes
         
         if self.config.scope.treat_directory_as_idp:
             in_directory = data.get("in_directory", False)
             if in_directory:
-                has_idp_match = True
                 codes.append("HAS_DIRECTORY")
         
-        if has_idp_match or has_cmdb_match:
-            plane_count = data.get("discovery_planes_count", 0) or 0
-            has_sufficient_discovery = plane_count >= self.config.admission.noise_floor
-            if has_sufficient_discovery:
-                codes.append(f"DISCOVERY_CORROBORATED_{plane_count}_PLANES")
-                return True, codes
-            else:
-                codes.append("NO_DISCOVERY_CORROBORATION")
-                return False, codes
-        
-        return False, codes
+        passed = len(codes) > 0
+        return passed, codes
     
     def _check_discovery_gate(self, data: dict) -> tuple[bool, list[str]]:
         """

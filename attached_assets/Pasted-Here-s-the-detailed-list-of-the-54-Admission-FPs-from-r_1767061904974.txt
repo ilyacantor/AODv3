@@ -1,0 +1,79 @@
+Here's the detailed list of the 54 Admission FPs from run_afdf165135dc:
+
+Admission FPs Breakdown
+Cataloged FPs (49 assets)
+AOD admitted these, but Farm says they should have been rejected
+
+#	Asset Key	Discovery Sources	Rejection Reason	Pattern
+1	fastly.co	0 (none)	None	CMDB-only, no discovery
+2	hubpoint.dev	0 (none)	None	CMDB-only, no discovery
+3	linkcloud.co	0 (none)	None	CMDB-only, no discovery
+4	maxlabs.net	0 (none)	None	CMDB-only, no discovery
+5	rapidsync.tech	1 (cloud_api)	Single source	Single source only
+6	worksuite.net	0 (none)	None	CMDB-only, no discovery
+7	datadesk.org	0 (none)	None	CMDB-only, no discovery
+8	hubspace.net	0 (none)	None	CMDB-only, no discovery
+9	dataforce.co	0 (none)	None	IdP-only, no discovery
+10	primepoint.cloud	0 (none)	None	CMDB-only, no discovery
+11	ultratech.org	0 (none)	None	IdP-only, no discovery
+12	fastflow.net	0 (none)	None	CMDB-only, no discovery
+13	workbox.org	0 (none)	None	IdP-only, no discovery
+14	maxhub.app	0 (none)	None	CMDB-only, no discovery
+15	corely.ai	0 (none)	None	CMDB-only, no discovery
+16	cloudsync.app	0 (none)	None	CMDB-only, no discovery
+17	workify.ai	0 (none)	None	CMDB-only, no discovery
+18	ultrasuite.com	0 (none)	None	IdP-only, no discovery
+19	workspace.ai	0 (none)	None	CMDB-only, no discovery
+20	dataforce.dev	0 (none)	No discovery sources	No discovery
+21	fastdesk.dev	0 (none)	None	IdP-only, no discovery
+22	hipchat.com	0 (none)	None	CMDB-only, no discovery
+23	flexlabs.com	0 (none)	None	CMDB-only, no discovery
+24	fastly.ai	0 (none)	None	CMDB-only, no discovery
+25	coresync.cloud	0 (none)	None	IdP-only, no discovery
+26	cloudlabs.co	0 (none)	None	CMDB-only, no discovery
+27	netsoft.net	0 (none)	None	IdP-only, no discovery
+28	openpoint.dev	0 (none)	None	CMDB-only, no discovery
+29	worktech.com	0 (none)	None	IdP-only, no discovery
+30	primepoint.com	0 (none)	None	CMDB-only, no discovery
+31	datadog.com	0 (none)	None	N/A
+32	fastdesk.co	0 (none)	None	IdP-only, no discovery
+33	hubapp.co	0 (none)	None	IdP-only, no discovery
+34	primebase.dev	0 (none)	None	CMDB-only, no discovery
+35	smartio.org	0 (none)	None	IdP-only, no discovery
+36	hubapp.io	0 (none)	None	IdP-only, no discovery
+37	fastdesk.io	0 (none)	None	IdP-only, no discovery
+38	smartsoft.dev	0 (none)	None	IdP-only, no discovery
+39	cloudsync.tech	0 (none)	None	CMDB-only, no discovery
+40	linkcloud.net	0 (none)	None	CMDB-only, no discovery
+41	rapidcloud.co	0 (none)	None	IdP-only, no discovery
+42	primebox.com	0 (none)	None	CMDB-only, no discovery
+43	synchub.ai	0 (none)	None	CMDB-only, no discovery
+44	flowdock.com	0 (none)	None	CMDB-only, no discovery
+45	corely.net	0 (none)	None	CMDB-only, no discovery
+46	prohub.com	0 (none)	No discovery sources	No discovery
+47	corely.cloud	0 (none)	None	CMDB-only, no discovery
+48	maxlabs.app	0 (none)	None	CMDB-only, no discovery
+49	opensoft.org	0 (none)	None	CMDB-only, no discovery
+Rejected FPs (5 assets)
+AOD rejected these, but Farm says they should have been admitted
+
+#	Asset Key	Discovery Sources	Issue
+1	ultrahub.com	0 (none)	Has CMDB, should be admitted
+2	hubforce.app	0 (none)	Has IdP, should be admitted
+3	veloedge-s4v1.com	2 (cloud_api, network_scan)	Tenant domain, fully governed
+4	datadoghq.com	3 (endpoint, network_scan, proxy)	Fully governed, multi-source
+5	tiktok.com	2 (dns, proxy)	Multi-source, should be admitted
+Root Cause Analysis
+Pattern	Count	Explanation
+CMDB-only, no discovery	~30	AOD admits CMDB entries even without active discovery. Farm requires discovery evidence.
+IdP-only, no discovery	~15	AOD admits IdP entries even without active discovery. Farm requires discovery evidence.
+Single source	1	Only 1 discovery source, Farm requires 2+ for corroboration
+No discovery sources	2	Zero discovery observations
+Key Insight
+The 49 Cataloged FPs all share the same pattern: AOD is admitting assets that exist in CMDB or IdP but have zero discovery observations. According to Farm's admission policy, an asset needs at least one of:
+
+2+ discovery sources (corroboration)
+cloud evidence
+idp presence
+cmdb presence
+AOD appears to be admitting based on CMDB/IdP alone, while Farm's discovery_sources_count shows 0. This suggests AOD and Farm have different interpretations of what counts as a "discovery source".

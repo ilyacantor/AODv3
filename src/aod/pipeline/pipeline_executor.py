@@ -30,6 +30,50 @@ logger = logging.getLogger(__name__)
 MAX_OBSERVATION_SAMPLES = 2000
 
 
+def _extract_plane_timestamps(correlation: 'CorrelationResult') -> list[datetime]:
+    """
+    Extract activity timestamps from correlated plane records.
+    
+    When discovery observations lack timestamps, we can use timestamps from
+    governance plane records (IdP, CMDB, Cloud, Finance) to determine activity.
+    
+    Returns list of UTC-aware datetime objects from matched plane records.
+    """
+    timestamps = []
+    
+    planes = [
+        (correlation.idp, ['last_login', 'last_access', 'last_activity', 'created_at', 'updated_at']),
+        (correlation.cmdb, ['last_seen', 'last_updated', 'updated_at', 'created_at']),
+        (correlation.cloud, ['last_activity', 'last_access', 'updated_at', 'created_at']),
+        (correlation.finance, ['last_invoice_date', 'transaction_date', 'updated_at', 'created_at']),
+    ]
+    
+    for plane_match, timestamp_fields in planes:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            for record in plane_match.matched_records:
+                if record is None:
+                    continue
+                for field_name in timestamp_fields:
+                    ts = getattr(record, field_name, None)
+                    if ts is not None:
+                        if isinstance(ts, datetime):
+                            if ts.tzinfo is None:
+                                ts = ts.replace(tzinfo=timezone.utc)
+                            timestamps.append(ts)
+                            break
+                        elif isinstance(ts, str):
+                            try:
+                                parsed = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                                if parsed.tzinfo is None:
+                                    parsed = parsed.replace(tzinfo=timezone.utc)
+                                timestamps.append(parsed)
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+    
+    return timestamps
+
+
 def _build_policy_asset_data(
     candidate: CandidateEntity,
     correlation: CorrelationResult,
@@ -84,6 +128,11 @@ def _build_policy_asset_data(
             obs_ts = obs.observed_at if obs.observed_at.tzinfo else obs.observed_at.replace(tzinfo=timezone.utc)
             if latest_observed_at is None or obs_ts > latest_observed_at:
                 latest_observed_at = obs_ts
+    
+    if latest_observed_at is None:
+        plane_timestamps = _extract_plane_timestamps(correlation)
+        if plane_timestamps:
+            latest_observed_at = max(plane_timestamps)
     
     activity_window_days = 90
     if latest_observed_at is not None:

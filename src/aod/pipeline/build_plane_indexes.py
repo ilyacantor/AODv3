@@ -20,6 +20,8 @@ class PlaneIndex:
     by_name_prefix: dict[str, list[str]] = field(default_factory=dict)
     by_name_bigrams: dict[str, list[str]] = field(default_factory=dict)
     by_name_words: dict[str, list[str]] = field(default_factory=dict)
+    record_domains: dict[str, str] = field(default_factory=dict)
+    record_domain_aliases: dict[str, set[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -40,6 +42,20 @@ def add_to_index(index: dict[str, list[str]], key: str, record_id: str):
         index[key] = []
     if record_id not in index[key]:
         index[key].append(record_id)
+
+
+def add_to_domain_index(plane_index: 'PlaneIndex', domain_key: str, record_id: str):
+    """Add a record ID to the domain index AND track the alias"""
+    if not domain_key:
+        return
+    domain_key = domain_key.lower().strip()
+    if domain_key not in plane_index.by_domain:
+        plane_index.by_domain[domain_key] = []
+    if record_id not in plane_index.by_domain[domain_key]:
+        plane_index.by_domain[domain_key].append(record_id)
+    if record_id not in plane_index.record_domain_aliases:
+        plane_index.record_domain_aliases[record_id] = set()
+    plane_index.record_domain_aliases[record_id].add(domain_key)
 
 
 def generate_bigrams(text: str) -> set[str]:
@@ -151,18 +167,24 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        if obj.domain:
-            # Index BOTH the registered domain AND raw domain
-            registered = normalize_domain(obj.domain)
-            raw = _get_raw_domain(obj.domain)
+        domain_source = obj.domain
+        if not domain_source and '.' in record_id and '@' not in record_id:
+            candidate = normalize_domain(record_id)
+            if candidate and '.' in candidate:
+                domain_source = record_id
+        
+        if domain_source:
+            registered = normalize_domain(domain_source)
+            raw = _get_raw_domain(domain_source)
             
-            add_to_index(index.by_domain, registered, record_id)
+            add_to_domain_index(index, registered, record_id)
             if raw and raw != registered:
-                add_to_index(index.by_domain, raw, record_id)
+                add_to_domain_index(index, raw, record_id)
             
-            # Dec 2025: Also index tenant token for cross-matching
-            # flowsoft.okta.com → 'flowsoft' in by_name_words
-            tenant_token = _extract_tenant_token(obj.domain)
+            if registered and record_id not in index.record_domains:
+                index.record_domains[record_id] = registered
+            
+            tenant_token = _extract_tenant_token(domain_source)
             if tenant_token:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         
@@ -192,17 +214,24 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        if ci.domain:
-            # Index BOTH the registered domain AND raw domain
-            registered = normalize_domain(ci.domain)
-            raw = _get_raw_domain(ci.domain)
+        domain_source = ci.domain
+        if not domain_source and '.' in record_id and '@' not in record_id:
+            candidate = normalize_domain(record_id)
+            if candidate and '.' in candidate:
+                domain_source = record_id
+        
+        if domain_source:
+            registered = normalize_domain(domain_source)
+            raw = _get_raw_domain(domain_source)
             
-            add_to_index(index.by_domain, registered, record_id)
+            add_to_domain_index(index, registered, record_id)
             if raw and raw != registered:
-                add_to_index(index.by_domain, raw, record_id)
+                add_to_domain_index(index, raw, record_id)
             
-            # Dec 2025: Also index tenant token for cross-matching
-            tenant_token = _extract_tenant_token(ci.domain)
+            if registered and record_id not in index.record_domains:
+                index.record_domains[record_id] = registered
+            
+            tenant_token = _extract_tenant_token(domain_source)
             if tenant_token:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         

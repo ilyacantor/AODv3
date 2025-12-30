@@ -638,14 +638,26 @@ def classify_actual(
             all_domain_variants.add(name_lower)
     
     for ref in asset.evidence_refs:
-        if isinstance(ref, str) and ":" in ref:
+        if not isinstance(ref, str):
+            continue
+        if ref.startswith("obs_"):
+            continue
+        
+        potential_domain = None
+        if ":" in ref:
             parts = ref.split(":")
             if len(parts) >= 2:
                 potential_domain = parts[1].lower().strip()
-                if "." in potential_domain and not potential_domain.startswith("obs_"):
-                    domain_parts = potential_domain.split(".")
-                    if len(domain_parts) >= 2 and len(domain_parts[-1]) in (2, 3, 4) and domain_parts[-1].isalpha():
-                        all_domain_variants.add(potential_domain)
+        elif "." in ref:
+            potential_domain = ref.lower().strip()
+        
+        if potential_domain and "." in potential_domain:
+            if "@" in potential_domain or "://" in potential_domain:
+                continue
+            registered = extract_registered_domain(potential_domain)
+            if registered:
+                all_domain_variants.add(potential_domain.lower())
+                all_domain_variants.add(registered.lower())
     
     all_domain_variants.add(domain_key)
     

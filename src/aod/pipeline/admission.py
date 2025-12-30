@@ -72,7 +72,7 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
 
 def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> set[str]:
     """
-    Extract ALL domains from correlation - both match_keys and matched_records.
+    Extract ALL domains from correlation - match_keys, matched_records, AND matched_ids.
     
     This ensures domains from IdP/CMDB matched records are captured even when
     the match was made by name token rather than domain. These domains are
@@ -81,6 +81,7 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> set
     Sources checked (priority order):
     1. PlaneMatch.match_key - if it looks like a domain
     2. PlaneMatch.matched_records[].domain - IdPObject/CMDBConfigItem domain fields
+    3. PlaneMatch.matched_ids - record IDs that might BE domains (e.g., "maxforce.org")
     
     Returns a set of all valid domains found.
     """
@@ -114,13 +115,26 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> set
                 extracted = extract_registered_domain(record_domain)
                 if extracted:
                     domains.add(extracted.lower())
+        
+        # Check matched_ids - record IDs might BE domains (idp_id="maxforce.org")
+        for record_id in plane_match.matched_ids:
+            if record_id and '.' in record_id:
+                # Reject emails, URIs, paths, observation IDs
+                if '@' in record_id or '://' in record_id or '/' in record_id:
+                    continue
+                if record_id.startswith('obs_'):
+                    continue
+                # Use extract_registered_domain to validate - it returns None for non-domains
+                extracted = extract_registered_domain(record_id)
+                if extracted:
+                    domains.add(extracted.lower())
     
     return domains
 
 
 def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional[str]:
     """
-    Extract a canonical domain from correlation match keys.
+    Extract a canonical domain from correlation match keys, matched records, and matched IDs.
     
     POST-CORRELATION REKEYING: When an entity doesn't have a domain from normalization,
     check if any plane correlation found a domain-based match. If so, use that as
@@ -130,13 +144,9 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
     had valid plane correlations with domain matches, but were rejected at admission.
     
     Priority order (most authoritative first):
-    1. IdP match_key (SSO domains are authoritative)
-    2. CMDB match_key (IT-registered domains)
-    3. Cloud match_key (cloud resource URIs)
-    4. Finance match_key (contract/billing domains)
-    
-    Only returns a domain if match_key looks like a valid domain (contains '.')
-    and can be extracted to a registered domain.
+    1. IdP/CMDB match_key (if looks like domain)
+    2. IdP/CMDB matched_records[].domain field
+    3. IdP/CMDB matched_ids (record IDs that ARE domains)
     
     SAFETY: Rejects match_keys that look like emails or URIs to avoid mis-keying.
     """
@@ -147,20 +157,13 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             match_key = plane_match.match_key
             if match_key and '.' in match_key:
-                # Reject emails (contain @)
-                if '@' in match_key:
-                    continue
-                # Reject URIs (contain :// or start with http)
-                if '://' in match_key or match_key.startswith('http'):
-                    continue
-                # Reject paths (contain /)
-                if '/' in match_key:
+                if '@' in match_key or '://' in match_key or '/' in match_key:
                     continue
                 domain = extract_registered_domain(match_key)
                 if domain:
                     return domain
     
-    # Fallback: check matched_records for domain fields (IdP/CMDB priority)
+    # Fallback 1: check matched_records for domain fields (IdP/CMDB priority)
     for plane_match in [correlation.idp, correlation.cmdb]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             for record in plane_match.matched_records:
@@ -172,6 +175,19 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
                 
                 if record_domain and '.' in record_domain:
                     extracted = extract_registered_domain(record_domain)
+                    if extracted:
+                        return extracted
+    
+    # Fallback 2: check matched_ids - record IDs might BE domains
+    for plane_match in [correlation.idp, correlation.cmdb]:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            for record_id in plane_match.matched_ids:
+                if record_id and '.' in record_id:
+                    if '@' in record_id or '://' in record_id or '/' in record_id:
+                        continue
+                    if record_id.startswith('obs_'):
+                        continue
+                    extracted = extract_registered_domain(record_id)
                     if extracted:
                         return extracted
     

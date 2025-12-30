@@ -154,10 +154,13 @@ def _extract_domains_from_raw_data(raw_data: dict | None) -> list[str]:
     """Extract domain strings from raw_data fields.
     
     Dec 2025 Fix: Farm's IdP/CMDB payloads may contain domains in:
-    - raw_data['domains'] (list of domains)
-    - raw_data['urls'] (list of URLs)
-    - raw_data['login_url'] (single login URL)
-    - raw_data['domain'] (single domain string)
+    - raw_data['domain'] (single domain string) - authoritative
+    - raw_data['domains'] (list of domains) - authoritative
+    
+    NOTE: We intentionally DO NOT extract from raw_data['urls'] or 
+    raw_data['login_url'] as these contain control-plane hostnames 
+    (login.okta.com, portal.microsoftonline.com) that normalize to 
+    vendor base domains, causing alias pollution and false correlations.
     """
     if not raw_data:
         return []
@@ -171,18 +174,6 @@ def _extract_domains_from_raw_data(raw_data: dict | None) -> list[str]:
         for d in raw_data['domains']:
             if d and isinstance(d, str):
                 domains.append(d)
-    
-    if 'urls' in raw_data and isinstance(raw_data['urls'], list):
-        for url in raw_data['urls']:
-            if url and isinstance(url, str):
-                cleaned = _get_raw_domain(url)
-                if cleaned and '.' in cleaned:
-                    domains.append(cleaned)
-    
-    if 'login_url' in raw_data and raw_data['login_url']:
-        cleaned = _get_raw_domain(str(raw_data['login_url']))
-        if cleaned and '.' in cleaned:
-            domains.append(cleaned)
     
     return domains
 

@@ -40,12 +40,13 @@ Finance presence does NOT equal governance. You can pay for unsanctioned tools. 
 - **Zombie Asset**: Anchored AND STALE activity AND NO registered owner (orphaned). CMDB presence = owned = not zombie.
 - **Parked Asset**: STALE activity AND (has registered owner in CMDB OR not anchored). Owned but inactive, or non-actionable.
 
-**Dec 2025 - Governance Trinity Enforcement:**
-Shadow classification upgraded from `OR` to `AND` logic for fail-closed policy:
-- **OLD (insecure)**: `is_governed = has_idp OR has_cmdb` - CMDB-only assets marked Clean
-- **NEW (secure)**: `is_governed = has_idp AND has_cmdb` - Both required for governance
+**Dec 2025 - Governance Policy (OR Logic):**
+Governance is defined as: `is_governed = has_idp OR has_cmdb`
+- IdP presence alone = governed
+- CMDB presence alone = governed
+- Neither = ungoverned (shadow if active)
 
-This fixes the security hole where CMDB-only assets (e.g., user manually enters Dropbox) were incorrectly marked as "Clean" when they should be Shadow IT. Now both IdP (Validation) AND CMDB (Visibility) are required for an asset to be considered governed.
+This policy applies consistently across all admission, discovery, recognition, and classification logic. There are NO instances where both IdP AND CMDB are required.
 
 **Dec 2025 Logic Fixes:**
 1. **Finance Admission Gate**: Finance alone is NOT sufficient for admission. Finance can only contribute to admission if paired with:

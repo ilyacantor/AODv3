@@ -5,10 +5,13 @@ Computes Shadow, Zombie, and Parked classifications from evidence AFTER the main
 These are computed on-read, not stored as flags.
 
 GOVERNANCE POLICY (Dec 2025):
-The Governance Trinity defines "governed":
-  - Visibility: Registered in CMDB
-  - Validation: Present in IdP (sanctioned/SSO)
-  - Control: Managed lifecycle tied to owner
+Governance is defined as: is_governed = has_idp OR has_cmdb
+  - IdP presence alone = governed
+  - CMDB presence alone = governed  
+  - Neither = ungoverned
+
+This OR policy applies consistently across all classification logic.
+There are NO instances where both IdP AND CMDB are required.
 
 Finance presence does NOT equal governance. An organization can pay for
 unsanctioned tools. There is no "Grey IT" - binary classification only.
@@ -18,7 +21,7 @@ Activity Status (ActivityStatus enum):
   - STALE = has activity timestamp outside activity_window_days
   - NONE = no activity timestamps at all (indeterminate)
 
-Anchored Predicate (for zombie classification):
+Anchored Predicate (for zombie eligibility):
   - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
   - Used to determine zombie eligibility - only anchored assets can be zombies
 
@@ -29,12 +32,12 @@ Shadow Asset = admitted asset with:
   - NOTE: Finance does NOT exempt from shadow - pay doesn't equal governance
 
 Zombie Asset = admitted asset with:
-  - anchored (has_idp OR has_cmdb OR has_finance OR has_cloud)
+  - governed (has_idp OR has_cmdb)
   - AND activity_status == STALE (NOT NONE - "no evidence" ≠ "stale evidence")
-  - Interpretation: Governed/tracked asset with stale activity that may need deprovisioning
+  - Interpretation: Governed asset with stale activity that may need deprovisioning
 
 Parked Asset = admitted asset with:
-  - NOT anchored (ungoverned AND no finance AND no cloud)
+  - ungoverned (NOT has_idp AND NOT has_cmdb)
   - AND activity_status == STALE
   - Interpretation: Non-actionable - can't deprovision what isn't managed
 """
@@ -382,13 +385,13 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     has_cloud = asset.lens_coverage.cloud
     has_discovery = asset.lens_coverage.discovery
     
-    # GOVERNANCE TRINITY: Both IdP AND CMDB required for governance
-    if has_idp and has_cmdb:
+    # GOVERNANCE: IdP OR CMDB (not Trinity AND logic)
+    if has_idp or has_cmdb:
         return ClassificationResult(
             is_classified=False,
             is_indeterminate=False,
             classification_type="shadow",
-            reason="Asset has both IdP AND CMDB presence - governed, not shadow",
+            reason="Asset has IdP or CMDB presence - governed, not shadow",
             evidence_summary=[]
         )
     

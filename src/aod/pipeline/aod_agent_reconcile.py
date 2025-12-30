@@ -914,8 +914,8 @@ def emit_actual_results(
             if has_stale:
                 has_recent = False
             
-            # GOVERNANCE TRINITY: Both IdP AND CMDB required
-            has_governance = has_idp and has_cmdb
+            # GOVERNANCE: IdP OR CMDB (not Trinity AND logic)
+            has_governance = has_idp or has_cmdb
             is_rejection_shadow = (not has_governance) and has_recent
             
             if is_rejection_shadow:

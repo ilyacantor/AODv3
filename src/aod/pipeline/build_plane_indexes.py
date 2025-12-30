@@ -150,6 +150,43 @@ def _extract_tenant_token(domain: str) -> str:
     return tenant if len(tenant) >= 4 else ""
 
 
+def _extract_domains_from_raw_data(raw_data: dict | None) -> list[str]:
+    """Extract domain strings from raw_data fields.
+    
+    Dec 2025 Fix: Farm's IdP/CMDB payloads may contain domains in:
+    - raw_data['domains'] (list of domains)
+    - raw_data['urls'] (list of URLs)
+    - raw_data['login_url'] (single login URL)
+    - raw_data['domain'] (single domain string)
+    """
+    if not raw_data:
+        return []
+    
+    domains = []
+    
+    if 'domain' in raw_data and raw_data['domain']:
+        domains.append(str(raw_data['domain']))
+    
+    if 'domains' in raw_data and isinstance(raw_data['domains'], list):
+        for d in raw_data['domains']:
+            if d and isinstance(d, str):
+                domains.append(d)
+    
+    if 'urls' in raw_data and isinstance(raw_data['urls'], list):
+        for url in raw_data['urls']:
+            if url and isinstance(url, str):
+                cleaned = _get_raw_domain(url)
+                if cleaned and '.' in cleaned:
+                    domains.append(cleaned)
+    
+    if 'login_url' in raw_data and raw_data['login_url']:
+        cleaned = _get_raw_domain(str(raw_data['login_url']))
+        if cleaned and '.' in cleaned:
+            domains.append(cleaned)
+    
+    return domains
+
+
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
     """Build IdP index: by domain, by canonical name, by vendor (if present).
     
@@ -157,6 +194,7 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
     - Registered domain: vendor matching (okta.com, servicenow.com)
     - Raw domain: tenant-specific matching (flowsoft.okta.com)
     - Tenant token: cross-matching (flowsoft.okta.com → 'flowsoft' in by_name_words)
+    - raw_data domains: domains from raw_data['domains'], raw_data['urls'], etc.
     """
     index = PlaneIndex()
     
@@ -167,13 +205,20 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        domain_source = obj.domain
-        if not domain_source and '.' in record_id and '@' not in record_id:
+        all_domain_sources = []
+        
+        if obj.domain:
+            all_domain_sources.append(obj.domain)
+        
+        if '.' in record_id and '@' not in record_id:
             candidate = normalize_domain(record_id)
             if candidate and '.' in candidate:
-                domain_source = record_id
+                all_domain_sources.append(record_id)
         
-        if domain_source:
+        raw_data_domains = _extract_domains_from_raw_data(obj.raw_data)
+        all_domain_sources.extend(raw_data_domains)
+        
+        for domain_source in all_domain_sources:
             registered = normalize_domain(domain_source)
             raw = _get_raw_domain(domain_source)
             
@@ -204,6 +249,7 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
     - Registered domain: vendor matching
     - Raw domain: tenant-specific matching (company.servicenow.com)
     - Tenant token: cross-matching (company.servicenow.com → 'company' in by_name_words)
+    - raw_data domains: domains from raw_data['domains'], raw_data['urls'], etc.
     """
     index = PlaneIndex()
     
@@ -214,13 +260,20 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        domain_source = ci.domain
-        if not domain_source and '.' in record_id and '@' not in record_id:
+        all_domain_sources = []
+        
+        if ci.domain:
+            all_domain_sources.append(ci.domain)
+        
+        if '.' in record_id and '@' not in record_id:
             candidate = normalize_domain(record_id)
             if candidate and '.' in candidate:
-                domain_source = record_id
+                all_domain_sources.append(record_id)
         
-        if domain_source:
+        raw_data_domains = _extract_domains_from_raw_data(ci.raw_data)
+        all_domain_sources.extend(raw_data_domains)
+        
+        for domain_source in all_domain_sources:
             registered = normalize_domain(domain_source)
             raw = _get_raw_domain(domain_source)
             

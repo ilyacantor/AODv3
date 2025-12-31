@@ -96,6 +96,20 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
     
     entity_key = correlation.entity.canonical_name if correlation.entity else "unknown"
     
+    def _clean_domain_from_url(value: Optional[str]) -> Optional[str]:
+        """Extract domain from URL if needed, strip protocol/path."""
+        if not value:
+            return None
+        value = value.strip()
+        if '://' in value or value.startswith('http'):
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(value if '://' in value else f'https://{value}')
+                return parsed.netloc or None
+            except Exception:
+                return None
+        return value
+    
     def _is_valid_domain_candidate(value: Optional[str]) -> bool:
         if not value or '.' not in value:
             return False
@@ -110,16 +124,18 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject) and record.domain:
-                if _is_valid_domain_candidate(record.domain):
-                    domain = extract_registered_domain(record.domain)
+                cleaned = _clean_domain_from_url(record.domain)
+                if _is_valid_domain_candidate(cleaned):
+                    domain = extract_registered_domain(cleaned)
                     if domain:
                         return domain
     
     if correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.cmdb.matched_records:
             if isinstance(record, CMDBConfigItem) and record.domain:
-                if _is_valid_domain_candidate(record.domain):
-                    domain = extract_registered_domain(record.domain)
+                cleaned = _clean_domain_from_url(record.domain)
+                if _is_valid_domain_candidate(cleaned):
+                    domain = extract_registered_domain(cleaned)
                     if domain:
                         return domain
     
@@ -135,15 +151,15 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
                 
                 # 1. Try top-level domain (defensive check for dict vs object)
                 if isinstance(record, dict):
-                    candidate = record.get('domain')
+                    candidate = _clean_domain_from_url(record.get('domain'))
                 else:
-                    candidate = getattr(record, 'domain', None)
+                    candidate = _clean_domain_from_url(getattr(record, 'domain', None))
                 
                 # 2. Fallback: Dig into raw_data if top-level failed
                 if not candidate:
                     raw_data = getattr(record, 'raw_data', None)
                     if raw_data and isinstance(raw_data, dict):
-                        candidate = (
+                        raw_candidate = (
                             raw_data.get('domain') or 
                             raw_data.get('registered_domain') or
                             raw_data.get('external_ref') or
@@ -151,14 +167,7 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
                             raw_data.get('application_url') or
                             raw_data.get('service_url')
                         )
-                        # Parse URL if needed
-                        if candidate and ('://' in candidate or candidate.startswith('http')):
-                            try:
-                                from urllib.parse import urlparse
-                                parsed = urlparse(candidate if '://' in candidate else f'https://{candidate}')
-                                candidate = parsed.netloc or None
-                            except Exception:
-                                candidate = None
+                        candidate = _clean_domain_from_url(raw_candidate)
                 
                 # 3. Validate and return
                 if candidate and _is_valid_domain_candidate(candidate):

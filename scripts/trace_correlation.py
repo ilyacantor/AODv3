@@ -121,6 +121,51 @@ async def main():
             print(f"\n'{target}' in by_domain:")
             print(f"  CMDB: {cmdb_matches}")
             print(f"  IdP: {idp_matches}")
+        
+        # Run full correlation for target entities
+        print(f"\n=== RUNNING FULL CORRELATION ===")
+        from aod.pipeline.normalize_observations import normalize_observations
+        from aod.pipeline.correlate_entities import correlate_entities_to_planes
+        from aod.pipeline.build_plane_indexes import build_cloud_index, build_finance_index, PlaneIndexes
+        
+        cloud_index = build_cloud_index(snapshot.planes.cloud)
+        finance_index = build_finance_index(snapshot.planes.finance)
+        
+        indexes = PlaneIndexes(
+            idp=idp_index,
+            cmdb=cmdb_index,
+            cloud=cloud_index,
+            finance=finance_index
+        )
+        
+        entities, _ = normalize_observations(snapshot.planes.discovery.observations)
+        print(f"Normalized {len(entities)} entities")
+        
+        # Find target entities
+        target_entities = []
+        for entity in entities:
+            if entity.domain and any(target in entity.domain for target in TARGET_DOMAINS):
+                target_entities.append(entity)
+                print(f"  Found target entity: {entity.entity_id}, domain={entity.domain}")
+        
+        if target_entities:
+            results = correlate_entities_to_planes(target_entities, indexes)
+            
+            print(f"\n=== CORRELATION RESULTS FOR TARGETS ===")
+            for result in results:
+                entity = result.entity
+                print(f"\nEntity: {entity.canonical_name} (domain={entity.domain})")
+                print(f"  IdP: status={result.idp.status.name}, match_key={result.idp.match_key}")
+                print(f"  CMDB: status={result.cmdb.status.name}, match_key={result.cmdb.match_key}")
+                print(f"  Cloud: status={result.cloud.status.name}")
+                print(f"  Finance: status={result.finance.status.name}")
+                
+                if result.cmdb.matched_records:
+                    for rec in result.cmdb.matched_records:
+                        print(f"    -> CMDB matched: name={rec.name}, domain={rec.domain}")
+                if result.idp.matched_records:
+                    for rec in result.idp.matched_records:
+                        print(f"    -> IdP matched: name={rec.name}, domain={rec.domain}")
 
 if __name__ == "__main__":
     asyncio.run(main())

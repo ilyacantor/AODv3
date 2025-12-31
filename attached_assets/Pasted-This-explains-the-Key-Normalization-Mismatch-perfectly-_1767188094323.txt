@@ -1,0 +1,54 @@
+This explains the "Key Normalization Mismatch" perfectly. The engine is doing the hard work of correlating the items, but failing to land the plane because the runway lights (the domains) are messy.
+
+You should pursue **Option 3 (URL Parsing)** combined with **Option 2 (Enhance Correlation)**.
+
+Here is the logic:
+
+1. **Option 3 (The Clean-up):** The presence of `https://` in a `domain` field is a data hygiene failure that will break things downstream forever. We must strip protocols and paths during normalization.
+2. **Option 2 (The Resilience):** Even if the CMDB has `.com` and Discovery has `.net`, if the *names* matched strongly enough to trigger a correlation, we should generally preserve the **Observed Domain** (Discovery) as a valid alias or even the Primary Key, rather than discarding it just because the CMDB record is messy.
+
+### Execution Plan
+
+**Step 1: Fix the Data Hygiene (URL Parsing)**
+In your Normalization logic (likely `src/aod/ingest/normalization.py` or where you process CMDB records), add a cleaner:
+
+```python
+from urllib.parse import urlparse
+
+def clean_domain(raw_domain):
+    if not raw_domain: return None
+    # Strip whitespace
+    domain = raw_domain.strip().lower()
+    # Handle URL inputs
+    if '://' in domain:
+        try:
+            domain = urlparse(domain).netloc
+        except:
+            pass
+    return domain
+
+```
+
+*Appply this to the CMDB ingestion.*
+
+**Step 2: Update Admission to Trust Entity Domain**
+In `src/aod/pipeline/admission.py` (specifically `hydrate_entity_from_evidence` or similar), change the priority.
+
+Currently, it likely overwrites the Entity's data with the CMDB's data. Change it to:
+
+1. Check CMDB Domain.
+2. If CMDB Domain is valid (and matches the clean format), use it.
+3. **Else (if CMDB is missing or messy):** Fallback to (or preserve) the **Entity's existing domain** (from Discovery).
+
+**Why this fixes `rapidbox.net`:**
+
+* **Discovery:** Sees `rapidbox.net`. Entity Key = `rapidbox.net`.
+* **CMDB:** Has `rapidbox.com` (or `https://...`).
+* **Correlation:** Matches "RapidBox" (Name).
+* **Admission:**
+* Old: "CMDB says `.com` (or invalid), so I'll use that." -> Key changes to `.com` or generic Name. -> **Mismatch**.
+* New: "CMDB says `.com` (or invalid). I prefer the `.net` I actually saw active in the wild." -> Key stays `rapidbox.net`. -> **Success**.
+
+
+
+Go ahead and implement the **URL Stripping** first—that might solve the majority of the "missing domain" issues immediately.

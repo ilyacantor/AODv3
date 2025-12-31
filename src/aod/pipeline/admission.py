@@ -120,13 +120,39 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
     
     for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
-            # Option B fix: Try to get domain from the actual evidence record first
             for record in plane_match.matched_records:
                 if record is None:
                     continue
-                record_domain = getattr(record, 'domain', None)
-                if record_domain and _is_valid_domain_candidate(record_domain):
-                    domain = extract_registered_domain(record_domain)
+                
+                candidate = None
+                
+                # 1. Try top-level domain (defensive check for dict vs object)
+                if isinstance(record, dict):
+                    candidate = record.get('domain')
+                else:
+                    candidate = getattr(record, 'domain', None)
+                
+                # 2. Fallback: Dig into raw_data if top-level failed
+                if not candidate:
+                    raw_data = getattr(record, 'raw_data', None)
+                    if raw_data and isinstance(raw_data, dict):
+                        candidate = (
+                            raw_data.get('domain') or 
+                            raw_data.get('registered_domain') or
+                            raw_data.get('url')
+                        )
+                        # Parse URL if needed
+                        if candidate and ('://' in candidate or candidate.startswith('http')):
+                            try:
+                                from urllib.parse import urlparse
+                                parsed = urlparse(candidate if '://' in candidate else f'https://{candidate}')
+                                candidate = parsed.netloc or None
+                            except Exception:
+                                candidate = None
+                
+                # 3. Validate and return
+                if candidate and _is_valid_domain_candidate(candidate):
+                    domain = extract_registered_domain(candidate)
                     if domain:
                         return domain
             

@@ -74,23 +74,6 @@ This policy applies consistently across all admission, discovery, recognition, a
 14. **Fail-Safe to Clean (Dec 2025)**: When no activity timestamps are available (from observations or plane records), assets fail-safe to CLEAN instead of being classified as STALE. Principle: **"You can't prove abandonment without evidence."** This prevents false positive zombie classification when timestamp data is missing. Only assets with PROVEN stale activity (timestamps > 90 days old) can become zombies.
 15. **Cloud Reason Codes Removed (Dec 2025)**: Removed `HAS_CLOUD`/`NO_CLOUD` reason codes from reconciliation output. Cloud presence is NOT used in shadow/zombie/parked classification (governance = IdP OR CMDB only). Including cloud codes in reason output was causing confusion where assets appeared to be flagged as zombie "because of NO_CLOUD" when cloud is actually irrelevant to classification. Cloud presence is still used for the "anchored" predicate but not emitted as a reason code.
 16. **Evidence Domain Extraction (Dec 2025)**: Fixed KEY_NORMALIZATION_MISMATCH by extracting domains from evidence_refs and adding them to all_domain_variants. When assets are keyed by name but have correlated CMDB/IdP records with domains, those domains now appear in domain_aliases for Farm to match against.
-17. **Comprehensive Domain Propagation (Dec 2025)**: Enhanced domain extraction across admission and reconciliation:
-    - `_extract_all_domains_from_correlation()`: Extracts domains from match_key, matched_records.domain, AND matched_ids
-    - `_extract_domain_from_correlation()`: Same fallback chain for primary domain recovery
-    - Asset.identifiers.domains: Now populated with ALL extracted domains during admission
-    - Reconciliation: Enhanced evidence_refs parsing to handle raw domains (without colons) and uses `extract_registered_domain()` validation instead of TLD whitelist
-18. **Domain Alias Tracking (Dec 2025)**: Fixed KEY_NORMALIZATION_MISMATCH for normalization-token matches:
-    - Added `record_domain_aliases: dict[str, set[str]]` to PlaneIndex to track all domain keys that reference each record
-    - Added `add_to_domain_index()` helper that populates both by_domain AND record_domain_aliases
-    - Added `recovered_domain` field to PlaneMatch for carrying domain through correlation
-    - For IdP/CMDB records: if record.domain is None but record_id looks like a domain, use record_id as domain source
-    - During normalization-token matching: lookup record_domain_aliases[record_id] to get authoritative domain
-    - `_recover_domain_from_planes()` checks PlaneMatch.recovered_domain first, then fallbacks
-19. **Raw Data Domain Extraction (Dec 2025)**: Farm's IdP/CMDB payloads may contain domains in raw_data fields even when record.domain is None:
-    - Added `_extract_domains_from_raw_data()` to extract domains from raw_data['domain'] and raw_data['domains'] ONLY
-    - NOTE: Intentionally DO NOT extract from raw_data['urls'] or raw_data['login_url'] as these contain control-plane hostnames (login.okta.com, portal.microsoftonline.com) that normalize to vendor base domains, causing alias pollution and false correlations
-    - Updated `build_idp_index()` and `build_cmdb_index()` to extract and index authoritative domain sources
-    - This enables domain recovery for GUID-keyed records where domain info only exists in raw_data
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

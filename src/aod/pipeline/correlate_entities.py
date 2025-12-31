@@ -143,7 +143,6 @@ class PlaneMatch:
     match_key: Optional[str] = None
     ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
     disambiguation_detail: Optional[str] = None
-    recovered_domain: Optional[str] = None  # Domain derived from normalization-token matching
 
 
 @dataclass
@@ -993,13 +992,10 @@ def correlate_to_plane(
             entity_token = get_normalization_token(entity.domain)
     
     if entity_token and len(entity_token) >= 3:
-        token_match_map: dict[str, PlaneRecord] = {}
+        token_matches: list[str] = []
         matched_vendor_tokens: set[str] = set()
-        first_domain_found: Optional[str] = None
         
         for record_id, record in plane_index.records.items():
-            if record_id in token_match_map:
-                continue
             record_name = _get_record_name(record)
             record_vendor = _get_record_vendor(record)
             
@@ -1007,43 +1003,24 @@ def correlate_to_plane(
             record_vendor_token = get_normalization_token(record_vendor) if record_vendor else ""
             
             if entity_token == record_name_token or entity_token == record_vendor_token:
-                token_match_map[record_id] = record
-                if first_domain_found is None:
-                    rd = getattr(record, 'domain', None)
-                    if rd:
-                        first_domain_found = normalize_domain(rd)
+                token_matches.append(record_id)
                 if record_vendor_token:
                     matched_vendor_tokens.add(record_vendor_token)
                 elif record_name_token:
                     matched_vendor_tokens.add(record_name_token)
         
-        if len(token_match_map) >= 1 and len(matched_vendor_tokens) == 1:
-            token_ids = list(token_match_map.keys())
-            token_records = list(token_match_map.values())
-            
-            if first_domain_found is None:
-                for matched_rid in token_ids:
-                    if hasattr(plane_index, 'record_domain_aliases'):
-                        aliases = plane_index.record_domain_aliases.get(matched_rid)
-                        if aliases:
-                            first_domain_found = sorted(aliases)[0]
-                            break
-                    if hasattr(plane_index, 'record_domains'):
-                        dom = plane_index.record_domains.get(matched_rid)
-                        if dom:
-                            first_domain_found = dom
-                            break
-            
+        token_matches = list(set(token_matches))
+        
+        if len(token_matches) >= 1 and len(matched_vendor_tokens) == 1:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
-                matched_ids=token_ids,
-                matched_records=token_records,
+                matched_ids=token_matches,
+                matched_records=[plane_index.records.get(mid) for mid in token_matches],
                 match_method="normalization_token",
                 match_key=entity_token,
-                ambiguity_code=AmbiguityCode.NONE,
-                recovered_domain=first_domain_found
+                ambiguity_code=AmbiguityCode.NONE
             )
-        elif len(token_match_map) > 1 and len(matched_vendor_tokens) > 1:
+        elif len(token_matches) > 1 and len(matched_vendor_tokens) > 1:
             pass
     
     return PlaneMatch(status=MatchStatus.UNMATCHED)
@@ -1084,16 +1061,10 @@ def _recover_domain_from_planes(result: CorrelationResult) -> Optional[str]:
     that have domains, we should adopt that domain as the entity's canonical key.
     
     Priority order: IdP → CMDB → Cloud → Finance
-    Sources checked (in order):
-    1. PlaneMatch.recovered_domain - domain derived during normalization-token matching
-    2. matched_records[].domain - record domain field
-    3. matched_ids - record IDs that ARE domains (e.g., idp_id="maxforce.org")
     
     Returns:
         Normalized domain from matched plane record, or None if no domain found
     """
-    from .vendor_inference import extract_registered_domain
-    
     planes_to_check = [
         (result.idp, "idp"),
         (result.cmdb, "cmdb"),
@@ -1101,17 +1072,6 @@ def _recover_domain_from_planes(result: CorrelationResult) -> Optional[str]:
         (result.finance, "finance"),
     ]
     
-    # First pass: check PlaneMatch.recovered_domain (set during normalization-token matching)
-    for plane_match, plane_name in planes_to_check[:2]:  # Only IdP and CMDB
-        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
-            if plane_match.recovered_domain:
-                logger.debug("domain_recovery.found_from_recovered", extra={
-                    "plane": plane_name,
-                    "recovered_domain": plane_match.recovered_domain
-                })
-                return plane_match.recovered_domain
-    
-    # Second pass: check matched_records[].domain
     for plane_match, plane_name in planes_to_check:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             for record in plane_match.matched_records:
@@ -1121,30 +1081,12 @@ def _recover_domain_from_planes(result: CorrelationResult) -> Optional[str]:
                 if raw_domain:
                     normalized = normalize_domain(raw_domain)
                     if normalized:
-                        logger.debug("domain_recovery.found_from_record", extra={
+                        logger.debug("domain_recovery.found", extra={
                             "plane": plane_name,
                             "raw_domain": raw_domain,
                             "normalized": normalized
                         })
                         return normalized
-    
-    # Third pass: check matched_ids (record IDs might BE domains)
-    for plane_match, plane_name in planes_to_check[:2]:  # Only IdP and CMDB
-        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
-            for record_id in plane_match.matched_ids:
-                if record_id and '.' in record_id:
-                    if '@' in record_id or '://' in record_id or '/' in record_id:
-                        continue
-                    if record_id.startswith('obs_'):
-                        continue
-                    extracted = extract_registered_domain(record_id)
-                    if extracted:
-                        logger.debug("domain_recovery.found_from_id", extra={
-                            "plane": plane_name,
-                            "record_id": record_id,
-                            "extracted": extracted
-                        })
-                        return extracted
     
     return None
 

@@ -356,6 +356,17 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
         if txn.vendor_name:
             vendor_name = normalize_string(txn.vendor_name)
             add_to_index(index.by_vendor_product, vendor_name, record_id)
+            
+            # Dec 2025: Index vendor name base tokens for cross-matching
+            # "Easycloud Inc-prod" → index "easycloud" in by_name_words
+            # This enables matching entity domain "easycloud.cloud" to transactions
+            vendor_tokens = vendor_name.replace('-', ' ').replace('_', ' ').split()
+            for token in vendor_tokens:
+                # Skip common suffixes that don't help with matching
+                if token.lower() in ('inc', 'corp', 'llc', 'ltd', 'prod', 'production', 'legacy', 'dev', 'test'):
+                    continue
+                if len(token) > 2:
+                    add_to_index(index.by_name_words, token.lower(), record_id)
         
         if txn.product:
             product_name = normalize_string(txn.product)

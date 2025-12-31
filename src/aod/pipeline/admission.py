@@ -868,7 +868,8 @@ def extract_activity_timestamps(
     network_last_seen_at: Optional[datetime] = None
     finance_last_transaction_at: Optional[datetime] = None
     
-    if correlation.idp.status == MatchStatus.MATCHED:
+    # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject) and record.last_login_at:
                 if idp_last_login_at is None or record.last_login_at > idp_last_login_at:
@@ -889,7 +890,8 @@ def extract_activity_timestamps(
         if discovery_observed_at:
             timestamps.append(discovery_observed_at)
     
-    if correlation.cloud.status == MatchStatus.MATCHED:
+    # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    if correlation.cloud.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.cloud.matched_records:
             if isinstance(record, CloudResource) and record.observed_at:
                 if cloud_observed_at is None or record.observed_at > cloud_observed_at:
@@ -897,7 +899,8 @@ def extract_activity_timestamps(
         if cloud_observed_at:
             timestamps.append(cloud_observed_at)
     
-    if correlation.finance.status == MatchStatus.MATCHED:
+    # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    if correlation.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.finance.matched_records:
             if isinstance(record, Transaction) and record.date:
                 if finance_last_transaction_at is None or record.date > finance_last_transaction_at:

@@ -210,12 +210,15 @@ def _is_legacy_name(name: str) -> bool:
 
 
 def _get_record_name(record: PlaneRecord) -> str:
-    """Extract name from a record (handles dict or object)."""
+    """Extract name from a record (handles dict or object).
+    
+    Dec 2025 Fix: Also check vendor_name for finance Transaction records.
+    """
     if record is None:
         return ""
     if isinstance(record, dict):
-        return record.get("name", "") or record.get("app_name", "") or ""
-    return getattr(record, "name", "") or getattr(record, "app_name", "") or ""
+        return record.get("name", "") or record.get("app_name", "") or record.get("vendor_name", "") or ""
+    return getattr(record, "name", "") or getattr(record, "app_name", "") or getattr(record, "vendor_name", "") or ""
 
 
 def _get_record_vendor(record: PlaneRecord) -> str:
@@ -752,7 +755,48 @@ def correlate_to_plane(
                 name_match = _is_valid_contains_match(canonical, record_name)
                 domain_match = record_domain_normalized and canonical in record_domain_normalized
                 
-                if name_match or domain_match:
+                # Dec 2025 Fix: For finance transactions, match via domain base token alignment
+                # Requirements: ≥6 chars + domain base must match FIRST token of vendor name
+                # This allows legitimate brands (netflix, github) while preventing false positives
+                # where the brand word appears later in unrelated vendor names (e.g., "Horizon Payroll")
+                GENERIC_TOKENS = frozenset({
+                    'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
+                    'solutions', 'platform', 'systems', 'tech', 'technology', 'global',
+                    'enterprise', 'business', 'group', 'corp', 'corporation', 'company',
+                    'consulting', 'analytics', 'media', 'network', 'security', 'storage',
+                    'hosting', 'managed', 'professional', 'integration', 'connect'
+                })
+                MIN_TOKEN_LENGTH = 4  # Allow zoom (4), slack (5), asana (5), etc.
+                # Common vendor name prefixes to skip when finding primary brand
+                VENDOR_PREFIXES = frozenset({'the', 'a', 'an', 'team', 'inc', 'corp', 'llc', 'ltd', 'co', 'by'})
+                token_match = False
+                if not name_match and not domain_match:
+                    from ..models.input_contracts import Transaction, Contract
+                    if isinstance(record, (Transaction, Contract)):
+                        # Extract and normalize domain base token (collapse hyphens/underscores)
+                        entity_domain = getattr(entity, 'domain', None) or ""
+                        domain_base_token = None
+                        if entity_domain and '.' in entity_domain:
+                            domain_parts = entity_domain.lower().split('.')
+                            if len(domain_parts) >= 2:
+                                # Normalize: "service-now" → "servicenow"
+                                domain_base_token = re.sub(r'[\-_]', '', domain_parts[0])
+                                if domain_base_token in GENERIC_TOKENS or len(domain_base_token) < MIN_TOKEN_LENGTH:
+                                    domain_base_token = None
+                        
+                        if domain_base_token:
+                            # Get vendor tokens (normalized)
+                            vendor_tokens = [re.sub(r'[\-_]', '', w.lower()) for w in re.split(r'[\s\-_./]+', record_name) if len(w) >= 2]
+                            # Find primary brand token (first non-prefix token)
+                            primary_brand_token = None
+                            for vt in vendor_tokens:
+                                if vt not in VENDOR_PREFIXES and len(vt) >= 3:
+                                    primary_brand_token = vt
+                                    break
+                            # Match if domain base equals the primary brand token
+                            token_match = primary_brand_token and domain_base_token == primary_brand_token
+                
+                if name_match or domain_match or token_match:
                     if candidate_id not in contains_matches:
                         contains_matches.append(candidate_id)
     else:
@@ -999,13 +1043,28 @@ def correlate_to_plane(
                 disambiguation_detail=f"Vendor-only match: {entity.vendor}"
             )
     
+    # Dec 2025 Fix: For finance plane, skip normalization_token matching for generic/short tokens
+    # to prevent false positives like "cloud.io" matching "Cloud Services Inc"
+    GENERIC_TOKENS_FOR_FINANCE = frozenset({
+        'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
+        'solutions', 'platform', 'systems', 'tech', 'technology', 'global',
+        'enterprise', 'business', 'group', 'corp', 'corporation', 'company',
+        'consulting', 'analytics', 'media', 'network', 'security', 'storage',
+        'hosting', 'managed', 'professional', 'integration', 'connect'
+    })
+    MIN_TOKEN_LENGTH_FOR_FINANCE = 4  # Allow zoom (4), slack (5), asana (5), etc.
+    
     entity_token = precomputed.normalization_token if precomputed else ""
     if not entity_token:
         entity_token = get_normalization_token(entity.canonical_name)
         if not entity_token and entity.domain:
             entity_token = get_normalization_token(entity.domain)
     
-    if entity_token and len(entity_token) >= 3:
+    # Skip normalization_token matching for finance plane with generic/short tokens
+    is_finance_plane = hasattr(plane_index, 'by_name_words')  # Finance plane has this attribute
+    skip_token_match = is_finance_plane and (entity_token in GENERIC_TOKENS_FOR_FINANCE or len(entity_token) < MIN_TOKEN_LENGTH_FOR_FINANCE)
+    
+    if entity_token and len(entity_token) >= 3 and not skip_token_match:
         token_matches: list[str] = []
         matched_vendor_tokens: set[str] = set()
         

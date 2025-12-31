@@ -72,42 +72,60 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
 
 def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional[str]:
     """
-    Extract a canonical domain from correlation match keys.
+    Extract a canonical domain from correlation matched records or match keys.
     
     POST-CORRELATION REKEYING: When an entity doesn't have a domain from normalization,
-    check if any plane correlation found a domain-based match. If so, use that as
-    the canonical domain key.
-    
-    This fixes KEY_NORMALIZATION_MISMATCH where entities keyed by name during normalization
-    had valid plane correlations with domain matches, but were rejected at admission.
+    check if any plane correlation found a domain. This fixes KEY_NORMALIZATION_MISMATCH
+    where entities keyed by name during normalization had valid plane correlations with
+    domain-containing records, but the domain wasn't propagated.
     
     Priority order (most authoritative first):
-    1. IdP match_key (SSO domains are authoritative)
-    2. CMDB match_key (IT-registered domains)
-    3. Cloud match_key (cloud resource URIs)
-    4. Finance match_key (contract/billing domains)
+    1. IdP matched_records[].domain (SSO domains are authoritative for active usage)
+    2. CMDB matched_records[].domain (IT-registered infrastructure domains)
+    3. Cloud matched_records (check for domain attribute)
+    4. Finance matched_records (check for domain attribute)
+    5. Fallback: match_key from any plane (for direct domain matches)
     
-    Only returns a domain if match_key looks like a valid domain (contains '.')
-    and can be extracted to a registered domain.
+    Only returns a domain if it looks valid (contains '.') and can be extracted
+    to a registered domain.
     
-    SAFETY: Rejects match_keys that look like emails or URIs to avoid mis-keying.
+    SAFETY: Rejects values that look like emails or URIs to avoid mis-keying.
     """
+    def _is_valid_domain_candidate(value: Optional[str]) -> bool:
+        if not value or '.' not in value:
+            return False
+        if '@' in value:
+            return False
+        if '://' in value or value.startswith('http'):
+            return False
+        if '/' in value:
+            return False
+        return True
+    
+    if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        for record in correlation.idp.matched_records:
+            if isinstance(record, IdPObject) and record.domain:
+                if _is_valid_domain_candidate(record.domain):
+                    domain = extract_registered_domain(record.domain)
+                    if domain:
+                        return domain
+    
+    if correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        for record in correlation.cmdb.matched_records:
+            if isinstance(record, CMDBConfigItem) and record.domain:
+                if _is_valid_domain_candidate(record.domain):
+                    domain = extract_registered_domain(record.domain)
+                    if domain:
+                        return domain
+    
     for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
             match_key = plane_match.match_key
-            if match_key and '.' in match_key:
-                # Reject emails (contain @)
-                if '@' in match_key:
-                    continue
-                # Reject URIs (contain :// or start with http)
-                if '://' in match_key or match_key.startswith('http'):
-                    continue
-                # Reject paths (contain /)
-                if '/' in match_key:
-                    continue
+            if _is_valid_domain_candidate(match_key):
                 domain = extract_registered_domain(match_key)
                 if domain:
                     return domain
+    
     return None
 
 

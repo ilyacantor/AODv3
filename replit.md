@@ -74,6 +74,11 @@ This policy applies consistently across all admission, discovery, recognition, a
 14. **Fail-Safe to Clean (Dec 2025)**: When no activity timestamps are available (from observations or plane records), assets fail-safe to CLEAN instead of being classified as STALE. Principle: **"You can't prove abandonment without evidence."** This prevents false positive zombie classification when timestamp data is missing. Only assets with PROVEN stale activity (timestamps > 90 days old) can become zombies.
 15. **Cloud Reason Codes Removed (Dec 2025)**: Removed `HAS_CLOUD`/`NO_CLOUD` reason codes from reconciliation output. Cloud presence is NOT used in shadow/zombie/parked classification (governance = IdP OR CMDB only). Including cloud codes in reason output was causing confusion where assets appeared to be flagged as zombie "because of NO_CLOUD" when cloud is actually irrelevant to classification. Cloud presence is still used for the "anchored" predicate but not emitted as a reason code.
 16. **Evidence Domain Extraction (Dec 2025)**: Fixed KEY_NORMALIZATION_MISMATCH by extracting domains from evidence_refs and adding them to all_domain_variants. When assets are keyed by name but have correlated CMDB/IdP records with domains, those domains now appear in domain_aliases for Farm to match against.
+17. **Domain Recovery from Matched Records (Dec 2025)**: Enhanced `_extract_domain_from_correlation()` in admission.py to extract domains directly from matched plane records, not just match_key. Priority order:
+    - **IdP matched_records[].domain** - Most authoritative for active SSO domains
+    - **CMDB matched_records[].domain** - IT-registered infrastructure domains
+    - **Fallback: match_key** - For direct domain-based matches
+    This fixes zombies being missed when entities are keyed by name (e.g., "rapidlabs") but have CMDB/IdP records containing the actual domain (e.g., "rapidlabs.org"). Previously, name-based matches set match_key to the entity name (no dot), so domain recovery failed.
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

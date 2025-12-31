@@ -79,6 +79,12 @@ This policy applies consistently across all admission, discovery, recognition, a
     - **CMDB matched_records[].domain** - IT-registered infrastructure domains
     - **Fallback: match_key** - For direct domain-based matches
     This fixes zombies being missed when entities are keyed by name (e.g., "rapidlabs") but have CMDB/IdP records containing the actual domain (e.g., "rapidlabs.org"). Previously, name-based matches set match_key to the entity name (no dot), so domain recovery failed.
+18. **Domain Base Name Indexing (Dec 2025)**: Added `_extract_domain_base_name()` in build_plane_indexes.py to extract base names from registered domains (e.g., "flexpoint" from "flexpoint.cloud") and index them in `by_name_words`. This enables cross-matching where:
+    - Entity is keyed by name "FlexPoint" (from discovery name field, no domain)
+    - IdP/CMDB has domain "flexpoint.cloud" but different name (e.g., "Cloud SSO")
+    - Previously: correlation failed because no name overlap
+    - Now: "flexpoint" token from IdP domain matches "flexpoint" entity name → correlation succeeds
+    This complements existing `_extract_tenant_token()` which only handled subdomain patterns (3+ parts like flowsoft.okta.com).
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

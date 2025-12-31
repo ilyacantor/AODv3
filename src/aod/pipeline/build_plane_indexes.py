@@ -134,6 +134,42 @@ def _extract_tenant_token(domain: str) -> str:
     return tenant if len(tenant) >= 4 else ""
 
 
+def _extract_domain_base_name(domain: str) -> str:
+    """Extract base name from registered domain for cross-matching.
+    
+    Dec 2025 Fix: For simple domains like flexpoint.cloud, extract 'flexpoint'
+    as a searchable token. This enables cross-matching where entity name
+    "FlexPoint" can match IdP domain "flexpoint.cloud" through by_name_words.
+    
+    This complements _extract_tenant_token which handles subdomain patterns.
+    
+    Examples:
+        flexpoint.cloud → flexpoint
+        microsoft.com → microsoft
+        slack.io → slack
+        flowsoft.okta.com → flowsoft (first part, same as tenant token)
+        abc.io → (empty, too short)
+    """
+    if not domain:
+        return ""
+    
+    raw = _get_raw_domain(domain)
+    if not raw:
+        return ""
+    
+    parts = raw.split(".")
+    if len(parts) < 2:
+        return ""
+    
+    # First part is the base name
+    base = parts[0]
+    # Clean up: remove hyphens/underscores for matching
+    base = base.replace("-", "").replace("_", "")
+    
+    # Only return if substantial (4+ chars)
+    return base if len(base) >= 4 else ""
+
+
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
     """Build IdP index: by domain, by canonical name, by vendor (if present).
     
@@ -160,10 +196,17 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
             if raw and raw != registered:
                 add_to_index(index.by_domain, raw, record_id)
             
-            # Dec 2025: Also index tenant token for cross-matching
+            # Dec 2025: Index domain base name for cross-matching
+            # flexpoint.cloud → 'flexpoint' in by_name_words
+            # This enables entity name "FlexPoint" to match IdP domain "flexpoint.cloud"
+            domain_base = _extract_domain_base_name(obj.domain)
+            if domain_base:
+                add_to_index(index.by_name_words, domain_base, record_id)
+            
+            # Also index tenant token for subdomain patterns
             # flowsoft.okta.com → 'flowsoft' in by_name_words
             tenant_token = _extract_tenant_token(obj.domain)
-            if tenant_token:
+            if tenant_token and tenant_token != domain_base:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         
         vendor = getattr(obj, 'vendor', None) or (obj.raw_data.get('vendor') if obj.raw_data else None)
@@ -201,9 +244,15 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
             if raw and raw != registered:
                 add_to_index(index.by_domain, raw, record_id)
             
-            # Dec 2025: Also index tenant token for cross-matching
+            # Dec 2025: Index domain base name for cross-matching
+            # flexpoint.cloud → 'flexpoint' in by_name_words
+            domain_base = _extract_domain_base_name(ci.domain)
+            if domain_base:
+                add_to_index(index.by_name_words, domain_base, record_id)
+            
+            # Also index tenant token for subdomain patterns
             tenant_token = _extract_tenant_token(ci.domain)
-            if tenant_token:
+            if tenant_token and tenant_token != domain_base:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         
         if ci.vendor:

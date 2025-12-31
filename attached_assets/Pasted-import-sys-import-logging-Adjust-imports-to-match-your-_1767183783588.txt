@@ -1,0 +1,65 @@
+import sys
+import logging
+# Adjust imports to match your project structure
+from aod.pipeline.admission import _extract_domain_from_correlation
+from aod.domain.objects import Entity, EvidenceRecord, PlaneMatch
+
+# Setup logging to see what's happening
+logging.basicConfig(level=logging.INFO)
+
+print("--- STARTING ZOMBIE DIAGNOSTIC ---")
+
+# 1. SIMULATE THE DATA (Based on your "RapidBox" miss)
+# This mimics what we *think* is happening in the pipeline
+
+# The Entity (Keyed by Name, missing domain)
+zombie_entity = Entity(
+    name="RapidBox",
+    identifiers={} 
+)
+
+# The Evidence Record (The confusing part)
+# We will create a few variations to see which one your code actually receives
+evidence_variations = [
+    # Case A: Dictionary with top-level domain (What we hoped for)
+    {"name": "RapidBox SSO", "domain": "rapidbox.net", "id": "1"},
+    
+    # Case B: Object with domain attribute (What the code might expect)
+    EvidenceRecord(name="RapidBox SSO", domain="rapidbox.net", source="idp"),
+    
+    # Case C: The likely CULPRIT - Domain hidden in raw_data
+    EvidenceRecord(
+        name="RapidBox SSO", 
+        domain=None,  # Top level is empty!
+        raw_data={"registered_domain": "rapidbox.net", "service_url": "https://rapidbox.net/login"}
+    )
+]
+
+print(f"Testing {len(evidence_variations)} data shapes against Admission Logic...")
+
+for i, record in enumerate(evidence_variations):
+    print(f"\n--- TEST CASE {i+1} ---")
+    print(f"Input Record Type: {type(record)}")
+    print(f"Input Data: {record}")
+    
+    # Wrap in a PlaneMatch (as the pipeline does)
+    # Note: Ensure match_key is the 'bad' one (no dot) to force the lookup logic
+    match_container = PlaneMatch(
+        plane="idp",
+        match_key="rapidbox", 
+        matched_records=[record]
+    )
+    
+    # RUN YOUR LOGIC
+    try:
+        result = _extract_domain_from_correlation(zombie_entity, match_container)
+        
+        if result == "rapidbox.net":
+            print(f"✅ SUCCESS: Domain extracted!")
+        else:
+            print(f"❌ FAILED: Returned '{result}' (Expected 'rapidbox.net')")
+            
+    except Exception as e:
+        print(f"💥 CRASH: {e}")
+
+print("\n--- DIAGNOSTIC COMPLETE ---")

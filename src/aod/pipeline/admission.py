@@ -70,7 +70,7 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
         finance=finance_debug
     )
 
-def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional[str]:
+def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: bool = False) -> Optional[str]:
     """
     Extract a canonical domain from correlation matched records or match keys.
     
@@ -91,6 +91,11 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
     
     SAFETY: Rejects values that look like emails or URIs to avoid mis-keying.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    entity_key = correlation.entity.canonical_name if correlation.entity else "unknown"
+    
     def _is_valid_domain_candidate(value: Optional[str]) -> bool:
         if not value or '.' not in value:
             return False
@@ -118,8 +123,10 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
                     if domain:
                         return domain
     
-    for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
+    planes_checked = []
+    for plane_name, plane_match in [("idp", correlation.idp), ("cmdb", correlation.cmdb), ("cloud", correlation.cloud), ("finance", correlation.finance)]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            planes_checked.append(plane_name)
             for record in plane_match.matched_records:
                 if record is None:
                     continue
@@ -165,6 +172,20 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
                 domain = extract_registered_domain(match_key)
                 if domain:
                     return domain
+    
+    if debug_log and planes_checked:
+        logger.warning(f"DOMAIN_EXTRACTION_FAILED entity={entity_key} planes_checked={planes_checked}")
+        for plane_name, plane_match in [("idp", correlation.idp), ("cmdb", correlation.cmdb)]:
+            if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+                for record in plane_match.matched_records:
+                    if record is None:
+                        continue
+                    record_type = type(record).__name__
+                    domain_val = getattr(record, 'domain', 'NO_ATTR')
+                    raw_data = getattr(record, 'raw_data', None)
+                    logger.warning(f"  {plane_name} record: type={record_type} domain={domain_val} raw_data_keys={list(raw_data.keys()) if raw_data else 'None'}")
+                    if raw_data:
+                        logger.warning(f"    raw_data={raw_data}")
     
     return None
 
@@ -940,7 +961,7 @@ def apply_admission_criteria(
     recovered_from_correlation = False
     
     if not effective_domain:
-        recovered_domain = _extract_domain_from_correlation(correlation)
+        recovered_domain = _extract_domain_from_correlation(correlation, debug_log=True)
         if recovered_domain:
             effective_domain = recovered_domain
             recovered_from_correlation = True

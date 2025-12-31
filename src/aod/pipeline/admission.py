@@ -120,6 +120,17 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
     
     for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            # Option B fix: Try to get domain from the actual evidence record first
+            for record in plane_match.matched_records:
+                if record is None:
+                    continue
+                record_domain = getattr(record, 'domain', None)
+                if record_domain and _is_valid_domain_candidate(record_domain):
+                    domain = extract_registered_domain(record_domain)
+                    if domain:
+                        return domain
+            
+            # Fallback to match_key (existing behavior)
             match_key = plane_match.match_key
             if _is_valid_domain_candidate(match_key):
                 domain = extract_registered_domain(match_key)

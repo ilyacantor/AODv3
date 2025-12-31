@@ -187,10 +187,15 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        if obj.domain:
+        # Dec 2025 Fix: Check both obj.domain AND raw_data['domain'] as fallback
+        effective_domain = obj.domain
+        if not effective_domain and obj.raw_data and isinstance(obj.raw_data, dict):
+            effective_domain = obj.raw_data.get('domain')
+        
+        if effective_domain:
             # Index BOTH the registered domain AND raw domain
-            registered = normalize_domain(obj.domain)
-            raw = _get_raw_domain(obj.domain)
+            registered = normalize_domain(effective_domain)
+            raw = _get_raw_domain(effective_domain)
             
             add_to_index(index.by_domain, registered, record_id)
             if raw and raw != registered:
@@ -199,13 +204,13 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
             # Dec 2025: Index domain base name for cross-matching
             # flexpoint.cloud → 'flexpoint' in by_name_words
             # This enables entity name "FlexPoint" to match IdP domain "flexpoint.cloud"
-            domain_base = _extract_domain_base_name(obj.domain)
+            domain_base = _extract_domain_base_name(effective_domain)
             if domain_base:
                 add_to_index(index.by_name_words, domain_base, record_id)
             
             # Also index tenant token for subdomain patterns
             # flowsoft.okta.com → 'flowsoft' in by_name_words
-            tenant_token = _extract_tenant_token(obj.domain)
+            tenant_token = _extract_tenant_token(effective_domain)
             if tenant_token and tenant_token != domain_base:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         
@@ -235,10 +240,15 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        if ci.domain:
+        # Dec 2025 Fix: Check both ci.domain AND raw_data['domain'] as fallback
+        effective_domain = ci.domain
+        if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):
+            effective_domain = ci.raw_data.get('domain')
+        
+        if effective_domain:
             # Index BOTH the registered domain AND raw domain
-            registered = normalize_domain(ci.domain)
-            raw = _get_raw_domain(ci.domain)
+            registered = normalize_domain(effective_domain)
+            raw = _get_raw_domain(effective_domain)
             
             add_to_index(index.by_domain, registered, record_id)
             if raw and raw != registered:
@@ -246,12 +256,12 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
             
             # Dec 2025: Index domain base name for cross-matching
             # flexpoint.cloud → 'flexpoint' in by_name_words
-            domain_base = _extract_domain_base_name(ci.domain)
+            domain_base = _extract_domain_base_name(effective_domain)
             if domain_base:
                 add_to_index(index.by_name_words, domain_base, record_id)
             
             # Also index tenant token for subdomain patterns
-            tenant_token = _extract_tenant_token(ci.domain)
+            tenant_token = _extract_tenant_token(effective_domain)
             if tenant_token and tenant_token != domain_base:
                 add_to_index(index.by_name_words, tenant_token, record_id)
         

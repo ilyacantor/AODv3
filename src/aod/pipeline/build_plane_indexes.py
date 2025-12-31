@@ -187,10 +187,17 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Dec 2025 Fix: Check both obj.domain AND raw_data['domain'] as fallback
+        # Dec 2025 Fix: Check obj.domain AND raw_data fields as fallback
+        # Priority: domain > external_ref > url > application_url > service_url
         effective_domain = obj.domain
         if not effective_domain and obj.raw_data and isinstance(obj.raw_data, dict):
-            effective_domain = obj.raw_data.get('domain')
+            effective_domain = (
+                obj.raw_data.get('domain') or
+                obj.raw_data.get('external_ref') or
+                obj.raw_data.get('url') or
+                obj.raw_data.get('application_url') or
+                obj.raw_data.get('service_url')
+            )
         
         if effective_domain:
             # Index BOTH the registered domain AND raw domain
@@ -240,10 +247,17 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Dec 2025 Fix: Check both ci.domain AND raw_data['domain'] as fallback
+        # Dec 2025 Fix: Check ci.domain AND raw_data fields as fallback
+        # Priority: domain > external_ref > url > application_url > service_url
         effective_domain = ci.domain
         if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):
-            effective_domain = ci.raw_data.get('domain')
+            effective_domain = (
+                ci.raw_data.get('domain') or
+                ci.raw_data.get('external_ref') or
+                ci.raw_data.get('url') or
+                ci.raw_data.get('application_url') or
+                ci.raw_data.get('service_url')
+            )
         
         if effective_domain:
             # Index BOTH the registered domain AND raw domain

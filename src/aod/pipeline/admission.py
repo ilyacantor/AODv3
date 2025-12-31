@@ -139,7 +139,10 @@ def _extract_domain_from_correlation(correlation: CorrelationResult) -> Optional
                         candidate = (
                             raw_data.get('domain') or 
                             raw_data.get('registered_domain') or
-                            raw_data.get('url')
+                            raw_data.get('external_ref') or
+                            raw_data.get('url') or
+                            raw_data.get('application_url') or
+                            raw_data.get('service_url')
                         )
                         # Parse URL if needed
                         if candidate and ('://' in candidate or candidate.startswith('http')):

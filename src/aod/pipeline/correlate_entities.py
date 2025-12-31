@@ -738,7 +738,16 @@ def correlate_to_plane(
             record = plane_index.records.get(candidate_id)
             if record:
                 record_name = normalize_string(_get_record_name(record))
-                if _is_valid_contains_match(canonical, record_name):
+                # Dec 2025 Fix: Also check record.domain for domain-based matches
+                # This allows entity "FlexPoint" to match IdP with domain "flexpoint.cloud"
+                # even when the record's name is generic like "Corporate SSO"
+                record_domain = getattr(record, 'domain', None)
+                record_domain_normalized = normalize_string(record_domain) if record_domain else ""
+                
+                name_match = _is_valid_contains_match(canonical, record_name)
+                domain_match = record_domain_normalized and canonical in record_domain_normalized
+                
+                if name_match or domain_match:
                     if candidate_id not in contains_matches:
                         contains_matches.append(candidate_id)
     else:

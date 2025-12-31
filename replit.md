@@ -86,6 +86,11 @@ This policy applies consistently across all admission, discovery, recognition, a
     - For IdP/CMDB records: if record.domain is None but record_id looks like a domain, use record_id as domain source
     - During normalization-token matching: lookup record_domain_aliases[record_id] to get authoritative domain
     - `_recover_domain_from_planes()` checks PlaneMatch.recovered_domain first, then fallbacks
+19. **Raw Data Domain Extraction (Dec 2025)**: Farm's IdP/CMDB payloads may contain domains in raw_data fields even when record.domain is None:
+    - Added `_extract_domains_from_raw_data()` to extract domains from raw_data['domain'] and raw_data['domains'] ONLY
+    - NOTE: Intentionally DO NOT extract from raw_data['urls'] or raw_data['login_url'] as these contain control-plane hostnames (login.okta.com, portal.microsoftonline.com) that normalize to vendor base domains, causing alias pollution and false correlations
+    - Updated `build_idp_index()` and `build_cmdb_index()` to extract and index authoritative domain sources
+    - This enables domain recovery for GUID-keyed records where domain info only exists in raw_data
 
 **Performance Optimizations (Dec 2025):**
 The correlation pipeline was optimized to reduce large snapshot processing time:

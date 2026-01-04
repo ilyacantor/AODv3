@@ -55,6 +55,23 @@ def _parse_snapshot_generated_at(snapshot_data: dict) -> Optional[datetime]:
     return None
 
 
+def _get_run_snapshot_as_of(run) -> Optional[datetime]:
+    """Extract snapshot_as_of from run.input_meta for activity recency calculation.
+    
+    Critical for zombie detection accuracy: ensures activity status (RECENT/STALE)
+    is calculated relative to the snapshot's generated_at time, not wall-clock now.
+    Without this, assets that were RECENT at snapshot time appear STALE when viewed later.
+    """
+    if not run or not hasattr(run, 'input_meta') or not run.input_meta:
+        return None
+    generated_at = run.input_meta.get("generated_at")
+    if isinstance(generated_at, datetime):
+        return generated_at
+    if isinstance(generated_at, str):
+        return _parse_iso_datetime(generated_at)
+    return None
+
+
 def _generate_ambiguous_explanation(item: dict) -> str:
     """Generate plain English explanation for why a match is ambiguous."""
     entity_name = item.get("entity_name", "Unknown")
@@ -537,9 +554,10 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     assets = await db.get_assets_by_run(run_id)
+    snapshot_as_of = _get_run_snapshot_as_of(run)
 
     if classification:
-        summary = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
+        summary = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
         if classification == "zombie":
             asset_ids = {a["asset_id"] for a in summary.zombie_assets}
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
@@ -583,7 +601,8 @@ async def get_run_summary(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
-    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
+    snapshot_as_of = _get_run_snapshot_as_of(run)
+    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
         "run_id": run_id,
@@ -616,7 +635,8 @@ async def get_classifications(run_id: str):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
     assets = await db.get_assets_by_run(run_id)
-    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id)
+    snapshot_as_of = _get_run_snapshot_as_of(run)
+    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
         "run_id": run_id,
@@ -729,12 +749,14 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
     assets = await db.get_assets_by_run(run_id)
+    snapshot_as_of = _get_run_snapshot_as_of(run)
 
-    summary = compute_derived_classifications(assets, activity_window_days, run_id=run_id)
+    summary = compute_derived_classifications(assets, activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
         "run_id": run_id,
         "activity_window_days": activity_window_days,
+        "snapshot_as_of": snapshot_as_of.isoformat() if snapshot_as_of else None,
         "shadow_count": summary.shadow_count,
         "zombie_count": summary.zombie_count,
         "indeterminate_count": summary.indeterminate_count,

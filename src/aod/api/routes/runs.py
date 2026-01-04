@@ -45,11 +45,26 @@ def _parse_iso_datetime(dt_str: str) -> Optional[datetime]:
 
 
 def _parse_snapshot_generated_at(snapshot_data: dict) -> Optional[datetime]:
-    """Parse generated_at from snapshot meta to use as snapshot_as_of for recency calculation."""
+    """Parse generated_at/created_at from snapshot meta for recency calculation.
+    
+    Checks multiple sources in priority order:
+    1. generated_at (Farm adapter normalized field)
+    2. created_at (raw Farm meta field)
+    """
     try:
         meta = snapshot_data.get("meta", {})
+        
         generated_at_str = meta.get("generated_at")
-        return _parse_iso_datetime(generated_at_str)
+        if generated_at_str:
+            result = _parse_iso_datetime(generated_at_str)
+            if result:
+                return result
+        
+        created_at_str = meta.get("created_at")
+        if created_at_str:
+            result = _parse_iso_datetime(created_at_str)
+            if result:
+                return result
     except (ValueError, TypeError):
         pass
     return None
@@ -61,14 +76,37 @@ def _get_run_snapshot_as_of(run) -> Optional[datetime]:
     Critical for zombie detection accuracy: ensures activity status (RECENT/STALE)
     is calculated relative to the snapshot's generated_at time, not wall-clock now.
     Without this, assets that were RECENT at snapshot time appear STALE when viewed later.
+    
+    Checks multiple sources in priority order:
+    1. provenance.snapshot_generated_at (set during Farm run)
+    2. generated_at (Farm adapter normalized field)
+    3. created_at (raw Farm meta field)
     """
     if not run or not hasattr(run, 'input_meta') or not run.input_meta:
         return None
+    
+    provenance = run.input_meta.get("provenance", {})
+    snapshot_generated_at = provenance.get("snapshot_generated_at") if provenance else None
+    if snapshot_generated_at:
+        if isinstance(snapshot_generated_at, datetime):
+            return snapshot_generated_at
+        if isinstance(snapshot_generated_at, str):
+            return _parse_iso_datetime(snapshot_generated_at)
+    
     generated_at = run.input_meta.get("generated_at")
-    if isinstance(generated_at, datetime):
-        return generated_at
-    if isinstance(generated_at, str):
-        return _parse_iso_datetime(generated_at)
+    if generated_at:
+        if isinstance(generated_at, datetime):
+            return generated_at
+        if isinstance(generated_at, str):
+            return _parse_iso_datetime(generated_at)
+    
+    created_at = run.input_meta.get("created_at")
+    if created_at:
+        if isinstance(created_at, datetime):
+            return created_at
+        if isinstance(created_at, str):
+            return _parse_iso_datetime(created_at)
+    
     return None
 
 
@@ -341,10 +379,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     mode = request.mode or "sprawl"
     
-    snapshot_as_of: Optional[datetime] = None
-    snapshot_generated_at_str = run.input_meta.get("snapshot_generated_at")
-    if snapshot_generated_at_str:
-        snapshot_as_of = _parse_iso_datetime(snapshot_generated_at_str)
+    snapshot_as_of = _get_run_snapshot_as_of(run)
     
     success, error = await reconcile_to_farm(
         run_log=run,

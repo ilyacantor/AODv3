@@ -1213,20 +1213,35 @@ def apply_admission_criteria(
         discovery=discovery_admitted
     )
     
-    # Dec 2025 Fix for KEY_NORMALIZATION_MISMATCH:
+    # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
     # Include ALL domains from correlated plane records (IdP, CMDB, etc.)
-    # This allows reconciliation to match against ANY domain variant
-    all_domains = set()
-    if effective_domain:
-        all_domains.add(effective_domain.lower().strip())
+    # This allows reconciliation to match against ANY domain variant.
+    # 
+    # CRITICAL: Discovery domain MUST be first (index 0) - it is the Primary Key.
+    # Governance domains (from IdP/CMDB) are aliases that enable correlation,
+    # but must NOT hijack the asset's identity.
+    # 
+    # Priority hierarchy:
+    # 1. effective_domain (Discovery) - "Observed Reality", anchor for Activity
+    # 2. plane_domains (Governance) - "Bureaucratic Records", anchors for Status
+    domain_list = []
+    seen_domains = set()
     
-    # Add domains from correlated plane records
+    # Discovery domain is PRIMARY - must be first
+    if effective_domain:
+        normalized = effective_domain.lower().strip()
+        domain_list.append(normalized)
+        seen_domains.add(normalized)
+    
+    # Add governance domains as secondary aliases (preserving correlation without breaking identity)
     plane_domains = _extract_all_domains_from_correlation(correlation)
     for pd in plane_domains:
-        all_domains.add(pd)
+        if pd not in seen_domains:
+            domain_list.append(pd)
+            seen_domains.add(pd)
     
     identifiers = AssetIdentifiers(
-        domains=sorted(all_domains) if all_domains else [],
+        domains=domain_list,
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )

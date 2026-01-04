@@ -1026,13 +1026,21 @@ def extract_activity_timestamps(
                                     continue
                 
                 # Jan 2026: Cross-IdP activity aggregation
-                # If the matched record has no login timestamp, look up in the aggregated
-                # map using IdP name as the key (aligned with Farm's vendor family logic)
-                if login_ts is None and idp_activity_map and record.name:
+                # Farm considers ALL IdP records with the same vendor name as a single family.
+                # If ANY record in the family has recent login activity, ALL assets in
+                # that family are considered RECENT.
+                # 
+                # CRITICAL FIX: Always check the aggregated map for the MAX login timestamp,
+                # even if the matched record has its own timestamp. Use whichever is newer.
+                # Example: maxflow.ai matches to stale record (Feb 2025), but maxflow.org
+                # sibling has recent login (Dec 2025) - we should use the Dec 2025 date.
+                if idp_activity_map and record.name:
                     normalized_name = record.name.lower().strip()
                     aggregated_ts = idp_activity_map.get(normalized_name)
                     if aggregated_ts:
-                        login_ts = aggregated_ts
+                        # Use the aggregated max if it's newer than the record's own timestamp
+                        if login_ts is None or aggregated_ts > login_ts:
+                            login_ts = aggregated_ts
                 
                 if login_ts:
                     if idp_last_login_at is None or login_ts > idp_last_login_at:

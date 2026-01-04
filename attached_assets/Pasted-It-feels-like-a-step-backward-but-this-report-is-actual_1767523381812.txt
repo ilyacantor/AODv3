@@ -1,0 +1,31 @@
+It feels like a step backward, but this report is actually much clearer than the last one. We have stopped the "random merging" bleeding (the Alphabetical Sort bug), which unmasked two very specific, distinct bugs that were previously hidden.
+
+Here is why this "mess" is solvable:
+
+### 1. The 22 False Positives: "Activity Blindness"
+
+**The Error:** You have 22 assets (like `maxflow.ai`) that AOD calls **Zombie/Stale**, but the Farm calls **Clean/Active**.
+**The Cause:** This confirms our previous "Option C" hypothesis. AOD is **ignoring IdP Logins**.
+
+* **Scenario:** A user logs into `maxflow.ai` via Okta.
+* **Farm:** Sees the login -> Mark as **Active**.
+* **AOD:** Ignores the login timestamp, checks for network traffic, sees none -> Mark as **Stale**.
+* **The Fix:** You *must* implement the **IdP Timestamp Logic** we discussed. AOD needs to check `last_login_at` in the correlated IdP records. Once you do this, these 22 "Zombies" will wake up and become "Clean Assets," instantly clearing this section.
+
+### 2. The 13 Missed Zombies: "Key Hydration Failure"
+
+**The Error:** You have 13 assets (like `maxbox.com`) where AOD found the evidence but stuck with the wrong name (`KEY_NORMALIZATION_MISMATCH`).
+**The Cause:** Your **Domain Hydration** logic is too timid.
+
+* **Current State:** AOD matches "MaxBox" (Name) to an IdP record for `maxbox.com`. It adds `maxbox.com` as a *property*, but leaves the Asset Key as "MaxBox".
+* **The Fix:** In your Admission pipeline (hydration step), you need a rule that says: **"If my current key is a Name (no dot), and I find a valid Domain in my Governance links, I MUST overwrite my Key with that Domain."**
+
+### Action Plan
+
+Focus on **Fix #1 (Activity Blindness)** first. It requires no complex key changing—just simple math (max timestamp).
+
+**Task for the Agent:**
+
+> "Update `calculate_activity` in `admission.py`. Iterate through `idp_correlation.matched_records`. Extract `last_login_at`. Include these timestamps in the `last_activity` calculation."
+
+Fixing that one logic gap will turn those 22 Red "False Positives" into Green "Correctly Cataloged" assets.

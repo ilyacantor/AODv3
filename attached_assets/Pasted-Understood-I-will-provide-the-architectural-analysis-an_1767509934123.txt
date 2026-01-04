@@ -1,0 +1,39 @@
+Understood. I will provide the architectural analysis and the logical requirements so the agent can implement the fix within their own repo context.
+
+### Root Cause Analysis: The "Proof of Life" Gap
+
+The discrepancy between the Farm and AOD regarding "Stale" vs. "Recent" assets (specifically the 15 mismatched zombies) is a **Business Logic failure**, not a data error.
+
+* **The Farm's Logic (Correct):** Any evidence of user interaction counts as activity. This includes network traffic (Discovery) **OR** authentication events (IdP).
+* **AOD's Current Logic (Flawed):** Activity is calculated solely based on **Discovery Observations** (network packets). It completely ignores the `last_login_at` timestamp found in the correlated IdP records.
+
+**The Blind Spot:**
+AOD is currently blind to "Remote Work" scenarios. If a user logs into a SaaS app from home (direct-to-cloud), there is no corporate network traffic for Discovery to see. However, the Identity Provider (IdP) logs the successful login. By ignoring the IdP timestamp, AOD incorrectly classifies these active assets as "Stale" or "Zombies."
+
+### Required Logic Update (For the Agent)
+
+The agent needs to modify the **Activity Aggregation** routine in the Admission pipeline.
+
+**Current Workflow:**
+
+1. Iterate through `discovery_observations`.
+2. Find the latest `observed_at` timestamp.
+3. Set that as the Asset's `last_activity`.
+
+**New Required Workflow:**
+
+1. Iterate through `discovery_observations` to get network timestamps.
+2. **AND** iterate through the `matched_records` from the **IdP Plane**.
+3. Extract the `last_login_at` (or equivalent) timestamp from those IdP records.
+4. Compare all collected timestamps (Discovery + IdP).
+5. The **latest** timestamp from *either* source becomes the Asset's `last_activity`.
+
+### Expected Outcome
+
+Once the agent implements this logic:
+
+1. AOD will recognize the October 2025 IdP logins for `cloudsync.dev`.
+2. The asset's status will flip from **STALE** to **RECENT**.
+3. This will align with the Farm's assessment, resolving the 15 "Stale vs Recent" discrepancies.
+
+You should direct the agent to apply this logic change to the admission pipeline's activity calculation immediately.

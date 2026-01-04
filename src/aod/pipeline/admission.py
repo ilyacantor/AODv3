@@ -1,7 +1,7 @@
 """Stage 5: Admission (AAC) - Apply admission criteria to determine assets"""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from ..models.output_contracts import (
@@ -916,11 +916,31 @@ def extract_activity_timestamps(
     finance_last_transaction_at: Optional[datetime] = None
     
     # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    # Jan 2026 Fix: Also check raw_data for login timestamps with various field names
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
-            if isinstance(record, IdPObject) and record.last_login_at:
-                if idp_last_login_at is None or record.last_login_at > idp_last_login_at:
-                    idp_last_login_at = record.last_login_at
+            if isinstance(record, IdPObject):
+                login_ts = record.last_login_at
+                # Fallback: Check raw_data for login timestamps if main field is empty
+                if login_ts is None and record.raw_data and isinstance(record.raw_data, dict):
+                    for field in ['last_login_at', 'lastLoginAt', 'lastLogin', 'last_activity', 'lastActivity']:
+                        raw_val = record.raw_data.get(field)
+                        if raw_val:
+                            if isinstance(raw_val, datetime):
+                                login_ts = raw_val
+                                break
+                            elif isinstance(raw_val, str):
+                                try:
+                                    parsed = datetime.fromisoformat(raw_val.replace('Z', '+00:00'))
+                                    if parsed.tzinfo is None:
+                                        parsed = parsed.replace(tzinfo=timezone.utc)
+                                    login_ts = parsed
+                                    break
+                                except (ValueError, AttributeError):
+                                    continue
+                if login_ts:
+                    if idp_last_login_at is None or login_ts > idp_last_login_at:
+                        idp_last_login_at = login_ts
         if idp_last_login_at:
             timestamps.append(idp_last_login_at)
     

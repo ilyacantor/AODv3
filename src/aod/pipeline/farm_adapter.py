@@ -44,7 +44,9 @@ IDP_OBJECT_MAPPING = {
     "has_sso": {"sources": ["has_sso"], "default": False},
     "has_scim": {"sources": ["has_scim"], "default": False},
     "owner": {"sources": ["owner"], "default": None},
-    "last_login_at": {"sources": ["last_login_at", "lastLoginAt"], "default": None},
+    # Jan 2026 Fix: Expand sources to capture all possible login timestamp field names from Farm
+    # Farm may send login activity as: last_login_at, lastLoginAt, lastLogin, last_activity, lastActivity
+    "last_login_at": {"sources": ["last_login_at", "lastLoginAt", "lastLogin", "last_activity", "lastActivity"], "default": None},
 }
 
 CMDB_CI_MAPPING = {

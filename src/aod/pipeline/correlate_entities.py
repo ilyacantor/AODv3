@@ -755,6 +755,36 @@ def correlate_to_plane(
                 name_match = _is_valid_contains_match(canonical, record_name)
                 domain_match = record_domain_normalized and canonical in record_domain_normalized
                 
+                # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
+                # When entity has a domain and record has a different domain, check if they share the same brand.
+                # Two matching strategies to cover different cases:
+                # 1. First-token match: "flowbase-internal.com" vs "flowbase.ai" (first token = "flowbase")
+                # 2. Collapsed match: "service-now.com" vs "servicenow.com" (collapse hyphens = "servicenow")
+                domain_base_match = False
+                if not name_match and not domain_match and record_domain:
+                    entity_domain = getattr(entity, 'domain', None) or ""
+                    if entity_domain and '.' in entity_domain and '.' in record_domain:
+                        # Extract first label (before first dot)
+                        entity_label = entity_domain.lower().split('.')[0]
+                        record_label = record_domain.lower().split('.')[0]
+                        
+                        # Strategy 1: First token match (handles env suffixes like "-internal", "-prod")
+                        # "flowbase-internal" → "flowbase", "flowbase" → "flowbase"
+                        entity_first = re.split(r'[\-_]+', entity_label)[0]
+                        record_first = re.split(r'[\-_]+', record_label)[0]
+                        
+                        # Strategy 2: Collapsed match (handles hyphenated brands like "service-now")
+                        # "service-now" → "servicenow", "servicenow" → "servicenow"
+                        entity_collapsed = re.sub(r'[\-_]', '', entity_label)
+                        record_collapsed = re.sub(r'[\-_]', '', record_label)
+                        
+                        # Match if either strategy succeeds (with 4-char minimum)
+                        first_match = len(entity_first) >= 4 and entity_first == record_first
+                        collapsed_match = len(entity_collapsed) >= 4 and entity_collapsed == record_collapsed
+                        
+                        if first_match or collapsed_match:
+                            domain_base_match = True
+                
                 # Dec 2025 Fix: For finance transactions, match via domain base token alignment
                 # Requirements: ≥6 chars + domain base must match FIRST token of vendor name
                 # This allows legitimate brands (netflix, github) while preventing false positives
@@ -796,7 +826,7 @@ def correlate_to_plane(
                             # Match if domain base equals the primary brand token
                             token_match = primary_brand_token and domain_base_token == primary_brand_token
                 
-                if name_match or domain_match or token_match:
+                if name_match or domain_match or domain_base_match or token_match:
                     if candidate_id not in contains_matches:
                         contains_matches.append(candidate_id)
     else:

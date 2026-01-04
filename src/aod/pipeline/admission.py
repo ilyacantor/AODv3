@@ -70,6 +70,53 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
         finance=finance_debug
     )
 
+def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> list[str]:
+    """
+    Extract ALL domains from correlation matched records.
+    
+    Dec 2025 Fix for KEY_NORMALIZATION_MISMATCH: When entities are admitted,
+    we should include ALL domains found in correlated plane records (IdP, CMDB, etc.)
+    in the asset's identifiers.domains. This allows reconciliation to match
+    against ANY domain variant, not just the entity's original domain.
+    
+    This is critical for zombie detection where:
+    - Discovery observation has domain "flowbase-internal.com"
+    - IdP record has domain "flowbase.ai"
+    - Farm expects "flowbase.ai" as the zombie key
+    - Without this fix, AOD only publishes "flowbase-internal.com"
+    
+    Returns:
+        List of unique, valid domains from all matched plane records
+    """
+    domains = set()
+    
+    def _is_valid_domain(value: str) -> bool:
+        if not value or '.' not in value:
+            return False
+        if '@' in value or '://' in value or '/' in value:
+            return False
+        parts = value.split('.')
+        return len(parts) >= 2 and len(parts[-1]) in (2, 3, 4, 5) and parts[-1].isalpha()
+    
+    for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            for record in plane_match.matched_records:
+                if record is None:
+                    continue
+                # Check domain attribute
+                raw_domain = getattr(record, 'domain', None)
+                if raw_domain and _is_valid_domain(raw_domain.lower().strip()):
+                    domains.add(raw_domain.lower().strip())
+                # Check raw_data['domain'] as fallback
+                raw_data = getattr(record, 'raw_data', None)
+                if raw_data and isinstance(raw_data, dict):
+                    rd_domain = raw_data.get('domain')
+                    if rd_domain and _is_valid_domain(rd_domain.lower().strip()):
+                        domains.add(rd_domain.lower().strip())
+    
+    return sorted(domains)
+
+
 def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: bool = False) -> Optional[str]:
     """
     Extract a canonical domain from correlation matched records or match keys.
@@ -1166,8 +1213,20 @@ def apply_admission_criteria(
         discovery=discovery_admitted
     )
     
+    # Dec 2025 Fix for KEY_NORMALIZATION_MISMATCH:
+    # Include ALL domains from correlated plane records (IdP, CMDB, etc.)
+    # This allows reconciliation to match against ANY domain variant
+    all_domains = set()
+    if effective_domain:
+        all_domains.add(effective_domain.lower().strip())
+    
+    # Add domains from correlated plane records
+    plane_domains = _extract_all_domains_from_correlation(correlation)
+    for pd in plane_domains:
+        all_domains.add(pd)
+    
     identifiers = AssetIdentifiers(
-        domains=[effective_domain] if effective_domain else [],
+        domains=sorted(all_domains) if all_domains else [],
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )

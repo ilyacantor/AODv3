@@ -19,6 +19,64 @@ from ...db.database import get_db_direct
 router = APIRouter(prefix="")
 
 
+def _parse_iso_datetime(ts_str: str | None) -> datetime | None:
+    """Parse ISO datetime string to timezone-aware datetime object.
+    
+    Always returns a timezone-aware datetime (UTC) to ensure consistent
+    activity status calculation relative to snapshot time.
+    """
+    if not ts_str:
+        return None
+    try:
+        if ts_str.endswith('Z'):
+            ts_str = ts_str[:-1] + '+00:00'
+        parsed = datetime.fromisoformat(ts_str)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (ValueError, TypeError):
+        return None
+
+
+def _get_run_snapshot_as_of(run) -> datetime | None:
+    """Extract snapshot_as_of from run.input_meta for activity recency calculation.
+    
+    Critical for zombie detection accuracy: ensures activity status (RECENT/STALE)
+    is calculated relative to the snapshot's generated_at time, not wall-clock now.
+    
+    Checks multiple sources in priority order:
+    1. provenance.snapshot_generated_at (set during Farm run)
+    2. generated_at (Farm adapter normalized field)
+    3. created_at (raw Farm meta field)
+    """
+    if not run or not hasattr(run, 'input_meta') or not run.input_meta:
+        return None
+    
+    provenance = run.input_meta.get("provenance", {})
+    snapshot_generated_at = provenance.get("snapshot_generated_at") if provenance else None
+    if snapshot_generated_at:
+        if isinstance(snapshot_generated_at, datetime):
+            return snapshot_generated_at
+        if isinstance(snapshot_generated_at, str):
+            return _parse_iso_datetime(snapshot_generated_at)
+    
+    generated_at = run.input_meta.get("generated_at")
+    if generated_at:
+        if isinstance(generated_at, datetime):
+            return generated_at
+        if isinstance(generated_at, str):
+            return _parse_iso_datetime(generated_at)
+    
+    created_at = run.input_meta.get("created_at")
+    if created_at:
+        if isinstance(created_at, datetime):
+            return created_at
+        if isinstance(created_at, str):
+            return _parse_iso_datetime(created_at)
+    
+    return None
+
+
 @router.post("/debug/aod-agent-reconcile", response_model=AODActualResultsResponse)
 async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     """
@@ -41,6 +99,9 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     IMPORTANT: Includes BOTH admitted assets AND rejected candidates.
     This ensures Farm reconciliation always has aod_reason_codes for every
     asset it asks about (no more empty aod_reason_codes for missed assets).
+    
+    NOTE: Uses snapshot_as_of from run.input_meta to ensure activity status is
+    calculated relative to snapshot generation time, not wall-clock time.
     """
     from ...pipeline.aod_agent_reconcile import emit_actual_results
 
@@ -58,11 +119,14 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     if not assets and not rejections:
         raise HTTPException(status_code=404, detail=f"No assets or rejections found for run_id: {request.run_id}")
 
+    snapshot_as_of = _get_run_snapshot_as_of(run)
+
     result = emit_actual_results(
         run_id=request.run_id,
         assets=assets or [],
         activity_window_days=request.activity_window_days,
-        rejections=rejections
+        rejections=rejections,
+        snapshot_as_of=snapshot_as_of
     )
 
     return AODActualResultsResponse(

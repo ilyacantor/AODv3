@@ -16,6 +16,83 @@ from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .domain_cache import extract_domain
 
 
+def build_idp_activity_map(idp_records: dict) -> dict[str, datetime]:
+    """
+    Build a mapping of IdP name -> max login timestamp across ALL IdP records.
+    
+    Jan 2026: Cross-IdP activity aggregation using IdP NAME as the grouping key.
+    This aligns with Farm's vendor family logic where multiple IdP records for
+    the same vendor (e.g., "Cloudsync" with domains .dev, .io, .tech) share activity.
+    
+    The IdP `name` field is a safe aggregation key because:
+    1. It represents the vendor/product name, not a shared domain like okta.com
+    2. Farm uses vendor name for family grouping
+    3. Unlike domains, IdP names are specific to the application
+    
+    Generic names are blocked to prevent false matches.
+    
+    Args:
+        idp_records: Dictionary of idp_id -> IdPObject from PlaneIndex.records
+        
+    Returns:
+        Dictionary of normalized IdP name -> max last_login_at datetime
+    """
+    # Generic names that could match multiple unrelated apps - must block
+    GENERIC_IDP_NAMES = {
+        'app', 'portal', 'admin', 'login', 'sso', 'auth', 'api', 'web', 'test',
+        'staging', 'dev', 'prod', 'demo', 'internal', 'external', 'legacy',
+        'service', 'system', 'platform', 'dashboard', 'console', 'gateway',
+        'proxy', 'agent', 'client', 'server', 'manager', 'hub', 'connector'
+    }
+    
+    name_to_max_login: dict[str, datetime] = {}
+    
+    for idp_id, obj in idp_records.items():
+        if not isinstance(obj, IdPObject):
+            continue
+        
+        name = obj.name
+        if not name:
+            continue
+        
+        normalized_name = name.lower().strip()
+        
+        # Skip generic names that could match unrelated apps
+        if normalized_name in GENERIC_IDP_NAMES:
+            continue
+        
+        # Skip names that are too short (likely abbreviations/codes)
+        if len(normalized_name) < 4:
+            continue
+        
+        login_ts = obj.last_login_at
+        
+        # Fallback: Check raw_data for login timestamps if main field is empty
+        if login_ts is None and obj.raw_data and isinstance(obj.raw_data, dict):
+            for field in ['last_login_at', 'lastLoginAt', 'lastLogin', 'last_activity', 'lastActivity']:
+                raw_val = obj.raw_data.get(field)
+                if raw_val:
+                    if isinstance(raw_val, datetime):
+                        login_ts = raw_val
+                        break
+                    elif isinstance(raw_val, str):
+                        try:
+                            parsed = datetime.fromisoformat(raw_val.replace('Z', '+00:00'))
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=timezone.utc)
+                            login_ts = parsed
+                            break
+                        except (ValueError, AttributeError):
+                            continue
+        
+        if login_ts:
+            current_max = name_to_max_login.get(normalized_name)
+            if current_max is None or login_ts > current_max:
+                name_to_max_login[normalized_name] = login_ts
+    
+    return name_to_max_login
+
+
 VALID_CI_TYPES = {"app", "application", "service", "database", "infra", "infrastructure", "server", "system"}
 VALID_LIFECYCLES = {"prod", "production", "staging", "stage", "live", "active"}
 
@@ -893,15 +970,24 @@ def determine_environment(correlation: CorrelationResult) -> Environment:
 def extract_activity_timestamps(
     correlation: CorrelationResult,
     entity: CandidateEntity,
-    observations: Optional[list[Observation]] = None
+    observations: Optional[list[Observation]] = None,
+    idp_activity_map: Optional[dict[str, datetime]] = None
 ) -> ActivityEvidence:
     """
     Extract activity timestamps from correlation evidence and observations.
+    
+    Jan 2026 Enhancement: Cross-IdP activity aggregation. If the entity's matched IdP
+    record has no last_login_at, we look up the IdP name in idp_activity_map to get
+    the aggregated max login timestamp from ALL IdP records with the same name.
+    
+    This aligns with Farm's behavior where activity is shared across all assets
+    matched to IdP records of the same vendor/brand.
     
     Args:
         correlation: Correlation result with matched records from various planes
         entity: The candidate entity being processed
         observations: Optional list of original observations for this entity
+        idp_activity_map: Optional mapping of normalized IdP name -> max last_login_at
         
     Returns:
         ActivityEvidence with timestamps from each plane and computed latest_activity_at
@@ -938,6 +1024,16 @@ def extract_activity_timestamps(
                                     break
                                 except (ValueError, AttributeError):
                                     continue
+                
+                # Jan 2026: Cross-IdP activity aggregation
+                # If the matched record has no login timestamp, look up in the aggregated
+                # map using IdP name as the key (aligned with Farm's vendor family logic)
+                if login_ts is None and idp_activity_map and record.name:
+                    normalized_name = record.name.lower().strip()
+                    aggregated_ts = idp_activity_map.get(normalized_name)
+                    if aggregated_ts:
+                        login_ts = aggregated_ts
+                
                 if login_ts:
                     if idp_last_login_at is None or login_ts > idp_last_login_at:
                         idp_last_login_at = login_ts
@@ -996,7 +1092,8 @@ def apply_admission_criteria(
     observations: Optional[list[Observation]] = None,
     propagated_idp: bool = False,
     propagated_cmdb: bool = False,
-    propagation_reason: Optional[str] = None
+    propagation_reason: Optional[str] = None,
+    idp_activity_map: Optional[dict[str, datetime]] = None
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -1025,6 +1122,7 @@ def apply_admission_criteria(
         propagated_idp: IdP governance propagated from vendor sibling (for classification only)
         propagated_cmdb: CMDB governance propagated from vendor sibling (for classification only)
         propagation_reason: Explanation of governance propagation (for metadata only)
+        idp_activity_map: Optional mapping of IdP name -> max login timestamp for cross-IdP activity
         
     Returns:
         AdmissionResult indicating whether entity is admitted
@@ -1278,7 +1376,7 @@ def apply_admission_criteria(
     if discovery_admitted:
         tags.append("discovery_only")
     
-    activity_evidence = extract_activity_timestamps(correlation, entity, observations)
+    activity_evidence = extract_activity_timestamps(correlation, entity, observations, idp_activity_map)
     
     from ..models.output_contracts import VendorHypothesis
     vendor_hypothesis = None

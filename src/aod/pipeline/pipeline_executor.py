@@ -20,7 +20,7 @@ from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
 from .vendor_governance import propagate_vendor_governance
-from .admission import apply_admission_criteria, AdmissionResult
+from .admission import apply_admission_criteria, AdmissionResult, build_idp_activity_map
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
@@ -293,6 +293,11 @@ async def execute_pipeline(
         indexes = build_plane_indexes(snapshot.planes)
         timings['build_indexes'] = time.perf_counter() - t_start
         
+        # Jan 2026: Pre-compute IdP activity map for cross-IdP activity aggregation
+        # This enables assets matched to IdP records with no last_login_at to inherit
+        # activity from sibling IdP records with the same vendor/name
+        idp_activity_map = build_idp_activity_map(indexes.idp.records)
+        
         t_start = time.perf_counter()
         correlations = correlate_entities_to_planes(candidates, indexes)
         timings['correlate'] = time.perf_counter() - t_start
@@ -394,7 +399,8 @@ async def execute_pipeline(
             entity_observations = [obs for obs in observations if obs.observation_id in candidate.observation_ids]
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
-                propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason
+                propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
+                idp_activity_map=idp_activity_map
             )
             
             policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)

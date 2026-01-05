@@ -505,12 +505,6 @@ async def execute_pipeline(
                 "candidates_evaluated": len(filtered_candidates),
             })
         
-        from .asset_identity import late_bind_and_merge_assets
-        late_binding_enabled = policy_config.scope.late_binding_domain_merge if hasattr(policy_config.scope, 'late_binding_domain_merge') else False
-        if late_binding_enabled:
-            assets = late_bind_and_merge_assets(assets, feature_enabled=True, logger=logger)
-            run_log.counts.assets_admitted = len(assets)
-        
         t_start = time.perf_counter()
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
         timings['findings'] = time.perf_counter() - t_start

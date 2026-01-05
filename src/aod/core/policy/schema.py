@@ -32,7 +32,6 @@ class ScopeConfig:
     include_infra: bool = False
     treat_directory_as_idp: bool = False
     use_policy_engine: bool = False
-    late_binding_domain_merge: bool = False
 
 
 @dataclass
@@ -65,7 +64,6 @@ class PolicyConfig:
                 "include_infra": self.scope.include_infra,
                 "treat_directory_as_idp": self.scope.treat_directory_as_idp,
                 "use_policy_engine": self.scope.use_policy_engine,
-                "late_binding_domain_merge": self.scope.late_binding_domain_merge,
             },
             "exclusions": self.exclusions,
             "seed_exclusions": {

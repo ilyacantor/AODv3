@@ -917,7 +917,6 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
         - alias_keys: List of original domains/subdomains that map to this canonical key
     
     Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
-    0. asset.name if already a valid registered domain (late-binding merge compatibility)
     1. asset.identifiers.domains -> extract registered domain -> normalize to vendor canonical
     2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
     3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
@@ -931,10 +930,6 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
     This fixes KEY_NORMALIZATION_MISMATCH errors where governance checks failed
     because microsoftonline.com and microsoft.com were treated as different assets.
     
-    LATE-BINDING FIX (Jan 2026): First check if asset.name is already a valid
-    registered domain. After late_bind_and_merge_assets(), asset.name IS the
-    canonical domain, so we should use it directly.
-    
     INVARIANT: This must match the key resolution in aod_agent_reconcile.py
     to ensure UI counts match reconciliation counts.
     
@@ -943,19 +938,6 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
     from .vendor_inference import extract_registered_domain
     
     alias_keys = []
-    
-    name = asset.name.lower().strip()
-    if "." in name and not name.startswith("."):
-        parts = name.split(".")
-        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
-            registered = extract_registered_domain(name)
-            if registered and registered == name:
-                alias_keys.append(name)
-                canonical = _normalize_to_canonical_vendor_domain(registered)
-                if canonical:
-                    alias_keys.append(canonical)
-                    return (canonical, True, alias_keys)
-                return (registered, True, alias_keys)
     
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:

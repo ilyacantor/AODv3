@@ -5,22 +5,17 @@ AOS Discover is the discovery module of AutonomOS, an enterprise operating syste
 
 ## Current Status (January 2026)
 
-**LATE-BINDING FIX IMPLEMENTED** (Feature-flagged, default OFF)
+**NEEDS ARCHITECTURAL FIX**
 
-| Metric | Target | Current | With Late-Binding |
-|--------|--------|---------|-------------------|
-| Shadow Accuracy | 100% | 98.2% (56/57) | Unchanged |
-| Zombie Accuracy | 100% | 53.6% (30/56) | ~100% expected |
-| Combined Accuracy | 95%+ | 83% | 95%+ expected |
+| Metric | Target | Current |
+|--------|--------|---------|
+| Shadow Accuracy | 100% | 98.2% (56/57) |
+| Zombie Accuracy | 100% | 53.6% (30/56) |
+| Combined Accuracy | 95%+ | 83% |
 
-**Critical Issue:** KEY_NORMALIZATION_MISMATCH — Fixed with Late-Binding Domain Merge.
+**Critical Issue:** KEY_NORMALIZATION_MISMATCH — Farm expects domain-based asset keys, AOD uses name-based keys. This causes zombie detection failures.
 
-**Solution Implemented:** Late-binding domain naming + fan-in merge stage:
-- Applies domain-based naming AFTER admission (never mutates entity_id)
-- Merges assets that share the same registered domain
-- Feature flag: `late_binding_domain_merge` in policy config (default OFF)
-
-**To Enable:** Set `policy.scope.late_binding_domain_merge = True` in policy config.
+**Failed Fix (Jan 2026):** "Domain Primacy" refactor was rolled back after causing 47% rejection rate and accuracy regression from 96.4% → 83%.
 
 See `CTO_ONBOARDING.md` for detailed technical analysis.
 
@@ -73,35 +68,22 @@ Activity is the MOST RECENT of:
 - **Token-Based Finance Correlation:** Matches entity domains to vendor names
 - **Snapshot Time Reference:** Activity calculated relative to snapshot timestamp
 
-### Known Issues (Fixed or In Progress)
-1. **KEY_NORMALIZATION_MISMATCH:** ✅ Fixed with late-binding domain merge (feature-flagged)
-2. **Zombie Detection Gap:** ✅ Fixed with late-binding (26 missed zombies recovered)
-3. **Entity ID Instability:** ✅ Addressed by design - entity_id never mutated
-
-### Late-Binding Domain Merge
-**New Stage:** Inserted between Admission and Findings generation
-- **Location:** `src/aod/pipeline/asset_identity.py`
-- **Feature Flag:** `late_binding_domain_merge` (default OFF)
-- **Purpose:** Fix KEY_NORMALIZATION_MISMATCH by applying domain-based naming after admission
-- **Algorithm:**
-  1. Compute merge_key (registered domain) for each asset
-  2. Group assets by merge_key
-  3. Merge groups using deterministic winner (lexicographically smallest asset_id)
-  4. Apply field-by-field merge rules preserving winner-first ordering
+### Known Issues
+1. **KEY_NORMALIZATION_MISMATCH:** Asset keys don't match Farm's domain-based expectations
+2. **Zombie Detection Gap:** 26/56 zombies missed due to key mismatch
+3. **Entity ID Instability:** Changing entity_id mid-pipeline breaks lookups
 
 ## Project Structure
 ```
 src/aod/
 ├── api/           # FastAPI routes
 ├── core/          # Core business logic
-│   └── policy/schema.py        # Policy config with feature flags
 ├── db/            # Database operations
 ├── models/        # Pydantic models
 ├── pipeline/      # 7-stage pipeline implementation
 │   ├── pipeline_executor.py    # Main orchestration
 │   ├── correlate_entities.py   # Entity correlation
 │   ├── admission.py            # Admission criteria
-│   ├── asset_identity.py       # Late-binding domain merge (NEW)
 │   ├── derived_classifications.py  # Shadow/Zombie logic
 │   └── aod_agent_reconcile.py  # Farm reconciliation
 └── utils/         # Utilities

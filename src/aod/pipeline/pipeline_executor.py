@@ -448,13 +448,16 @@ async def execute_pipeline(
         assets = late_bind_and_merge_assets(assets, late_binding_enabled, logger)
         timings['domain_merge'] = time.perf_counter() - t_start
         
-        if late_binding_enabled and len(assets) != pre_merge_count:
-            logger.info("pipeline.domain_merge_applied", extra={
-                "run_id": run_id,
-                "pre_merge_count": pre_merge_count,
-                "post_merge_count": len(assets),
-                "merged_count": pre_merge_count - len(assets)
-            })
+        if late_binding_enabled:
+            post_merge_count = len(assets)
+            run_log.counts.assets_admitted = post_merge_count
+            if post_merge_count != pre_merge_count:
+                logger.info("pipeline.domain_merge_applied", extra={
+                    "run_id": run_id,
+                    "pre_merge_count": pre_merge_count,
+                    "post_merge_count": post_merge_count,
+                    "merged_count": pre_merge_count - post_merge_count
+                })
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

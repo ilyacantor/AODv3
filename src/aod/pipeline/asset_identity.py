@@ -26,9 +26,24 @@ from ..models.output_contracts import (
     LensStatus,
     LensStatuses,
 )
+from ..constants import INFRASTRUCTURE_DOMAINS
 from .vendor_inference import extract_registered_domain
 
 logger = logging.getLogger(__name__)
+
+
+SSO_PROVIDER_DOMAINS: set[str] = {
+    "okta.com", "oktapreview.com",
+    "auth0.com",
+    "onelogin.com",
+    "pingidentity.com", "pingone.com",
+    "duo.com", "duosecurity.com",
+    "jumpcloud.com",
+}
+
+def _is_sso_or_infrastructure_domain(domain: str) -> bool:
+    """Check if domain is an SSO provider or infrastructure domain that should be deprioritized."""
+    return domain in SSO_PROVIDER_DOMAINS or domain in INFRASTRUCTURE_DOMAINS
 
 
 def late_bind_and_merge_assets(
@@ -67,10 +82,16 @@ def late_bind_and_merge_assets(
     
     merged: list[Asset] = []
     merge_count = 0
+    normalized_count = 0
     
     for merge_key, group in groups.items():
         if len(group) == 1:
-            merged.append(group[0])
+            original = group[0]
+            normalized_asset = _normalize_singleton(original, merge_key, log)
+            original_first = original.identifiers.domains[0] if original.identifiers and original.identifiers.domains else None
+            if original_first != merge_key:
+                normalized_count += 1
+            merged.append(normalized_asset)
         else:
             merged_asset = _merge_assets(group, merge_key, log)
             merged.append(merged_asset)
@@ -84,11 +105,12 @@ def late_bind_and_merge_assets(
     
     merged.extend(standalone)
     
-    if merge_count > 0:
+    if merge_count > 0 or normalized_count > 0:
         log.info("asset_identity.summary", extra={
             "input_assets": len(assets),
             "output_assets": len(merged),
             "merges_performed": merge_count,
+            "singletons_normalized": normalized_count,
             "standalone_assets": len(standalone)
         })
     
@@ -100,16 +122,72 @@ def _compute_merge_key(asset: Asset) -> Optional[str]:
     Compute merge key from asset's domains.
     Returns registered domain (eTLD+1) or None if no valid domain.
     
-    INVARIANT: Do NOT create synthetic merge_key from asset name.
+    Scans ALL domains and prefers non-SSO/non-infrastructure domains.
+    Does NOT create synthetic merge_key from asset name.
     Assets without domains stay standalone.
+    
+    Priority:
+    1. First non-SSO, non-infrastructure registered domain
+    2. Fallback to first valid registered domain if all are SSO/infrastructure
     """
-    if asset.identifiers and asset.identifiers.domains:
-        for domain in asset.identifiers.domains:
-            if domain:
-                registered = extract_registered_domain(domain)
-                if registered:
-                    return registered
-    return None
+    if not asset.identifiers or not asset.identifiers.domains:
+        return None
+    
+    first_registered: Optional[str] = None
+    
+    for domain in asset.identifiers.domains:
+        if not domain:
+            continue
+        
+        registered = extract_registered_domain(domain)
+        if not registered:
+            continue
+        
+        if first_registered is None:
+            first_registered = registered
+        
+        if not _is_sso_or_infrastructure_domain(registered):
+            return registered
+    
+    return first_registered
+
+
+def _normalize_singleton(asset: Asset, merge_key: str, log: logging.Logger) -> Asset:
+    """
+    Normalize a singleton asset by ensuring canonical domain is first.
+    
+    This fixes KEY_NORMALIZATION_MISMATCH for single assets by:
+    1. Prepending the canonical registered domain to identifiers.domains
+    2. Ensuring Farm can match on the canonical domain
+    
+    Returns a new Asset if normalization was needed, otherwise the original.
+    Uses model_copy() to preserve all fields without explicit enumeration.
+    """
+    current_domains = asset.identifiers.domains if asset.identifiers else []
+    
+    if current_domains and current_domains[0] == merge_key:
+        return asset
+    
+    seen: set[str] = set()
+    ordered_domains: list[str] = [merge_key]
+    seen.add(merge_key)
+    
+    for domain in current_domains:
+        if domain and domain not in seen:
+            ordered_domains.append(domain)
+            seen.add(domain)
+    
+    new_identifiers = asset.identifiers.model_copy(update={"domains": ordered_domains}) if asset.identifiers else AssetIdentifiers(domains=ordered_domains)
+    normalized_asset = asset.model_copy(update={"identifiers": new_identifiers})
+    
+    log.debug("asset_identity.singleton_normalized", extra={
+        "asset_id": str(asset.asset_id),
+        "merge_key": merge_key,
+        "original_first_domain": current_domains[0] if current_domains else None,
+        "new_domains": ordered_domains[:3]
+    })
+    
+    return normalized_asset
 
 
 def _max_timestamp(t1: Optional[datetime], t2: Optional[datetime]) -> Optional[datetime]:

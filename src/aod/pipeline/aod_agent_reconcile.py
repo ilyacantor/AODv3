@@ -473,6 +473,7 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     MUST be normalized to the canonical vendor domain for governance checks.
     
     Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
+    0. asset.name if already a valid registered domain (late-binding merge compatibility)
     1. asset.identifiers.domains -> extract registered -> normalize to vendor canonical
     2. Asset name if it looks like a domain -> extract registered -> normalize to vendor canonical
     3. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN (only if no domain evidence)
@@ -482,8 +483,21 @@ def _extract_registered_domain(asset: Asset) -> str | None:
     check DOMAIN_TO_VENDOR to map vendor-related domains to a single canonical key.
     e.g., login.microsoftonline.com -> microsoftonline.com -> microsoft.com
     
+    LATE-BINDING FIX (Jan 2026): First check if asset.name is already a valid
+    registered domain. After late_bind_and_merge_assets(), asset.name IS the
+    canonical domain, so we should use it directly.
+    
     Returns the first valid canonical domain, or None if not available.
     """
+    name = asset.name.lower().strip()
+    if "." in name and not name.startswith("."):
+        parts = name.split(".")
+        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
+            registered = extract_registered_domain(name)
+            if registered and registered == name:
+                canonical = _normalize_to_canonical_vendor_domain(registered)
+                return canonical if canonical else registered
+    
     if asset.identifiers and asset.identifiers.domains:
         for domain in asset.identifiers.domains:
             if domain and "." in domain:

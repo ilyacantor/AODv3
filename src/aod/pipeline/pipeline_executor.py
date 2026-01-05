@@ -1,35 +1,4 @@
-"""
-Pipeline Executor - Orchestrate all pipeline stages
-
-ARCHITECTURAL OVERVIEW
-======================
-This is the main orchestration for AOD's 7-stage pipeline:
-1. VALIDATION    - Parse snapshot, validate structure
-2. NORMALIZATION - Clean observation names, extract domains  
-3. INDEXING      - Build lookup indexes for IdP, CMDB, Cloud, Finance
-4. CORRELATION   - Match entities to governance plane records
-5. ADMISSION     - Apply admission criteria, create assets
-6. ARTIFACTS     - Handle non-asset artifacts
-7. FINDINGS      - Generate Shadow/Zombie/Gap findings
-
-KEY INVARIANTS (Jan 2026 - Lessons Learned)
-==========================================
-1. ENTITY_ID STABILITY: entity_id must NOT change after normalization.
-   The correlation_by_entity_id lookup depends on stable IDs.
-   
-2. BATCH DEDUPLICATION: All batch inserts (obs_samples, ambiguous_matches,
-   rejections) must be deduplicated before insert to prevent PK violations.
-   
-3. NO DOMAIN GUILLOTINE: Entities without domains must NOT be rejected.
-   Many zombies lack domains and would be incorrectly filtered.
-
-KNOWN ISSUES
-============
-- KEY_NORMALIZATION_MISMATCH: Asset keys don't match Farm's domain-based
-  expectations. This causes 26/56 zombie detection failures.
-  
-See CTO_ONBOARDING.md for detailed technical analysis.
-"""
+"""Pipeline Executor - Orchestrate all pipeline stages"""
 
 import hashlib
 import json
@@ -302,7 +271,7 @@ async def execute_pipeline(
         
         obs_samples = []
         for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:
-            sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.original_name, candidate.domain or ""))
+            sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.entity_id))
             raw_data = {
                 "entity_id": candidate.entity_id,
                 "canonical_name": candidate.canonical_name,
@@ -318,14 +287,7 @@ async def execute_pipeline(
                 sample_id, run_id, candidate.original_name, candidate.domain,
                 candidate.source, None, raw_preview, started_at.isoformat()
             ))
-        # Deduplicate by sample_id (first tuple element)
-        seen_sample_ids = set()
-        deduped_samples = []
-        for row in obs_samples:
-            if row[0] not in seen_sample_ids:
-                seen_sample_ids.add(row[0])
-                deduped_samples.append(row)
-        await db.create_observation_samples_batch(deduped_samples)
+        await db.create_observation_samples_batch(obs_samples)
         
         t_start = time.perf_counter()
         indexes = build_plane_indexes(snapshot.planes)
@@ -386,20 +348,13 @@ async def execute_pipeline(
                         else:
                             candidate_names.append(str(rec))
                     
-                    match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.original_name, c.entity.domain or "", plane))
+                    match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.entity_id, plane))
                     ambiguous_matches_batch.append((
                         match_id, run_id, c.entity.entity_id, c.entity.original_name, plane,
                         json.dumps(plane_match.matched_ids), json.dumps(candidate_names[:10]),
                         json.dumps([plane_match.match_method or "unknown"]), started_at.isoformat()
                     ))
-        # Deduplicate by match_id (first tuple element) - keep first occurrence
-        seen_ids = set()
-        deduped_batch = []
-        for row in ambiguous_matches_batch:
-            if row[0] not in seen_ids:
-                seen_ids.add(row[0])
-                deduped_batch.append(row)
-        await db.create_ambiguous_matches_batch(deduped_batch)
+        await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
         
         t_start = time.perf_counter()
@@ -427,7 +382,7 @@ async def execute_pipeline(
         for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
-                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.original_name, candidate.domain or ""))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "no_correlation", "Entity not found in correlation results",
@@ -468,7 +423,7 @@ async def execute_pipeline(
             if should_admit and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
-                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.original_name, candidate.domain or ""))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
@@ -481,17 +436,10 @@ async def execute_pipeline(
                     started_at.isoformat()
                 ))
         
-        # Deduplicate rejections by rejection_id (first tuple element)
-        seen_rejection_ids = set()
-        deduped_rejections = []
-        for row in rejections_batch:
-            if row[0] not in seen_rejection_ids:
-                seen_rejection_ids.add(row[0])
-                deduped_rejections.append(row)
-        await db.create_rejections_batch(deduped_rejections)
+        await db.create_rejections_batch(rejections_batch)
         timings['admission'] = time.perf_counter() - t_start
         run_log.counts.assets_admitted = len(assets)
-        run_log.counts.rejected = len(deduped_rejections)
+        run_log.counts.rejected = len(rejections_batch)
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

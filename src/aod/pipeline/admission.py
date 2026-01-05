@@ -1,34 +1,4 @@
-"""
-Stage 5: Admission (AAC) - Apply admission criteria to determine assets
-
-ARCHITECTURAL OVERVIEW
-======================
-Admission is the critical gate where correlated entities become assets.
-This is where identity (asset.name, asset.identifiers) is finalized.
-
-KEY DECISIONS MADE HERE:
-- Asset name selection (domain vs display name)
-- Governance status (has_idp, has_cmdb)
-- Activity status (RECENT, STALE, NONE)
-- Shadow/Zombie classification
-
-KNOWN ISSUE: KEY_NORMALIZATION_MISMATCH
-=======================================
-Farm expects assets keyed by domain (e.g., "rapidbox.net"), but this module
-historically uses display names (e.g., "RapidBox"). This causes zombie
-detection failures when Farm can't find matching assets.
-
-FAILED FIX (Jan 2026): "Domain Primacy" attempted to set asset.name = domain
-but was rolled back after rejecting 47% of candidates (Domain Guillotine).
-
-LESSON LEARNED: Any fix must:
-1. NOT reject entities without domains (kills zombies)
-2. Apply domain-based naming at persistence, not mid-pipeline
-3. Handle fan-in collisions (multiple entities -> same domain)
-4. Preserve original_name in identifiers.hostnames
-
-See CTO_ONBOARDING.md for detailed technical analysis.
-"""
+"""Stage 5: Admission (AAC) - Apply admission criteria to determine assets"""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -221,7 +191,7 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
                     if rd_domain and _is_valid_domain(rd_domain.lower().strip()):
                         domains.add(rd_domain.lower().strip())
     
-    return list(domains)
+    return sorted(domains)
 
 
 def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: bool = False) -> Optional[str]:
@@ -1396,15 +1366,9 @@ def apply_admission_criteria(
             domain_list.append(pd)
             seen_domains.add(pd)
     
-    hostnames_list = []
-    if entity.hostname:
-        hostnames_list.append(entity.hostname)
-    if entity.original_name and entity.original_name not in hostnames_list:
-        hostnames_list.append(entity.original_name)
-    
     identifiers = AssetIdentifiers(
         domains=domain_list,
-        hostnames=hostnames_list,
+        hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )
     
@@ -1433,20 +1397,8 @@ def apply_admission_criteria(
     
     canonical_domain = registered_domain
     
-    # DOMAIN PRIMACY: Reject entities that reach Admission without a valid domain
-    # This is the "Guillotine" - entities had their chance to get a domain from Correlation
-    if not canonical_domain:
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.BLOCKED,
-            asset=None,
-            admission_reason="Identity requires a valid domain; no domain found after correlation"
-        )
-    
     asset_key = canonical_domain
-    # DOMAIN PRIMACY: Asset name IS the canonical domain (not the observation name)
-    # Original name is preserved in identifiers.hostnames for UI/search
-    display_name = canonical_domain
+    display_name = entity.original_name
     
     # Add traffic light status tag
     tags.append(f"traffic_light:{provisioning_status.value}")

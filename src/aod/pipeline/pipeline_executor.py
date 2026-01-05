@@ -271,7 +271,7 @@ async def execute_pipeline(
         
         obs_samples = []
         for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:
-            sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.entity_id))
+            sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.original_name, candidate.domain or ""))
             raw_data = {
                 "entity_id": candidate.entity_id,
                 "canonical_name": candidate.canonical_name,
@@ -348,7 +348,7 @@ async def execute_pipeline(
                         else:
                             candidate_names.append(str(rec))
                     
-                    match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.entity_id, plane))
+                    match_id = str(deterministic_uuid(snapshot_id, run_id, "ambiguous", c.entity.original_name, c.entity.domain or "", plane))
                     ambiguous_matches_batch.append((
                         match_id, run_id, c.entity.entity_id, c.entity.original_name, plane,
                         json.dumps(plane_match.matched_ids), json.dumps(candidate_names[:10]),
@@ -382,7 +382,7 @@ async def execute_pipeline(
         for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
-                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.original_name, candidate.domain or ""))
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "no_correlation", "Entity not found in correlation results",
@@ -423,7 +423,7 @@ async def execute_pipeline(
             if should_admit and admission_result.asset:
                 assets.append(admission_result.asset)
             else:
-                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.original_name, candidate.domain or ""))
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",

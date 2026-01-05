@@ -1,0 +1,207 @@
+Understood. I’m going to be very direct, and I’m going to project impact on *accuracy, stability, and future refactors* with every point.
+
+I’ve reviewed the pipeline, correlation, admission, and the failed “Domain Primacy” attempt. The failure was **not** about domain logic being hard — it was about **violating system invariants without guardrails**.
+
+Below is my interim-CTO plan and the reasoning behind it.
+
+---
+
+## 1. Why the Refactor Failed (Root Cause, Not Symptoms)
+
+### The core mistake
+
+You refactored **identity** instead of **presentation**.
+
+You changed *who an entity is* mid-pipeline instead of *how it is named at the end*.
+
+That single decision cascaded into:
+
+* Missed zombies
+* Mass rejection (“Domain Guillotine”)
+* ID instability
+* Broken reconciliation
+* Unpredictable bugs
+
+### The violated invariants
+
+These were already implicitly relied on by the system:
+
+1. **Entity ID must be immutable after normalization**
+2. **Admission must never reject based on missing evidence**
+3. **Multiple entities may legitimately resolve to the same domain**
+4. **Farm reconciliation assumes domain keys, not internal entity IDs**
+
+The refactor broke all four at once.
+
+**Impact:**
+You created a system that *looked cleaner* but was *less correct* and impossible to reason about.
+
+---
+
+## 2. The Non-Negotiable Architectural Rule (Going Forward)
+
+> **Identity is fixed early. Naming is decided late.**
+
+If we violate this again, we will regress again.
+
+This is the rule that prevents “obvious bugs” from slipping through.
+
+---
+
+## 3. The Correct Fix: Late-Binding Identity (Not Another Refactor)
+
+### What we do NOT touch
+
+* Normalization
+* Correlation
+* Entity IDs
+* Evidence generation
+* Admission logic semantics
+
+### What we DO change
+
+Only **asset identity finalization at persistence time**.
+
+#### Concrete behavior
+
+At the moment we create an `Asset`:
+
+1. **If a canonical domain exists → use it as `asset.name`**
+2. **If not → fall back to original normalized name**
+3. **Always preserve:**
+
+   * original_name
+   * all observed domains
+   * all correlated domains
+
+No guillotine. No rejection. No mid-stream mutation.
+
+**Impact:**
+
+* Zombies immediately recover (Farm can now match)
+* Shadows stay intact
+* Zero regression risk upstream
+* Deterministic behavior preserved
+
+---
+
+## 4. Fan-In Is Real — Treat It Explicitly
+
+You *will* have cases where:
+
+* `foo.ai`
+* `foo.com`
+* `login.foo.com`
+
+All resolve to the same registered domain.
+
+### The rule
+
+> **Fan-in is merged, not rejected.**
+
+### Minimal merge strategy (safe and sufficient)
+
+* Keep the **oldest entity_id** as canonical
+* Union:
+
+  * evidence_refs
+  * observations
+  * finance records
+* Recompute findings once
+
+Do **not** invent heuristics here yet.
+
+**Impact:**
+
+* No UUID collisions
+* No dropped assets
+* Predictable merges
+* Future ML/heuristics possible later
+
+---
+
+## 5. Why the Bugs Were “Obvious” in Retrospect
+
+Because there were **no invariant checks** guarding the refactor.
+
+Before any identity-related change, the system must answer *yes* to these questions:
+
+1. Can an entity survive with **zero domains**?
+2. Can **multiple entities map to one domain**?
+3. Does any lookup depend on the **old entity_id**?
+4. Can Farm still reconcile using **only domains**?
+
+The previous CTO refactored without answering those.
+
+**Impact:**
+This is exactly how senior systems fail — not due to complexity, but due to skipped invariants.
+
+---
+
+## 6. Guardrails I Am Putting in Place Immediately
+
+These are non-optional while I’m in this seat.
+
+### 1. Invariant tests (cheap, brutal, effective)
+
+Every refactor must pass:
+
+* Shadow count unchanged
+* Zombie count ≥ previous
+* Zero increase in rejected entities
+* Entity ID count stable pre- vs post-admission
+
+### 2. “No Identity Mutation” rule
+
+Any PR that mutates:
+
+* `entity_id`
+* `candidate.canonical_name`
+  before persistence is blocked.
+
+### 3. Refactors must be **single-axis**
+
+We change:
+
+* *Either* naming
+* *Or* correlation
+* *Or* admission
+
+Never more than one in the same change.
+
+**Impact:**
+Predictable progress instead of accidental rewrites.
+
+---
+
+## 7. What This Unlocks Next (Strategic Impact)
+
+Once late-binding is in place:
+
+* Farm reconciliation becomes stable
+* Zombie accuracy goes to ~100%
+* Shadow accuracy remains intact
+* You can safely:
+
+  * Improve fuzzy matching
+  * Add vendor family heuristics
+  * Introduce explainable ML later
+
+Without this fix, *every future improvement is fragile*.
+
+---
+
+## Bottom Line (CEO-Level Summary)
+
+* The failure was architectural, not algorithmic
+* The fix is **late binding**, not more normalization
+* Identity must be immutable
+* Domains are a **view**, not a **key**
+* This approach restores correctness *and* velocity
+
+If you want, next I can:
+
+* Give you a **one-page refactor plan** for the team
+* Or write the **exact acceptance criteria** engineers must meet before merging
+
+Your move.

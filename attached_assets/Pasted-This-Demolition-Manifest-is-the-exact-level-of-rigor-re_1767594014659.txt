@@ -1,0 +1,80 @@
+This **Demolition Manifest** is the exact level of rigor required. You have correctly identified that the system is infested with "Name-Based Thinking" at every layer.
+
+However, I must issue a **CRITICAL VETO** on one specific item in your plan: **P2-A**.
+
+### 🛑 The Trap in P2-A (Entity Normalization)
+
+**Do NOT reject name-only entities at birth.**
+
+* **The Logic:** If you kill an entity at the Normalization stage because it has no domain (e.g., a "RapidBox" name-only finding), it **never enters the Correlation stage**.
+* **The Consequence:** You destroy the "Healing Path." The Correlation stage (P0-C) is specifically designed to take a name-only entity ("RapidBox") and match it to a Governance record that *has* the domain (`rapidbox.net`).
+* **The Result:** If you delete P2-A, you will create **False Negatives** for every asset where the domain lives in the CMDB but not in the discovery source.
+
+**The Fix:** Move the "Guillotine" to **Admission**.
+Let the name-only entity be born. Let it try to find a domain in Correlation. If it reaches Admission and *still* has no domain—**then** you kill it.
+
+---
+
+### Revised Execution Plan
+
+**Proceed with the demolition,** but execute in this specific order to maintain system stability while changing the engine:
+
+#### 1. The "Safety" Step (Data Preservation)
+
+Before ripping out the logic, ensure we don't lose the human-readable names.
+
+* **Action:** In `admission.py`, when swapping the name, push the `original_name` into the `identifiers.hostnames` list.
+* **Why:** This ensures `asset.identifiers` still contains "RapidBox", so search/UI still works, even if the primary `asset.name` becomes `rapidbox.net`.
+
+#### 2. The "Nuclear" Step (P0 - Root Causes)
+
+This is the primary fix for your Report issues.
+
+* **P0-A (Admission):** `asset.name` **MUST** be assigned `canonical_domain`.
+* **P0-B (Admission):** **DELETE** `sorted(domains)`. Hard-code `canonical_domain` as index 0.
+* **P0-C (Correlation):** **DELETE** `if not entity.domain`. Always run recovery.
+
+#### 3. The "Cleanup" Step (P1 - Key Resolution)
+
+Once P0 is done, these functions become "dead code" or logic errors if left alone.
+
+* **P1-A/B/C:** Refactor these to expect a domain key. If they receive a name-like key (no dots), they should either fail loudly or attempt a final lookup, but never treat it as canonical.
+
+#### 4. The "Filter" Step (P2 - Modified)
+
+* **Modified P2-A:** In `admission.py`, add a **Gate 0** check:
+```python
+if not canonical_domain:
+    return AdmissionResult(admitted=False, rejection_reason="Identity requires a valid domain")
+
+```
+
+
+*Do not implement this check in `normalize_observations.py`.*
+
+---
+
+### Command for the Agent
+
+You can now authorize the agent with this unified instruction set:
+
+> **Execute Operation "Domain Primacy"**
+> 1. **Admission (`admission.py`):**
+> * **Logic Swap:** Instantiate `Asset` with `name=canonical_domain`.
+> * **Alias Preservation:** Append `entity.original_name` to `identifiers.hostnames`.
+> * **Priority Queue:** Remove `sorted(all_domains)`. Construct `domains` list as `[canonical_domain] + [unique plane_domains]`.
+> * **The Guillotine:** Reject any candidate at the end of the pipeline that still lacks a `canonical_domain`.
+> 
+> 
+> 2. **Correlation (`correlate_entities.py`):**
+> * **Aggressive Recovery:** Remove the `if not entity.domain` guard from `_recover_domain_from_planes`. Always update the entity if a governance domain is found.
+> 
+> 
+> 3. **Reconciliation (`aod_agent_reconcile.py` & `zombie.py`):**
+> * Update key resolution logic to prefer `identifiers.domains[0]` over `asset.name` if `asset.name` appears to be a display string.
+> 
+> 
+> 
+> 
+
+**This plan is approved.** Proceed with the demolition.

@@ -1,0 +1,165 @@
+Below is the **engineering work order**. It’s written so the dev can execute with minimal interpretation.
+
+---
+
+## Work Order: Late-Binding Domain Naming + Fan-In Merge (Post-Admission, Pre-Findings)
+
+### Goal
+
+Fix **KEY_NORMALIZATION_MISMATCH** (Farm expects domain-keyed assets) **without** destabilizing entity IDs, correlation, or admission logic.  
+
+### Non-goals (explicit)
+
+* Do **not** change normalization logic.
+* Do **not** mutate `entity_id` after normalization. 
+* Do **not** reject candidates for missing domains (“no guillotine”). 
+* Do **not** refactor correlation matching in this change.
+
+---
+
+## A. Insertion Point (Exact Pipeline Step)
+
+In `pipeline_executor.execute_pipeline()`:
+
+**Insert a new step after admission produces `assets[]` and before `generate_findings()` is called.**
+Rationale: findings must be generated once per final merged asset to avoid having to migrate/dedupe child findings later. 
+
+---
+
+## B. Deliverables
+
+### B1) New module/function
+
+Create a small utility (recommended location: `src/aod/pipeline/asset_identity.py` or similar):
+
+**Function signature (recommended):**
+
+* `late_bind_and_merge_assets(assets: list[Asset], correlations_by_entity_id: dict[str, CorrelationResult] | None = None) -> list[Asset]`
+
+If correlations aren’t easily available at that point, function can operate on assets only; but if they are available, use them to select canonical domain more accurately. (Admission already has correlation-domain extraction helpers; reuse them if accessible.) 
+
+---
+
+## C. Rules of Behavior
+
+### C1) Determine merge_key
+
+For each asset:
+
+* compute `registered_domain` (eTLD+1) from the best available domain candidate:
+
+  * prefer `asset.identifiers.domains` if present
+  * else if `asset.name` looks like a domain
+  * else none
+
+If `merge_key` is empty → **do not merge** (asset stays standalone; no synthetic key). This preserves determinism and avoids name-based accidental merges.
+
+### C2) Fan-in merge grouping
+
+Group assets by `merge_key` where `merge_key` is non-empty.
+
+### C3) Deterministic winner selection
+
+Winner = asset with lexicographically smallest `asset_id` (or next best stable deterministic identifier if `asset_id` isn’t directly comparable).
+
+No timestamps for “oldest”. Keep it deterministic across runs.
+
+### C4) Field-by-field merge (must implement exactly)
+
+Implement the merge table:
+
+* `asset_id`: **winner keeps**
+* `name`: **set to canonical registered domain** (`merge_key`) for merged groups
+* `identifiers.domains`: **union + ordered** (see ordering below)
+* `identifiers.hostnames`: **union** (dedupe)
+* all other identifier lists (ids, urls, etc. if present): **union** (dedupe)
+* `evidence_refs`: **union** (dedupe) — sort for deterministic diffs
+* coverage booleans (`has_idp`, `has_cmdb`, `has_cloud`, `has_finance` or equivalents): **OR**
+* `activity` (latest activity timestamp / evidence): **max()**
+* `lens_statuses` / derived classifications: **recompute** from merged flags + merged activity using the existing policy semantics (governed=idp OR cmdb; zombie=governed AND stale AND ongoing_finance; shadow=ungoverned AND recent). 
+
+Fields to **NOT** merge (winner keeps; log conflict if mismatched):
+
+* `asset_type`
+* `environment`
+* `provisioning_status`
+* `lens_debug` / `match_info` / debug payloads (keep winner’s, optionally attach a lightweight `merge_note` if such a field exists)
+
+### C5) Domain ordering rules (canonical at index 0)
+
+After merge:
+
+1. `domains[0] = merge_key` (canonical)
+2. then winner’s prior domains in their original order (excluding canonical)
+3. then the remaining domains from all other assets, lexicographically sorted (excluding already included)
+
+This preserves “winner priority” while staying deterministic.
+
+---
+
+## D. Reconciliation Adapter Hardening (Required)
+
+Update the reconciliation lookup so Farm can match by:
+
+1. `asset.name == requested_domain`
+2. OR `requested_domain in asset.identifiers.domains`
+
+This prevents future key drift if naming changes again.
+
+(Reason: onboarding docs explicitly state Farm expects domain keys and this mismatch is the core issue.)  
+
+---
+
+## E. Acceptance Criteria (Hard Gates)
+
+Run:
+
+* `POST /api/discovery/run`
+* `GET /api/reconciliation/assess/{run_id}` 
+
+Must pass all:
+
+1. **Shadows**
+
+* Matched ≥ 56 and FP = 0 (do not break current shadow performance) 
+
+2. **Zombies**
+
+* Matched = 56 (or within 1 with explicit RCA)
+* FP ≤ 1 
+
+3. **Rejections**
+
+* Must not spike relative to baseline (no return of “Domain Guillotine” behavior; prior bad run rejected 550/1163) 
+
+4. **Determinism**
+
+* Re-running same snapshot produces identical asset keys and counts (no nondeterministic ordering).
+
+If any gate fails → rollback.
+
+---
+
+## F. Rollback Plan (Mandatory)
+
+Feature-flag the late-binding + merge step with a single config toggle (default off until validated). If gates fail:
+
+* disable toggle
+* re-run assessment to confirm baseline restored
+* open RCA ticket with diff of: assets count, merged groups count, zombie FP list
+
+---
+
+## G. Implementation Checklist (Dev-facing)
+
+* [ ] Add `late_bind_and_merge_assets()` utility
+* [ ] Insert call **post-admission, pre-findings** in `execute_pipeline()` 
+* [ ] Ensure merge is deterministic (stable winner, stable ordering)
+* [ ] Ensure dedupe on evidence_refs and identifiers lists
+* [ ] Update reconciliation adapter matching: name OR identifiers.domains 
+* [ ] Run reconciliation assessment; verify acceptance gates 
+* [ ] If pass, enable feature flag for the target tenant/snapshot first (phased rollout)
+
+---
+
+If you paste this to the dev and they want one more layer of specificity (“which variable names in execute_pipeline?”), tell them: **show me the section where assets are produced and where `generate_findings()` is called**, and I’ll map the exact insertion lines to their current file version.

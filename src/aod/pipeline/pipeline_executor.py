@@ -1,4 +1,35 @@
-"""Pipeline Executor - Orchestrate all pipeline stages"""
+"""
+Pipeline Executor - Orchestrate all pipeline stages
+
+ARCHITECTURAL OVERVIEW
+======================
+This is the main orchestration for AOD's 7-stage pipeline:
+1. VALIDATION    - Parse snapshot, validate structure
+2. NORMALIZATION - Clean observation names, extract domains  
+3. INDEXING      - Build lookup indexes for IdP, CMDB, Cloud, Finance
+4. CORRELATION   - Match entities to governance plane records
+5. ADMISSION     - Apply admission criteria, create assets
+6. ARTIFACTS     - Handle non-asset artifacts
+7. FINDINGS      - Generate Shadow/Zombie/Gap findings
+
+KEY INVARIANTS (Jan 2026 - Lessons Learned)
+==========================================
+1. ENTITY_ID STABILITY: entity_id must NOT change after normalization.
+   The correlation_by_entity_id lookup depends on stable IDs.
+   
+2. BATCH DEDUPLICATION: All batch inserts (obs_samples, ambiguous_matches,
+   rejections) must be deduplicated before insert to prevent PK violations.
+   
+3. NO DOMAIN GUILLOTINE: Entities without domains must NOT be rejected.
+   Many zombies lack domains and would be incorrectly filtered.
+
+KNOWN ISSUES
+============
+- KEY_NORMALIZATION_MISMATCH: Asset keys don't match Farm's domain-based
+  expectations. This causes 26/56 zombie detection failures.
+  
+See CTO_ONBOARDING.md for detailed technical analysis.
+"""
 
 import hashlib
 import json

@@ -1,4 +1,34 @@
-"""Stage 5: Admission (AAC) - Apply admission criteria to determine assets"""
+"""
+Stage 5: Admission (AAC) - Apply admission criteria to determine assets
+
+ARCHITECTURAL OVERVIEW
+======================
+Admission is the critical gate where correlated entities become assets.
+This is where identity (asset.name, asset.identifiers) is finalized.
+
+KEY DECISIONS MADE HERE:
+- Asset name selection (domain vs display name)
+- Governance status (has_idp, has_cmdb)
+- Activity status (RECENT, STALE, NONE)
+- Shadow/Zombie classification
+
+KNOWN ISSUE: KEY_NORMALIZATION_MISMATCH
+=======================================
+Farm expects assets keyed by domain (e.g., "rapidbox.net"), but this module
+historically uses display names (e.g., "RapidBox"). This causes zombie
+detection failures when Farm can't find matching assets.
+
+FAILED FIX (Jan 2026): "Domain Primacy" attempted to set asset.name = domain
+but was rolled back after rejecting 47% of candidates (Domain Guillotine).
+
+LESSON LEARNED: Any fix must:
+1. NOT reject entities without domains (kills zombies)
+2. Apply domain-based naming at persistence, not mid-pipeline
+3. Handle fan-in collisions (multiple entities -> same domain)
+4. Preserve original_name in identifiers.hostnames
+
+See CTO_ONBOARDING.md for detailed technical analysis.
+"""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone

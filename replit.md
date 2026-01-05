@@ -1,62 +1,123 @@
 # AOS Discover - AutonomOS Discovery Module
 
 ## Overview
-AOS Discover is the discovery module of AutonomOS, an enterprise operating system. Its primary function is to ingest raw enterprise evidence to generate an Asset Catalog, a Run Log, and Explainable Findings. The system is designed to be deterministic, evidence-only, and fully explainable, rejecting pre-adjudicated labels to accurately identify and classify enterprise assets. This provides a clear, auditable view of an organization's digital footprint, supporting robust asset management and risk mitigation.
+AOS Discover is the discovery module of AutonomOS, an enterprise operating system. Its primary function is to ingest raw enterprise evidence to generate an Asset Catalog, a Run Log, and Explainable Findings. The system is designed to be deterministic, evidence-only, and fully explainable, rejecting pre-adjudicated labels to accurately identify and classify enterprise assets.
+
+## Current Status (January 2026)
+
+**NEEDS ARCHITECTURAL FIX**
+
+| Metric | Target | Current |
+|--------|--------|---------|
+| Shadow Accuracy | 100% | 98.2% (56/57) |
+| Zombie Accuracy | 100% | 53.6% (30/56) |
+| Combined Accuracy | 95%+ | 83% |
+
+**Critical Issue:** KEY_NORMALIZATION_MISMATCH — Farm expects domain-based asset keys, AOD uses name-based keys. This causes zombie detection failures.
+
+**Failed Fix (Jan 2026):** "Domain Primacy" refactor was rolled back after causing 47% rejection rate and accuracy regression from 96.4% → 83%.
+
+See `CTO_ONBOARDING.md` for detailed technical analysis.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-AOS Discover follows a strict architectural design based on several core principles: no ground truth ingestion, no ML/anomaly scores, determinism, and evidence-only decisions. It distinguishes between assets and artifacts to prevent asset count inflation.
 
-The system uses a 7-stage sequential pipeline for processing: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Findings Generation.
+### 7-Stage Pipeline
+1. **Validation** — Parse snapshot, validate structure
+2. **Normalization** — Clean observation names, extract domains
+3. **Indexing** — Build lookup indexes for IdP, CMDB, Cloud, Finance
+4. **Correlation** — Match entities to governance plane records
+5. **Admission** — Apply admission criteria, create assets
+6. **Artifacts** — Handle non-asset artifacts
+7. **Findings** — Generate Shadow/Zombie/Gap findings
 
-**Governance Trinity:** An asset is classified as "Shadow" if it fails any of the following:
--   **Visibility**: Registered in CMDB
--   **Validation**: Present in IdP (sanctioned/SSO)
--   **Control**: Managed lifecycle tied to owner
-Finance presence does not equate to governance; there is no "Grey IT".
+### Core Design Principles
+- No ground truth ingestion
+- No ML/anomaly scores
+- Determinism
+- Evidence-only decisions
 
-**Derived Classifications:**
--   **Activity Status**: RECENT (active within 90 days), STALE (inactive beyond 90 days), or NONE.
--   **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match.
--   **Shadow Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND RECENT activity.
--   **Financial Anchor Governance Gap**: Shadow asset with ongoing finance.
--   **Zombie Asset**: Governed (has_idp OR has_cmdb) AND STALE activity AND ongoing_finance.
--   **Parked Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND STALE activity.
+### Governance Policy
+```python
+is_governed = has_idp OR has_cmdb
+```
 
-**Governance Policy:** `is_governed = has_idp OR has_cmdb`. This policy applies consistently across all logic.
+Finance presence does NOT equal governance. There is no "Grey IT".
 
-**Key Technical Implementations & Features:**
--   **Admission Gates:** Finance alone is not sufficient for admission; it requires corroboration with governance or sufficient discovery.
--   **Domain Normalization:** Standardizes domain names by stripping subdomains to eTLD+1 and collapsing alias domains.
--   **Tenant Token Indexing:** Extracts and indexes tenant tokens from subdomain patterns for cross-matching.
--   **Correlation Consistency:** Ensures consistent domain normalization across all correlation phases.
--   **Activity Status & Zombie Detection:** Accurate calculation of activity status based on observation and plane timestamps, crucial for identifying zombie assets. Fail-safe to "CLEAN" if no activity timestamps are available. **Snapshot Time Reference (Jan 2026):** Activity status (RECENT/STALE) is now calculated relative to the snapshot's generated_at/created_at timestamp, not wall-clock time. This ensures consistent reconciliation results regardless of when the snapshot is processed. **IdP Activity Integration (Jan 2026):** Activity is now calculated from BOTH Discovery observations AND IdP last_login_at timestamps, aligning with Farm's definition that "Activity = Network Visibility OR Authentication Success". Cross-IdP aggregation uses IdP NAME as the grouping key (e.g., "Maxflow" groups maxflow.ai, maxflow.org) - this is safe because IdP names are vendor-specific, unlike shared domains. **Critical Fix (Jan 2026):** When an asset matches to an IdP record, the system now ALWAYS checks the aggregated family max timestamp and uses whichever is newer. This ensures assets matched to stale sibling records (e.g., maxflow.ai with Feb 2025 login) inherit recent activity from other family members (e.g., maxflow.org with Dec 2025 login). Generic names (app, portal, admin, login, sso, auth, api, web, test, etc.) are blocklisted to prevent false aggregation.
--   **Domain Recovery:** Recovers entity domains from correlated plane records (IdP, CMDB, Cloud, Finance) when discovery observations lack domain fields.
--   **Cross-Domain Correlation (Jan 2026):** Enables correlation between entities with different domains that share the same brand. Uses dual matching strategy: (1) First-token match for environment suffixes (e.g., "flowbase-internal.com" ↔ "flowbase.ai"), and (2) Collapsed match for hyphenated brands (e.g., "service-now.com" ↔ "servicenow.com"). Requires ≥4 char tokens to prevent false positives.
--   **Multi-Domain Identifiers (Jan 2026):** Assets now include ALL domains from correlated plane records (IdP, CMDB, etc.) in their identifiers.domains list. This enables Farm reconciliation to match assets by any domain variant, resolving KEY_NORMALIZATION_MISMATCH for zombie detection.
--   **Domain Primacy Architecture (Jan 2026):** Fundamental fix for KEY_NORMALIZATION_MISMATCH. The system now enforces "Domain > Name" hierarchy:
-    -   **Asset Name = Canonical Domain:** `asset.name` is set to the canonical domain (e.g., "rapidbox.net"), not the observation name (e.g., "RapidBox"). This ensures asset keys match reconciliation expectations.
-    -   **Original Name Preservation:** The observation name is preserved in `asset.identifiers.hostnames` for UI/search purposes.
-    -   **Aggressive Domain Recovery:** Correlation ALWAYS attempts to upgrade entity domains from governance planes (IdP/CMDB), even if a weak/inferred domain already exists.
-    -   **Domain Guillotine:** Entities that reach Admission without a valid domain are rejected. This ensures all admitted assets have verifiable domain-based identities.
-    -   **Priority-Ordered Domains:** Domain lists preserve discovery-first priority (no alphabetical sorting), ensuring the canonical domain remains at index 0.
--   **Indexing Enhancements:** Extracts and indexes base names from registered domains and vendor names from finance transactions to improve correlation.
--   **Token-Based Finance Correlation:** Uses token-based matching for finance transactions. Requirements: (1) domain base token ≥4 chars, (2) NOT in GENERIC_TOKENS blocklist (cloud, data, online, digital, software, service, etc.), (3) domain base must match the FIRST token of vendor name (primary brand). VENDOR_PREFIXES skipped: the, a, an, team, inc, corp, llc, ltd, co, by. Hyphen normalization collapses "service-now" → "servicenow". This enables cross-matching between entity domains (e.g., "easycloud.cloud") and transaction vendor names (e.g., "Easycloud Inc-prod") while preventing false positives from generic terms or wrong-position brand mentions.
+### Derived Classifications
+- **Shadow Asset:** Ungoverned + RECENT activity
+- **Zombie Asset:** Governed + STALE activity + ongoing finance
+- **Parked Asset:** Ungoverned + STALE activity
+- **Activity Status:** RECENT (≤90 days), STALE (>90 days), NONE
 
-**Performance Optimizations:** Implemented memoization and pre-computation of entity normalization tokens to improve processing time for large snapshots.
+### Activity Calculation
+Activity is the MOST RECENT of:
+- Discovery observation timestamps
+- IdP last_login_at timestamps
 
-**Traffic Light Provisioning:** A fail-closed system for asset provisioning with statuses: ACTIVE, REVIEW, QUARANTINE, BLOCKED, RETIRED, IGNORED.
+**Cross-IdP Aggregation:** Assets inherit activity from sibling IdP records with same vendor name.
 
-**UI Design:** Adheres to the AutonomOS palette, featuring cyan and purple accents, a dark slate foundation, and the Quicksand font.
+## Key Technical Features
 
-**Quality Guardrails:** Emphasizes semantic preservation, avoidance of "cheating," real-world proof via before/after outputs, and negative test inclusion. Designed to "fail loudly."
+### Working Features
+- **Domain Normalization:** Strips subdomains to eTLD+1
+- **Tenant Token Indexing:** Extracts subdomain patterns for cross-matching
+- **Cross-IdP Activity Aggregation:** Maxflow.ai inherits activity from maxflow.org
+- **Token-Based Finance Correlation:** Matches entity domains to vendor names
+- **Snapshot Time Reference:** Activity calculated relative to snapshot timestamp
+
+### Known Issues
+1. **KEY_NORMALIZATION_MISMATCH:** Asset keys don't match Farm's domain-based expectations
+2. **Zombie Detection Gap:** 26/56 zombies missed due to key mismatch
+3. **Entity ID Instability:** Changing entity_id mid-pipeline breaks lookups
+
+## Project Structure
+```
+src/aod/
+├── api/           # FastAPI routes
+├── core/          # Core business logic
+├── db/            # Database operations
+├── models/        # Pydantic models
+├── pipeline/      # 7-stage pipeline implementation
+│   ├── pipeline_executor.py    # Main orchestration
+│   ├── correlate_entities.py   # Entity correlation
+│   ├── admission.py            # Admission criteria
+│   ├── derived_classifications.py  # Shadow/Zombie logic
+│   └── aod_agent_reconcile.py  # Farm reconciliation
+└── utils/         # Utilities
+```
 
 ## External Dependencies
--   **Python 3.11**
--   **FastAPI** with **Pydantic v2**
--   **PostgreSQL** persistence via **asyncpg**
--   **Uvicorn** server
--   **httpx** for async HTTP communication with Farm
--   **Farm Integration**: Integrates with Farm for snapshot ingestion and reconciliation.
+- **Python 3.11**
+- **FastAPI** with **Pydantic v2**
+- **PostgreSQL** via **asyncpg**
+- **Uvicorn** server
+- **httpx** for Farm API communication
+
+## Development Commands
+```bash
+# Start server
+PYTHONPATH=/home/runner/workspace/src python -m uvicorn src.main:app --host 0.0.0.0 --port 5000 --reload
+
+# Run discovery
+POST /api/discovery/run
+
+# Check reconciliation
+GET /api/reconciliation/assess/{run_id}
+```
+
+## Lessons Learned
+
+### DO NOT
+- Change entity_id mid-pipeline
+- Reject entities without domains (kills zombies)
+- Deploy without regression tests
+- Skip batch insert deduplication
+
+### DO
+- Keep entity_id stable throughout pipeline
+- Apply identity transformation at final persistence
+- Test zombie/shadow counts before and after changes
+- Use fallbacks when domain recovery fails

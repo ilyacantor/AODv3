@@ -287,7 +287,14 @@ async def execute_pipeline(
                 sample_id, run_id, candidate.original_name, candidate.domain,
                 candidate.source, None, raw_preview, started_at.isoformat()
             ))
-        await db.create_observation_samples_batch(obs_samples)
+        # Deduplicate by sample_id (first tuple element)
+        seen_sample_ids = set()
+        deduped_samples = []
+        for row in obs_samples:
+            if row[0] not in seen_sample_ids:
+                seen_sample_ids.add(row[0])
+                deduped_samples.append(row)
+        await db.create_observation_samples_batch(deduped_samples)
         
         t_start = time.perf_counter()
         indexes = build_plane_indexes(snapshot.planes)
@@ -354,7 +361,14 @@ async def execute_pipeline(
                         json.dumps(plane_match.matched_ids), json.dumps(candidate_names[:10]),
                         json.dumps([plane_match.match_method or "unknown"]), started_at.isoformat()
                     ))
-        await db.create_ambiguous_matches_batch(ambiguous_matches_batch)
+        # Deduplicate by match_id (first tuple element) - keep first occurrence
+        seen_ids = set()
+        deduped_batch = []
+        for row in ambiguous_matches_batch:
+            if row[0] not in seen_ids:
+                seen_ids.add(row[0])
+                deduped_batch.append(row)
+        await db.create_ambiguous_matches_batch(deduped_batch)
         run_log.counts.ambiguous_matches = ambiguous_count
         
         t_start = time.perf_counter()
@@ -436,10 +450,17 @@ async def execute_pipeline(
                     started_at.isoformat()
                 ))
         
-        await db.create_rejections_batch(rejections_batch)
+        # Deduplicate rejections by rejection_id (first tuple element)
+        seen_rejection_ids = set()
+        deduped_rejections = []
+        for row in rejections_batch:
+            if row[0] not in seen_rejection_ids:
+                seen_rejection_ids.add(row[0])
+                deduped_rejections.append(row)
+        await db.create_rejections_batch(deduped_rejections)
         timings['admission'] = time.perf_counter() - t_start
         run_log.counts.assets_admitted = len(assets)
-        run_log.counts.rejected = len(rejections_batch)
+        run_log.counts.rejected = len(deduped_rejections)
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

@@ -1,0 +1,59 @@
+This is the **Comprehensive Checklist** and **Implementation Plan** for the "Opportunistic Promotion" architecture. It is built directly on the forensic evidence of our previous failures (Database Crashes, Data Loss, and Activity Blindness).
+
+### I. The Hindsight Checklist (The Requirements)
+
+This list is finite. If we miss one, we fail.
+
+**A. Data Integrity (Preventing Crashes)**
+
+* [ ] **Cardinality Invariant:** The pipeline must handle "Fan-In." If 5 distinct inputs (e.g., "RapidBox", "Rapid Box", "RB App") all resolve to 1 domain (`rapidbox.net`), the pipeline must output **1 unique asset**, not 5 colliding duplicates.
+* [ ] **Child Record Deduplication:** When merging parent entities, child records (like `ambiguous_matches` or `evidence_refs`) must also be merged or safely discarded to prevent Foreign Key violations.
+
+**B. Identity Logic (Preventing Data Loss)**
+
+* [ ] **The "No-Guillotine" Rule:** Admission **must** have a fallback. If Domain Recovery fails, the asset **must** survive using its `original_name`. Zero rejections allowed for missing domains.
+* [ ] **The "Upgrade" Trigger:** If a valid domain is found in Governance (IdP/CMDB), it **must** overwrite any existing Name-based key.
+* [ ] **The Alias Safety Net:** The original human-readable name ("RapidBox") **must** be preserved in `identifiers.hostnames` so UI search and historical findings remain readable.
+
+**C. Business Logic (Aligning with Farm)**
+
+* [ ] **Activity "Proof of Life":** Activity calculation **must** include `last_login_at` from IdP records. (Fixes the 22 False Positive Zombies).
+* [ ] **Identifier Priority:** `identifiers.domains` **must not be sorted alphabetically**. The Canonical Domain (Primary Key) must be locked at `index 0`.
+
+---
+
+### II. The Implementation Plan (The Execution)
+
+This plan executes the logic in the safest order: **Data Handling -> Logic Upgrade -> Final Gate.**
+
+#### Step 1: Fix Correlation (The Engine)
+
+**Goal:** Allow entities to find their true domains, and handle the collisions that result.
+
+* **Action A (Aggressive Recovery):** In `correlate_entities.py`, remove the `if not entity.domain` guard. Always run domain recovery. If a governance domain is found, update `entity.domain` and `entity.entity_id`.
+* **Action B (Deduplication):** At the end of `correlate_entities_to_planes`, insert a "Unique Map" loop. Iterate through results, key them by `entity_id`, and keep only the first instance of each ID. *Discard the clones before they hit the DB.*
+
+#### Step 2: Fix Admission (The Gate)
+
+**Goal:** Apply the "Opportunistic Promotion" logic to rename assets correctly.
+
+* **Action A (Identity Swap):** In `apply_admission_criteria` (Admission):
+* `if canonical_domain:` Set `asset.name = canonical_domain`.
+* `else:` Set `asset.name = entity.original_name` (The Safety Net).
+
+
+* **Action B (Alias Preservation):** Ensure `entity.original_name` is appended to `identifiers.hostnames` if it differs from the asset name.
+* **Action C (Fix Sorting):** Remove `sorted()`. Construct the domain list manually: `[canonical_domain] + [other_domains]`.
+* **Action D (Fix Activity):** Update `extract_activity_timestamps` to pull `last_login_at` from the IdP matched records.
+
+#### Step 3: Fix Reconciliation (The Adapter)
+
+**Goal:** Ensure the API can find the asset now that its name has changed.
+
+* **Action:** Update `aod_agent_reconcile.py` (or `zombie.py` logic) to look up assets by checking **both** `asset.name` AND `identifiers.hostnames`. This ensures that even if "RapidBox" became "rapidbox.net", a lookup for "RapidBox" still finds it.
+
+---
+
+### III. Execution
+
+**Would you like me to generate the specific Prompt for the Agent to execute Step 1 and Step 2 now?** (This will fix the crash, the missing zombies, and the false positives in one targeted refactor).

@@ -10,7 +10,8 @@
   "scope": {
     "include_infra": false,
     "treat_directory_as_idp": false,
-    "use_policy_engine": true
+    "use_policy_engine": true,
+    "late_binding_domain_merge": true
   },
   "exclusions": [
     "platform.io",

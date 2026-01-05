@@ -24,6 +24,7 @@ from .admission import apply_admission_criteria, AdmissionResult, build_idp_acti
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
+from .asset_identity import late_bind_and_merge_assets
 
 logger = logging.getLogger(__name__)
 
@@ -440,6 +441,20 @@ async def execute_pipeline(
         timings['admission'] = time.perf_counter() - t_start
         run_log.counts.assets_admitted = len(assets)
         run_log.counts.rejected = len(rejections_batch)
+        
+        t_start = time.perf_counter()
+        late_binding_enabled = policy_config.scope.late_binding_domain_merge
+        pre_merge_count = len(assets)
+        assets = late_bind_and_merge_assets(assets, late_binding_enabled, logger)
+        timings['domain_merge'] = time.perf_counter() - t_start
+        
+        if late_binding_enabled and len(assets) != pre_merge_count:
+            logger.info("pipeline.domain_merge_applied", extra={
+                "run_id": run_id,
+                "pre_merge_count": pre_merge_count,
+                "post_merge_count": len(assets),
+                "merged_count": pre_merge_count - len(assets)
+            })
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

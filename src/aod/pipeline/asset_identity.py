@@ -76,19 +76,30 @@ def _precedence_status(s1: LensStatus, s2: LensStatus) -> LensStatus:
     return s1 if order.get(s1, 0) >= order.get(s2, 0) else s2
 
 
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    """Deduplicate list while preserving encounter order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 def _merge_assets(assets: list[Asset], merge_key: str, logger: Optional[logging.Logger]) -> Asset:
     """
     Merge multiple assets into one using field-by-field merge rules.
     
     Winner selection: lexicographically smallest str(asset.asset_id)
+    
+    Ordering rules (per CTO spec):
+    - Domains: [canonical] + winner's domains (in order) + other assets' domains (sorted)
+    - Hostnames/URIs/Evidence: winner's first (in order), then others (in encounter order)
     """
     sorted_assets = sorted(assets, key=lambda a: str(a.asset_id))
     winner = sorted_assets[0]
-    
-    all_domains: list[str] = []
-    all_hostnames: list[str] = []
-    all_uris: list[str] = []
-    all_evidence_refs: list[str] = []
+    other_assets = sorted_assets[1:]
     
     merged_coverage = LensCoverage(
         idp=False,
@@ -118,13 +129,6 @@ def _merge_assets(assets: list[Asset], merge_key: str, logger: Optional[logging.
     conflicting_statuses = set()
     
     for asset in sorted_assets:
-        if asset.identifiers:
-            all_domains.extend(asset.identifiers.domains or [])
-            all_hostnames.extend(asset.identifiers.hostnames or [])
-            all_uris.extend(asset.identifiers.uris or [])
-        
-        all_evidence_refs.extend(asset.evidence_refs or [])
-        
         merged_coverage.idp = merged_coverage.idp or asset.lens_coverage.idp
         merged_coverage.cmdb = merged_coverage.cmdb or asset.lens_coverage.cmdb
         merged_coverage.cloud = merged_coverage.cloud or asset.lens_coverage.cloud
@@ -169,8 +173,8 @@ def _merge_assets(assets: list[Asset], merge_key: str, logger: Optional[logging.
             "merged_asset_ids": [str(a.asset_id) for a in sorted_assets]
         })
     
-    seen_domains = set()
-    ordered_domains = [merge_key]
+    seen_domains: set[str] = set()
+    ordered_domains: list[str] = [merge_key]
     seen_domains.add(merge_key)
     
     for domain in (winner.identifiers.domains if winner.identifiers else []):
@@ -178,14 +182,37 @@ def _merge_assets(assets: list[Asset], merge_key: str, logger: Optional[logging.
             ordered_domains.append(domain)
             seen_domains.add(domain)
     
-    for domain in sorted(set(all_domains)):
-        if domain and domain not in seen_domains:
-            ordered_domains.append(domain)
-            seen_domains.add(domain)
+    other_domains: list[str] = []
+    for asset in other_assets:
+        if asset.identifiers:
+            for domain in (asset.identifiers.domains or []):
+                if domain and domain not in seen_domains:
+                    other_domains.append(domain)
+                    seen_domains.add(domain)
+    for domain in sorted(other_domains):
+        ordered_domains.append(domain)
     
-    deduped_hostnames = sorted(set(h for h in all_hostnames if h))
-    deduped_uris = sorted(set(u for u in all_uris if u))
-    deduped_refs = sorted(set(r for r in all_evidence_refs if r))
+    hostnames_ordered: list[str] = []
+    if winner.identifiers:
+        hostnames_ordered.extend(winner.identifiers.hostnames or [])
+    for asset in other_assets:
+        if asset.identifiers:
+            hostnames_ordered.extend(asset.identifiers.hostnames or [])
+    deduped_hostnames = _dedupe_preserve_order(hostnames_ordered)
+    
+    uris_ordered: list[str] = []
+    if winner.identifiers:
+        uris_ordered.extend(winner.identifiers.uris or [])
+    for asset in other_assets:
+        if asset.identifiers:
+            uris_ordered.extend(asset.identifiers.uris or [])
+    deduped_uris = _dedupe_preserve_order(uris_ordered)
+    
+    refs_ordered: list[str] = []
+    refs_ordered.extend(winner.evidence_refs or [])
+    for asset in other_assets:
+        refs_ordered.extend(asset.evidence_refs or [])
+    deduped_refs = _dedupe_preserve_order(refs_ordered)
     
     merged_asset = Asset(
         asset_id=winner.asset_id,

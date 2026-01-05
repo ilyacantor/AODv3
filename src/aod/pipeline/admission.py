@@ -191,7 +191,7 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
                     if rd_domain and _is_valid_domain(rd_domain.lower().strip()):
                         domains.add(rd_domain.lower().strip())
     
-    return sorted(domains)
+    return list(domains)
 
 
 def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: bool = False) -> Optional[str]:
@@ -1366,9 +1366,15 @@ def apply_admission_criteria(
             domain_list.append(pd)
             seen_domains.add(pd)
     
+    hostnames_list = []
+    if entity.hostname:
+        hostnames_list.append(entity.hostname)
+    if entity.original_name and entity.original_name not in hostnames_list:
+        hostnames_list.append(entity.original_name)
+    
     identifiers = AssetIdentifiers(
         domains=domain_list,
-        hostnames=[entity.hostname] if entity.hostname else [],
+        hostnames=hostnames_list,
         uris=[entity.uri] if entity.uri else []
     )
     
@@ -1397,8 +1403,20 @@ def apply_admission_criteria(
     
     canonical_domain = registered_domain
     
+    # DOMAIN PRIMACY: Reject entities that reach Admission without a valid domain
+    # This is the "Guillotine" - entities had their chance to get a domain from Correlation
+    if not canonical_domain:
+        return AdmissionResult(
+            admitted=False,
+            provisioning_status=ProvisioningStatus.BLOCKED,
+            asset=None,
+            admission_reason="Identity requires a valid domain; no domain found after correlation"
+        )
+    
     asset_key = canonical_domain
-    display_name = entity.original_name
+    # DOMAIN PRIMACY: Asset name IS the canonical domain (not the observation name)
+    # Original name is preserved in identifiers.hostnames for UI/search
+    display_name = canonical_domain
     
     # Add traffic light status tag
     tags.append(f"traffic_light:{provisioning_status.value}")

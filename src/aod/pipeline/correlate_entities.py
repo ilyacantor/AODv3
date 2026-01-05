@@ -1281,14 +1281,18 @@ def correlate_entities_to_planes(
         elif result.finance.status == MatchStatus.AMBIGUOUS:
             ambiguous_counts["finance"] += 1
         
-        if not entity.domain:
-            recovered_domain = _recover_domain_from_planes(result)
-            if recovered_domain:
-                entity.domain = recovered_domain
-                entity.entity_id = f"entity:{recovered_domain}"
-                entity.canonical_name = recovered_domain
+        # DOMAIN PRIMACY: Always attempt domain recovery from governance planes
+        # This allows upgrading weak/inferred domains to authoritative ones from IdP/CMDB
+        recovered_domain = _recover_domain_from_planes(result)
+        if recovered_domain:
+            old_domain = entity.domain
+            entity.domain = recovered_domain
+            entity.entity_id = f"entity:{recovered_domain}"
+            entity.canonical_name = recovered_domain
+            if old_domain != recovered_domain:
                 logger.debug("correlate_entities.domain_recovered", extra={
                     "original_name": entity.original_name,
+                    "old_domain": old_domain,
                     "recovered_domain": recovered_domain
                 })
         

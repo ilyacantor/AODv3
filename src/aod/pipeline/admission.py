@@ -1071,13 +1071,16 @@ def extract_activity_timestamps(
             timestamps.append(cloud_observed_at)
     
     # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    # NOTE: Finance timestamps are stored for metadata but NOT included in latest_activity_at.
+    # Per design: "Activity = Network Visibility OR Authentication Success"
+    # Finance transactions are billing events, not actual usage/activity evidence.
     if correlation.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.finance.matched_records:
             if isinstance(record, Transaction) and record.date:
                 if finance_last_transaction_at is None or record.date > finance_last_transaction_at:
                     finance_last_transaction_at = record.date
-        if finance_last_transaction_at:
-            timestamps.append(finance_last_transaction_at)
+        # Jan 2026: Do NOT add finance_last_transaction_at to timestamps!
+        # Finance is metadata for ongoing_finance flag, NOT activity evidence.
     
     latest_activity_at = max(timestamps) if timestamps else None
     

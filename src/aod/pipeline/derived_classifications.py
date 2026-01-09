@@ -868,7 +868,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "stripe.network",  # Stripe
     "zdassets.com",  # Zendesk
     "hubspotusercontent.com",  # HubSpot
-    "datadoghq.com",  # Datadog
+    # Note: datadoghq.com is the canonical SaaS domain (app.datadoghq.com), NOT an alias
     "splunkcloud.com",  # Splunk
     "docusign.net",  # DocuSign
     "adobelogin.com",  # Adobe

@@ -1,0 +1,184 @@
+You’re right. The fix needs **guardrails + kill-switches** so we don’t “improve keys” and silently break admission/classification again.
+
+Below is the **Replit-agent prompt** I would use. It is designed to fix **only** `KEY_NORMALIZATION_MISMATCH` while preventing collateral damage, with explicit invariants, CI gates, and rollback safety.
+
+---
+
+## Replit Agent Prompt (Guardrailed): Eliminate KEY_NORMALIZATION_MISMATCH without breaking anything else
+
+### Objective
+
+Fix **ONLY** the root cause behind Farm’s `KEY_NORMALIZATION_MISMATCH`:
+
+> “Domain exists in AOD evidence but not used as canonical key.”
+
+Success is **KEY_NORMALIZATION_MISMATCH = 0** on the reference snapshot/run, while keeping all other metrics within tight tolerances.
+
+### Non-negotiable constraints
+
+* **Do not modify AssetIdentity** (frozen)
+* **Do not emit multiple keys**
+* **Do not change admission gate logic**
+* **Do not change shadow/zombie policy logic**
+* **Do not change discovery_sources semantics** (already hard-frozen)
+* **Do not introduce vendor collapsing** (Google/Microsoft/Salesforce alias collapsing is out of scope)
+
+Only change **canonical key selection + immutability**.
+
+---
+
+## Plan (must follow exactly)
+
+### Step 0 — Create safety branch + baseline metrics
+
+1. Create branch `fix/key-normalization-guardrailed`.
+2. Run the reference assessment (same snapshot/tenant as last run) and capture baseline:
+
+   * combined accuracy
+   * admission accuracy
+   * shadow/zombie match counts
+   * **KEY_NORMALIZATION_MISMATCH count**
+3. Save the baseline JSON/markdown output in `artifacts/baseline_<runid>.md` so we can compare.
+
+**Guardrail:** if baseline run cannot be reproduced exactly, stop and report.
+
+---
+
+### Step 1 — Add observability (NO behavior change)
+
+Add debug logging (behind env flag `AOD_DEBUG_KEYS=1`) that, for every emitted asset, records:
+
+* `emitted_key`
+* `candidate_domains_from_observations` (top 10 by support)
+* `support_count` per candidate
+* `candidate_source_diversity` per candidate (distinct obs.source)
+* `identifiers.domains` (full list)
+* `where_emitted_key_came_from` (function name)
+
+Write this to `artifacts/key_debug_<runid>.jsonl`.
+
+**Guardrail:** This step must not change outputs when `AOD_DEBUG_KEYS` is off.
+
+---
+
+### Step 2 — Implement Primary Key Freeze (single choke point)
+
+Locate the single place where the emitted asset key is chosen (the “primary key”).
+
+Implement function:
+
+`choose_primary_key_from_observations(observations) -> registrable_domain`
+
+Rules:
+
+1. Extract candidate domains from **observations only** (hostname/domain fields).
+2. Normalize to registrable domain (eTLD+1).
+3. Score candidates:
+
+   * higher `support_count` wins
+   * tie-breaker: higher `source_diversity`
+   * tie-breaker: most recent activity
+4. Output `primary_key`.
+
+Then enforce immutability:
+
+* set `asset.primary_key` exactly once
+* disallow any later step from changing it (merge/alias must not overwrite)
+
+**Hard guardrail invariant (must fail fast):**
+If any code path attempts to emit an asset under a key different from `asset.primary_key`, raise and fail the run.
+
+---
+
+### Step 3 — Stop “late overrides”
+
+Search for and eliminate these patterns (without changing other behavior):
+
+* Using `identifiers.domains[0]` as the emitted key
+* Reordering `identifiers.domains` to influence key selection
+* “Promote to vendor root” or alias mapping that overwrites primary key
+
+Allowed behavior:
+
+* `identifiers.domains` can include additional domains
+* merges can union identifiers/evidence
+* but **primary_key remains unchanged**
+
+---
+
+## Guardrail test suite (must be added/updated)
+
+### A) Key determinism test
+
+Same snapshot, run 3x:
+
+* emitted key set must be identical across runs
+
+### B) No-key-override test
+
+For a synthetic asset with observations supporting `foo-legacy.com` and also identifiers containing `foo.com`,
+
+* primary_key must remain `foo-legacy.com` if that is what observations support
+
+### C) Farm mismatch regression list
+
+Hardcode the current mismatch domains into a test that asserts:
+
+* each appears as an emitted primary key when present in observations for the reference snapshot
+
+Domains list (from last assessment):
+`amazon.com, workers.dev, easyworks.co, zoom-legacy.com, flexflow.org, protech.com, cloudcloud.ai, linktech.org, ultralabs.ai, fasthub.dev, fasthub.co, flexflow.com, syncdesk.tech, ultralabs.co`
+
+If some are not present in observations, the test should assert they are absent in identifiers too (to avoid false alarms).
+
+---
+
+## Success criteria (kill-switches)
+
+After implementing, rerun the reference assessment and compare against baseline:
+
+### Primary goal
+
+* **KEY_NORMALIZATION_MISMATCH == 0**
+
+### Must-not-regress thresholds
+
+If any of these worsen beyond tolerance, abort and revert:
+
+* combined accuracy: drop > 1.0%
+* admission accuracy: drop > 0.5%
+* shadow matched count: drop > 2
+* zombie matched count: drop > 2
+
+This is the “don’t break other stuff” guardrail.
+
+### Output artifacts
+
+Save:
+
+* `artifacts/after_<runid>.md`
+* diff summary vs baseline (counts only)
+* key debug jsonl (if enabled)
+
+---
+
+## What to deliver back
+
+1. The commit hash + branch name
+2. Baseline vs after diff table
+3. Confirmation that KEY_NORMALIZATION_MISMATCH is 0 on the reference snapshot
+4. If any mismatch remains: show the debug lines for those keys only (from jsonl)
+
+---
+
+### Notes
+
+* Do not touch admission gates or classification logic.
+* Do not change discovery_sources computation.
+* Do not implement vendor alias collapsing.
+
+Focus only on “domain exists in observations but not used as primary key.”
+
+---
+
+If you want, I can tighten this further by naming the likely exact “choke point” files/functions (based on your earlier paths) once you paste where the emitted asset key is set today (the function that creates the final Asset output).

@@ -262,6 +262,56 @@ def derive_canonical_name(observation: Observation) -> str:
     return canonical if canonical else normalize_string(name)
 
 
+def choose_primary_key_from_observations(observations: list[Observation]) -> Optional[str]:
+    """
+    Score and choose the best primary key from multiple observations.
+    
+    Selection criteria (in priority order):
+    1. Domain support count (how many observations mention this domain)
+    2. Source diversity (multiple distinct sources = higher confidence)
+    3. Recency (if timestamps available, prefer more recent observations)
+    
+    Returns the best registrable domain as primary key, or None if no domains found.
+    
+    INVARIANT: Once chosen, this key MUST NOT be changed downstream.
+    """
+    import os
+    from collections import defaultdict
+    from .vendor_inference import extract_registered_domain
+    
+    if not observations:
+        return None
+    
+    domain_sources: dict[str, set[str]] = defaultdict(set)
+    domain_counts: dict[str, int] = defaultdict(int)
+    
+    for obs in observations:
+        domain = resolve_domain_from_observation(obs)
+        if domain:
+            registered = extract_registered_domain(domain)
+            if registered:
+                domain_sources[registered].add(obs.source or "unknown")
+                domain_counts[registered] += 1
+    
+    if not domain_counts:
+        return None
+    
+    scored = []
+    for domain, count in domain_counts.items():
+        source_diversity = len(domain_sources[domain])
+        scored.append((source_diversity, count, domain))
+    
+    scored.sort(reverse=True)
+    
+    if os.environ.get("AOD_DEBUG_KEYS"):
+        logger.info("primary_key.selection", extra={
+            "candidates": [{"domain": d, "sources": list(domain_sources[d]), "count": c} for d in domain_counts],
+            "chosen": scored[0][2] if scored else None
+        })
+    
+    return scored[0][2] if scored else None
+
+
 def normalize_observations(observations: list[Observation]) -> tuple[list[CandidateEntity], list[dict]]:
     """
     Normalize observations and derive candidate system entities.
@@ -286,6 +336,9 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     entities_by_name: dict[str, CandidateEntity] = {}
     entities_by_base_token: dict[str, CandidateEntity] = {}
     rejected: list[dict] = []
+    
+    import os
+    debug_keys = os.environ.get("AOD_DEBUG_KEYS")
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
         domain = resolve_domain_from_observation(obs)

@@ -1440,7 +1440,18 @@ def apply_admission_criteria(
     
     canonical_domain = registered_domain
     
+    # PRIMARY KEY FREEZE: The key was chosen in normalize_observations - never change it
     asset_key = canonical_domain
+    
+    import os
+    if os.environ.get("AOD_DEBUG_KEYS"):
+        logger.info("admission.primary_key_freeze", extra={
+            "entity_domain": entity.domain,
+            "registered_domain": registered_domain,
+            "asset_key": asset_key,
+            "from_correlation_recovery": recovered_from_correlation
+        })
+    
     display_name = entity.original_name
     
     # Add traffic light status tag

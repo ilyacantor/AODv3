@@ -222,8 +222,8 @@ VENDOR_TO_DOMAIN.update({
     "g suite": "google.com",
     "gsuite": "google.com",
     "google apps": "google.com",
-    "aws": "amazonaws.com",
-    "amazon web services": "amazonaws.com",
+    "aws": "amazon.com",
+    "amazon web services": "amazon.com",
 })
 
 

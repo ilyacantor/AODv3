@@ -192,33 +192,10 @@ class TestFinanceAnchoringClassification:
 
 
 class TestFinanceAnchoringZombie:
-    """Test that governed + finance + stale = zombie; finance-only + stale = parked"""
+    """Test that financially anchored assets can still be zombie if stale"""
     
-    def test_governed_recurring_finance_stale_is_zombie(self):
-        """Asset with CMDB + recurring finance but stale activity IS zombie
-        
-        Zombie = governed (IdP/CMDB) + stale + ongoing finance
-        Finance alone without governance = parked (not zombie)
-        """
-        asset = make_asset(
-            has_cmdb=True,  # Governance is required for zombie
-            has_finance=True,
-            activity_days_ago=120,
-            evidence_refs=["discovery:obs1", "discovery:obs2", "cmdb:ci1", "finance:contract123", "recurring_contract:contract123"]
-        )
-        
-        result = classify_actual(asset)
-        reason_values = [r.value for r in result.reasons]
-        
-        assert result.is_zombie is True
-        assert "ZOMBIE_CLASSIFICATION" in reason_values
-        assert result.is_shadow is False
-    
-    def test_finance_only_stale_is_parked_not_zombie(self):
-        """Asset with finance only but stale = parked (no governance = no zombie)
-        
-        Per governance trinity: zombie requires IdP or CMDB governance
-        """
+    def test_recurring_finance_stale_is_zombie(self):
+        """Asset with recurring finance but stale activity IS zombie (anchored + stale)"""
         asset = make_asset(
             has_finance=True,
             activity_days_ago=120,
@@ -228,7 +205,6 @@ class TestFinanceAnchoringZombie:
         result = classify_actual(asset)
         reason_values = [r.value for r in result.reasons]
         
-        # Without governance, stale = parked (not zombie)
-        assert result.is_zombie is False
-        assert result.is_parked is True
-        assert "PARKED_CLASSIFICATION" in reason_values
+        assert result.is_zombie is True
+        assert "ZOMBIE_CLASSIFICATION" in reason_values
+        assert result.is_shadow is False

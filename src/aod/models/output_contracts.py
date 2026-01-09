@@ -181,10 +181,6 @@ class Asset(BaseModel):
         default_factory=list,
         description="Single source of truth for discovery evidence. lens_coverage.discovery and HAS_DISCOVERY derive from this."
     )
-    canonical_key: Optional[str] = Field(
-        default=None,
-        description="Immutable canonical key for reconciliation. Set once during admission, must never change. Derived from registered domain (eTLD+1)."
-    )
     created_at: datetime = Field(default_factory=now_pst)
 
 

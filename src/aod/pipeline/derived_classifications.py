@@ -916,77 +916,90 @@ def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
         Tuple of (domain_key, is_canonical, alias_keys) where:
         - domain_key: The canonical vendor domain (e.g., microsoft.com for microsoftonline.com)
         - is_canonical: True if key is a registered domain, False if name-derived
-        - alias_keys: List of original domains/subdomains that map to this canonical key
+        - alias_keys: List of ALL domain variants from identifiers.domains
     
     Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
-    1. asset.identifiers.domains -> extract registered domain -> normalize to vendor canonical
+    1. asset.identifiers.domains[0] -> extract registered domain -> normalize to vendor canonical
     2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
     3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
     4. Asset name if it looks like a domain -> extract registered -> normalize to vendor canonical
     5. Fallback: normalized name -> NOT canonical
     
-    NORMALIZATION FIX (Dec 2025): After extracting registered domain, we now also
-    check DOMAIN_TO_VENDOR to map vendor-related domains to a single canonical key.
-    e.g., login.microsoftonline.com -> microsoftonline.com -> microsoft.com
+    Jan 2026 FIX: Now processes ALL domains in identifiers.domains to build alias_keys,
+    not just the first one. The PRIMARY KEY is still frozen from domain[0], but all
+    domain variants are included in alias_keys for Farm reconciliation matching.
     
-    This fixes KEY_NORMALIZATION_MISMATCH errors where governance checks failed
-    because microsoftonline.com and microsoft.com were treated as different assets.
+    This fixes KEY_NORMALIZATION_MISMATCH errors where governance plane domains
+    (IdP, CMDB) were in identifiers.domains but never surfaced in alias_keys.
     
-    INVARIANT: This must match the key resolution in aod_agent_reconcile.py
-    to ensure UI counts match reconciliation counts.
-    
-    INVARIANT: If raw domain != registered domain != canonical, all are preserved in alias_keys.
+    INVARIANT: Primary key is determined from domain[0] only - never changes based on later domains.
+    INVARIANT: This must match the key resolution in aod_agent_reconcile.py.
+    INVARIANT: All domain variants (raw, registered, canonical) are preserved in alias_keys.
     """
     from .vendor_inference import extract_registered_domain
     
-    alias_keys = []
+    alias_keys_set = set()
+    primary_key = None
+    is_canonical = False
     
     if asset.identifiers and asset.identifiers.domains:
-        for domain in asset.identifiers.domains:
+        for idx, domain in enumerate(asset.identifiers.domains):
             if domain and "." in domain:
                 raw_domain = domain.lower().strip()
-                alias_keys.append(raw_domain)
+                alias_keys_set.add(raw_domain)
+                
                 registered = extract_registered_domain(raw_domain)
                 if registered:
                     if registered != raw_domain:
-                        alias_keys.append(registered)
-                    # NEW: Check if registered domain maps to a canonical vendor domain
+                        alias_keys_set.add(registered)
                     canonical = _normalize_to_canonical_vendor_domain(registered)
                     if canonical:
-                        alias_keys.append(canonical)
-                        return (canonical, True, alias_keys)
-                    return (registered, True, alias_keys)
-                return (raw_domain, True, alias_keys)
+                        alias_keys_set.add(canonical)
+                    
+                    # PRIMARY KEY: Only set from first domain (index 0)
+                    if idx == 0 and primary_key is None:
+                        if canonical:
+                            primary_key = canonical
+                        else:
+                            primary_key = registered
+                        is_canonical = True
+                elif idx == 0 and primary_key is None:
+                    primary_key = raw_domain
+                    is_canonical = True
+        
+        if primary_key:
+            return (primary_key, is_canonical, sorted(alias_keys_set))
     
     if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
         vendor_key = asset.vendor.lower().strip()
         if vendor_key in VENDOR_TO_DOMAIN:
             canonical = VENDOR_TO_DOMAIN[vendor_key]
-            return (canonical, True, [canonical])
+            alias_keys_set.add(canonical)
+            return (canonical, True, sorted(alias_keys_set) if alias_keys_set else [canonical])
     
     normalized_name = _normalize_name_for_vendor_lookup(asset.name)
     if normalized_name in VENDOR_TO_DOMAIN:
         canonical = VENDOR_TO_DOMAIN[normalized_name]
-        return (canonical, True, [canonical])
+        alias_keys_set.add(canonical)
+        return (canonical, True, sorted(alias_keys_set) if alias_keys_set else [canonical])
     
     name = asset.name.lower().strip()
     if "." in name:
         parts = name.split(".")
         if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
-            alias_keys.append(name)
+            alias_keys_set.add(name)
             registered = extract_registered_domain(name)
             if registered:
                 if registered != name:
-                    alias_keys.append(registered)
-                # NEW: Check if registered domain maps to a canonical vendor domain
+                    alias_keys_set.add(registered)
                 canonical = _normalize_to_canonical_vendor_domain(registered)
                 if canonical:
-                    alias_keys.append(canonical)
-                    return (canonical, True, alias_keys)
-                return (registered, True, alias_keys)
-            return (name, True, alias_keys)
+                    alias_keys_set.add(canonical)
+                    return (canonical, True, sorted(alias_keys_set))
+                return (registered, True, sorted(alias_keys_set))
+            return (name, True, sorted(alias_keys_set))
     
-    return (re.sub(r'[^a-z0-9]', '', name.lower()), False, [])
+    return (re.sub(r'[^a-z0-9]', '', name.lower()), False, sorted(alias_keys_set) if alias_keys_set else [])
 
 
 def _get_parent_domain(domain: str) -> Optional[str]:

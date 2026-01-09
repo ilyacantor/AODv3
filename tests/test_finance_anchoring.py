@@ -192,14 +192,41 @@ class TestFinanceAnchoringClassification:
 
 
 class TestFinanceAnchoringZombie:
-    """Test that financially anchored assets can still be zombie if stale"""
+    """Test zombie classification requires governance - finance anchoring alone is not enough"""
     
-    def test_recurring_finance_stale_is_zombie(self):
-        """Asset with recurring finance but stale activity IS zombie (anchored + stale)"""
+    def test_ungoverned_recurring_finance_stale_is_parked_not_zombie(self):
+        """Ungoverned asset with recurring finance but stale activity is PARKED, not zombie.
+        
+        Per Governance Trinity: Zombie requires governance (has_idp OR has_cmdb).
+        Finance anchoring expands 'anchored' eligibility but doesn't override governance for zombie.
+        """
         asset = make_asset(
             has_finance=True,
             activity_days_ago=120,
             evidence_refs=["discovery:obs1", "finance:contract123", "recurring_contract:contract123"]
+        )
+        
+        result = classify_actual(asset)
+        reason_values = [r.value for r in result.reasons]
+        
+        # Ungoverned + stale = PARKED (not zombie because zombie requires governance)
+        assert result.is_parked is True
+        assert "PARKED_CLASSIFICATION" in reason_values
+        assert result.is_zombie is False
+        assert result.is_shadow is False
+        # Still has ongoing finance reason code
+        assert "HAS_ONGOING_FINANCE" in reason_values
+    
+    def test_governed_recurring_finance_stale_is_zombie(self):
+        """Governed asset (with IdP) + stale activity + ongoing finance IS zombie.
+        
+        This is the correct zombie formula: governed + stale + finance.
+        """
+        asset = make_asset(
+            has_idp=True,  # Governed!
+            has_finance=True,
+            activity_days_ago=120,
+            evidence_refs=["discovery:obs1", "idp:app1", "finance:contract123", "recurring_contract:contract123"]
         )
         
         result = classify_actual(asset)

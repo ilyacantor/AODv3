@@ -917,35 +917,11 @@ def emit_actual_results(
             
             reasons = _compute_rejection_reasons(rej)
             
-            # SHADOW CLASSIFICATION FOR REJECTED ASSETS:
-            # Rejected assets can still be Shadow IT if they are ungoverned AND have RECENT activity.
+            # Jan 2026 Fix: REJECTED assets should NOT be classified as shadows
+            # Rejected assets failed admission criteria - they're not in the asset catalog
+            # Farm expects "not-admitted" assets to not appear as shadows
+            # Only ADMITTED assets can be shadows/zombies/parked
             evidence = rej.get("evidence_summary", {})
-            has_idp = evidence.get("has_idp", False) or "HAS_IDP" in reasons
-            has_cmdb = evidence.get("has_cmdb", False) or "HAS_CMDB" in reasons
-            has_discovery = evidence.get("has_discovery", False) or "HAS_DISCOVERY" in reasons
-            
-            # Check for activity status
-            has_recent = evidence.get("has_recent_activity", False)
-            has_stale = "STALE_ACTIVITY" in reasons or evidence.get("has_stale_activity", False)
-            
-            # DISCOVERY = RECENT ACTIVITY for rejected assets
-            # If an asset was seen in discovery plane, it has recent observation evidence
-            # This is a reasonable proxy for recency when explicit timestamps are missing
-            if has_discovery and not has_stale:
-                has_recent = True
-            
-            # If stale activity is explicitly indicated, not shadow
-            if has_stale:
-                has_recent = False
-            
-            # GOVERNANCE: IdP OR CMDB (not Trinity AND logic)
-            has_governance = has_idp or has_cmdb
-            is_rejection_shadow = (not has_governance) and has_recent
-            
-            if is_rejection_shadow:
-                shadow_actual.append(entity_key)
-                if "SHADOW_CLASSIFICATION" not in reasons:
-                    reasons.append("SHADOW_CLASSIFICATION")
             
             admission_actual[entity_key] = "rejected"
             actual_reasons[entity_key] = reasons
@@ -991,7 +967,7 @@ def emit_actual_results(
             asset_details[entity_key] = {
                 "asset_id": None,
                 "name": rej.get("entity_name", entity_key),
-                "is_shadow": is_rejection_shadow,
+                "is_shadow": False,  # Rejected assets cannot be shadows
                 "is_zombie": False,
                 "is_parked": False,
                 "alias_keys": alias_keys_list,

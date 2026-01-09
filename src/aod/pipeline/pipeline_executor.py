@@ -425,6 +425,10 @@ async def execute_pipeline(
                 assets.append(admission_result.asset)
             else:
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
+                # Jan 2026 Fix: Include plane-extracted domains in rejection evidence
+                # This enables alias_keys building for rejected assets so Farm can match them
+                from .admission import _extract_all_domains_from_correlation
+                plane_domains = _extract_all_domains_from_correlation(correlation)
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
@@ -432,7 +436,13 @@ async def execute_pipeline(
                         "idp_status": correlation.idp.status.value,
                         "cmdb_status": correlation.cmdb.status.value,
                         "cloud_status": correlation.cloud.status.value,
-                        "finance_status": correlation.finance.status.value
+                        "finance_status": correlation.finance.status.value,
+                        "domain": candidate.domain,
+                        "registered_domain": candidate.domain,
+                        "domains": plane_domains,
+                        "has_idp": correlation.idp.status.value in ("matched", "ambiguous"),
+                        "has_cmdb": correlation.cmdb.status.value in ("matched", "ambiguous"),
+                        "has_discovery": bool(candidate.observation_ids)
                     }),
                     started_at.isoformat()
                 ))

@@ -949,17 +949,53 @@ def emit_actual_results(
             
             admission_actual[entity_key] = "rejected"
             actual_reasons[entity_key] = reasons
+            
+            # Jan 2026 Fix: Build alias_keys for rejected assets too
+            # Extract domain variants from evidence to enable Farm lookup
+            rej_alias_keys = set()
+            # Check for domains in evidence (clone to avoid mutation)
+            evidence_domains = evidence.get("domains")
+            if evidence_domains and isinstance(evidence_domains, (list, set)):
+                for d in evidence_domains:
+                    if d and isinstance(d, str):
+                        rej_alias_keys.add(d.lower().strip())
+            evidence_identifiers = evidence.get("identifiers", {})
+            if isinstance(evidence_identifiers, dict):
+                id_domains = evidence_identifiers.get("domains")
+                if id_domains and isinstance(id_domains, (list, set)):
+                    for d in id_domains:
+                        if d and isinstance(d, str):
+                            rej_alias_keys.add(d.lower().strip())
+            if evidence.get("domain") and isinstance(evidence.get("domain"), str):
+                rej_alias_keys.add(evidence["domain"].lower().strip())
+            if evidence.get("registered_domain") and isinstance(evidence.get("registered_domain"), str):
+                rej_alias_keys.add(evidence["registered_domain"].lower().strip())
+            # Check rejection record for domain info
+            if rej.get("registered_domain") and isinstance(rej.get("registered_domain"), str):
+                rej_alias_keys.add(rej["registered_domain"].lower().strip())
+            if rej.get("domain") and isinstance(rej.get("domain"), str):
+                rej_alias_keys.add(rej["domain"].lower().strip())
+            # Filter out empty/invalid entries and remove the entity_key itself
+            rej_alias_keys.discard("")
+            rej_alias_keys.discard(entity_key)
+            alias_keys_list = sorted(rej_alias_keys)
+            
+            # Clone evidence to avoid mutating shared state
+            evidence_copy = {
+                "rejection_reason": rej.get("reason_code", "unknown"),
+                "rejection_detail": rej.get("reason_detail", ""),
+                "original_evidence": dict(evidence) if evidence else {},
+                "alias_keys": alias_keys_list
+            }
+            
             asset_details[entity_key] = {
                 "asset_id": None,
                 "name": rej.get("entity_name", entity_key),
                 "is_shadow": is_rejection_shadow,
                 "is_zombie": False,
                 "is_parked": False,
-                "evidence_summary": {
-                    "rejection_reason": rej.get("reason_code", "unknown"),
-                    "rejection_detail": rej.get("reason_detail", ""),
-                    "original_evidence": evidence
-                }
+                "alias_keys": alias_keys_list,
+                "evidence_summary": evidence_copy
             }
     
     shadow_actual = sorted(set(shadow_actual))

@@ -255,16 +255,18 @@ class TestShadowZombieTimestamps:
                 idp=LensStatus.MATCHED,
                 cmdb=LensStatus.UNMATCHED,
                 cloud=LensStatus.UNMATCHED,
-                finance=LensStatus.UNMATCHED
+                finance=LensStatus.MATCHED  # Zombie requires ongoing finance
             ),
-            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=False),
+            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=True),
             activity_evidence=ActivityEvidence(
                 idp_last_login_at=stale_date,
                 latest_activity_at=stale_date
             ),
-            evidence_refs=["idp:app1"],
+            evidence_refs=["idp:app1", "recurring_transaction:txn1"],  # Ongoing finance
             tags=["identity_managed"],
-            admission_reason="IdP match with SSO enabled"
+            admission_reason="IdP match with SSO enabled",
+            provisioning_status=ProvisioningStatus.REVIEW,  # Zombie requires REVIEW status
+            discovery_sources=["dns", "browser"]  # Required for governance admission
         )
         
         shadow_asset = Asset(
@@ -280,7 +282,7 @@ class TestShadowZombieTimestamps:
                 cloud=LensStatus.MATCHED,
                 finance=LensStatus.MATCHED
             ),
-            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=True, finance=True),
+            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=True, finance=True, discovery=True),
             activity_evidence=ActivityEvidence(
                 finance_last_transaction_at=recent_date,
                 latest_activity_at=recent_date,
@@ -288,7 +290,9 @@ class TestShadowZombieTimestamps:
             ),
             evidence_refs=["discovery:obs1", "finance:txn1"],
             tags=["finance_tracked"],
-            admission_reason="Finance match: Recurring transaction"
+            admission_reason="Finance match: Recurring transaction",
+            provisioning_status=ProvisioningStatus.QUARANTINE,  # Shadow requires QUARANTINE
+            discovery_sources=["dns", "browser"]  # Single source of truth for discovery
         )
         
         indeterminate_asset = Asset(

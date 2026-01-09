@@ -352,7 +352,8 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     
     if asset.provisioning_status == ProvisioningStatus.QUARANTINE:
         has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
-        has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+        # Source of truth: asset.discovery_sources (set by admission from footprint)
+        has_discovery = bool(getattr(asset, "discovery_sources", None))
         has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
         
         presence_sources = []
@@ -388,7 +389,8 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
     has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
     
     has_cloud = asset.lens_coverage.cloud
-    has_discovery = asset.lens_coverage.discovery
+    # Source of truth: asset.discovery_sources (set by admission from footprint)
+    has_discovery = bool(getattr(asset, "discovery_sources", None))
     
     # GOVERNANCE: IdP OR CMDB (not Trinity AND logic)
     if has_idp or has_cmdb:
@@ -1054,10 +1056,8 @@ def compute_domain_rollups(
         has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_finance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
         has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_discovery = any(
-            isinstance(ref, str) and ref.startswith("discovery:")
-            for ref in asset.evidence_refs
-        ) or asset.activity_evidence.discovery_observed_at is not None
+        # Source of truth: asset.discovery_sources (set by admission from footprint)
+        has_discovery = bool(getattr(asset, "discovery_sources", None))
         has_ongoing_finance = any(
             isinstance(ref, str) and (
                 ref.startswith("recurring_contract:") or 

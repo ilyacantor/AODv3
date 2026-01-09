@@ -106,6 +106,26 @@ def make_observation(domain: str, days_ago: int = 1, source: str = "dns") -> Obs
     )
 
 
+def make_observations_multi_source(domain: str, days_ago: int = 1, sources: list[str] = None) -> list[Observation]:
+    """
+    Create multiple observations with different sources for discovery corroboration.
+    
+    Admission requires >= 2 distinct discovery sources for governance to admit.
+    Default: dns + browser (2 sources)
+    """
+    sources = sources or ["dns", "browser"]
+    return [
+        Observation(
+            observation_id=str(uuid4()),
+            name=domain,
+            domain=domain,
+            source=source,
+            observed_at=datetime.now(timezone.utc) - timedelta(days=days_ago)
+        )
+        for source in sources
+    ]
+
+
 class TestTrafficLightProvisioning:
     """Test the Traffic Light provisioning system."""
     
@@ -119,7 +139,8 @@ class TestTrafficLightProvisioning:
         entity = make_entity("okta.com", "Okta", "Okta")
         idp = make_idp_object("Okta SSO", has_sso=True)
         correlation = make_correlation(entity, idp_records=[idp])
-        observations = [make_observation("okta.com", days_ago=1)]
+        # Need >= 2 discovery sources for governance to admit
+        observations = make_observations_multi_source("okta.com", days_ago=1)
         
         result = apply_admission_criteria(
             correlation=correlation,
@@ -145,7 +166,8 @@ class TestTrafficLightProvisioning:
         entity = make_entity("salesforce.com", "Salesforce", "Salesforce")
         cmdb = make_cmdb_item("Salesforce", ci_type="application", lifecycle="production")
         correlation = make_correlation(entity, cmdb_records=[cmdb])
-        observations = [make_observation("salesforce.com", days_ago=5)]
+        # Need >= 2 discovery sources for governance to admit
+        observations = make_observations_multi_source("salesforce.com", days_ago=5)
         
         result = apply_admission_criteria(
             correlation=correlation,
@@ -170,7 +192,8 @@ class TestTrafficLightProvisioning:
         entity = make_entity("atlassian.com", "Jira", "Atlassian")
         cmdb = make_cmdb_item("Jira", ci_type="application", lifecycle="production")
         correlation = make_correlation(entity, cmdb_records=[cmdb])
-        observations = [make_observation("atlassian.com", days_ago=120)]
+        # Need >= 2 discovery sources for governance to admit (stale = 120 days ago)
+        observations = make_observations_multi_source("atlassian.com", days_ago=120)
         
         result = apply_admission_criteria(
             correlation=correlation,
@@ -299,7 +322,8 @@ class TestTrafficLightPrecedence:
         idp = make_idp_object("Slack", has_sso=True)
         cloud = make_cloud_resource("Slack Integration")
         correlation = make_correlation(entity, idp_records=[idp], cloud_records=[cloud])
-        observations = [make_observation("slack.com", days_ago=1)]
+        # Need >= 2 discovery sources for governance to admit
+        observations = make_observations_multi_source("slack.com", days_ago=1)
         
         result = apply_admission_criteria(
             correlation=correlation,
@@ -318,7 +342,8 @@ class TestTrafficLightPrecedence:
         idp = make_idp_object("Workday SSO", has_sso=True)
         cmdb = make_cmdb_item("Workday", ci_type="application", lifecycle="production")
         correlation = make_correlation(entity, idp_records=[idp], cmdb_records=[cmdb])
-        observations = [make_observation("workday.com", days_ago=120)]
+        # Need >= 2 discovery sources for governance to admit (stale = 120 days ago)
+        observations = make_observations_multi_source("workday.com", days_ago=120)
         
         result = apply_admission_criteria(
             correlation=correlation,

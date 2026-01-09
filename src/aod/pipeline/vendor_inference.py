@@ -123,6 +123,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "bitwarden.com": "Bitwarden",
     "sentry.io": "Sentry",
     "cloudflare.com": "Cloudflare",
+    "workers.dev": "Cloudflare",
     "fastly.com": "Fastly",
     "vercel.com": "Vercel",
     "netlify.com": "Netlify",
@@ -224,6 +225,7 @@ VENDOR_TO_DOMAIN.update({
     "google apps": "google.com",
     "aws": "amazon.com",
     "amazon web services": "amazon.com",
+    "cloudflare workers": "workers.dev",
 })
 
 

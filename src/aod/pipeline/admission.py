@@ -325,8 +325,8 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
 
 # Banned domains - immediately BLOCKED (not QUARANTINE)
 # These are domains that are policy-forbidden regardless of governance status
+# Note: tiktok.com removed Jan 2026 - it's a common marketing platform, not policy-forbidden
 BANNED_DOMAINS = {
-    "tiktok.com",
     "kaspersky.com",
 }
 

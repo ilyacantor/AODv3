@@ -224,3 +224,48 @@ class TestKnownMismatchCases:
         
         assert len(entities) == 1
         assert entities[0].domain == "google.com"
+
+
+class TestHostnameExtraction:
+    """Tests for hostname field extraction in domain resolution."""
+    
+    def test_hostname_field_extracts_domain(self):
+        """Hostname field should be used for domain extraction when domain is missing."""
+        obs = Observation(
+            observation_id="obs-1",
+            name="Example App",
+            hostname="api.example.com",
+            source="dns"
+        )
+        
+        domain = resolve_domain_from_observation(obs)
+        
+        assert domain == "example.com"
+    
+    def test_hostname_used_for_entity_creation(self):
+        """Entity should be created using hostname when domain is missing."""
+        obs = Observation(
+            observation_id="obs-1",
+            name="Cloud Worker",
+            hostname="api.cloudflare.com",
+            source="proxy"
+        )
+        
+        entities, _ = normalize_observations([obs])
+        
+        assert len(entities) == 1
+        assert entities[0].domain == "cloudflare.com"
+    
+    def test_domain_takes_priority_over_hostname(self):
+        """Domain field should take priority over hostname field."""
+        obs = Observation(
+            observation_id="obs-1",
+            name="Mixed Source",
+            domain="primary.com",
+            hostname="fallback.com",
+            source="proxy"
+        )
+        
+        domain = resolve_domain_from_observation(obs)
+        
+        assert domain == "primary.com"

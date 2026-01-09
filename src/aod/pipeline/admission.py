@@ -14,6 +14,7 @@ from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .domain_cache import extract_domain
+from ..constants import INFRASTRUCTURE_DOMAINS
 
 
 def build_idp_activity_map(idp_records: dict) -> dict[str, datetime]:
@@ -147,6 +148,84 @@ def build_lens_match_debug(correlation: CorrelationResult) -> Optional[LensMatch
         finance=finance_debug
     )
 
+SSO_PROVIDER_DOMAINS: set[str] = {
+    "okta.com", "oktapreview.com",
+    "auth0.com",
+    "onelogin.com",
+    "pingidentity.com", "pingone.com",
+    "duo.com", "duosecurity.com",
+    "jumpcloud.com",
+}
+
+
+def _clean_url_to_domain(value: Optional[str]) -> Optional[str]:
+    """
+    Extract domain from URL, cleaning protocol/path/port.
+    
+    Mirrors the logic in build_plane_indexes._get_raw_domain() to ensure
+    consistent domain extraction between indexing and correlation.
+    
+    Examples:
+        "https://flexflow.org/app" -> "flexflow.org"
+        "company.okta.com:443/login" -> "company.okta.com"
+        "flexflow.org" -> "flexflow.org"
+    """
+    if not value:
+        return None
+    cleaned = value.lower().strip()
+    cleaned = cleaned.removeprefix("http://")
+    cleaned = cleaned.removeprefix("https://")
+    cleaned = cleaned.split("/")[0]  # Remove path
+    cleaned = cleaned.split(":")[0]  # Remove port
+    cleaned = cleaned.removeprefix("www.")
+    return cleaned if cleaned and '.' in cleaned else None
+
+
+def _resolve_effective_domain_from_record(record) -> Optional[str]:
+    """
+    Resolve effective domain from a plane record using same fallback chain as indexing.
+    
+    Jan 2026 Fix: This mirrors the fallback logic in build_plane_indexes.build_idp_index()
+    and build_cmdb_index() to ensure domain extraction is consistent with what was indexed.
+    
+    Priority: domain > raw_data['domain'] > raw_data['external_ref'] > 
+              raw_data['url'] > raw_data['application_url'] > raw_data['service_url']
+    
+    Returns the cleaned domain (after URL parsing) or None if no valid domain found.
+    """
+    if record is None:
+        return None
+    
+    # First: check direct domain attribute
+    raw_domain = getattr(record, 'domain', None)
+    if raw_domain:
+        cleaned = _clean_url_to_domain(raw_domain)
+        if cleaned:
+            return cleaned
+    
+    # Second: check raw_data fields with same priority as indexing
+    raw_data = getattr(record, 'raw_data', None)
+    if raw_data and isinstance(raw_data, dict):
+        for field in ['domain', 'external_ref', 'url', 'application_url', 'service_url']:
+            field_value = raw_data.get(field)
+            if field_value:
+                cleaned = _clean_url_to_domain(field_value)
+                if cleaned:
+                    return cleaned
+    
+    return None
+
+
+def _is_sso_or_infrastructure_domain(domain: str) -> bool:
+    """Check if domain is an SSO provider or infrastructure domain that should be filtered."""
+    if not domain:
+        return False
+    registered = extract_registered_domain(domain)
+    if not registered:
+        return False
+    return registered in SSO_PROVIDER_DOMAINS or registered in INFRASTRUCTURE_DOMAINS
+
+
 def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> list[str]:
     """
     Extract ALL domains from correlation matched records.
@@ -156,9 +235,12 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
     in the asset's identifiers.domains. This allows reconciliation to match
     against ANY domain variant, not just the entity's original domain.
     
+    Jan 2026 Fix: Now uses same fallback field chain as indexing (external_ref, url,
+    application_url, service_url) and filters out SSO/infrastructure domains.
+    
     This is critical for zombie detection where:
     - Discovery observation has domain "flowbase-internal.com"
-    - IdP record has domain "flowbase.ai"
+    - IdP record has domain "flowbase.ai" (in external_ref field)
     - Farm expects "flowbase.ai" as the zombie key
     - Without this fix, AOD only publishes "flowbase-internal.com"
     
@@ -170,7 +252,7 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
     def _is_valid_domain(value: str) -> bool:
         if not value or '.' not in value:
             return False
-        if '@' in value or '://' in value or '/' in value:
+        if '@' in value:
             return False
         parts = value.split('.')
         return len(parts) >= 2 and len(parts[-1]) in (2, 3, 4, 5) and parts[-1].isalpha()
@@ -180,16 +262,20 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
             for record in plane_match.matched_records:
                 if record is None:
                     continue
-                # Check domain attribute
-                raw_domain = getattr(record, 'domain', None)
-                if raw_domain and _is_valid_domain(raw_domain.lower().strip()):
-                    domains.add(raw_domain.lower().strip())
-                # Check raw_data['domain'] as fallback
-                raw_data = getattr(record, 'raw_data', None)
-                if raw_data and isinstance(raw_data, dict):
-                    rd_domain = raw_data.get('domain')
-                    if rd_domain and _is_valid_domain(rd_domain.lower().strip()):
-                        domains.add(rd_domain.lower().strip())
+                
+                # Use shared helper that mirrors indexing fallback chain
+                effective_domain = _resolve_effective_domain_from_record(record)
+                
+                if effective_domain and _is_valid_domain(effective_domain):
+                    # Extract registered domain for filtering
+                    registered = extract_registered_domain(effective_domain)
+                    
+                    # Filter out SSO provider and infrastructure domains
+                    # These are hosting platforms, not the asset's actual domain
+                    if registered and _is_sso_or_infrastructure_domain(registered):
+                        continue
+                    
+                    domains.add(effective_domain)
     
     return sorted(domains)
 
@@ -364,9 +450,6 @@ def is_corporate_root_domain(domain: Optional[str]) -> bool:
         return False
     domain_lower = domain.lower().strip()
     return domain_lower in CORPORATE_ROOT_DOMAINS
-
-
-from ..constants import INFRASTRUCTURE_DOMAINS
 
 
 def is_infrastructure_domain(domain: Optional[str]) -> bool:

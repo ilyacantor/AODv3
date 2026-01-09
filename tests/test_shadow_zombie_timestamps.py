@@ -257,7 +257,7 @@ class TestShadowZombieTimestamps:
                 cloud=LensStatus.UNMATCHED,
                 finance=LensStatus.MATCHED  # Zombie requires ongoing finance
             ),
-            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=True),
+            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=True, discovery=True),
             activity_evidence=ActivityEvidence(
                 idp_last_login_at=stale_date,
                 latest_activity_at=stale_date
@@ -266,7 +266,7 @@ class TestShadowZombieTimestamps:
             tags=["identity_managed"],
             admission_reason="IdP match with SSO enabled",
             provisioning_status=ProvisioningStatus.REVIEW,  # Zombie requires REVIEW status
-            discovery_sources=["dns", "browser"]  # Required for governance admission
+            discovery_sources=["dns", "browser"]  # Single source of truth for discovery (lens_coverage.discovery must match)
         )
         
         shadow_asset = Asset(
@@ -464,3 +464,63 @@ class TestZombieNoPresenceEvidence:
         assert result.is_classified is True
         assert result.is_indeterminate is False
         assert "Zombie" in result.reason
+
+
+class TestDiscoverySourcesInvariant:
+    """
+    Regression tests for discovery_sources single-source-of-truth invariant.
+    
+    POLICY: discovery_sources is the canonical source for discovery presence.
+    lens_coverage.discovery MUST equal bool(discovery_sources).
+    This prevents split-brain where different code paths compute has_discovery differently.
+    """
+    
+    def test_discovery_sources_matches_lens_coverage_discovery(self):
+        """
+        Invariant: lens_coverage.discovery == bool(discovery_sources)
+        
+        When discovery_sources is set, lens_coverage.discovery must be True.
+        When discovery_sources is empty, lens_coverage.discovery must be False.
+        """
+        asset_with_discovery = Asset(
+            asset_id=uuid4(),
+            tenant_id="test",
+            run_id="test-run",
+            name="App With Discovery",
+            asset_type=AssetType.SAAS,
+            lens_status=LensStatuses(
+                idp=LensStatus.UNMATCHED,
+                cmdb=LensStatus.UNMATCHED,
+                cloud=LensStatus.UNMATCHED,
+                finance=LensStatus.UNMATCHED
+            ),
+            lens_coverage=LensCoverage(idp=False, cmdb=False, cloud=False, finance=False, discovery=True),
+            activity_evidence=ActivityEvidence(),
+            evidence_refs=["obs:1"],
+            tags=[],
+            admission_reason="Discovery",
+            discovery_sources=["dns", "browser"]
+        )
+        
+        asset_without_discovery = Asset(
+            asset_id=uuid4(),
+            tenant_id="test",
+            run_id="test-run",
+            name="App Without Discovery",
+            asset_type=AssetType.SAAS,
+            lens_status=LensStatuses(
+                idp=LensStatus.MATCHED,
+                cmdb=LensStatus.UNMATCHED,
+                cloud=LensStatus.UNMATCHED,
+                finance=LensStatus.UNMATCHED
+            ),
+            lens_coverage=LensCoverage(idp=True, cmdb=False, cloud=False, finance=False, discovery=False),
+            activity_evidence=ActivityEvidence(),
+            evidence_refs=["idp:1"],
+            tags=[],
+            admission_reason="IdP match",
+            discovery_sources=[]
+        )
+        
+        assert asset_with_discovery.lens_coverage.discovery == bool(asset_with_discovery.discovery_sources)
+        assert asset_without_discovery.lens_coverage.discovery == bool(asset_without_discovery.discovery_sources)

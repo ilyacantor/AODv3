@@ -20,7 +20,11 @@ from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
 from .vendor_governance import propagate_vendor_governance
-from .admission import apply_admission_criteria, AdmissionResult, build_idp_activity_map
+from .admission import (
+    apply_admission_criteria, AdmissionResult, build_idp_activity_map,
+    _extract_all_domains_from_correlation, _extract_domain_from_correlation
+)
+from .vendor_inference import extract_registered_domain
 from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
@@ -427,8 +431,25 @@ async def execute_pipeline(
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
                 # Jan 2026 Fix: Include plane-extracted domains in rejection evidence
                 # This enables alias_keys building for rejected assets so Farm can match them
-                from .admission import _extract_all_domains_from_correlation
                 plane_domains = _extract_all_domains_from_correlation(correlation)
+                # Compute proper registered domain (eTLD+1), not raw FQDN
+                # Priority: correlation-recovered domain > candidate domain > first plane domain
+                # CRITICAL: Always populate domain to avoid downstream null checks
+                rejection_domain = None
+                recovered_domain = _extract_domain_from_correlation(correlation)
+                if recovered_domain:
+                    rejection_domain = recovered_domain
+                elif candidate.domain:
+                    rejection_domain = candidate.domain
+                elif plane_domains:
+                    rejection_domain = plane_domains[0]
+                # Compute registered domain (eTLD+1)
+                rejection_registered_domain = None
+                if rejection_domain:
+                    rejection_registered_domain = extract_registered_domain(rejection_domain)
+                elif plane_domains:
+                    rejection_registered_domain = extract_registered_domain(plane_domains[0])
+                    rejection_domain = plane_domains[0]
                 rejections_batch.append((
                     rejection_id, run_id, candidate.entity_id, candidate.original_name,
                     "admission_failed", admission_result.rejection_reason or "No admission criteria satisfied",
@@ -437,8 +458,8 @@ async def execute_pipeline(
                         "cmdb_status": correlation.cmdb.status.value,
                         "cloud_status": correlation.cloud.status.value,
                         "finance_status": correlation.finance.status.value,
-                        "domain": candidate.domain,
-                        "registered_domain": candidate.domain,
+                        "domain": rejection_domain,
+                        "registered_domain": rejection_registered_domain,
                         "domains": plane_domains,
                         "has_idp": correlation.idp.status.value in ("matched", "ambiguous"),
                         "has_cmdb": correlation.cmdb.status.value in ("matched", "ambiguous"),

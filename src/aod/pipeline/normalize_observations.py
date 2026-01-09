@@ -316,15 +316,18 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     """
     Normalize observations and derive candidate system entities.
     
-    ARCHITECTURE (Dec 2025 Iron Dome Refactor):
-    This function uses resolve_domain_from_observation() as the SINGLE entry point
-    for domain resolution. All entities with resolvable domains have:
+    ARCHITECTURE (Jan 2026 Group-First Refactor):
+    This function uses a two-phase approach:
+    1. PHASE 1: Group observations by base token (product identity)
+    2. PHASE 2: Create entities using choose_primary_key_from_observations() per group
+    
+    This ensures entity.domain is set from the BEST observation (most canonical),
+    not the first one encountered. Eliminates KEY_NORMALIZATION_MISMATCH errors.
+    
+    All entities with resolvable domains have:
     - entity_id = "entity:{normalized_domain}"
     - canonical_name = normalized_domain
     - domain = normalized_domain
-    
-    Base-token merging ensures name-only entities get REKEYED when a domain
-    is discovered for the same product later.
     
     Args:
         observations: List of raw observations
@@ -332,17 +335,19 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     Returns:
         Tuple of (valid_entities, rejected_observations)
     """
+    from collections import defaultdict
+    import os
+    
     entities_by_domain: dict[str, CandidateEntity] = {}
     entities_by_name: dict[str, CandidateEntity] = {}
-    entities_by_base_token: dict[str, CandidateEntity] = {}
     rejected: list[dict] = []
     
-    import os
     debug_keys = os.environ.get("AOD_DEBUG_KEYS")
+    
+    observation_groups: dict[str, list[Observation]] = defaultdict(list)
     
     for obs in sorted(observations, key=lambda o: o.observation_id):
         domain = resolve_domain_from_observation(obs)
-        
         canonical_name = derive_canonical_name(obs)
         
         if not canonical_name and domain:
@@ -373,95 +378,63 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
             })
             continue
         
-        hostname = obs.hostname.lower().strip() if obs.hostname else None
-        uri = obs.uri.lower().strip() if obs.uri else None
-        vendor = normalize_string(obs.vendor) if obs.vendor else None
-        
         base_token = get_normalization_token(domain) if domain else get_normalization_token(canonical_name)
-        
-        existing_entity = None
-        
-        if domain:
-            if domain in entities_by_domain:
-                existing_entity = entities_by_domain[domain]
-            elif base_token and base_token in entities_by_base_token:
-                existing_by_token = entities_by_base_token[base_token]
-                if not existing_by_token.domain:
-                    existing_entity = existing_by_token
-                    old_canonical = existing_entity.canonical_name
-                    old_entity_id = existing_entity.entity_id
-                    
-                    existing_entity.domain = domain
-                    existing_entity.vendor_hypothesis = infer_vendor_from_domain(domain)
-                    existing_entity.entity_id = f"entity:{domain}"
-                    existing_entity.canonical_name = domain
-                    
-                    entities_by_domain[domain] = existing_entity
-                    
-                    if old_canonical in entities_by_name:
-                        del entities_by_name[old_canonical]
-                    
-                    entities_by_base_token[base_token] = existing_entity
-                    
-                    logger.debug("normalize.base_token_merge_rekey", extra={
-                        "observation_id": obs.observation_id,
-                        "base_token": base_token,
-                        "domain": domain,
-                        "old_entity_id": old_entity_id,
-                        "new_entity_id": existing_entity.entity_id,
-                        "absorbed_name": old_canonical
-                    })
+        if base_token:
+            observation_groups[base_token].append(obs)
         else:
-            if canonical_name in entities_by_name:
-                existing_entity = entities_by_name[canonical_name]
-            elif base_token and base_token in entities_by_base_token:
-                existing_by_token = entities_by_base_token[base_token]
-                if existing_by_token.domain:
-                    existing_entity = existing_by_token
-                    logger.debug("normalize.base_token_merge_into_domain", extra={
-                        "observation_id": obs.observation_id,
-                        "base_token": base_token,
-                        "name": canonical_name,
-                        "merged_into_domain": existing_by_token.domain
-                    })
+            observation_groups[canonical_name].append(obs)
+    
+    for group_key, group_obs in observation_groups.items():
+        primary_domain = choose_primary_key_from_observations(group_obs)
         
-        if existing_entity:
-            existing_entity.observation_ids.append(obs.observation_id)
-            if hostname and not existing_entity.hostname:
-                existing_entity.hostname = hostname
-            if uri and not existing_entity.uri:
-                existing_entity.uri = uri
-            if vendor and not existing_entity.vendor:
-                existing_entity.vendor = vendor
+        first_obs = group_obs[0]
+        canonical_name = derive_canonical_name(first_obs)
+        hostname = first_obs.hostname.lower().strip() if first_obs.hostname else None
+        uri = first_obs.uri.lower().strip() if first_obs.uri else None
+        vendor = normalize_string(first_obs.vendor) if first_obs.vendor else None
+        
+        for obs in group_obs[1:]:
+            if not hostname and obs.hostname:
+                hostname = obs.hostname.lower().strip()
+            if not uri and obs.uri:
+                uri = obs.uri.lower().strip()
+            if not vendor and obs.vendor:
+                vendor = normalize_string(obs.vendor)
+        
+        vendor_hypothesis = infer_vendor_from_domain(primary_domain) if primary_domain else None
+        
+        if primary_domain:
+            entity_key = primary_domain
+            entity_canonical = primary_domain
         else:
-            vendor_hypothesis = infer_vendor_from_domain(domain) if domain else None
-            
-            if domain:
-                entity_key = domain
-                entity_canonical = domain
-            else:
-                entity_key = canonical_name
-                entity_canonical = canonical_name
-            
-            entity = CandidateEntity(
-                entity_id=f"entity:{entity_key}",
-                canonical_name=entity_canonical,
-                original_name=obs.name or "",
-                domain=domain,
-                hostname=hostname,
-                uri=uri,
-                vendor=vendor,
-                vendor_hypothesis=vendor_hypothesis,
-                observation_ids=[obs.observation_id],
-                source=obs.source
-            )
-            if domain:
-                entities_by_domain[domain] = entity
-            else:
-                entities_by_name[canonical_name] = entity
-            
-            if base_token and base_token not in entities_by_base_token:
-                entities_by_base_token[base_token] = entity
+            entity_key = canonical_name
+            entity_canonical = canonical_name
+        
+        entity = CandidateEntity(
+            entity_id=f"entity:{entity_key}",
+            canonical_name=entity_canonical,
+            original_name=first_obs.name or "",
+            domain=primary_domain,
+            hostname=hostname,
+            uri=uri,
+            vendor=vendor,
+            vendor_hypothesis=vendor_hypothesis,
+            observation_ids=[obs.observation_id for obs in group_obs],
+            source=first_obs.source
+        )
+        
+        if primary_domain:
+            entities_by_domain[primary_domain] = entity
+        else:
+            entities_by_name[entity_canonical] = entity
+        
+        if debug_keys:
+            logger.info("normalize.group_entity_created", extra={
+                "group_key": group_key,
+                "primary_domain": primary_domain,
+                "observation_count": len(group_obs),
+                "entity_id": entity.entity_id
+            })
     
     all_entities = list(entities_by_domain.values()) + list(entities_by_name.values())
     

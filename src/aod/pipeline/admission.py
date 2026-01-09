@@ -722,13 +722,14 @@ class DiscoveryInvariantError(Exception):
 
 def _validate_discovery_invariants(asset, expected_sources: list[str], asset_key: str) -> None:
     """
-    Runtime invariants to ensure discovery_sources is the single source of truth.
+    Runtime invariants to ensure discovery_sources and canonical_key are stable.
     
     FAIL FAST: If any invariant fails, raise DiscoveryInvariantError and stop.
     Do not limp forward with inconsistent state.
     
     Invariant 1: lens_coverage.discovery == bool(discovery_sources)
     Invariant 2: asset.discovery_sources matches expected sources from footprint
+    Invariant 3: asset.canonical_key must equal asset_key (no-override invariant)
     """
     has_sources = len(expected_sources) > 0
     
@@ -748,6 +749,15 @@ def _validate_discovery_invariants(asset, expected_sources: list[str], asset_key
             f"asset.discovery_sources={asset.discovery_sources} but "
             f"expected from footprint={expected_sources}. "
             f"These must agree. Fix: discovery_sources should be set only from footprint."
+        )
+    
+    # Invariant 3: canonical_key no-override - once set, it must never change
+    # This prevents late-binding merges from overriding identity
+    if asset.canonical_key is not None and asset.canonical_key != asset_key:
+        raise DiscoveryInvariantError(
+            f"INVARIANT_VIOLATION: Asset {asset_key} | "
+            f"canonical_key={asset.canonical_key} != asset_key={asset_key}. "
+            f"Canonical key must equal registered domain. No overrides allowed."
         )
 
 
@@ -1283,14 +1293,17 @@ def apply_admission_criteria(
     # =========================================================================
     # FINANCE ADMISSION GATE (Dec 2025)
     # Finance alone is NOT sufficient for admission - requires corroboration:
-    # - Finance + Governance (IdP/CMDB) = admitted
+    # - Finance + Governance (IdP/CMDB with >= 2 discovery sources) = admitted
     # - Finance + Discovery (>= 2 sources) = admitted
     # - Finance alone with minimal discovery (< 2 sources) = NOT admitted
-    # This prevents low-confidence finance-only assets from cluttering catalog
+    # 
+    # CRITICAL FIX (Jan 2026): Use has_sufficient_discovery for governance corroboration
+    # Previously used idp_admitted/cmdb_admitted which allowed single-source admission
+    # Now requires >= 2 discovery sources for ALL paths except cloud
     # =========================================================================
     finance_can_admit = finance_admitted and (
-        idp_admitted or 
-        cmdb_admitted or 
+        (idp_admitted and has_sufficient_discovery) or 
+        (cmdb_admitted and has_sufficient_discovery) or 
         discovery_admitted  # discovery_admitted already requires >= 2 sources
     )
     
@@ -1386,23 +1399,30 @@ def apply_admission_criteria(
     # Include ALL domains from correlated plane records (IdP, CMDB, etc.)
     # This allows reconciliation to match against ANY domain variant.
     # 
-    # CRITICAL: Discovery domain MUST be first (index 0) - it is the Primary Key.
-    # Governance domains (from IdP/CMDB) are aliases that enable correlation,
-    # but must NOT hijack the asset's identity.
+    # CRITICAL FIX (Jan 2026): REGISTERED domain MUST be first (index 0) for canonical key stability.
+    # The raw FQDN (effective_domain) is added as secondary for evidence preservation.
+    # This ensures _resolve_domain_key() returns the registered domain, matching Farm's expectation.
     # 
     # Priority hierarchy:
-    # 1. effective_domain (Discovery) - "Observed Reality", anchor for Activity
-    # 2. plane_domains (Governance) - "Bureaucratic Records", anchors for Status
+    # 1. registered_domain (eTLD+1) - Canonical Key, stable for reconciliation
+    # 2. effective_domain (raw FQDN) - Original observation, for audit trail
+    # 3. plane_domains (Governance) - Aliases from IdP/CMDB/etc
     domain_list = []
     seen_domains = set()
     
-    # Discovery domain is PRIMARY - must be first
+    # REGISTERED domain is CANONICAL - must be first for stable reconciliation key
+    if registered_domain:
+        domain_list.append(registered_domain)
+        seen_domains.add(registered_domain)
+    
+    # Add raw FQDN as secondary (preserves original observation for audit)
     if effective_domain:
         normalized = effective_domain.lower().strip()
-        domain_list.append(normalized)
-        seen_domains.add(normalized)
+        if normalized not in seen_domains:
+            domain_list.append(normalized)
+            seen_domains.add(normalized)
     
-    # Add governance domains as secondary aliases (preserving correlation without breaking identity)
+    # Add governance domains as tertiary aliases (preserving correlation without breaking identity)
     plane_domains = _extract_all_domains_from_correlation(correlation)
     for pd in plane_domains:
         if pd not in seen_domains:
@@ -1464,7 +1484,8 @@ def apply_admission_criteria(
         tags=tags,
         admission_reason="; ".join(admission_reasons),
         provisioning_status=provisioning_status,
-        discovery_sources=discovery_sources_list  # Single source of truth
+        discovery_sources=discovery_sources_list,  # Single source of truth
+        canonical_key=registered_domain  # Immutable canonical key for reconciliation
     )
     
     # =========================================================================

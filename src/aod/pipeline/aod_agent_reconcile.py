@@ -618,7 +618,16 @@ def classify_actual(
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     
-    domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
+    # Use canonical_key if set (immutable, set during admission), else fallback to _resolve_domain_key
+    if asset.canonical_key:
+        domain_key = asset.canonical_key
+        is_canonical = True
+        alias_keys = [asset.canonical_key]
+        # Still resolve for additional alias_keys
+        _, _, additional_aliases = _resolve_domain_key(asset)
+        alias_keys.extend([a for a in additional_aliases if a != domain_key])
+    else:
+        domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
     
     all_domain_variants = set(alias_keys)
     

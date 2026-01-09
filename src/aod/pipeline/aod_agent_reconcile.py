@@ -862,7 +862,24 @@ def emit_actual_results(
         if agg.get("registered_domain"):
             evidence["registered_domain"] = agg["registered_domain"]
         
-        alias_keys = evidence.get("alias_keys", [])
+        # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
+        # Build alias_keys from ALL domain variants so Farm can look up assets
+        # by any domain variant, not just the primary asset key.
+        # This enables matching when AOD keys by name but has domain in identifiers.domains.
+        original_alias_keys = set(evidence.get("alias_keys", []))
+        all_alias_keys = original_alias_keys.copy()
+        # Add all domain variants (includes identifiers.domains)
+        all_alias_keys.update(domain_aliases)
+        # Add registered domain
+        if agg.get("registered_domain"):
+            all_alias_keys.add(agg["registered_domain"])
+        # Remove the primary key from alias_keys (it's the canonical key, not an alias)
+        all_alias_keys.discard(key)
+        alias_keys = sorted(all_alias_keys)
+        
+        # CRITICAL: Also update evidence["alias_keys"] so Farm can find it
+        # (Farm reads evidence_summary.alias_keys for domain lookup)
+        evidence["alias_keys"] = alias_keys
         
         asset_details[key] = {
             "asset_id": agg["asset_ids"][0],

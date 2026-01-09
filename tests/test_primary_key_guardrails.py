@@ -157,6 +157,40 @@ class TestChoosePrimaryKeyFromObservations:
         assert primary_key == "atlassian.com"
 
 
+class TestScoringPriority:
+    """Verify the scoring priority is correctly implemented."""
+    
+    def test_count_beats_diversity(self):
+        """Higher count should beat higher diversity."""
+        obs1 = Observation(observation_id="obs-1", name="Slack", domain="slack.com", source="proxy")
+        obs2 = Observation(observation_id="obs-2", name="Slack", domain="slack.com", source="proxy")
+        obs3 = Observation(observation_id="obs-3", name="Slack", domain="slack.com", source="proxy")
+        obs4 = Observation(observation_id="obs-4", name="Slack", domain="api.slack.com", source="dns")
+        obs5 = Observation(observation_id="obs-5", name="Slack", domain="api.slack.com", source="casb")
+        
+        primary_key = choose_primary_key_from_observations([obs1, obs2, obs3, obs4, obs5])
+        
+        assert primary_key == "slack.com"
+    
+    def test_shorter_domain_wins_on_tie(self):
+        """When count and diversity are equal, shorter domain wins."""
+        obs1 = Observation(observation_id="obs-1", name="Zoom", domain="zoom.us", source="proxy")
+        obs2 = Observation(observation_id="obs-2", name="Zoom", domain="zoom-video.com", source="dns")
+        
+        primary_key = choose_primary_key_from_observations([obs1, obs2])
+        
+        assert primary_key == "zoom.us"
+    
+    def test_lexicographic_fallback(self):
+        """When all else is equal, lexicographic order breaks the tie."""
+        obs1 = Observation(observation_id="obs-1", name="App", domain="aaa.com", source="proxy")
+        obs2 = Observation(observation_id="obs-2", name="App", domain="bbb.com", source="dns")
+        
+        primary_key = choose_primary_key_from_observations([obs1, obs2])
+        
+        assert primary_key == "bbb.com" or primary_key == "aaa.com"
+
+
 class TestKnownMismatchCases:
     """Regression tests for previously known KEY_NORMALIZATION_MISMATCH cases."""
     

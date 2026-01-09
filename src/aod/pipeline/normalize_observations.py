@@ -267,9 +267,10 @@ def choose_primary_key_from_observations(observations: list[Observation]) -> Opt
     Score and choose the best primary key from multiple observations.
     
     Selection criteria (in priority order):
-    1. Domain support count (how many observations mention this domain)
-    2. Source diversity (multiple distinct sources = higher confidence)
-    3. Recency (if timestamps available, prefer more recent observations)
+    1. Domain support count (how many observations mention this domain) - PRIMARY
+    2. Source diversity (multiple distinct sources = higher confidence) - SECONDARY
+    3. Domain length (shorter = more canonical, e.g., zoom.us vs zoom-video.com)
+    4. Lexicographic order (deterministic tiebreaker)
     
     Returns the best registrable domain as primary key, or None if no domains found.
     
@@ -290,7 +291,8 @@ def choose_primary_key_from_observations(observations: list[Observation]) -> Opt
         if domain:
             registered = extract_registered_domain(domain)
             if registered:
-                domain_sources[registered].add(obs.source or "unknown")
+                source = (obs.source or "unknown").lower().strip()
+                domain_sources[registered].add(source)
                 domain_counts[registered] += 1
     
     if not domain_counts:
@@ -299,17 +301,17 @@ def choose_primary_key_from_observations(observations: list[Observation]) -> Opt
     scored = []
     for domain, count in domain_counts.items():
         source_diversity = len(domain_sources[domain])
-        scored.append((source_diversity, count, domain))
+        scored.append((count, source_diversity, -len(domain), domain))
     
     scored.sort(reverse=True)
     
     if os.environ.get("AOD_DEBUG_KEYS"):
         logger.info("primary_key.selection", extra={
             "candidates": [{"domain": d, "sources": list(domain_sources[d]), "count": c} for d in domain_counts],
-            "chosen": scored[0][2] if scored else None
+            "chosen": scored[0][3] if scored else None
         })
     
-    return scored[0][2] if scored else None
+    return scored[0][3] if scored else None
 
 
 def normalize_observations(observations: list[Observation]) -> tuple[list[CandidateEntity], list[dict]]:

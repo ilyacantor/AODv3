@@ -704,9 +704,6 @@ async def get_reconcile_payload(run_id: str):
     
     snapshot_id = run.input_meta.get("snapshot_id") if run.input_meta else None
     
-    if not snapshot_id:
-        raise HTTPException(status_code=400, detail="Run has no snapshot_id in metadata")
-    
     return build_reconcile_payload(
         run_log=run,
         assets=assets,

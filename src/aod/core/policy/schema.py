@@ -32,7 +32,7 @@ class ScopeConfig:
     include_infra: bool = False
     treat_directory_as_idp: bool = False
     use_policy_engine: bool = False
-    late_binding_domain_merge: bool = False
+    late_binding_domain_merge: bool = True
 
 
 @dataclass

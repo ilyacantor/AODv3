@@ -36,7 +36,7 @@
       
       "aws.amazon.com": "amazon.com", "amazon.co.uk": "amazon.com", 
       "media-amazon.com": "amazon.com", "amazonaws.com": "amazon.com",
-      "s3.amazonaws.com": "amazon.com", "cloudfront.net": "amazon.com",
+      "s3.amazonaws.com": "amazon.com",
       
       "webex.co": "webex.com", "ciscospark.com": "webex.com", "wbx2.com": "webex.com",
       
@@ -46,7 +46,7 @@
       "twitter.com": "x.com", "t.co": "x.com", "twimg.com": "x.com",
       "lnkd.in": "linkedin.com", "licdn.com": "linkedin.com",
       
-      "adobe.io": "adobe.com", "typekit.net": "adobe.com",
+      "adobe.io": "adobe.com",
       "paypalobjects.com": "paypal.com", "paypal.me": "paypal.com"
     }
   }

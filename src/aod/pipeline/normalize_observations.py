@@ -52,10 +52,11 @@ def resolve_domain_from_observation(obs: Observation) -> Optional[str]:
     
     Resolution order:
     1. obs.domain (if present) → IdentityNormalizer.normalize()
-    2. obs.uri (extract domain) → IdentityNormalizer.normalize()
-    3. obs.name (if looks like domain) → IdentityNormalizer.normalize()
-    4. obs.name → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
-    5. obs.vendor → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
+    2. obs.hostname (if present) → IdentityNormalizer.normalize()
+    3. obs.uri (extract domain) → IdentityNormalizer.normalize()
+    4. obs.name (if looks like domain) → IdentityNormalizer.normalize()
+    5. obs.name → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
+    6. obs.vendor → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
     
     Args:
         obs: Observation object to resolve domain for
@@ -69,6 +70,16 @@ def resolve_domain_from_observation(obs: Observation) -> Optional[str]:
             logger.debug("resolve_domain.from_domain", extra={
                 "observation_id": obs.observation_id,
                 "raw": obs.domain,
+                "normalized": normalized
+            })
+            return normalized
+    
+    if obs.hostname:
+        normalized = _NORMALIZER.normalize(obs.hostname)
+        if normalized:
+            logger.debug("resolve_domain.from_hostname", extra={
+                "observation_id": obs.observation_id,
+                "raw": obs.hostname,
                 "normalized": normalized
             })
             return normalized

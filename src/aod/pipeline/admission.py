@@ -1334,12 +1334,16 @@ def apply_admission_criteria(
         finance=LensStatus(correlation.finance.status.value)
     )
     
+    # Single source of truth: discovery_sources from footprint
+    # lens_coverage.discovery is DERIVED from discovery_sources (not independent)
+    discovery_sources_list = sorted(footprint.discovery_sources)
+    
     lens_coverage = LensCoverage(
         idp=idp_admitted,
         cmdb=cmdb_admitted,
         cloud=cloud_admitted,
         finance=finance_admitted,
-        discovery=discovery_admitted
+        discovery=bool(discovery_sources_list)  # Derived from discovery_sources
     )
     
     # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
@@ -1423,7 +1427,8 @@ def apply_admission_criteria(
         activity_evidence=activity_evidence,
         tags=tags,
         admission_reason="; ".join(admission_reasons),
-        provisioning_status=provisioning_status
+        provisioning_status=provisioning_status,
+        discovery_sources=discovery_sources_list  # Single source of truth
     )
     
     return AdmissionResult(

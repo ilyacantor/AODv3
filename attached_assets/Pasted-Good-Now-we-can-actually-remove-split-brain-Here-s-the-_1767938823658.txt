@@ -1,0 +1,114 @@
+Good. Now we can actually *remove* split-brain. Here’s the exact “hard freeze” change set.
+
+## Target outcome
+
+There will be **one truth** for discovery:
+
+* `DiscoveryFootprint.discovery_sources` (and its count)
+* everything else derives from it:
+
+  * `lens_coverage.discovery`
+  * `HAS_DISCOVERY` reason code
+  * `evidence_summary.discovery_sources`
+
+And we add invariants that fail the run if they diverge.
+
+---
+
+# Commit 1: Make DiscoveryFootprint the single source of truth
+
+## A) Stop deriving HAS_DISCOVERY from lens_coverage
+
+**File:** `src/aod/pipeline/decision_trace.py`
+**Function:** `compute_decision_trace()` lines 229–231
+
+Replace:
+
+```python
+has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+if has_discovery:
+    reason_codes.append("HAS_DISCOVERY")
+```
+
+With:
+
+```python
+# Source of truth: discovery_sources list (footprint-derived)
+has_discovery = bool(getattr(asset, "discovery_sources", None))
+if has_discovery:
+    reason_codes.append("HAS_DISCOVERY")
+```
+
+Rationale: lens_coverage becomes *derived display*, not a truth source.
+
+---
+
+## B) Ensure asset.discovery_sources is always set from build_discovery_footprint (or empty)
+
+Wherever the asset object is constructed (likely in admission/correlation pipeline), set:
+
+* `asset.discovery_sources = footprint.discovery_sources` (a list)
+* `asset.lens_coverage.discovery = bool(asset.discovery_sources)` (derived)
+
+No other code should ever “recover” discovery by setting lens_coverage directly.
+
+If you currently have correlation/recovery logic that sets `lens_coverage.discovery = True` without observations: **delete that behavior**. Discovery must come from observations.
+
+---
+
+## C) In classify_actual(), stop recomputing/guessing discovery_sources
+
+**File:** `src/aod/pipeline/aod_agent_reconcile.py`
+**Function:** `classify_actual()`
+
+Make `evidence_summary["discovery_sources"]` come from:
+
+* `asset.discovery_sources` only
+
+Never from separate observation iteration inside reconcile (that’s a second calculator).
+
+If `asset.discovery_sources` is missing, set it to `[]` and treat as no discovery.
+
+---
+
+# Commit 2: Add runtime invariants (fail fast)
+
+Add a small validator that runs once per asset before emission (best place: end of admission or right before output serialization):
+
+### Invariant 1
+
+```python
+bool(asset.lens_coverage.discovery) == (len(asset.discovery_sources or []) > 0)
+```
+
+### Invariant 2
+
+```python
+("HAS_DISCOVERY" in reason_codes) == (len(asset.discovery_sources or []) > 0)
+```
+
+### Invariant 3 (optional but valuable)
+
+If you still keep `build_discovery_footprint(observations)` around in admission:
+
+```python
+set(asset.discovery_sources) == set(build_discovery_footprint(observations).discovery_sources)
+```
+
+(Only if you still have observations in scope at that point.)
+
+**Behavior:** if any invariant fails, mark the run FAILED and stop (or raise). Do not limp forward.
+
+---
+
+# Why this will actually stick
+
+* You are removing the alternate writer (`decision_trace` reading lens_coverage, and any recovery path setting lens_coverage without sources).
+* You are making reconcile read the same field that admission populates (`asset.discovery_sources`).
+* You are adding fail-fast guards so drift can’t silently return.
+
+---
+
+# Minimal validation after the change
+
+Run your determinism suite again

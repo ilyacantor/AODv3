@@ -177,6 +177,10 @@ class Asset(BaseModel):
     llm_metadata: Optional[LLMMetadata] = None
     has_critical_gap: bool = Field(default=False, description="True if ACTIVE asset has identity_gap finding (no IdP match)")
     owner: Optional[str] = Field(default=None, description="Business owner email - assigned via Triage or sourced from CMDB/IdP")
+    discovery_sources: list[str] = Field(
+        default_factory=list,
+        description="Single source of truth for discovery evidence. lens_coverage.discovery and HAS_DISCOVERY derive from this."
+    )
     created_at: datetime = Field(default_factory=now_pst)
 
 

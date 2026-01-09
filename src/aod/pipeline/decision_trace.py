@@ -223,7 +223,9 @@ def compute_decision_trace(asset: Asset, activity_window_days: int = 90) -> Deci
     else:
         reason_codes.append("STALE_ACTIVITY")
     
-    has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+    # Source of truth: discovery_sources list (footprint-derived)
+    # lens_coverage.discovery is now a derived display, not the truth source
+    has_discovery = bool(getattr(asset, "discovery_sources", None))
     if has_discovery:
         reason_codes.append("HAS_DISCOVERY")
     

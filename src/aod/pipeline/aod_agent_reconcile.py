@@ -866,15 +866,16 @@ def emit_actual_results(
         # Build alias_keys from ALL domain variants so Farm can look up assets
         # by any domain variant, not just the primary asset key.
         # This enables matching when AOD keys by name but has domain in identifiers.domains.
+        # CRITICAL: Keep the canonical key in alias_keys - Farm expects it to be present.
         original_alias_keys = set(evidence.get("alias_keys", []))
         all_alias_keys = original_alias_keys.copy()
+        # Add the canonical asset key (Farm expects this to be present)
+        all_alias_keys.add(key)
         # Add all domain variants (includes identifiers.domains)
         all_alias_keys.update(domain_aliases)
         # Add registered domain
         if agg.get("registered_domain"):
             all_alias_keys.add(agg["registered_domain"])
-        # Remove the primary key from alias_keys (it's the canonical key, not an alias)
-        all_alias_keys.discard(key)
         alias_keys = sorted(all_alias_keys)
         
         # CRITICAL: Also update evidence["alias_keys"] so Farm can find it

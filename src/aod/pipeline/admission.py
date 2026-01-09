@@ -11,7 +11,7 @@ from ..models.output_contracts import (
 from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction, Observation
 from .correlate_entities import CorrelationResult, MatchStatus
 from .deterministic_ids import deterministic_uuid
-from .normalize_observations import CandidateEntity
+from .normalize_observations import CandidateEntity, normalize_domain
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .domain_cache import extract_domain
 from ..constants import INFRASTRUCTURE_DOMAINS
@@ -162,13 +162,17 @@ def _clean_url_to_domain(value: Optional[str]) -> Optional[str]:
     """
     Extract domain from URL, cleaning protocol/path/port.
     
-    Mirrors the logic in build_plane_indexes._get_raw_domain() to ensure
+    EXACTLY mirrors the logic in build_plane_indexes._get_raw_domain() to ensure
     consistent domain extraction between indexing and correlation.
+    
+    NOTE: Does NOT require a dot - single tokens like "salesforce" from external_ref
+    are valid because indexing preserves them. The caller filters invalid entries.
     
     Examples:
         "https://flexflow.org/app" -> "flexflow.org"
         "company.okta.com:443/login" -> "company.okta.com"
         "flexflow.org" -> "flexflow.org"
+        "salesforce" -> "salesforce"  # Valid - matches _get_raw_domain behavior
     """
     if not value:
         return None
@@ -178,7 +182,7 @@ def _clean_url_to_domain(value: Optional[str]) -> Optional[str]:
     cleaned = cleaned.split("/")[0]  # Remove path
     cleaned = cleaned.split(":")[0]  # Remove port
     cleaned = cleaned.removeprefix("www.")
-    return cleaned if cleaned and '.' in cleaned else None
+    return cleaned if cleaned else None
 
 
 def _resolve_effective_domain_from_record(record) -> Optional[str]:
@@ -236,7 +240,8 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
     against ANY domain variant, not just the entity's original domain.
     
     Jan 2026 Fix: Now uses same fallback field chain as indexing (external_ref, url,
-    application_url, service_url) and filters out SSO/infrastructure domains.
+    application_url, service_url) and includes raw, registered, AND canonical alias
+    forms for maximum alias matching coverage. EXACTLY mirrors build_plane_indexes.
     
     This is critical for zombie detection where:
     - Discovery observation has domain "flowbase-internal.com"
@@ -249,13 +254,25 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
     """
     domains = set()
     
-    def _is_valid_domain(value: str) -> bool:
-        if not value or '.' not in value:
+    def _is_valid_domain_for_alias(value: str) -> bool:
+        """Check if value is valid for alias matching.
+        
+        Accepts both full domains (flexflow.org) AND tokens (salesforce)
+        to mirror what build_plane_indexes stores in by_domain index.
+        Only rejects email addresses and empty strings.
+        """
+        if not value:
             return False
         if '@' in value:
             return False
+        return True
+    
+    def _is_proper_domain(value: str) -> bool:
+        """Check if value looks like a proper domain with TLD."""
+        if not value or '.' not in value:
+            return False
         parts = value.split('.')
-        return len(parts) >= 2 and len(parts[-1]) in (2, 3, 4, 5) and parts[-1].isalpha()
+        return len(parts) >= 2 and len(parts[-1]) in (2, 3, 4, 5, 6) and parts[-1].isalpha()
     
     for plane_match in [correlation.idp, correlation.cmdb, correlation.cloud, correlation.finance]:
         if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
@@ -266,16 +283,23 @@ def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> lis
                 # Use shared helper that mirrors indexing fallback chain
                 effective_domain = _resolve_effective_domain_from_record(record)
                 
-                if effective_domain and _is_valid_domain(effective_domain):
-                    # Extract registered domain for filtering
-                    registered = extract_registered_domain(effective_domain)
+                if effective_domain and _is_valid_domain_for_alias(effective_domain):
+                    # EXACT PARITY with build_plane_indexes:
+                    # Index BOTH the canonical domain AND raw domain
+                    # Mirrors build_idp_index logic:
+                    #   registered = normalize_domain(effective_domain)  # canonical
+                    #   raw = _get_raw_domain(effective_domain)
+                    #   add_to_index(index.by_domain, registered, record_id)
+                    #   if raw and raw != registered: add_to_index(index.by_domain, raw, record_id)
                     
-                    # Filter out SSO provider and infrastructure domains
-                    # These are hosting platforms, not the asset's actual domain
-                    if registered and _is_sso_or_infrastructure_domain(registered):
-                        continue
+                    # 1. Add canonical domain from normalize_domain (handles alias mappings)
+                    canonical = normalize_domain(effective_domain)
+                    if canonical and _is_valid_domain_for_alias(canonical):
+                        domains.add(canonical)
                     
-                    domains.add(effective_domain)
+                    # 2. Add raw domain if different from canonical (preserves tenant subdomains)
+                    if effective_domain != canonical:
+                        domains.add(effective_domain)
     
     return sorted(domains)
 

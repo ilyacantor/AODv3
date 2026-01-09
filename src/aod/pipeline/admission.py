@@ -715,6 +715,42 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class DiscoveryInvariantError(Exception):
+    """Raised when discovery evidence invariants fail - indicates split-brain state."""
+    pass
+
+
+def _validate_discovery_invariants(asset, expected_sources: list[str], asset_key: str) -> None:
+    """
+    Runtime invariants to ensure discovery_sources is the single source of truth.
+    
+    FAIL FAST: If any invariant fails, raise DiscoveryInvariantError and stop.
+    Do not limp forward with inconsistent state.
+    
+    Invariant 1: lens_coverage.discovery == bool(discovery_sources)
+    Invariant 2: asset.discovery_sources matches expected sources from footprint
+    """
+    has_sources = len(expected_sources) > 0
+    
+    # Invariant 1: lens_coverage.discovery must equal bool(discovery_sources)
+    if asset.lens_coverage.discovery != has_sources:
+        raise DiscoveryInvariantError(
+            f"INVARIANT_VIOLATION: Asset {asset_key} | "
+            f"lens_coverage.discovery={asset.lens_coverage.discovery} but "
+            f"discovery_sources={expected_sources} (bool={has_sources}). "
+            f"These must agree. Fix: lens_coverage.discovery should derive from discovery_sources."
+        )
+    
+    # Invariant 2: asset.discovery_sources must match expected sources
+    if sorted(asset.discovery_sources) != sorted(expected_sources):
+        raise DiscoveryInvariantError(
+            f"INVARIANT_VIOLATION: Asset {asset_key} | "
+            f"asset.discovery_sources={asset.discovery_sources} but "
+            f"expected from footprint={expected_sources}. "
+            f"These must agree. Fix: discovery_sources should be set only from footprint."
+        )
+
+
 @dataclass
 class DiscoveryFootprint:
     """Evidence footprint for discovery admission."""
@@ -1430,6 +1466,12 @@ def apply_admission_criteria(
         provisioning_status=provisioning_status,
         discovery_sources=discovery_sources_list  # Single source of truth
     )
+    
+    # =========================================================================
+    # RUNTIME INVARIANTS: Fail fast if discovery evidence diverges
+    # These ensure discovery_sources remains the single source of truth
+    # =========================================================================
+    _validate_discovery_invariants(asset, discovery_sources_list, asset_key)
     
     return AdmissionResult(
         admitted=True,

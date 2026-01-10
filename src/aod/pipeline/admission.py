@@ -1500,17 +1500,48 @@ def apply_admission_criteria(
     # Priority hierarchy:
     # 1. effective_domain (Discovery) - "Observed Reality", anchor for Activity
     # 2. plane_domains (Governance) - "Bureaucratic Records", anchors for Status
+    #
+    # Jan 2026 FIX: When effective_domain is falsy, fall back to first non-infrastructure
+    # governance domain. This ensures identifiers.domains is populated for entities that
+    # were correlated via name but have domain in their IdP/CMDB records.
     domain_list = []
     seen_domains = set()
+    
+    # Extract governance domains first (needed for fallback logic)
+    plane_domains = _extract_all_domains_from_correlation(correlation)
     
     # Discovery domain is PRIMARY - must be first
     if effective_domain:
         normalized = effective_domain.lower().strip()
         domain_list.append(normalized)
         seen_domains.add(normalized)
+    else:
+        # Jan 2026 FIX: Fall back to governance domain when discovery domain is absent
+        # This fixes KEY_NORMALIZATION_MISMATCH where entities keyed by name have
+        # governance domains (IdP/CMDB) that should be used for alias matching
+        # 
+        # TIERED FALLBACK (ensures identifiers.domains is never empty):
+        # Tier 1: First non-infrastructure domain with TLD (preferred)
+        # Tier 2: First infrastructure domain with TLD (fallback - okta.com is still a valid key)
+        # This guarantees identifiers.domains has at least one entry for alias resolution
+        fallback_domain = None
+        fallback_infra_domain = None
+        
+        for pd in plane_domains:
+            if pd and '.' in pd:
+                if not _is_sso_or_infrastructure_domain(pd):
+                    fallback_domain = pd
+                    break  # Found ideal candidate, stop searching
+                elif fallback_infra_domain is None:
+                    fallback_infra_domain = pd  # Keep as backup
+        
+        # Use best available domain
+        primary_fallback = fallback_domain or fallback_infra_domain
+        if primary_fallback:
+            domain_list.append(primary_fallback)
+            seen_domains.add(primary_fallback)
     
-    # Add governance domains as secondary aliases (preserving correlation without breaking identity)
-    plane_domains = _extract_all_domains_from_correlation(correlation)
+    # Add remaining governance domains as secondary aliases
     for pd in plane_domains:
         if pd not in seen_domains:
             domain_list.append(pd)

@@ -4,27 +4,24 @@ Golden Reconciliation Test - End-to-end accuracy benchmark
 This test runs the full AOD pipeline against a curated Farm snapshot and
 compares actual results against expected outcomes from Farm reconciliation.
 
-THRESHOLD: 95%+ accuracy in EACH category (cataloged, rejected, shadow, zombie)
+THRESHOLD: 95%+ accuracy in EACH category (shadow, zombie)
 for the test to pass.
 
 Usage:
     pytest tests/test_golden_reconciliation.py -v
     
 To debug specific assets:
-    DEBUG_RECONCILE_ASSETS=fasthub.dev,amazon.com pytest tests/test_golden_reconciliation.py -v
+    DEBUG_RECONCILE_ASSETS=fasthub.dev,amazon.com pytest tests/test_golden_reconciliation.py -v -s
 """
 
 import pytest
 import json
-import asyncio
-from datetime import datetime
 from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from aod.db.database import Database
-from aod.pipeline.pipeline_executor import execute_pipeline
+from aod.pipeline.pipeline_executor import run_pipeline_ephemeral
 from aod.pipeline.aod_agent_reconcile import emit_actual_results
 
 
@@ -68,19 +65,10 @@ def compute_accuracy(expected: set, actual: set) -> dict:
     }
 
 
-@pytest.fixture
-def fresh_db():
-    """Create a fresh in-memory database for testing"""
-    db = Database(":memory:")
-    asyncio.get_event_loop().run_until_complete(db.initialize())
-    return db
-
-
 class TestGoldenReconciliation:
     """Golden reconciliation tests - validates end-to-end pipeline accuracy"""
     
-    @pytest.mark.asyncio
-    async def test_full_pipeline_accuracy(self, fresh_db):
+    def test_full_pipeline_accuracy(self):
         """
         Run full pipeline and validate accuracy in each category.
         
@@ -93,20 +81,11 @@ class TestGoldenReconciliation:
         snapshot = load_snapshot()
         expected = load_expected_outcomes()
         
-        run_id = f"golden_test_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-        started_at = datetime.utcnow()
+        run_id = "golden_test"
         
-        snapshot_as_of = None
-        if snapshot.get("meta", {}).get("created_at"):
-            try:
-                created_at_str = snapshot["meta"]["created_at"]
-                snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-            except (ValueError, TypeError):
-                pass
-        
-        result = await execute_pipeline(
-            snapshot, fresh_db,
-            run_id=run_id, started_at=started_at,
+        result = run_pipeline_ephemeral(
+            snapshot,
+            run_id=run_id,
             is_farm_source=True
         )
         
@@ -116,9 +95,9 @@ class TestGoldenReconciliation:
             run_id=run_id,
             assets=result.assets,
             activity_window_days=90,
-            rejections=result.rejections if hasattr(result, 'rejections') else None,
+            rejections=result.rejections,
             mode="sprawl",
-            snapshot_as_of=snapshot_as_of
+            snapshot_as_of=result.snapshot_as_of
         )
         
         expected_shadows = set(expected.get("expected_shadows", []))
@@ -175,26 +154,16 @@ class TestGoldenReconciliation:
         if failures:
             pytest.fail("\n".join(failures))
     
-    @pytest.mark.asyncio 
-    async def test_shadow_accuracy_detailed(self, fresh_db):
+    def test_shadow_accuracy_detailed(self):
         """Detailed shadow accuracy test with diagnostic output"""
         snapshot = load_snapshot()
         expected = load_expected_outcomes()
         
         run_id = "shadow_test"
-        started_at = datetime.utcnow()
         
-        snapshot_as_of = None
-        if snapshot.get("meta", {}).get("created_at"):
-            try:
-                created_at_str = snapshot["meta"]["created_at"]
-                snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-            except (ValueError, TypeError):
-                pass
-        
-        result = await execute_pipeline(
-            snapshot, fresh_db,
-            run_id=run_id, started_at=started_at,
+        result = run_pipeline_ephemeral(
+            snapshot,
+            run_id=run_id,
             is_farm_source=True
         )
         
@@ -204,9 +173,9 @@ class TestGoldenReconciliation:
             run_id=run_id,
             assets=result.assets,
             activity_window_days=90,
-            rejections=result.rejections if hasattr(result, 'rejections') else None,
+            rejections=result.rejections,
             mode="sprawl",
-            snapshot_as_of=snapshot_as_of
+            snapshot_as_of=result.snapshot_as_of
         )
         
         expected_shadows = set(expected.get("expected_shadows", []))
@@ -219,26 +188,16 @@ class TestGoldenReconciliation:
             f"Missed: {metrics['missed']}"
         )
     
-    @pytest.mark.asyncio
-    async def test_zombie_accuracy_detailed(self, fresh_db):
+    def test_zombie_accuracy_detailed(self):
         """Detailed zombie accuracy test with diagnostic output"""
         snapshot = load_snapshot()
         expected = load_expected_outcomes()
         
         run_id = "zombie_test"
-        started_at = datetime.utcnow()
         
-        snapshot_as_of = None
-        if snapshot.get("meta", {}).get("created_at"):
-            try:
-                created_at_str = snapshot["meta"]["created_at"]
-                snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-            except (ValueError, TypeError):
-                pass
-        
-        result = await execute_pipeline(
-            snapshot, fresh_db,
-            run_id=run_id, started_at=started_at,
+        result = run_pipeline_ephemeral(
+            snapshot,
+            run_id=run_id,
             is_farm_source=True
         )
         
@@ -248,9 +207,9 @@ class TestGoldenReconciliation:
             run_id=run_id,
             assets=result.assets,
             activity_window_days=90,
-            rejections=result.rejections if hasattr(result, 'rejections') else None,
+            rejections=result.rejections,
             mode="sprawl",
-            snapshot_as_of=snapshot_as_of
+            snapshot_as_of=result.snapshot_as_of
         )
         
         expected_zombies = set(expected.get("expected_zombies", []))

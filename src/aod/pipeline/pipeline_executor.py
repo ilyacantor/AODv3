@@ -177,7 +177,167 @@ class PipelineResult:
     assets: list[Asset] = field(default_factory=list)
     artifacts: list[Artifact] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
+    rejections: list[dict] = field(default_factory=list)
     error: str = ""
+
+
+@dataclass
+class EphemeralPipelineResult:
+    """Result of ephemeral pipeline execution (no database persistence)"""
+    success: bool
+    assets: list[Asset] = field(default_factory=list)
+    rejections: list[dict] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+    snapshot_as_of: datetime | None = None
+    error: str = ""
+
+
+def run_pipeline_ephemeral(
+    data: dict[str, Any],
+    run_id: str = "ephemeral_run",
+    is_farm_source: bool = True
+) -> EphemeralPipelineResult:
+    """
+    Run the AOD pipeline without database persistence.
+    
+    Useful for testing and reconciliation validation. Runs all compute stages
+    but skips database writes, returning assets and rejections directly.
+    
+    Args:
+        data: Raw snapshot JSON data
+        run_id: Run identifier (defaults to "ephemeral_run")
+        is_farm_source: Whether snapshot is from Farm (enables Farm format normalization)
+    
+    Returns:
+        EphemeralPipelineResult with assets, rejections, findings
+    """
+    try:
+        snapshot_id = data.get("meta", {}).get("snapshot_id", run_id)
+        tenant_id = data.get("meta", {}).get("tenant_id", "unknown")
+        started_at = datetime.now(timezone.utc)
+        
+        snapshot_as_of = None
+        created_at_str = data.get("meta", {}).get("created_at") or data.get("meta", {}).get("generated_at")
+        if created_at_str:
+            try:
+                snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                if snapshot_as_of.tzinfo is None:
+                    snapshot_as_of = snapshot_as_of.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                pass
+        
+        snapshot = validate_snapshot(
+            data,
+            normalize=is_farm_source,
+            fallback_tenant_id=tenant_id,
+            snapshot_id=snapshot_id
+        )
+        
+        observations = snapshot.planes.discovery.observations
+        
+        candidates, _ = normalize_observations(observations)
+        
+        indexes = build_plane_indexes(snapshot.planes)
+        
+        idp_activity_map = build_idp_activity_map(indexes.idp.records)
+        
+        correlations = correlate_entities_to_planes(candidates, indexes)
+        
+        filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
+        
+        correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
+        
+        propagated_governance = propagate_vendor_governance(correlations)
+        
+        policy_config = get_current_config()
+        policy_engine = PolicyEngine(policy_config)
+        use_policy_engine = policy_config.scope.use_policy_engine
+        
+        assets = []
+        rejections = []
+        
+        for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
+            correlation = correlation_by_entity_id.get(candidate.entity_id)
+            if not correlation:
+                rejections.append({
+                    "entity_key": f"entity:{candidate.entity_id}",
+                    "entity_name": candidate.original_name,
+                    "reason_code": "no_correlation",
+                    "reason_detail": "Entity not found in correlation results",
+                    "evidence_summary": {"source": candidate.source, "domain": candidate.domain}
+                })
+                continue
+            
+            prop_gov = propagated_governance.get(candidate.entity_id)
+            prop_idp = prop_gov.idp_present if prop_gov else False
+            prop_cmdb = prop_gov.cmdb_present if prop_gov else False
+            prop_reason = prop_gov.propagation_reason if prop_gov else None
+            
+            entity_observations = [obs for obs in observations if obs.observation_id in candidate.observation_ids]
+            admission_result = apply_admission_criteria(
+                correlation, tenant_id, run_id, snapshot_id, entity_observations,
+                propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
+                idp_activity_map=idp_activity_map
+            )
+            
+            policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)
+            policy_decision = policy_engine.evaluate(policy_asset_data)
+            
+            should_admit = policy_decision.admitted if use_policy_engine else admission_result.admitted
+            
+            if should_admit and admission_result.asset:
+                assets.append(admission_result.asset)
+            else:
+                plane_domains = _extract_all_domains_from_correlation(correlation)
+                rejection_domain = _extract_domain_from_correlation(correlation) or candidate.domain
+                if not rejection_domain and plane_domains:
+                    rejection_domain = plane_domains[0]
+                rejection_registered_domain = extract_registered_domain(rejection_domain) if rejection_domain else None
+                
+                rejections.append({
+                    "entity_key": f"entity:{candidate.entity_id}",
+                    "entity_name": candidate.original_name,
+                    "reason_code": "admission_failed",
+                    "reason_detail": admission_result.rejection_reason or "No admission criteria satisfied",
+                    "domain": rejection_domain,
+                    "registered_domain": rejection_registered_domain,
+                    "evidence_summary": {
+                        "idp_status": correlation.idp.status.value,
+                        "cmdb_status": correlation.cmdb.status.value,
+                        "cloud_status": correlation.cloud.status.value,
+                        "finance_status": correlation.finance.status.value,
+                        "domain": rejection_domain,
+                        "registered_domain": rejection_registered_domain,
+                        "domains": plane_domains,
+                        "has_idp": correlation.idp.status.value in ("matched", "ambiguous"),
+                        "has_cmdb": correlation.cmdb.status.value in ("matched", "ambiguous"),
+                        "has_discovery": bool(candidate.observation_ids)
+                    }
+                })
+        
+        late_binding_enabled = policy_config.scope.late_binding_domain_merge
+        assets = late_bind_and_merge_assets(assets, late_binding_enabled, logger)
+        
+        findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
+        
+        return EphemeralPipelineResult(
+            success=True,
+            assets=assets,
+            rejections=rejections,
+            findings=findings,
+            snapshot_as_of=snapshot_as_of
+        )
+        
+    except ValidationError as e:
+        return EphemeralPipelineResult(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        return EphemeralPipelineResult(
+            success=False,
+            error=str(e)
+        )
 
 
 async def execute_pipeline(

@@ -356,6 +356,7 @@ def build_finance_index(finance_plane: FinancePlane) -> PlaneIndex:
         if txn.vendor_name:
             vendor_name = normalize_string(txn.vendor_name)
             add_to_index(index.by_vendor_product, vendor_name, record_id)
+            add_to_index(index.by_canonical_name, vendor_name, record_id)
             
             # Dec 2025: Index vendor name base tokens for cross-matching
             # "Easycloud Inc-prod" → index "easycloud" in by_name_words

@@ -606,12 +606,12 @@ def classify_actual(
             if financially_anchored:
                 reasons.append(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP)
         
-        # ALIGNED WITH FARM RECONCILIATION (Jan 2026):
-        # Zombie = is_governed AND activity_status==STALE AND has_finance
-        # Any finance presence indicates cost exposure for unused governed assets.
-        # Updated from has_ongoing_finance to has_finance to align with Farm expectations.
+        # ALIGNED WITH POLICY ENGINE (Dec 2025):
+        # Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
+        # "Paying for something you don't use" - requires ongoing spend
+        # Without ongoing finance, stale governed assets are just inactive (not wasting money)
         if has_stale_activity:
-            if has_governance and has_finance:
+            if has_governance and has_ongoing_finance:
                 is_zombie = True
                 reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
             elif not has_governance:

@@ -895,10 +895,21 @@ def emit_actual_results(
         
         if agg["is_shadow"]:
             shadow_actual.append(key)
+            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
+            # This fixes KEY_NORMALIZATION_MISMATCH where Farm looks for a governance domain
+            # but AOD keyed the asset by a different (discovery) domain
+            for alias_domain in alias_keys:
+                shadow_actual.append(alias_domain)
         if agg["is_zombie"]:
             zombie_actual.append(key)
+            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
+            for alias_domain in alias_keys:
+                zombie_actual.append(alias_domain)
         if agg["is_parked"]:
             parked_actual.append(key)
+            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
+            for alias_domain in alias_keys:
+                parked_actual.append(alias_domain)
     
     if rejections:
         for rej in rejections:

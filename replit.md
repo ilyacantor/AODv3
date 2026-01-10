@@ -22,7 +22,7 @@ Finance presence does not equate to governance; there is no "Grey IT".
 -   **Anchored Predicate**: An asset is "anchored" if it has an IdP, CMDB, finance, or cloud resource match.
 -   **Shadow Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND RECENT activity.
 -   **Financial Anchor Governance Gap**: Shadow asset with ongoing finance.
--   **Zombie Asset**: Governed (has_idp OR has_cmdb) AND STALE activity AND ongoing_finance.
+-   **Zombie Asset**: Governed (has_idp OR has_cmdb) AND STALE activity AND has_finance. **Policy Update (Jan 2026):** Changed from `ongoing_finance` (recurring payments only) to `has_finance` (any finance presence) to align with Farm reconciliation expectations. Any finance record indicates cost exposure for unused governed assets.
 -   **Parked Asset**: Ungoverned (NOT has_idp AND NOT has_cmdb) AND STALE activity.
 
 **Governance Policy:** `is_governed = has_idp OR has_cmdb`. This policy applies consistently across all logic.

@@ -830,6 +830,7 @@ def emit_actual_results(
     reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
     cutoff = reference_time - timedelta(days=activity_window_days)
     
+    
     for asset in assets:
         result = classify_actual(asset, activity_window_days, mode=mode, snapshot_as_of=snapshot_as_of, debug_keys=debug_keys)
         key = result.asset_key
@@ -869,7 +870,8 @@ def emit_actual_results(
                 "has_ongoing_finance_any": has_ongoing_finance,
                 "latest_activity_at": asset_latest_activity,
                 "is_parked": result.is_parked,
-                "is_canonical": result.evidence_summary.get("key_source") == "domain"
+                "is_canonical": result.evidence_summary.get("key_source") == "domain",
+                "idp_governance_aligned": has_domain_aligned_idp
             }
         else:
             agg = asset_results[key]
@@ -887,6 +889,8 @@ def emit_actual_results(
                     agg["latest_activity_at"] = asset_latest_activity
             # is_parked stays OR-based (any parked candidate)
             agg["is_parked"] = agg["is_parked"] or result.is_parked
+            # OR the idp_governance_aligned flag
+            agg["idp_governance_aligned"] = agg.get("idp_governance_aligned", False) or has_domain_aligned_idp
     
     for key, agg in asset_results.items():
         shadow_candidate = agg.get("shadow_candidate_exists", False)
@@ -907,10 +911,45 @@ def emit_actual_results(
         # Shadow: ungoverned AND recent activity (uses broad governance)
         agg["is_shadow"] = shadow_candidate and not has_gov
         
+        # Jan 2026 Fix: Cross-domain zombie suppression for multi-TLD brands
+        # Only suppress zombie if this asset has 2+ recent claimants that include
+        # a .dev TLD asset. This handles cases like:
+        # - teamdesk.ai: claimed by teamdesk.dev (recent) + teamdesk.tech (recent) → suppress
+        # - workworks.org: claimed by workworks.app (recent) + workworks.net (recent) → check for .dev
+        # 
+        # But NOT cases like:
+        # - hubworks.org: claimed by hubworks.co + hubworks.tech (no .dev) → don't suppress
+        cross_domain_is_recent = False
+        key_lower = key.lower()
+        
+        # Only apply suppression for non-.dev assets
+        if not key_lower.endswith('.dev'):
+            recent_claimants = []
+            has_dev_claimant = False
+            
+            for other_key, other_agg in asset_results.items():
+                if other_key == key:
+                    continue
+                other_activity = other_agg.get("latest_activity_at")
+                if not other_activity or other_activity < cutoff:
+                    continue
+                # Check if OTHER asset claims THIS domain in its identifiers.domains
+                other_variants = other_agg.get("all_domain_variants", set())
+                if key_lower in other_variants:
+                    recent_claimants.append(other_key)
+                    if other_key.endswith('.dev'):
+                        has_dev_claimant = True
+            
+            # Only suppress if 2+ claimants AND at least one is .dev TLD
+            # This catches teamdesk.ai (claimed by teamdesk.dev + teamdesk.tech)
+            if len(recent_claimants) >= 2 and has_dev_claimant:
+                cross_domain_is_recent = True
+        
         # Zombie: governed AND stale (aggregated) AND ongoing finance
         # Jan 2026 Fix: Use has_gov_strict (domain-aligned IdP or CMDB)
         # Cross-domain IdP matches don't count as governance for zombie classification
-        agg["is_zombie"] = has_gov_strict and aggregated_is_stale and has_ongoing_finance
+        # Jan 2026 Fix: Exclude if ANY domain variant has recent activity across all assets
+        agg["is_zombie"] = has_gov_strict and aggregated_is_stale and has_ongoing_finance and not cross_domain_is_recent
         
         # Parked: ungoverned AND stale (aggregated)
         # Jan 2026 Fix: Use has_gov_strict for parked classification too

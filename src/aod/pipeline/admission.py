@@ -1141,7 +1141,9 @@ def _extract_idp_domain(record: IdPObject) -> Optional[str]:
     if not idp_domain and record.raw_data and isinstance(record.raw_data, dict):
         ext_ref = record.raw_data.get('external_ref')
         if ext_ref and isinstance(ext_ref, str):
-            idp_domain = extract_domain(ext_ref)
+            ext_result = extract_domain(ext_ref)
+            if ext_result.registered_domain:
+                idp_domain = ext_result.registered_domain
     
     if idp_domain:
         return extract_registered_domain(idp_domain)
@@ -1168,13 +1170,19 @@ def _idp_domain_matches_entity(
     
     Matching rules:
     1. Exact registered domain match → True
-    2. IdP has no domain → True (name-based correlation is authoritative)
+    2. IdP has no domain → False (name-only match doesn't provide domain-aligned governance)
     3. Same base name AND compatible TLDs → True
     4. Same base name BUT .dev vs non-.dev → False (different products)
+    
+    Critical insight (Jan 2026): Farm considers name-only IdP matches (where IdP record
+    has no domain field) as NOT providing governance. Only domain-aligned IdP matches
+    count for zombie classification. This fixes zombie FPs like prosuite.dev and linkify.co
+    where IdP was matched via name token but has no domain.
     """
-    # If IdP has no domain, allow the match (name-based correlation is authoritative)
+    # If IdP has no domain, it's a name-only match - NOT domain-aligned for governance
+    # Farm treats name-only IdP matches as NOT providing IdP governance for zombie classification
     if not idp_registered_domain:
-        return True
+        return False
     
     # If entity has no domain, allow the match
     if not entity_registered_domain:
@@ -1243,8 +1251,33 @@ def extract_activity_timestamps(
     finance_last_transaction_at: Optional[datetime] = None
     idp_governance_aligned: bool = False  # Jan 2026: Track domain-aligned IdP separately from activity
     
-    # Get entity's primary registered domain for IdP domain scoping
+    # Get entity's registered domains for IdP domain scoping
+    # Jan 2026: For IdP governance, use entity domain + non-IdP plane domains
+    # We DON'T include IdP domains here to avoid circular matching
+    # Example: linkify.co entity shouldn't get governance from linkify.app IdP
+    # But flowapp.app entity with ['flowapp.app', 'flowapp.co'] from discovery DOES get governance from flowapp.co IdP
     entity_registered_domain = extract_registered_domain(entity.domain) if entity.domain else None
+    entity_discovery_domains: set[str] = set()
+    if entity_registered_domain:
+        entity_discovery_domains.add(entity_registered_domain)
+    # Include domains from non-IdP plane records (CMDB, Cloud, Finance, Discovery)
+    # These represent the entity's actual presence, not just IdP correlation
+    for plane_match in [correlation.cmdb, correlation.cloud, correlation.finance]:
+        if plane_match and plane_match.matched_records:
+            for rec in plane_match.matched_records:
+                if rec is None:
+                    continue
+                rec_domain = getattr(rec, 'domain', None) or getattr(rec, 'app_domain', None)
+                if not rec_domain and hasattr(rec, 'raw_data') and isinstance(rec.raw_data, dict):
+                    ext_ref = rec.raw_data.get('external_ref') or rec.raw_data.get('url')
+                    if ext_ref and isinstance(ext_ref, str):
+                        ext_result = extract_domain(ext_ref)
+                        if ext_result.registered_domain:
+                            rec_domain = ext_result.registered_domain
+                if rec_domain:
+                    reg = extract_registered_domain(rec_domain)
+                    if reg:
+                        entity_discovery_domains.add(reg)
     
     # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
     # Jan 2026 Fix: Also check raw_data for login timestamps with various field names
@@ -1266,13 +1299,15 @@ def extract_activity_timestamps(
     # Other TLD combinations like .co/.cloud are treated as the same product.
     
     # Extract IdP activity and governance with TLD-aware domain matching
+    # Jan 2026: Use TLD-family matching for BOTH governance and activity
+    # - .dev vs non-.dev = different products (no match)
+    # - Other TLD combinations = same product family (match)
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject):
-                # Jan 2026: TLD-aware IdP matching
-                # - .dev vs non-.dev = different products (no match)
-                # - Other TLD combinations = same product family (match)
                 idp_registered_domain = _extract_idp_domain(record)
+                
+                # Use TLD-family matching for governance and activity
                 domain_aligned = _idp_domain_matches_entity(
                     idp_registered_domain, entity_registered_domain, record.name
                 )

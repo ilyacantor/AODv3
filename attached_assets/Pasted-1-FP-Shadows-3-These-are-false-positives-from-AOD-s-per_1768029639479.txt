@@ -1,0 +1,199 @@
+1. FP Shadows (3)
+
+These are false positives from AOD’s perspective, but not all are equal.
+
+netbox.net
+
+Facts
+
+Discovery sources: 1
+
+Farm: not admitted
+
+AOD: admitted
+
+Reality check
+
+This violates the stated invariant: single-source assets should not admit
+
+Classification
+
+❌ Bug / Gate leak
+
+Why
+
+This is not a philosophy difference
+
+It is a mechanical failure of the single-source rejection gate
+
+Action
+
+Tighten admission gate:
+discovery_sources == 1 → reject unless explicitly governed
+
+salesforceliveagent.com
+
+Facts
+
+Farm: clean (GOVERNED_VIA_VENDOR)
+
+AOD: shadow
+
+Reality check
+
+This domain is owned and operated by Salesforce
+
+Customers never “own” it; it’s a vendor-controlled service surface
+
+Classification
+
+⚠️ Edge case – vendor aliasing gap
+
+Why
+
+Farm has vendor→domain intelligence
+
+AOD currently treats it as an independent SaaS
+
+Action
+
+Add vendor-owned domain aliasing
+
+This is not discovery logic — it’s vendor ontology enrichment
+
+datadynamics-v4s5.com
+
+Facts
+
+Farm: clean (GOVERNED)
+
+AOD: shadow
+
+Reality check
+
+This is a tenant-generated domain
+
+Functionally equivalent to customername.vendor.com
+
+Classification
+
+⚠️ Edge case – tenant domain handling
+
+Why
+
+Governance exists, but domain pattern is opaque
+
+Action
+
+Add tenant-domain heuristics:
+
+Known SaaS + opaque suffix + governance → auto-govern
+
+Not a bug
+
+This is a coverage expansion, not a logic error
+
+FP Shadows — Summary
+Asset	Classification	Reason
+netbox.net	❌ Bug	Single-source gate leak
+salesforceliveagent.com	⚠️ Edge	Vendor aliasing missing
+datadynamics-v4s5.com	⚠️ Edge	Tenant-domain inference missing
+2. AOD Rejected but Farm Admitted (12)
+
+You already reasoned this correctly. This is intentional divergence.
+
+Root cause (restated clearly)
+Dimension	Farm	AOD
+Governance signal	Sufficient	Insufficient
+Trust model	“System of record = existence”	“Observed activity = existence”
+Goal	Inventory truth	Live surface validation
+Sub-patterns
+Zero discovery + governed
+
+basecamp.com, pivotaltracker.com, etc.
+
+Verdict:
+✅ Legitimate policy difference
+
+Low discovery + governed
+
+microsoft365.io, gstatic.com, etc.
+
+Verdict:
+✅ Legitimate policy difference
+
+Domain normalization
+
+amazon.com, workers.dev, tiktok.com
+
+Verdict:
+❌ Bug
+
+Why
+
+Canonicalization drift breaks reconciliation
+
+Not a philosophy issue
+
+3. AOD Cataloged but Farm Rejected (3)
+
+This is the mirror image of the netbox.net problem.
+
+Assets
+
+salesforce-crm.com (1 dns)
+
+netbox.net (1 dns)
+
+openforce.net (1 proxy)
+
+Reality check
+
+All three have exactly one discovery source
+
+Farm rejects them
+
+AOD admits them
+
+Classification
+
+❌ Bug / admission gate leak
+
+Why this matters
+
+This undermines:
+
+Shadow classification accuracy
+
+False-positive control
+
+Confidence in discovery thresholds
+
+Action (non-negotiable)
+
+Enforce invariant:
+
+discovery_sources == 1
+AND not governed
+→ reject
+
+Final, cleaned-up verdicts
+True Bugs (must fix)
+
+Single-source admission leakage
+
+netbox.net (twice)
+
+salesforce-crm.com
+
+openforce.net
+
+Domain canonicalization drift
+
+Legitimate Edge Cases (policy / enrichment)
+
+Governance-only admission differences (Farm vs AOD)
+
+Vendor-owned subdomains (Salesforce Live Agent)
+
+Tenant-generated opaque domains

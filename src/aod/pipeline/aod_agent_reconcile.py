@@ -811,6 +811,8 @@ def emit_actual_results(
         registered_domain = result.evidence_summary.get("registered_domain")
         all_variants = set(result.evidence_summary.get("all_domain_variants", []))
         
+        has_governance = result.evidence_summary.get("has_governance", False)
+        
         if key not in asset_results:
             asset_results[key] = {
                 "admission": result.admission,
@@ -820,7 +822,8 @@ def emit_actual_results(
                 "all_domain_variants": all_variants,
                 "registered_domain": registered_domain,
                 "evidence_summary": result.evidence_summary,
-                "is_shadow": result.is_shadow,
+                "shadow_candidate_exists": result.is_shadow,
+                "has_governance_any": has_governance,
                 "is_zombie": result.is_zombie,
                 "is_parked": result.is_parked,
                 "is_canonical": result.evidence_summary.get("key_source") == "domain"
@@ -831,12 +834,21 @@ def emit_actual_results(
             agg["asset_ids"].append(result.asset_id)
             agg["names"].append(result.name)
             agg["all_domain_variants"].update(all_variants)
-            agg["is_shadow"] = agg["is_shadow"] or result.is_shadow
+            agg["shadow_candidate_exists"] = agg["shadow_candidate_exists"] or result.is_shadow
+            agg["has_governance_any"] = agg["has_governance_any"] or has_governance
             agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
             agg["is_parked"] = agg["is_parked"] or result.is_parked
     
     for key, agg in asset_results.items():
+        shadow_candidate = agg.get("shadow_candidate_exists", False)
+        has_gov = agg.get("has_governance_any", False)
+        agg["is_shadow"] = shadow_candidate and not has_gov
+        
         reasons = agg["reasons"]
+        if not agg["is_shadow"]:
+            reasons.discard(ReasonCode.SHADOW_CLASSIFICATION.value)
+            reasons.discard(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP.value)
+        
         reasons = _deduplicate_reason_codes(reasons)
         agg["reasons"] = reasons
     

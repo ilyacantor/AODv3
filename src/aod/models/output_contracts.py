@@ -112,6 +112,11 @@ class ActivityEvidence(BaseModel):
     network_last_seen_at: Optional[datetime] = None
     finance_last_transaction_at: Optional[datetime] = None
     latest_activity_at: Optional[datetime] = None
+    # Jan 2026: Domain-aligned IdP governance flag
+    # True if any matched IdP record has a domain that matches the entity's domain.
+    # This is INDEPENDENT of whether that IdP has activity (last_login_at).
+    # Used for zombie classification to distinguish domain-aligned IdP from cross-domain matches.
+    idp_governance_aligned: bool = False
 
 
 class VendorHypothesis(BaseModel):

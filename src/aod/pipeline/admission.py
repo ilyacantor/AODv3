@@ -1110,6 +1110,102 @@ def determine_environment(correlation: CorrelationResult) -> Environment:
     return Environment.UNKNOWN
 
 
+def _extract_base_name_from_domain(domain: Optional[str]) -> Optional[str]:
+    """
+    Extract the base name (first token) from a registered domain.
+    
+    Example: flowapp.co -> flowapp, worktech.cloud -> worktech
+    
+    Returns:
+        Base name (lowercased) if extractable, None otherwise
+    """
+    if not domain or "." not in domain:
+        return None
+    base = domain.split(".")[0].lower()
+    if len(base) >= 3:  # Require at least 3 chars to avoid false positives
+        return base
+    return None
+
+
+def _extract_idp_domain(record: IdPObject) -> Optional[str]:
+    """
+    Extract registered domain from IdP record.
+    
+    Jan 2026: Domain-scoped IdP activity gating.
+    Checks domain field, then external_ref in raw_data.
+    
+    Returns:
+        Registered domain (eTLD+1) if found, None otherwise
+    """
+    idp_domain = record.domain
+    if not idp_domain and record.raw_data and isinstance(record.raw_data, dict):
+        ext_ref = record.raw_data.get('external_ref')
+        if ext_ref and isinstance(ext_ref, str):
+            idp_domain = extract_domain(ext_ref)
+    
+    if idp_domain:
+        return extract_registered_domain(idp_domain)
+    return None
+
+
+def _idp_domain_matches_entity(
+    idp_registered_domain: Optional[str], 
+    entity_registered_domain: Optional[str],
+    idp_name: Optional[str] = None
+) -> bool:
+    """
+    Check if IdP domain matches entity domain for activity and governance purposes.
+    
+    Jan 2026: TLD-aware matching based on Farm behavior analysis.
+    
+    Key insight from Farm data:
+    - easydesk.dev (entity) vs easydesk.app (IdP) → NO match (different products)
+    - datacloud.co (entity) vs datacloud.cloud (IdP) → MATCH (same product family)
+    - flowapp.app (entity) vs flowapp.co (IdP) → MATCH (same product family)
+    
+    The pattern: .dev is treated as a separate namespace from .app/.com/.io.
+    Other TLD combinations (.co, .cloud, .app, .io, .org) are treated as same family.
+    
+    Matching rules:
+    1. Exact registered domain match → True
+    2. IdP has no domain → True (name-based correlation is authoritative)
+    3. Same base name AND compatible TLDs → True
+    4. Same base name BUT .dev vs non-.dev → False (different products)
+    """
+    # If IdP has no domain, allow the match (name-based correlation is authoritative)
+    if not idp_registered_domain:
+        return True
+    
+    # If entity has no domain, allow the match
+    if not entity_registered_domain:
+        return True
+    
+    # Exact registered domain match
+    if idp_registered_domain == entity_registered_domain:
+        return True
+    
+    # Check for compatible TLD matching
+    idp_base = _extract_base_name_from_domain(idp_registered_domain)
+    entity_base = _extract_base_name_from_domain(entity_registered_domain)
+    
+    # Different base names = no match
+    if not idp_base or not entity_base or idp_base != entity_base:
+        return False
+    
+    # Same base name - check TLD compatibility
+    idp_tld = idp_registered_domain.split('.')[-1] if '.' in idp_registered_domain else ''
+    entity_tld = entity_registered_domain.split('.')[-1] if '.' in entity_registered_domain else ''
+    
+    # .dev is a separate namespace - it's typically used for development/different products
+    # If entity is .dev and IdP is not .dev (or vice versa), don't match
+    dev_conflict = (entity_tld == 'dev') != (idp_tld == 'dev')
+    if dev_conflict:
+        return False
+    
+    # All other TLD combinations with same base name are considered same product family
+    return True
+
+
 def extract_activity_timestamps(
     correlation: CorrelationResult,
     entity: CandidateEntity,
@@ -1123,8 +1219,10 @@ def extract_activity_timestamps(
     record has no last_login_at, we look up the IdP name in idp_activity_map to get
     the aggregated max login timestamp from ALL IdP records with the same name.
     
-    This aligns with Farm's behavior where activity is shared across all assets
-    matched to IdP records of the same vendor/brand.
+    Jan 2026 Fix: Domain-scoped IdP activity. Only count IdP activity if the IdP
+    record's domain matches the entity's primary registered domain. This prevents
+    cross-domain IdP inheritance (e.g., easydesk.app IdP activity being counted
+    for easydesk.dev entities) which causes false RECENT activity status.
     
     Args:
         correlation: Correlation result with matched records from various planes
@@ -1143,12 +1241,48 @@ def extract_activity_timestamps(
     endpoint_last_seen_at: Optional[datetime] = None
     network_last_seen_at: Optional[datetime] = None
     finance_last_transaction_at: Optional[datetime] = None
+    idp_governance_aligned: bool = False  # Jan 2026: Track domain-aligned IdP separately from activity
+    
+    # Get entity's primary registered domain for IdP domain scoping
+    entity_registered_domain = extract_registered_domain(entity.domain) if entity.domain else None
     
     # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
     # Jan 2026 Fix: Also check raw_data for login timestamps with various field names
+    # 
+    # Jan 2026: REVISED IdP strategy based on Farm behavior analysis:
+    # 
+    # IdP governance and activity are BOTH inherited from ALL matched IdP records.
+    # However, for certain TLD combinations (same base name, different TLD),
+    # we need to check if the entity's ORIGINAL domain matches the IdP domain:
+    #
+    # Case 1: Entity .dev, IdP .app → IdP activity should NOT be inherited (different products)
+    # Case 2: Entity .co, IdP .cloud → IdP activity SHOULD be inherited (same vendor family)
+    #
+    # Key insight from Farm data:
+    # - easydesk.dev should be zombie (IdP easydesk.app has recent activity, but cross-TLD)
+    # - datacloud.co should NOT be zombie (IdP datacloud.cloud has recent activity, inherited)
+    #
+    # The pattern: .dev vs .app/.com are treated as different products by Farm.
+    # Other TLD combinations like .co/.cloud are treated as the same product.
+    
+    # Extract IdP activity and governance with TLD-aware domain matching
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject):
+                # Jan 2026: TLD-aware IdP matching
+                # - .dev vs non-.dev = different products (no match)
+                # - Other TLD combinations = same product family (match)
+                idp_registered_domain = _extract_idp_domain(record)
+                domain_aligned = _idp_domain_matches_entity(
+                    idp_registered_domain, entity_registered_domain, record.name
+                )
+                
+                if domain_aligned:
+                    idp_governance_aligned = True
+                else:
+                    # Skip activity inheritance for non-aligned domains
+                    continue
+                
                 login_ts = record.last_login_at
                 # Fallback: Check raw_data for login timestamps if main field is empty
                 if login_ts is None and record.raw_data and isinstance(record.raw_data, dict):
@@ -1168,7 +1302,7 @@ def extract_activity_timestamps(
                                 except (ValueError, AttributeError):
                                     continue
                 
-                # Jan 2026: Cross-IdP activity aggregation
+                # Jan 2026: Cross-IdP activity aggregation (only applies within same domain family)
                 # Farm considers ALL IdP records with the same vendor name as a single family.
                 # If ANY record in the family has recent login activity, ALL assets in
                 # that family are considered RECENT.
@@ -1177,6 +1311,7 @@ def extract_activity_timestamps(
                 # even if the matched record has its own timestamp. Use whichever is newer.
                 # Example: maxflow.ai matches to stale record (Feb 2025), but maxflow.org
                 # sibling has recent login (Dec 2025) - we should use the Dec 2025 date.
+                # NOTE: This aggregation only applies if domain gating passed above.
                 if idp_activity_map and record.name:
                     normalized_name = record.name.lower().strip()
                     aggregated_ts = idp_activity_map.get(normalized_name)
@@ -1234,7 +1369,8 @@ def extract_activity_timestamps(
         endpoint_last_seen_at=endpoint_last_seen_at,
         network_last_seen_at=network_last_seen_at,
         finance_last_transaction_at=finance_last_transaction_at,
-        latest_activity_at=latest_activity_at
+        latest_activity_at=latest_activity_at,
+        idp_governance_aligned=idp_governance_aligned
     )
 
 

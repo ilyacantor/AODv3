@@ -571,10 +571,27 @@ def classify_actual(
     # Cloud presence for anchoring (not used in governance/classification)
     has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
     
+    # Jan 2026 Fix: Domain-aligned IdP governance for zombie classification
+    # IdP match counts as governance ONLY if domain-aligned.
+    # Use explicit idp_governance_aligned flag set during admission.
+    # Cross-domain IdP matches (name-based without domain alignment) don't count as governance.
+    has_domain_aligned_idp = (
+        has_idp and 
+        asset.activity_evidence and 
+        asset.activity_evidence.idp_governance_aligned
+    )
+    
+    # For shadow/parked, use broad IdP governance (any match)
+    # For zombie, use domain-aligned IdP governance only
+    has_governance_broad = has_idp or has_cmdb
+    has_governance_strict = has_domain_aligned_idp or has_cmdb
+    
     # ALIGNED WITH POLICY ENGINE (Dec 2025):
     # Governed = has_idp OR has_cmdb (consistent with PolicyEngine._classify)
     # This is the single source of truth for governance status.
-    has_governance = has_idp or has_cmdb
+    # For shadow/parked: use broad governance
+    # For zombie: use strict (domain-aligned) governance to match Farm behavior
+    has_governance = has_governance_broad
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     
@@ -610,11 +627,16 @@ def classify_actual(
         # Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
         # "Paying for something you don't use" - requires ongoing spend
         # Without ongoing finance, stale governed assets are just inactive (not wasting money)
+        # 
+        # Jan 2026 Fix: Use has_governance_strict for zombie classification.
+        # This requires domain-aligned IdP governance (not cross-domain name matches).
+        # Cross-domain IdP matches (e.g., datacloud.co entity matched to datacloud.cloud IdP)
+        # do NOT count as governance for zombie classification - they become parked instead.
         if has_stale_activity:
-            if has_governance and has_ongoing_finance:
+            if has_governance_strict and has_ongoing_finance:
                 is_zombie = True
                 reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
-            elif not has_governance:
+            elif not has_governance_strict:
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     
@@ -804,6 +826,10 @@ def emit_actual_results(
     
     asset_results: dict[str, dict] = {}
     
+    # Reference time for activity calculation
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    cutoff = reference_time - timedelta(days=activity_window_days)
+    
     for asset in assets:
         result = classify_actual(asset, activity_window_days, mode=mode, snapshot_as_of=snapshot_as_of, debug_keys=debug_keys)
         key = result.asset_key
@@ -812,6 +838,21 @@ def emit_actual_results(
         all_variants = set(result.evidence_summary.get("all_domain_variants", []))
         
         has_governance = result.evidence_summary.get("has_governance", False)
+        has_ongoing_finance = result.evidence_summary.get("financially_anchored", False)
+        
+        # Jan 2026 Fix: Track domain-aligned governance for zombie classification
+        # Use explicit idp_governance_aligned flag from admission
+        has_cmdb_governance = ReasonCode.HAS_CMDB.value in [r.value for r in result.reasons]
+        has_idp = ReasonCode.HAS_IDP.value in [r.value for r in result.reasons]
+        has_domain_aligned_idp = (
+            has_idp and 
+            asset.activity_evidence and 
+            asset.activity_evidence.idp_governance_aligned
+        )
+        has_governance_strict = has_domain_aligned_idp or has_cmdb_governance
+        
+        # Extract activity timestamp from asset for aggregation
+        asset_latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at) if asset.activity_evidence else None
         
         if key not in asset_results:
             asset_results[key] = {
@@ -824,7 +865,9 @@ def emit_actual_results(
                 "evidence_summary": result.evidence_summary,
                 "shadow_candidate_exists": result.is_shadow,
                 "has_governance_any": has_governance,
-                "is_zombie": result.is_zombie,
+                "has_governance_strict_any": has_governance_strict,
+                "has_ongoing_finance_any": has_ongoing_finance,
+                "latest_activity_at": asset_latest_activity,
                 "is_parked": result.is_parked,
                 "is_canonical": result.evidence_summary.get("key_source") == "domain"
             }
@@ -836,18 +879,54 @@ def emit_actual_results(
             agg["all_domain_variants"].update(all_variants)
             agg["shadow_candidate_exists"] = agg["shadow_candidate_exists"] or result.is_shadow
             agg["has_governance_any"] = agg["has_governance_any"] or has_governance
-            agg["is_zombie"] = agg["is_zombie"] or result.is_zombie
+            agg["has_governance_strict_any"] = agg.get("has_governance_strict_any", False) or has_governance_strict
+            agg["has_ongoing_finance_any"] = agg["has_ongoing_finance_any"] or has_ongoing_finance
+            # Track MAX activity timestamp across all assets for this domain
+            if asset_latest_activity:
+                if agg["latest_activity_at"] is None or asset_latest_activity > agg["latest_activity_at"]:
+                    agg["latest_activity_at"] = asset_latest_activity
+            # is_parked stays OR-based (any parked candidate)
             agg["is_parked"] = agg["is_parked"] or result.is_parked
     
     for key, agg in asset_results.items():
         shadow_candidate = agg.get("shadow_candidate_exists", False)
         has_gov = agg.get("has_governance_any", False)
+        has_gov_strict = agg.get("has_governance_strict_any", False)
+        has_ongoing_finance = agg.get("has_ongoing_finance_any", False)
+        latest_activity = agg.get("latest_activity_at")
+        
+        # Recompute aggregated activity status using MAX timestamp across all assets
+        aggregated_is_stale = False
+        aggregated_is_recent = False
+        if latest_activity is not None:
+            if latest_activity < cutoff:
+                aggregated_is_stale = True
+            else:
+                aggregated_is_recent = True
+        
+        # Shadow: ungoverned AND recent activity (uses broad governance)
         agg["is_shadow"] = shadow_candidate and not has_gov
+        
+        # Zombie: governed AND stale (aggregated) AND ongoing finance
+        # Jan 2026 Fix: Use has_gov_strict (domain-aligned IdP or CMDB)
+        # Cross-domain IdP matches don't count as governance for zombie classification
+        agg["is_zombie"] = has_gov_strict and aggregated_is_stale and has_ongoing_finance
+        
+        # Parked: ungoverned AND stale (aggregated)
+        # Jan 2026 Fix: Use has_gov_strict for parked classification too
+        # Assets with cross-domain IdP but no CMDB are parked, not zombies
+        if not has_gov_strict and aggregated_is_stale:
+            agg["is_parked"] = True
+        elif aggregated_is_recent:
+            # If domain is recent, it's not parked even if some assets were stale
+            agg["is_parked"] = False
         
         reasons = agg["reasons"]
         if not agg["is_shadow"]:
             reasons.discard(ReasonCode.SHADOW_CLASSIFICATION.value)
             reasons.discard(ReasonCode.FINANCIAL_ANCHOR_GOVERNANCE_GAP.value)
+        if not agg["is_zombie"]:
+            reasons.discard(ReasonCode.ZOMBIE_CLASSIFICATION.value)
         
         reasons = _deduplicate_reason_codes(reasons)
         agg["reasons"] = reasons
@@ -907,20 +986,42 @@ def emit_actual_results(
         
         if agg["is_shadow"]:
             shadow_actual.append(key)
-            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
-            # This fixes KEY_NORMALIZATION_MISMATCH where Farm looks for a governance domain
-            # but AOD keyed the asset by a different (discovery) domain
-            for alias_domain in alias_keys:
-                shadow_actual.append(alias_domain)
         if agg["is_zombie"]:
             zombie_actual.append(key)
-            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
-            for alias_domain in alias_keys:
-                zombie_actual.append(alias_domain)
         if agg["is_parked"]:
             parked_actual.append(key)
-            # Jan 2026 Fix: Also add ALL alias domains so Farm can look up by any variant
-            for alias_domain in alias_keys:
+    
+    # Jan 2026 FIX: Alias expansion must not override an asset's own classification
+    # Build sets of primary keys for each classification
+    primary_shadow_keys = set()
+    primary_zombie_keys = set()
+    primary_parked_keys = set()
+    all_primary_keys = set(asset_results.keys())
+    
+    for key, agg in asset_results.items():
+        if agg["is_shadow"]:
+            primary_shadow_keys.add(key)
+        if agg["is_zombie"]:
+            primary_zombie_keys.add(key)
+        if agg["is_parked"]:
+            primary_parked_keys.add(key)
+    
+    # Now add aliases, but ONLY if the alias is not already a primary key for another asset
+    # This prevents hipchat.com (zombie) from adding atlassian.net (not-zombie) to zombie_actual
+    for key, agg in asset_results.items():
+        alias_keys = asset_details[key].get("alias_keys", [])
+        for alias_domain in alias_keys:
+            # Skip if this alias is already a primary key for another asset
+            # The asset's own classification takes precedence over being an alias
+            if alias_domain in all_primary_keys:
+                continue
+            
+            # Add alias to the appropriate list based on parent's classification
+            if agg["is_shadow"]:
+                shadow_actual.append(alias_domain)
+            if agg["is_zombie"]:
+                zombie_actual.append(alias_domain)
+            if agg["is_parked"]:
                 parked_actual.append(alias_domain)
     
     if rejections:

@@ -33,10 +33,15 @@ METRICS MEASURED:
 - FALSE NEGATIVES (Missed): Assets Farm expects that we didn't find
 - FALSE POSITIVES: Assets we flagged that Farm didn't expect
 
+CATEGORIES TESTED:
+==================
+- ADMISSION: Cataloged (admitted) and Rejected assets
+- CLASSIFICATION: Shadow and Zombie assets
+
 THRESHOLDS:
 ===========
-- Recall >= 95% per category
-- Precision >= 90% per category (allows some false positives)
+- Admission: Recall >= 95%, Precision >= 95% (stricter - admission is upstream)
+- Classification: Recall >= 95%, Precision >= 90% (allows some false positives)
 - Both must pass for the test to succeed
 
 Usage:
@@ -58,8 +63,14 @@ from aod.pipeline.aod_agent_reconcile import emit_actual_results
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+# Classification thresholds (shadow, zombie)
 RECALL_THRESHOLD = 0.95
 PRECISION_THRESHOLD = 0.90
+
+# Admission thresholds (cataloged, rejected) - stricter because admission is upstream
+ADMISSION_RECALL_THRESHOLD = 0.95
+ADMISSION_PRECISION_THRESHOLD = 0.95
 
 
 def load_snapshot():
@@ -201,18 +212,35 @@ class TestGoldenReconciliation:
         
         expected_shadows = set(expected.get("expected_shadows", []))
         expected_zombies = set(expected.get("expected_zombies", []))
+        expected_cataloged = set(expected.get("expected_cataloged", []))
+        expected_rejected = set(expected.get("expected_rejected", []))
         
         actual_shadows = set(actual_results.shadow_actual)
         actual_zombies = set(actual_results.zombie_actual)
+        actual_cataloged = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "admitted"
+        )
+        actual_rejected = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "rejected"
+        )
         
         shadow_metrics = compute_metrics(expected_shadows, actual_shadows, "shadow")
         zombie_metrics = compute_metrics(expected_zombies, actual_zombies, "zombie")
+        cataloged_metrics = compute_metrics(expected_cataloged, actual_cataloged, "cataloged")
+        rejected_metrics = compute_metrics(expected_rejected, actual_rejected, "rejected")
         
         print("\n" + "=" * 80)
         print("GOLDEN RECONCILIATION TEST RESULTS")
         print("=" * 80)
         print("\nGUARDRAIL REMINDER: If tests fail, fix the CODE not the POLICY.")
         
+        print("\n--- ADMISSION ---")
+        print_metrics_report(cataloged_metrics, ADMISSION_RECALL_THRESHOLD, ADMISSION_PRECISION_THRESHOLD)
+        print_metrics_report(rejected_metrics, ADMISSION_RECALL_THRESHOLD, ADMISSION_PRECISION_THRESHOLD)
+        
+        print("\n--- CLASSIFICATION ---")
         print_metrics_report(shadow_metrics, RECALL_THRESHOLD, PRECISION_THRESHOLD)
         print_metrics_report(zombie_metrics, RECALL_THRESHOLD, PRECISION_THRESHOLD)
         
@@ -220,6 +248,30 @@ class TestGoldenReconciliation:
         
         failures = []
         
+        # Admission failures
+        if cataloged_metrics['recall'] < ADMISSION_RECALL_THRESHOLD:
+            failures.append(
+                f"Cataloged RECALL {cataloged_metrics['recall']:.1%} < {ADMISSION_RECALL_THRESHOLD:.0%}. "
+                f"Missed {cataloged_metrics['missed_count']}: {cataloged_metrics['missed'][:5]}..."
+            )
+        if cataloged_metrics['precision'] < ADMISSION_PRECISION_THRESHOLD:
+            failures.append(
+                f"Cataloged PRECISION {cataloged_metrics['precision']:.1%} < {ADMISSION_PRECISION_THRESHOLD:.0%}. "
+                f"FPs {cataloged_metrics['fp_count']}: {cataloged_metrics['false_positives'][:5]}..."
+            )
+        
+        if rejected_metrics['recall'] < ADMISSION_RECALL_THRESHOLD:
+            failures.append(
+                f"Rejected RECALL {rejected_metrics['recall']:.1%} < {ADMISSION_RECALL_THRESHOLD:.0%}. "
+                f"Missed {rejected_metrics['missed_count']}: {rejected_metrics['missed'][:5]}..."
+            )
+        if rejected_metrics['precision'] < ADMISSION_PRECISION_THRESHOLD:
+            failures.append(
+                f"Rejected PRECISION {rejected_metrics['precision']:.1%} < {ADMISSION_PRECISION_THRESHOLD:.0%}. "
+                f"FPs {rejected_metrics['fp_count']}: {rejected_metrics['false_positives'][:5]}..."
+            )
+        
+        # Classification failures
         if shadow_metrics['recall'] < RECALL_THRESHOLD:
             failures.append(
                 f"Shadow RECALL {shadow_metrics['recall']:.1%} < {RECALL_THRESHOLD:.0%}. "
@@ -308,6 +360,86 @@ class TestGoldenReconciliation:
         assert metrics['precision'] >= PRECISION_THRESHOLD, (
             f"Zombie PRECISION {metrics['precision']:.1%} < {PRECISION_THRESHOLD:.0%}. "
             f"False positives: {metrics['false_positives']}"
+        )
+    
+    # =========================================================================
+    # ADMISSION TESTS - Cataloged and Rejected
+    # =========================================================================
+    
+    def test_cataloged_recall(self):
+        """Cataloged (admitted) recall must be >= 95%"""
+        expected = load_expected_outcomes()
+        actual_results = run_pipeline_and_get_results()
+        
+        expected_cataloged = set(expected.get("expected_cataloged", []))
+        actual_cataloged = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "admitted"
+        )
+        
+        metrics = compute_metrics(expected_cataloged, actual_cataloged, "cataloged")
+        
+        print_metrics_report(metrics, ADMISSION_RECALL_THRESHOLD, ADMISSION_PRECISION_THRESHOLD)
+        
+        assert metrics['recall'] >= ADMISSION_RECALL_THRESHOLD, (
+            f"Cataloged RECALL {metrics['recall']:.1%} < {ADMISSION_RECALL_THRESHOLD:.0%}. "
+            f"Missed: {metrics['missed'][:10]}..."
+        )
+    
+    def test_cataloged_precision(self):
+        """Cataloged (admitted) precision must be >= 95%"""
+        expected = load_expected_outcomes()
+        actual_results = run_pipeline_and_get_results()
+        
+        expected_cataloged = set(expected.get("expected_cataloged", []))
+        actual_cataloged = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "admitted"
+        )
+        
+        metrics = compute_metrics(expected_cataloged, actual_cataloged, "cataloged")
+        
+        assert metrics['precision'] >= ADMISSION_PRECISION_THRESHOLD, (
+            f"Cataloged PRECISION {metrics['precision']:.1%} < {ADMISSION_PRECISION_THRESHOLD:.0%}. "
+            f"False positives: {metrics['false_positives'][:10]}..."
+        )
+    
+    def test_rejected_recall(self):
+        """Rejected recall must be >= 95%"""
+        expected = load_expected_outcomes()
+        actual_results = run_pipeline_and_get_results()
+        
+        expected_rejected = set(expected.get("expected_rejected", []))
+        actual_rejected = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "rejected"
+        )
+        
+        metrics = compute_metrics(expected_rejected, actual_rejected, "rejected")
+        
+        print_metrics_report(metrics, ADMISSION_RECALL_THRESHOLD, ADMISSION_PRECISION_THRESHOLD)
+        
+        assert metrics['recall'] >= ADMISSION_RECALL_THRESHOLD, (
+            f"Rejected RECALL {metrics['recall']:.1%} < {ADMISSION_RECALL_THRESHOLD:.0%}. "
+            f"Missed: {metrics['missed'][:10]}..."
+        )
+    
+    def test_rejected_precision(self):
+        """Rejected precision must be >= 95%"""
+        expected = load_expected_outcomes()
+        actual_results = run_pipeline_and_get_results()
+        
+        expected_rejected = set(expected.get("expected_rejected", []))
+        actual_rejected = set(
+            k for k, v in actual_results.admission_actual.items() 
+            if v == "rejected"
+        )
+        
+        metrics = compute_metrics(expected_rejected, actual_rejected, "rejected")
+        
+        assert metrics['precision'] >= ADMISSION_PRECISION_THRESHOLD, (
+            f"Rejected PRECISION {metrics['precision']:.1%} < {ADMISSION_PRECISION_THRESHOLD:.0%}. "
+            f"False positives: {metrics['false_positives'][:10]}..."
         )
 
 

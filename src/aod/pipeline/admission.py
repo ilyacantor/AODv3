@@ -1151,67 +1151,44 @@ def _extract_idp_domain(record: IdPObject) -> Optional[str]:
 
 
 def _idp_domain_matches_entity(
-    idp_registered_domain: Optional[str], 
+    idp_registered_domain: Optional[str],
     entity_registered_domain: Optional[str],
     idp_name: Optional[str] = None
 ) -> bool:
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
-    
-    Jan 2026: TLD-aware matching based on Farm behavior analysis.
-    
-    Key insight from Farm data:
-    - easydesk.dev (entity) vs easydesk.app (IdP) → NO match (different products)
-    - datacloud.co (entity) vs datacloud.cloud (IdP) → MATCH (same product family)
-    - flowapp.app (entity) vs flowapp.co (IdP) → MATCH (same product family)
-    
-    The pattern: .dev is treated as a separate namespace from .app/.com/.io.
-    Other TLD combinations (.co, .cloud, .app, .io, .org) are treated as same family.
-    
+
+    Jan 2026 Fix: Farm requires EXACT registered domain matches for IdP governance.
+
+    Critical finding: Cross-domain IdP matches (e.g., dataflow.cloud entity matched to
+    dataflow.net IdP) do NOT provide domain-aligned governance. Only exact domain matches count.
+
+    Examples from Farm data:
+    - dataflow.cloud (entity) vs dataflow.net (IdP) → NO match (different TLDs)
+    - linkify.org (entity) vs linkify.app (IdP) → NO match (different TLDs)
+    - maxworks.app (entity) vs maxworks.net (IdP) → NO match (different TLDs)
+    - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact match)
+
     Matching rules:
-    1. Exact registered domain match → True
-    2. IdP has no domain → False (name-only match doesn't provide domain-aligned governance)
-    3. Same base name AND compatible TLDs → True
-    4. Same base name BUT .dev vs non-.dev → False (different products)
-    
-    Critical insight (Jan 2026): Farm considers name-only IdP matches (where IdP record
-    has no domain field) as NOT providing governance. Only domain-aligned IdP matches
-    count for zombie classification. This fixes zombie FPs like prosuite.dev and linkify.co
-    where IdP was matched via name token but has no domain.
+    1. IdP has no domain → False (name-only match, no domain alignment)
+    2. Entity has no domain → True (allow match)
+    3. Exact registered domain match → True
+    4. Different domains → False (including different TLDs of same base)
+
+    This fixes the bug where TLD-family matching incorrectly classified cross-domain
+    IdP matches as governed, causing Farm to expect them as shadows.
     """
     # If IdP has no domain, it's a name-only match - NOT domain-aligned for governance
-    # Farm treats name-only IdP matches as NOT providing IdP governance for zombie classification
     if not idp_registered_domain:
         return False
-    
+
     # If entity has no domain, allow the match
     if not entity_registered_domain:
         return True
-    
-    # Exact registered domain match
-    if idp_registered_domain == entity_registered_domain:
-        return True
-    
-    # Check for compatible TLD matching
-    idp_base = _extract_base_name_from_domain(idp_registered_domain)
-    entity_base = _extract_base_name_from_domain(entity_registered_domain)
-    
-    # Different base names = no match
-    if not idp_base or not entity_base or idp_base != entity_base:
-        return False
-    
-    # Same base name - check TLD compatibility
-    idp_tld = idp_registered_domain.split('.')[-1] if '.' in idp_registered_domain else ''
-    entity_tld = entity_registered_domain.split('.')[-1] if '.' in entity_registered_domain else ''
-    
-    # .dev is a separate namespace - it's typically used for development/different products
-    # If entity is .dev and IdP is not .dev (or vice versa), don't match
-    dev_conflict = (entity_tld == 'dev') != (idp_tld == 'dev')
-    if dev_conflict:
-        return False
-    
-    # All other TLD combinations with same base name are considered same product family
-    return True
+
+    # Farm requires EXACT registered domain match
+    # Cross-domain matches (different TLDs) do NOT count as governance
+    return idp_registered_domain == entity_registered_domain
 
 
 def extract_activity_timestamps(

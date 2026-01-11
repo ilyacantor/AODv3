@@ -504,17 +504,15 @@ def classify_actual(
         asset.activity_evidence.idp_governance_aligned
     )
     
-    # For shadow/parked, use broad IdP governance (any match)
-    # For zombie, use domain-aligned IdP governance only
+    # For shadow/parked, use broad IdP governance (any IdP match counts)
+    # For zombie, use domain-aligned IdP governance (strict)
+    #
+    # Jan 2026 Fix: admission.py now requires EXACT domain matches for idp_governance_aligned.
+    # Cross-domain IdP matches (e.g., dataflow.cloud entity vs dataflow.net IdP) correctly
+    # set idp_governance_aligned=False, so strict governance works correctly.
     has_governance_broad = has_idp or has_cmdb
     has_governance_strict = has_domain_aligned_idp or has_cmdb
-    
-    # ALIGNED WITH POLICY ENGINE (Dec 2025):
-    # Governed = has_idp OR has_cmdb (consistent with PolicyEngine._classify)
-    # This is the single source of truth for governance status.
-    # For shadow/parked: use broad governance
-    # For zombie: use strict (domain-aligned) governance to match Farm behavior
-    has_governance = has_governance_broad
+    has_governance = has_governance_strict  # Use strict for ALL classifications
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     

@@ -776,10 +776,11 @@ def test_end_to_end_key_normalization():
 
 ## Open Questions for Discussion
 
-1. **What is the correct normalization rule?**
+1. **What is the correct normalization rule?** ✅ **ANSWERED**
    - Should `"login.microsoftonline.com"` → `"microsoft.com"` or `"microsoftonline.com"`?
-   - Farm expects: ?
-   - AOD currently: Depends on code path
+   - **Farm expects: `microsoft.com` (canonical vendor domain)**
+   - AOD currently: Depends on code path (needs consolidation)
+   - **Decision: Use ALIAS_DOMAINS_TO_COLLAPSE to map intermediate domains to canonical**
 
 2. **Is `_extract_raw_domain()` still used?**
    - Function preserves subdomains (no normalization)
@@ -804,6 +805,53 @@ def test_end_to_end_key_normalization():
 
 ---
 
+## Implementation Guidance (Based on Q1 Answer)
+
+With the confirmed normalization rule (`login.microsoftonline.com` → `microsoft.com`), Phase 1 implementation should:
+
+### 1. Canonical Key Algorithm
+```python
+def compute_canonical_key(domains: list[str], vendor: Optional[str], name: str) -> CanonicalKeyResult:
+    """
+    Normalization pipeline:
+    1. Extract registered domain (eTLD+1): login.microsoftonline.com → microsoftonline.com
+    2. Check ALIAS_DOMAINS_TO_COLLAPSE: microsoftonline.com → microsoft.com
+    3. Return canonical vendor domain: microsoft.com
+
+    All variants preserved in alias_keys for Farm lookup.
+    """
+    if domains:
+        raw_domain = domains[0]  # Primary domain
+        registered = extract_registered_domain(raw_domain)  # eTLD+1
+
+        # Collapse aliases to canonical
+        if registered in ALIAS_DOMAINS_TO_COLLAPSE:
+            canonical = DOMAIN_TO_VENDOR[registered] → VENDOR_TO_DOMAIN lookup
+            return CanonicalKeyResult(
+                primary_key=canonical,  # "microsoft.com"
+                registered_domain=registered,  # "microsoftonline.com"
+                all_variants=[raw_domain, registered, canonical]  # All forms
+            )
+```
+
+### 2. ALIAS_DOMAINS_TO_COLLAPSE Completeness
+**Action Item:** Audit ALIAS_DOMAINS_TO_COLLAPSE to ensure ALL vendor aliases are included.
+
+Current known gaps (from failure mode #3):
+- `microsoft365.com` → Should map to `microsoft.com` (currently missing?)
+
+### 3. Vendor Fallback Fix
+Lines 505-508 in `_extract_registered_domain()` should ONLY execute if:
+```python
+if not domains:  # Only if NO domain evidence exists
+    if asset.vendor and asset.vendor in VENDOR_TO_DOMAIN:
+        return VENDOR_TO_DOMAIN[asset.vendor]
+```
+
+**Do NOT** allow vendor fallback to override domain evidence.
+
+---
+
 ## Conclusion
 
 The KEY_NORMALIZATION_MISMATCH issue is not a simple bug - it's an **architectural problem** where multiple domain normalization systems evolved independently and were never unified.
@@ -811,6 +859,8 @@ The KEY_NORMALIZATION_MISMATCH issue is not a simple bug - it's an **architectur
 **Root Cause:** No single source of truth for domain→key conversion.
 
 **Solution:** Consolidate all normalization logic into one canonical function, then refactor all call sites to use it.
+
+**Normalization Rule (CONFIRMED):** All domains should normalize to canonical vendor domain (e.g., `microsoft.com`), not intermediate eTLD+1 (`microsoftonline.com`).
 
 **Estimated Effort:**
 - Phase 1 (Consolidation): 3-5 days

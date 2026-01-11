@@ -504,39 +504,17 @@ def classify_actual(
         asset.activity_evidence.idp_governance_aligned
     )
     
-    # For shadow/parked, use broad IdP governance (any IdP match counts)
-    # For zombie, use domain-aligned IdP governance (strict)
-    # Note: Cross-domain IdP matches DO count as governance for shadow classification
+    # For shadow/parked, use broad IdP governance (any match)
+    # For zombie, use domain-aligned IdP governance only
     has_governance_broad = has_idp or has_cmdb
     has_governance_strict = has_domain_aligned_idp or has_cmdb
-
-    # CRITICAL FIX (Jan 2026): Finance ambiguity undermines IdP governance
-    # Farm requirement: IdP with ambiguous finance is weakened governance.
-    # Only treat as ungoverned if BOTH conditions are met:
-    # 1. Finance is ambiguous (multiple vendors), AND
-    # 2. Either no ongoing finance OR cross-domain IdP (weak IdP match)
-    #
-    # Examples:
-    # - IdP + finance ambiguous + ongoing finance + domain-aligned → GOVERNED
-    # - IdP + finance ambiguous + NO ongoing finance → UNGOVERNED
-    # - IdP + finance ambiguous + cross-domain IdP → UNGOVERNED
-    # - CMDB → always GOVERNED (overrides all)
-    from aod.models.output_contracts import LensStatus
-    finance_is_ambiguous = asset.lens_status.finance == LensStatus.AMBIGUOUS
-
-    # IdP governance is undermined if finance ambiguity AND weak financial/IdP signals
-    idp_with_undermined_governance = (
-        has_idp and
-        not has_cmdb and
-        finance_is_ambiguous and
-        (not has_ongoing_finance or not has_domain_aligned_idp)
-    )
-
-    if idp_with_undermined_governance:
-        # Weakened governance: finance ambiguity + no ongoing finance/cross-domain IdP
-        has_governance = False
-    else:
-        has_governance = has_governance_broad
+    
+    # ALIGNED WITH POLICY ENGINE (Dec 2025):
+    # Governed = has_idp OR has_cmdb (consistent with PolicyEngine._classify)
+    # This is the single source of truth for governance status.
+    # For shadow/parked: use broad governance
+    # For zombie: use strict (domain-aligned) governance to match Farm behavior
+    has_governance = has_governance_broad
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     

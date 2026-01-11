@@ -926,12 +926,14 @@ def build_discovery_footprint(
     for obs in observations:
         if obs.source:
             source_lower = obs.source.lower()
-            plane = source_to_plane(source_lower)
-            # Only count sources that map to discovery-corroboration planes
-            # Exclude CMDB and finance sources as they aren't "real" discovery evidence
-            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+            # Jan 2026 Fix: Only count Farm-credited "hard discovery" sources
+            # Exclude user-activity exhaust (proxy, browser, saas_audit_log) per Farm policy
+            # Ref: Farm assessment - browser/proxy sources don't count toward discovery threshold
+            if source_lower in FARM_CREDITED_DISCOVERY_SOURCES:
                 discovery_sources.add(source_lower)
-                planes_present.add(plane)
+                plane = source_to_plane(source_lower)
+                if plane is not None:
+                    planes_present.add(plane)
         if obs.observed_at:
             if latest_activity is None or obs.observed_at > latest_activity:
                 latest_activity = obs.observed_at

@@ -1306,17 +1306,26 @@ def extract_activity_timestamps(
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject):
+                # Jan 2026 Fix: Check SSO/SCIM FIRST - these provide governance regardless of domain alignment
+                # This fixes the governance propagation bug where SSO/SCIM IdP records with cross-domain
+                # matches were skipped entirely, causing governed assets to be misclassified as shadows.
+                if record.has_sso or record.has_scim:
+                    idp_governance_aligned = True
+                    # Continue processing for activity timestamps
+
                 idp_registered_domain = _extract_idp_domain(record)
-                
+
                 # Use TLD-family matching for governance and activity
                 domain_aligned = _idp_domain_matches_entity(
                     idp_registered_domain, entity_registered_domain, record.name
                 )
-                
+
                 if domain_aligned:
                     idp_governance_aligned = True
-                else:
-                    # Skip activity inheritance for non-aligned domains
+                    # Continue for activity timestamp extraction
+                elif not (record.has_sso or record.has_scim):
+                    # Skip activity inheritance for non-aligned domains WITHOUT SSO/SCIM
+                    # SSO/SCIM records inherit activity even if cross-domain
                     continue
                 
                 login_ts = record.last_login_at

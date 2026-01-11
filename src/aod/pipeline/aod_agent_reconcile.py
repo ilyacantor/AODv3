@@ -504,15 +504,18 @@ def classify_actual(
         asset.activity_evidence.idp_governance_aligned
     )
     
-    # For shadow/parked, use broad IdP governance (any IdP match counts)
-    # For zombie, use domain-aligned IdP governance (strict)
+    # Jan 2026 Fix: Track BOTH broad and strict governance for different classification needs
+    # - Shadows: Use strict (domain-aligned IdP only) - cross-domain matches don't count
+    # - Zombies: Use broad (any IdP match) - cross-domain matches DO count as governance
     #
-    # Jan 2026 Fix: admission.py now requires EXACT domain matches for idp_governance_aligned.
+    # admission.py now requires EXACT domain matches for idp_governance_aligned flag.
     # Cross-domain IdP matches (e.g., dataflow.cloud entity vs dataflow.net IdP) correctly
-    # set idp_governance_aligned=False, so strict governance works correctly.
+    # set idp_governance_aligned=False.
     has_governance_broad = has_idp or has_cmdb
     has_governance_strict = has_domain_aligned_idp or has_cmdb
-    has_governance = has_governance_strict  # Use strict for ALL classifications
+    has_governance = has_governance_strict  # Default to strict for backward compatibility
+
+    # Store both in evidence_summary for downstream use
     is_anchored = has_idp or has_cmdb or has_finance or has_cloud
     financially_anchored = has_ongoing_finance
     
@@ -525,7 +528,8 @@ def classify_actual(
         reasons.append(ReasonCode.FINANCIALLY_ANCHORED)
     
     evidence["is_anchored"] = is_anchored
-    evidence["has_governance"] = has_governance
+    evidence["has_governance"] = has_governance_strict  # Shadows use this (strict)
+    evidence["has_governance_broad"] = has_governance_broad  # Zombies use this (broad)
     evidence["financially_anchored"] = financially_anchored
     
     is_shadow = False
@@ -548,16 +552,15 @@ def classify_actual(
         # Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
         # "Paying for something you don't use" - requires ongoing spend
         # Without ongoing finance, stale governed assets are just inactive (not wasting money)
-        # 
-        # Jan 2026 Fix: Use has_governance_strict for zombie classification.
-        # This requires domain-aligned IdP governance (not cross-domain name matches).
-        # Cross-domain IdP matches (e.g., datacloud.co entity matched to datacloud.cloud IdP)
-        # do NOT count as governance for zombie classification - they become parked instead.
+        #
+        # Jan 2026 Fix: Use has_governance_broad for zombie classification.
+        # Farm treats cross-domain IdP matches (e.g., flowapp.app entity matched to flowapp.co IdP)
+        # as governance for zombies. This differs from shadows which require exact domain matches.
         if has_stale_activity:
-            if has_governance_strict and has_ongoing_finance:
+            if has_governance_broad and has_ongoing_finance:
                 is_zombie = True
                 reasons.append(ReasonCode.ZOMBIE_CLASSIFICATION)
-            elif not has_governance_strict:
+            elif not has_governance_broad:
                 is_parked = True
                 reasons.append(ReasonCode.PARKED_CLASSIFICATION)
     
@@ -759,7 +762,8 @@ def emit_actual_results(
         registered_domain = result.evidence_summary.get("registered_domain")
         all_variants = set(result.evidence_summary.get("all_domain_variants", []))
         
-        has_governance = result.evidence_summary.get("has_governance", False)
+        has_governance = result.evidence_summary.get("has_governance", False)  # Strict (for shadows)
+        has_governance_broad_flag = result.evidence_summary.get("has_governance_broad", False)  # Broad (for zombies)
         has_ongoing_finance = result.evidence_summary.get("financially_anchored", False)
         
         # Jan 2026 Fix: Track domain-aligned governance for zombie classification
@@ -786,7 +790,8 @@ def emit_actual_results(
                 "registered_domain": registered_domain,
                 "evidence_summary": result.evidence_summary,
                 "shadow_candidate_exists": result.is_shadow,
-                "has_governance_any": has_governance,
+                "has_governance_any": has_governance,  # Strict (for shadows)
+                "has_governance_broad_any": has_governance_broad_flag,  # Broad (for zombies)
                 "has_governance_strict_any": has_governance_strict,
                 "has_ongoing_finance_any": has_ongoing_finance,
                 "latest_activity_at": asset_latest_activity,
@@ -801,7 +806,8 @@ def emit_actual_results(
             agg["names"].append(result.name)
             agg["all_domain_variants"].update(all_variants)
             agg["shadow_candidate_exists"] = agg["shadow_candidate_exists"] or result.is_shadow
-            agg["has_governance_any"] = agg["has_governance_any"] or has_governance
+            agg["has_governance_any"] = agg["has_governance_any"] or has_governance  # Strict
+            agg["has_governance_broad_any"] = agg.get("has_governance_broad_any", False) or has_governance_broad_flag  # Broad
             agg["has_governance_strict_any"] = agg.get("has_governance_strict_any", False) or has_governance_strict
             agg["has_ongoing_finance_any"] = agg["has_ongoing_finance_any"] or has_ongoing_finance
             # Track MAX activity timestamp across all assets for this domain
@@ -815,7 +821,8 @@ def emit_actual_results(
     
     for key, agg in asset_results.items():
         shadow_candidate = agg.get("shadow_candidate_exists", False)
-        has_gov = agg.get("has_governance_any", False)
+        has_gov = agg.get("has_governance_any", False)  # Strict (for shadows)
+        has_gov_broad = agg.get("has_governance_broad_any", False)  # Broad (for zombies)
         has_gov_strict = agg.get("has_governance_strict_any", False)
         has_ongoing_finance = agg.get("has_ongoing_finance_any", False)
         latest_activity = agg.get("latest_activity_at")
@@ -832,50 +839,34 @@ def emit_actual_results(
         # Shadow: ungoverned AND recent activity (uses broad governance)
         agg["is_shadow"] = shadow_candidate and not has_gov
         
-        # Jan 2026 Fix: Cross-domain zombie suppression for multi-TLD brands
-        # Only suppress zombie if this asset has 2+ recent claimants that include
-        # a .dev TLD asset. This handles cases like:
-        # - teamdesk.ai: claimed by teamdesk.dev (recent) + teamdesk.tech (recent) → suppress
-        # - workworks.org: claimed by workworks.app (recent) + workworks.net (recent) → check for .dev
-        # 
-        # But NOT cases like:
-        # - hubworks.org: claimed by hubworks.co + hubworks.tech (no .dev) → don't suppress
-        cross_domain_is_recent = False
-        key_lower = key.lower()
-        
-        # Only apply suppression for non-.dev assets
-        if not key_lower.endswith('.dev'):
-            recent_claimants = []
-            has_dev_claimant = False
-            
-            for other_key, other_agg in asset_results.items():
-                if other_key == key:
-                    continue
-                other_activity = other_agg.get("latest_activity_at")
-                if not other_activity or other_activity < cutoff:
-                    continue
-                # Check if OTHER asset claims THIS domain in its identifiers.domains
-                other_variants = other_agg.get("all_domain_variants", set())
-                if key_lower in other_variants:
-                    recent_claimants.append(other_key)
-                    if other_key.endswith('.dev'):
-                        has_dev_claimant = True
-            
-            # Only suppress if 2+ claimants AND at least one is .dev TLD
-            # This catches teamdesk.ai (claimed by teamdesk.dev + teamdesk.tech)
-            if len(recent_claimants) >= 2 and has_dev_claimant:
-                cross_domain_is_recent = True
-        
+        # Jan 2026 Fix: DISABLED cross-domain zombie suppression
+        # The previous logic incorrectly suppressed legitimate zombies when SEPARATE
+        # entities happened to share a domain. Example: Linkforce (Legacy) with only
+        # linkforce.io was suppressed because other distinct Linkforce products
+        # (Linkforce-prod, Linkforc) claimed linkforce.io in their domain lists.
+        #
+        # The original intent was to prevent zombies for multi-TLD brand variants
+        # (e.g., teamdesk.ai when teamdesk.dev is recent), but it caused false negatives
+        # for legitimate separate products that share domains.
+        #
+        # TODO: Implement better entity disambiguation to distinguish:
+        # - Same product with multiple TLDs (.com + .io + .ai)
+        # - Different products from same company (Product-Legacy vs Product-New)
+        cross_domain_is_recent = False  # Disabled
+
         # Zombie: governed AND stale (aggregated) AND ongoing finance
-        # Jan 2026 Fix: Use has_gov_strict (domain-aligned IdP or CMDB)
-        # Cross-domain IdP matches don't count as governance for zombie classification
-        # Jan 2026 Fix: Exclude if ANY domain variant has recent activity across all assets
-        agg["is_zombie"] = has_gov_strict and aggregated_is_stale and has_ongoing_finance and not cross_domain_is_recent
+        # Jan 2026 Fix: Use broad governance (any IdP or CMDB) for zombie classification
+        # Farm treats cross-domain IdP matches as governance for zombies (e.g., flowapp.app
+        # matched to flowapp.co IdP is governed), unlike shadows which require exact matches.
+        agg["is_zombie"] = has_gov_broad and aggregated_is_stale and has_ongoing_finance
         
-        # Parked: ungoverned AND stale (aggregated)
-        # Jan 2026 Fix: Use has_gov_strict for parked classification too
-        # Assets with cross-domain IdP but no CMDB are parked, not zombies
-        if not has_gov_strict and aggregated_is_stale:
+        # Parked: ungoverned (broad) AND stale (aggregated) AND NOT zombie
+        # Jan 2026 Fix: Use has_gov_broad for parked to be consistent with zombie logic
+        # Assets are only parked if they're ungoverned (no IdP/CMDB at all) OR lack ongoing finance
+        if not has_gov_broad and aggregated_is_stale:
+            agg["is_parked"] = True
+        elif has_gov_broad and aggregated_is_stale and not has_ongoing_finance:
+            # Governed + stale but no ongoing finance = parked (not wasting money, just inactive)
             agg["is_parked"] = True
         elif aggregated_is_recent:
             # If domain is recent, it's not parked even if some assets were stale

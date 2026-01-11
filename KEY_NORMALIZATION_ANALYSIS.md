@@ -661,41 +661,76 @@ def emit_actual_results(...):
         agg[key] = classify_domain(aggregated_assets[key])
 ```
 
-#### 2.2. Remove Governance Duality
+#### 2.2. Document Governance Duality (NOT Removal)
 **Current:** `has_governance_broad` vs `has_governance_strict`
-**Target:** Single governance definition
+**Status:** ✅ **This is correct behavior (Q3 answer)**
+**Action:** Document clearly in code comments
 
 ```python
-# SINGLE governance definition
-has_governance = has_idp or has_cmdb
+# BROAD GOVERNANCE: For shadow/parked classification
+# - Any IdP match (including cross-domain) OR CMDB match = governed
+# - Prevents false shadows when IdP exists even if for different TLD
+has_governance_broad = has_idp or has_cmdb
 
-# If cross-domain IdP matters, handle it separately:
-if has_idp_cross_domain_only:
-    # Mark as "weak governance" - becomes parked instead of zombie
-    pass
+# STRICT GOVERNANCE: For zombie classification
+# - Domain-aligned IdP OR CMDB match = governed
+# - Cross-domain IdP matches (e.g., linkify.co ↔ linkify.app) don't count
+# - Prevents false zombies when IdP is for a different product variant
+has_governance_strict = has_domain_aligned_idp or has_cmdb
 ```
 
-#### 2.3. Remove `_extract_raw_domain()` (If Unused)
-**Check:** Is this function still called anywhere?
-**If no:** Delete it (legacy code)
-**If yes:** Understand why subdomains are preserved, then refactor
+#### 2.3. Document `_extract_raw_domain()` Purpose (NOT Removal)
+**Status:** ✅ **Still in use for decision_trace.py (Q2 answer)**
+**Action:** Add clear docstring
+
+```python
+def _extract_raw_domain(asset: Asset) -> Optional[str]:
+    """
+    Extract raw domain preserving subdomains (NO NORMALIZATION).
+
+    USAGE: Decision tracing and reconciliation diagnostics ONLY.
+    DO NOT use for canonical key generation - use compute_canonical_key() instead.
+
+    This function preserves subdomains like login498.edge.com for detailed
+    comparison with Farm's reconciliation logic in decision traces.
+    """
+```
+
+#### 2.4. Remove Late-Binding Merge Feature (Q5 answer)
+**Status:** ✅ **Feature disabled, should be permanently removed**
+**Action:** Delete feature flag and dead code
+
+```python
+# Files to clean up:
+# - src/aod/core/policy/schema.py: Remove late_binding_domain_merge field
+# - src/aod/pipeline/pipeline_executor.py: Remove feature flag checks
+# - src/aod/pipeline/asset_identity.py: Keep _compute_merge_key for other uses?
+# - config/policy.json: Remove late_binding_domain_merge
+# - attached_assets/LATE_BINDING_IMPLEMENTATION_PLAN_*.md: Archive
+```
 
 ### Phase 3: Performance (Low Priority)
 
-#### 3.1. Remove O(N²) Cross-Domain Zombie Suppression
-**Current:** Lines 922-946 in `emit_actual_results()`
-**Target:** O(N) using inverted index
+#### 3.1. Optimize O(N²) Cross-Domain Zombie Suppression (Keep Logic)
+**Current:** Lines 922-946 in `emit_actual_results()` - O(N²) nested loop
+**Status:** ✅ **Logic is correct (Q4 answer) - .dev TLD treatment is intentional**
+**Target:** O(N) using inverted index (PERFORMANCE ONLY, preserve logic)
 
 ```python
-# Build domain→assets index once
+# Build domain→assets index once (O(N))
 domain_claimants: dict[str, list[str]] = defaultdict(list)
 for key, agg in asset_results.items():
     for variant in agg["all_domain_variants"]:
         domain_claimants[variant].append(key)
 
-# Check claimants in O(1)
+# Check claimants in O(1) (preserve .dev TLD special treatment)
 claimants = domain_claimants.get(key_lower, [])
 has_dev_claimant = any(c.endswith('.dev') for c in claimants)
+recent_claimants = [c for c in claimants if is_recent(c)]
+
+# Keep existing logic: suppress if 2+ claimants AND includes .dev TLD
+if len(recent_claimants) >= 2 and has_dev_claimant:
+    cross_domain_is_recent = True
 ```
 
 ### Phase 4: Testing (Critical)
@@ -760,8 +795,9 @@ def test_end_to_end_key_normalization():
 
 ### Phase 2 Complete When:
 - [ ] `emit_actual_results()` has single pass (no recomputation)
-- [ ] Single governance definition across all classification logic
-- [ ] `_extract_raw_domain()` removed OR clearly documented why it exists
+- [ ] Governance duality (broad vs strict) clearly documented in code comments
+- [ ] `_extract_raw_domain()` clearly documented as tracing-only (not for canonical keys)
+- [ ] Late-binding merge feature flag and dead code removed
 
 ### Phase 3 Complete When:
 - [ ] Cross-domain zombie suppression is O(N)
@@ -782,26 +818,43 @@ def test_end_to_end_key_normalization():
    - AOD currently: Depends on code path (needs consolidation)
    - **Decision: Use ALIAS_DOMAINS_TO_COLLAPSE to map intermediate domains to canonical**
 
-2. **Is `_extract_raw_domain()` still used?**
-   - Function preserves subdomains (no normalization)
-   - Comment says "matching Farm's host-level granularity"
-   - But Farm uses domain-level keys
-   - Should this be deleted?
+2. **Is `_extract_raw_domain()` still used?** ✅ **ANSWERED**
+   - **YES - Still in use for diagnostic purposes**
+   - Found in `src/aod/pipeline/decision_trace.py:86, 118, 138, 194`
+   - Used to compute decision traces for comparing Farm and AOD logic
+   - Preserves subdomains for detailed reconciliation analysis
+   - **Decision: Keep for now, but clearly document it's for tracing only, NOT for canonical keys**
 
-3. **Why does governance have two definitions?**
-   - Broad governance for shadow/parked
-   - Strict governance for zombie
-   - Is this intentional policy or implementation artifact?
+3. **Why does governance have two definitions?** ✅ **ANSWERED**
+   - **Intentional fix for cross-domain IdP matching (Jan 2026, commit 3860809)**
+   - Problem: Some assets match IdP by NAME only (cross-domain), without domain alignment
+   - Example: `linkify.co` entity matched to `linkify.app` IdP (different TLDs = different products)
+   - **Broad governance** (has_idp OR has_cmdb): Used for shadow/parked classification
+   - **Strict governance** (domain-aligned IdP OR cmdb): Used for zombie classification
+   - Cross-domain IdP matches become **parked** (not governed for zombie purposes)
+   - Prevents false zombies when IdP is for a different product variant
+   - Tracked via `idp_governance_aligned` field in `ActivityEvidence`
+   - **Decision: This is correct behavior - document it clearly in code comments**
 
-4. **Cross-domain zombie suppression: Why .dev TLD?**
-   - Line 940: `if other_key.endswith('.dev')`
-   - Why is .dev special?
-   - What about .app, .io, .tech?
+4. **Cross-domain zombie suppression: Why .dev TLD?** ✅ **ANSWERED**
+   - **`.dev` TLD indicates developer/staging/internal tooling (separate product namespace)**
+   - Comments in lines 914-944 explain the logic:
+   - Example: `teamdesk.ai` claimed by `teamdesk.dev` + `teamdesk.tech`
+   - If 2+ recent claimants include a `.dev` TLD, suppress zombie (still active elsewhere)
+   - Rationale: `.dev` variants are developer tools, not production SaaS
+   - Other TLDs (.co/.cloud/.app/.tech) treated as same product family
+   - Prevents false zombies for multi-TLD brands where .dev variant is still active
+   - **Decision: Keep .dev special treatment - it's based on real-world TLD semantics**
 
-5. **Should late-binding merge be removed?**
-   - Currently disabled (was causing issues)
-   - Should it be re-enabled after canonical key consolidation?
-   - Or permanently removed?
+5. **Should late-binding merge be removed?** ✅ **ANSWERED**
+   - **Currently DISABLED - should be permanently removed**
+   - From replit.md line 39: _"Now DISABLED (was causing issues with multi-tenant domain collapsing and governance evidence loss)"_
+   - Problem: Merging assets by eTLD+1 caused multi-tenant domains to collapse incorrectly
+   - Example: Multiple tenants using `slack.com` would merge into one asset
+   - Result: Governance evidence loss, negative impact on zombie accuracy
+   - config/policy.json has `late_binding_domain_merge: true` but schema defaults to `False`
+   - Feature was rolled back and is not coming back
+   - **Decision: Remove feature flag and dead code after Phase 1 consolidation**
 
 ---
 
@@ -862,14 +915,27 @@ The KEY_NORMALIZATION_MISMATCH issue is not a simple bug - it's an **architectur
 
 **Normalization Rule (CONFIRMED):** All domains should normalize to canonical vendor domain (e.g., `microsoft.com`), not intermediate eTLD+1 (`microsoftonline.com`).
 
-**Estimated Effort:**
-- Phase 1 (Consolidation): 3-5 days
-- Phase 2 (Simplification): 2-3 days
-- Phase 3 (Performance): 1-2 days
-- Phase 4 (Testing): 2-3 days
-- **Total: 8-13 days**
+**All Open Questions Resolved:**
+1. ✅ Normalization rule: Use canonical vendor domains
+2. ✅ `_extract_raw_domain()`: Keep for tracing, document clearly
+3. ✅ Governance duality: Intentional for cross-domain IdP handling
+4. ✅ .dev TLD special treatment: Based on real-world TLD semantics
+5. ✅ Late-binding merge: Permanently disabled, should be removed
 
-**Recommendation:** Start with Phase 1 (consolidation) as it provides the highest value (fixes KEY_NORMALIZATION_MISMATCH) with manageable risk.
+**Key Insights from Analysis:**
+- Governance duality is a sophisticated fix for cross-domain IdP matching (NOT a bug)
+- .dev TLD suppression prevents false zombies for multi-TLD brands (NOT arbitrary)
+- `_extract_raw_domain()` serves diagnostic purposes (NOT obsolete)
+- Late-binding merge was rolled back due to multi-tenant collapsing issues
+
+**Estimated Effort (REVISED):**
+- Phase 1 (Consolidation): 3-5 days
+- Phase 2 (Documentation + Cleanup): 2-3 days (was "Simplification", now mostly docs)
+- Phase 3 (Performance): 1-2 days (optimize O(N²) to O(N), preserve logic)
+- Phase 4 (Testing): 2-3 days
+- **Total: 8-13 days** (unchanged, but scope is clearer)
+
+**Recommendation:** Start with Phase 1 (consolidation) as it provides the highest value (fixes KEY_NORMALIZATION_MISMATCH) with manageable risk. Phases 2-3 are now primarily documentation and optimization, not logic changes.
 
 ---
 

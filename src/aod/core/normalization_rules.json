@@ -16,14 +16,14 @@
     "alias_map": {
       "zoom-video.com": "zoom.us", "zoom.com": "zoom.us", "zoom.cn": "zoom.us", "zoomgov.com": "zoom.us",
       
-      "microsoftonline.com": "microsoft.com", "office365.com": "microsoft.com", 
-      "live.com": "microsoft.com", "office.com": "microsoft.com", 
+      "microsoftonline.com": "microsoft.com", "office365.com": "microsoft.com",
+      "live.com": "microsoft.com",
       "windows.net": "microsoft.com", "azure.com": "microsoft.com",
       "msn.com": "microsoft.com", "visualstudio.com": "microsoft.com",
       "lync.com": "microsoft.com",
-      
-      "googleusercontent.com": "google.com", "youtu.be": "google.com", 
-      "youtube.com": "google.com", "googleapis.com": "google.com", 
+
+      "youtu.be": "google.com",
+      "youtube.com": "google.com",
       "ggpht.com": "google.com", "1e100.net": "google.com",
       
       "slack-edge.com": "slack.com", "slack-msgs.com": "slack.com", 

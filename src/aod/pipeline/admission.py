@@ -515,30 +515,54 @@ class AdmissionResult:
     admission_reason: Optional[str] = None
 
 
-def check_idp_admission(correlation: CorrelationResult) -> tuple[bool, str]:
+def check_idp_admission(correlation: CorrelationResult, entity_registered_domain: Optional[str] = None) -> tuple[bool, str]:
     """
     Check IdP plane admission criteria:
-    - IdP match (any IdP object is sufficient for admission)
-    - Prefer: has_sso OR has_scim OR idp_type==service_principal (stronger signal)
+    - IdP match with DOMAIN-ALIGNED governance (exact domain match required)
+    - Prefer: has_sso OR has_scim (stronger signal that overrides domain alignment)
     NOTE: Both MATCHED and AMBIGUOUS count as having IdP evidence.
-    
-    RELAXED: Any IdP match counts. SSO/SCIM provides stronger confidence but is not required.
+
+    Jan 2026 Fix: Farm requires domain-aligned IdP for admission, NOT cross-domain matches.
+
+    Cross-domain IdP matches (e.g., easyworks.ai entity matched to easyworks.co IdP) do NOT
+    provide governance for admission. Only exact domain matches count, UNLESS the IdP has
+    SSO/SCIM which provides stronger governance signals.
+
+    Examples:
+    - easyworks.ai entity + easyworks.co IdP (no SSO/SCIM) → NOT admitted (cross-domain)
+    - easyworks.ai entity + easyworks.ai IdP → admitted (exact match)
+    - easyworks.ai entity + easyworks.co IdP with SSO → admitted (SSO overrides domain)
     """
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
-    
+
+    # Track domain-aligned matches and strong governance signals separately
+    has_domain_aligned_match = False
+    has_strong_signal = False
+
     for record in correlation.idp.matched_records:
         if isinstance(record, IdPObject):
+            # Strong governance signals (SSO/SCIM) override domain alignment requirement
             if record.has_sso:
-                return True, "IdP match with SSO enabled"
+                has_strong_signal = True
+                return True, "IdP match with SSO enabled (domain-aligned governance)"
             if record.has_scim:
-                return True, "IdP match with SCIM enabled"
-            if record.idp_type == "service_principal":
-                return True, "IdP match as service principal"
-    
-    if correlation.idp.matched_records:
-        return True, "IdP match (directory object)"
-    
+                has_strong_signal = True
+                return True, "IdP match with SCIM enabled (domain-aligned governance)"
+
+            # Check for exact domain match (domain-aligned governance)
+            idp_domain = None
+            if record.domain:
+                idp_domain = extract_registered_domain(record.domain)
+
+            if _idp_domain_matches_entity(idp_domain, entity_registered_domain, idp_name=record.name):
+                has_domain_aligned_match = True
+                # Continue checking for stronger signals (SSO/SCIM)
+
+    if has_domain_aligned_match:
+        return True, "IdP match with domain-aligned governance"
+
+    # Cross-domain IdP matches without SSO/SCIM do NOT provide admission governance
     return False, ""
 
 
@@ -1499,18 +1523,22 @@ def apply_admission_criteria(
             rejection_reason=f"Corporate root domain: {registered_domain} (from {effective_domain})"
         )
     
-    # GATE 2: Reject infrastructure/tooling domains unconditionally
+    # Check each admission criterion FIRST (before infrastructure filter)
+    idp_admitted, idp_reason = check_idp_admission(correlation, entity_registered_domain=registered_domain)
+    cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
+
+    # GATE 2: Reject infrastructure/tooling domains ONLY if they lack governance
+    # Jan 2026 Fix: Farm admits infrastructure domains (postgresql.org, mongodb.com, etc.)
+    # if they have IdP or CMDB governance. Only reject ungoverned infrastructure.
     # Check against REGISTERED domain, not raw FQDN
     if is_infrastructure_domain(registered_domain):
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Infrastructure domain: {registered_domain} (from {effective_domain})"
-        )
-    
-    # Check each admission criterion
-    idp_admitted, idp_reason = check_idp_admission(correlation)
-    cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
+        if not (idp_admitted or cmdb_admitted):
+            return AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
+                rejection_reason=f"Infrastructure domain without governance: {registered_domain} (from {effective_domain})"
+            )
+        # Infrastructure domain WITH governance - continue to admission
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(
@@ -1522,45 +1550,37 @@ def apply_admission_criteria(
     # It is recorded as metadata for classification/explanation only
     
     # =========================================================================
-    # DISCOVERY CORROBORATION CHECK (Dec 2025)
-    # Count discovery observations to verify actual usage evidence
-    # NOTE: Every candidate has ≥1 observation (that's how they become candidates)
-    # so we require ≥2 distinct sources for governance to admit
+    # FARM ADMISSION POLICY (Jan 2026 Fix)
+    # Farm's admission policy: discovery >= 2 OR cloud_present OR idp_present OR cmdb_present
+    #
+    # Critical: IdP/CMDB/Cloud alone is SUFFICIENT for admission (no discovery requirement)
+    # Only discovery-only assets require 2+ sources for corroboration
+    #
+    # Previous AOD logic incorrectly required IdP/CMDB to have 2+ discovery sources,
+    # causing 12 cataloged FN (cloudflareinsights.com, pivotaltracker.com, etc.)
     # =========================================================================
     footprint = build_discovery_footprint(
-        observations, 
+        observations,
         canonical_key=effective_domain or entity.canonical_name if entity else None
     )
-    # Require at least 2 distinct discovery sources for corroboration
-    # Single-source assets (often vendor-inferred) lack sufficient evidence
+    # Require at least 2 distinct discovery sources for discovery-only admission
     has_sufficient_discovery = len(footprint.discovery_sources) >= 2
-    
-    # =========================================================================
-    # FINANCE ADMISSION GATE (Dec 2025)
-    # Finance alone is NOT sufficient for admission - requires corroboration:
-    # - Finance + Governance (IdP/CMDB) = admitted
-    # - Finance + Discovery (>= 2 sources) = admitted
-    # - Finance alone with minimal discovery (< 2 sources) = NOT admitted
-    # This prevents low-confidence finance-only assets from cluttering catalog
-    # =========================================================================
+
+    # Finance can admit if it has other corroborating evidence
+    # (governance or sufficient discovery)
     finance_can_admit = finance_admitted and (
-        idp_admitted or 
-        cmdb_admitted or 
+        idp_admitted or
+        cmdb_admitted or
+        cloud_admitted or
         discovery_admitted  # discovery_admitted already requires >= 2 sources
     )
-    
-    # =========================================================================
-    # GOVERNANCE ADMISSION GATE (Dec 2025)
-    # IdP/CMDB alone is NOT sufficient for admission - requires discovery:
-    # - IdP/CMDB + at least 2 discovery sources = admitted
-    # - IdP/CMDB with only 1 source (often inferred) = NOT admitted
-    # This prevents governance-only assets with weak evidence from cluttering catalog
-    # =========================================================================
-    idp_can_admit = idp_admitted and has_sufficient_discovery
-    cmdb_can_admit = cmdb_admitted and has_sufficient_discovery
-    
-    # Admission: Cloud or Discovery (≥2 sources) can admit independently
-    # IdP/CMDB/Finance require discovery corroboration
+
+    # Farm policy: IdP/CMDB/Cloud alone is sufficient (no discovery corroboration needed)
+    # Only discovery-only assets need 2+ sources
+    idp_can_admit = idp_admitted  # Domain-aligned IdP is sufficient
+    cmdb_can_admit = cmdb_admitted  # CMDB alone is sufficient
+
+    # Admission: IdP OR CMDB OR Cloud OR Discovery (≥2) OR Finance (with corroboration)
     if not any([idp_can_admit, cmdb_can_admit, cloud_admitted, finance_can_admit, discovery_admitted]):
         return AdmissionResult(
             admitted=False,

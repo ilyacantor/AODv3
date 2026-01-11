@@ -383,135 +383,58 @@ def _extract_raw_domain(asset: Asset) -> str | None:
     return None
 
 
-# Domains that are ALIASES and should collapse to the vendor canonical domain.
-# Only domains in this set will be normalized. Other domains in DOMAIN_TO_VENDOR
-# that are legitimate primary SaaS keys (atlassian.net, notion.so) are preserved.
-ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
-    # Microsoft family - collapse to microsoft.com
-    "microsoftonline.com",
-    "azure.com",
-    "office.com",
-    "office365.com",
-    "sharepoint.com",
-    "live.com",
-    "outlook.com",
-    "onedrive.com",
-    "powerbi.com",
-    # Google family - collapse to google.com
-    "googleapis.com",
-    "gstatic.com",
-    "googleusercontent.com",
-    # Zoom family - collapse to zoom.us
-    "zoom.com",
-    "zoom-video.com",
-    "zoom-meetings.net",
-    "zoomapp.io",
-    # Atlassian aliases - collapse to atlassian.com
-    # Note: atlassian.net is a legitimate primary domain (Jira Cloud), NOT collapsed
-    "jira.com",
-    "confluence.com",
-    "opsgenie.com",
-    # GitHub aliases
-    "github.io",
-    "githubusercontent.com",
-    # Other aliases
-    "slackb2b.com",  # Slack
-    "dropboxapi.com",  # Dropbox
-    "boxcdn.net",  # Box
-    "oktapreview.com",  # Okta
-    "sendgrid.net",  # Twilio
-    "stripe.network",  # Stripe
-    "zdassets.com",  # Zendesk
-    "hubspotusercontent.com",  # HubSpot
-    # Note: datadoghq.com is the canonical SaaS domain (app.datadoghq.com), NOT an alias
-    "splunkcloud.com",  # Splunk
-    "docusign.net",  # DocuSign
-    "adobelogin.com",  # Adobe
-}
+# Phase 1 Consolidation (Jan 2026): Import from canonical_key module (single source of truth)
+from .canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
 
 
 def _normalize_to_canonical_vendor_domain(registered_domain: str) -> str | None:
     """
     Normalize a registered domain to its canonical vendor domain (only for known aliases).
-    
-    This handles cases like:
-    - microsoftonline.com -> microsoft.com (known alias)
-    - office365.com -> microsoft.com (known alias)
-    - googleapis.com -> google.com (known alias)
-    
-    BUT PRESERVES:
-    - atlassian.net (legitimate primary domain, not an alias)
-    - notion.so (canonical domain)
-    - segment.io (canonical domain)
-    
-    Only domains in ALIAS_DOMAINS_TO_COLLAPSE are normalized.
-    Other domains in DOMAIN_TO_VENDOR that are legitimate SaaS keys are preserved.
+
+    Phase 1 Consolidation (Jan 2026): Now delegates to canonical_key.normalize_to_canonical_vendor_domain()
+    as single source of truth. This wrapper kept for backward compatibility.
+
+    Examples:
+        microsoftonline.com -> microsoft.com (known alias)
+        office365.com -> microsoft.com (known alias)
+        googleapis.com -> google.com (known alias)
+        atlassian.net -> None (legitimate primary domain, not an alias)
     """
-    # Only normalize if this is a known alias domain
-    if registered_domain not in ALIAS_DOMAINS_TO_COLLAPSE:
-        return None
-    
-    if registered_domain in DOMAIN_TO_VENDOR:
-        vendor_name = DOMAIN_TO_VENDOR[registered_domain]
-        vendor_key = vendor_name.lower().strip()
-        if vendor_key in VENDOR_TO_DOMAIN:
-            canonical = VENDOR_TO_DOMAIN[vendor_key]
-            if canonical != registered_domain:
-                return canonical
-    return None
+    from .canonical_key import normalize_to_canonical_vendor_domain
+    return normalize_to_canonical_vendor_domain(registered_domain)
 
 
 def _extract_registered_domain(asset: Asset) -> str | None:
     """
     Extract the canonical domain from asset identifiers or vendor.
-    
-    INVARIANT: If any entity has a resolvable registered domain, the asset_key
-    MUST be normalized to the canonical vendor domain for governance checks.
-    
-    Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
-    1. asset.identifiers.domains -> extract registered -> normalize to vendor canonical
-    2. Asset name if it looks like a domain -> extract registered -> normalize to vendor canonical
-    3. Reverse lookup from asset.vendor using VENDOR_TO_DOMAIN (only if no domain evidence)
-    4. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN (last resort)
-    
-    NORMALIZATION FIX (Dec 2025): After extracting registered domain, we now also
-    check DOMAIN_TO_VENDOR to map vendor-related domains to a single canonical key.
-    e.g., login.microsoftonline.com -> microsoftonline.com -> microsoft.com
-    
+
+    Phase 1 Consolidation (Jan 2026): Now uses canonical_key.compute_canonical_key()
+    as single source of truth for domain normalization.
+
+    CRITICAL BUG FIX: Vendor fallback now ONLY executes if no domain evidence exists.
+    Previously, vendor lookup at lines 505-508 could override explicit domain evidence
+    when extract_registered_domain() returned None (TLD parsing failure). This caused
+    KEY_NORMALIZATION_MISMATCH errors.
+
+    Example bug scenario (FIXED):
+    - Input: domains=["dropboxusercontent.io"], vendor="Dropbox"
+    - Old: extract_registered_domain("dropboxusercontent.io") → None → fallback to "dropbox.com"
+    - New: compute_canonical_key() correctly handles all TLDs → "dropbox.com" (via alias collapse)
+
     Returns the first valid canonical domain, or None if not available.
     """
-    if asset.identifiers and asset.identifiers.domains:
-        for domain in asset.identifiers.domains:
-            if domain and "." in domain:
-                raw_domain = domain.lower().strip()
-                registered = extract_registered_domain(raw_domain)
-                if registered:
-                    # Check if registered domain maps to a canonical vendor domain
-                    canonical = _normalize_to_canonical_vendor_domain(registered)
-                    return canonical if canonical else registered
-                return raw_domain
-    
-    name = asset.name.lower().strip()
-    if "." in name:
-        parts = name.split(".")
-        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
-            registered = extract_registered_domain(name)
-            if registered:
-                # Check if registered domain maps to a canonical vendor domain
-                canonical = _normalize_to_canonical_vendor_domain(registered)
-                return canonical if canonical else registered
-            return name
-    
-    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
-        vendor_key = asset.vendor.lower().strip()
-        if vendor_key in VENDOR_TO_DOMAIN:
-            return VENDOR_TO_DOMAIN[vendor_key]
-    
-    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
-    if normalized_name in VENDOR_TO_DOMAIN:
-        return VENDOR_TO_DOMAIN[normalized_name]
-    
-    return None
+    from .canonical_key import compute_canonical_key
+
+    domains = asset.identifiers.domains if asset.identifiers else []
+    vendor = asset.vendor if asset.vendor else None
+    name = asset.name if asset.name else ""
+
+    try:
+        result = compute_canonical_key(domains=domains, vendor=vendor, name=name)
+        # Only return domain if is_canonical (not name-derived)
+        return result.primary_key if result.is_canonical else None
+    except ValueError:
+        return None
 
 
 def classify_actual(

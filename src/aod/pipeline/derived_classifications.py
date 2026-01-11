@@ -831,175 +831,57 @@ def compute_derived_classifications(
 # Domains that are ALIASES and should collapse to the vendor canonical domain.
 # Only domains in this set will be normalized. Other domains in DOMAIN_TO_VENDOR
 # that are legitimate primary SaaS keys (atlassian.net, notion.so) are preserved.
-ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
-    # Microsoft family - collapse to microsoft.com
-    "microsoftonline.com",
-    "azure.com",
-    "office.com",
-    "office365.com",
-    "sharepoint.com",
-    "live.com",
-    "outlook.com",
-    "onedrive.com",
-    "powerbi.com",
-    # Google family - collapse to google.com
-    "googleapis.com",
-    "gstatic.com",
-    "googleusercontent.com",
-    # Zoom family - collapse to zoom.us
-    "zoom.com",
-    "zoom-video.com",
-    "zoom-meetings.net",
-    "zoomapp.io",
-    # Atlassian aliases - collapse to atlassian.com
-    # Note: atlassian.net is a legitimate primary domain (Jira Cloud), NOT collapsed
-    "jira.com",
-    "confluence.com",
-    "opsgenie.com",
-    # GitHub aliases
-    "github.io",
-    "githubusercontent.com",
-    # Other aliases
-    "slackb2b.com",  # Slack
-    "dropboxapi.com",  # Dropbox
-    "boxcdn.net",  # Box
-    "oktapreview.com",  # Okta
-    "sendgrid.net",  # Twilio
-    "stripe.network",  # Stripe
-    "zdassets.com",  # Zendesk
-    "hubspotusercontent.com",  # HubSpot
-    # Note: datadoghq.com is the canonical SaaS domain (app.datadoghq.com), NOT an alias
-    "splunkcloud.com",  # Splunk
-    "docusign.net",  # DocuSign
-    "adobelogin.com",  # Adobe
-}
+# Phase 1 Consolidation (Jan 2026): Import from canonical_key module (single source of truth)
+from .canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
 
 
 def _normalize_to_canonical_vendor_domain(registered_domain: str) -> str | None:
     """
     Normalize a registered domain to its canonical vendor domain (only for known aliases).
-    
-    This handles cases like:
-    - microsoftonline.com -> microsoft.com (known alias)
-    - office365.com -> microsoft.com (known alias)
-    - googleapis.com -> google.com (known alias)
-    
-    BUT PRESERVES:
-    - atlassian.net (legitimate primary domain, not an alias)
-    - notion.so (canonical domain)
-    - segment.io (canonical domain)
-    
-    Only domains in ALIAS_DOMAINS_TO_COLLAPSE are normalized.
-    Other domains in DOMAIN_TO_VENDOR that are legitimate SaaS keys are preserved.
+
+    Phase 1 Consolidation (Jan 2026): Now delegates to canonical_key.normalize_to_canonical_vendor_domain()
+    as single source of truth. This wrapper kept for backward compatibility.
+
+    Examples:
+        microsoftonline.com -> microsoft.com (known alias)
+        office365.com -> microsoft.com (known alias)
+        googleapis.com -> google.com (known alias)
+        atlassian.net -> None (legitimate primary domain, not an alias)
     """
-    from .vendor_inference import DOMAIN_TO_VENDOR
-    
-    # Only normalize if this is a known alias domain
-    if registered_domain not in ALIAS_DOMAINS_TO_COLLAPSE:
-        return None
-    
-    if registered_domain in DOMAIN_TO_VENDOR:
-        vendor_name = DOMAIN_TO_VENDOR[registered_domain]
-        vendor_key = vendor_name.lower().strip()
-        if vendor_key in VENDOR_TO_DOMAIN:
-            canonical = VENDOR_TO_DOMAIN[vendor_key]
-            if canonical != registered_domain:
-                return canonical
-    return None
+    from .canonical_key import normalize_to_canonical_vendor_domain
+    return normalize_to_canonical_vendor_domain(registered_domain)
 
 
 def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
     """
     Resolve the canonical domain key for an asset.
-    
+
+    Phase 1 Consolidation (Jan 2026): Now uses canonical_key.compute_canonical_key()
+    as single source of truth for domain normalization.
+
     Returns:
         Tuple of (domain_key, is_canonical, alias_keys) where:
         - domain_key: The canonical vendor domain (e.g., microsoft.com for microsoftonline.com)
         - is_canonical: True if key is a registered domain, False if name-derived
         - alias_keys: List of ALL domain variants from identifiers.domains
-    
-    Priority order (DOMAIN PROMOTION with VENDOR NORMALIZATION):
-    1. asset.identifiers.domains[0] -> extract registered domain -> normalize to vendor canonical
-    2. VENDOR_TO_DOMAIN[asset.vendor] (reverse lookup from vendor name) -> canonical
-    3. NAME-BASED PROMOTION: Normalize name and look up in VENDOR_TO_DOMAIN -> canonical
-    4. Asset name if it looks like a domain -> extract registered -> normalize to vendor canonical
-    5. Fallback: normalized name -> NOT canonical
-    
-    Jan 2026 FIX: Now processes ALL domains in identifiers.domains to build alias_keys,
-    not just the first one. The PRIMARY KEY is still frozen from domain[0], but all
-    domain variants are included in alias_keys for Farm reconciliation matching.
-    
-    This fixes KEY_NORMALIZATION_MISMATCH errors where governance plane domains
-    (IdP, CMDB) were in identifiers.domains but never surfaced in alias_keys.
-    
+
     INVARIANT: Primary key is determined from domain[0] only - never changes based on later domains.
-    INVARIANT: This must match the key resolution in aod_agent_reconcile.py.
     INVARIANT: All domain variants (raw, registered, canonical) are preserved in alias_keys.
     """
-    from .vendor_inference import extract_registered_domain
-    
-    alias_keys_set = set()
-    primary_key = None
-    is_canonical = False
-    
-    if asset.identifiers and asset.identifiers.domains:
-        for idx, domain in enumerate(asset.identifiers.domains):
-            if domain and "." in domain:
-                raw_domain = domain.lower().strip()
-                alias_keys_set.add(raw_domain)
-                
-                registered = extract_registered_domain(raw_domain)
-                if registered:
-                    if registered != raw_domain:
-                        alias_keys_set.add(registered)
-                    canonical = _normalize_to_canonical_vendor_domain(registered)
-                    if canonical:
-                        alias_keys_set.add(canonical)
-                    
-                    # PRIMARY KEY: Only set from first domain (index 0)
-                    if idx == 0 and primary_key is None:
-                        if canonical:
-                            primary_key = canonical
-                        else:
-                            primary_key = registered
-                        is_canonical = True
-                elif idx == 0 and primary_key is None:
-                    primary_key = raw_domain
-                    is_canonical = True
-        
-        if primary_key:
-            return (primary_key, is_canonical, sorted(alias_keys_set))
-    
-    if asset.vendor and asset.vendor.lower() not in ("unknown", "", "none"):
-        vendor_key = asset.vendor.lower().strip()
-        if vendor_key in VENDOR_TO_DOMAIN:
-            canonical = VENDOR_TO_DOMAIN[vendor_key]
-            alias_keys_set.add(canonical)
-            return (canonical, True, sorted(alias_keys_set) if alias_keys_set else [canonical])
-    
-    normalized_name = _normalize_name_for_vendor_lookup(asset.name)
-    if normalized_name in VENDOR_TO_DOMAIN:
-        canonical = VENDOR_TO_DOMAIN[normalized_name]
-        alias_keys_set.add(canonical)
-        return (canonical, True, sorted(alias_keys_set) if alias_keys_set else [canonical])
-    
-    name = asset.name.lower().strip()
-    if "." in name:
-        parts = name.split(".")
-        if len(parts) >= 2 and len(parts[-1]) in (2, 3, 4) and parts[-1].isalpha():
-            alias_keys_set.add(name)
-            registered = extract_registered_domain(name)
-            if registered:
-                if registered != name:
-                    alias_keys_set.add(registered)
-                canonical = _normalize_to_canonical_vendor_domain(registered)
-                if canonical:
-                    alias_keys_set.add(canonical)
-                    return (canonical, True, sorted(alias_keys_set))
-                return (registered, True, sorted(alias_keys_set))
-            return (name, True, sorted(alias_keys_set))
-    
-    return (re.sub(r'[^a-z0-9]', '', name.lower()), False, sorted(alias_keys_set) if alias_keys_set else [])
+    from .canonical_key import compute_canonical_key
+
+    domains = asset.identifiers.domains if asset.identifiers else []
+    vendor = asset.vendor if asset.vendor else None
+    name = asset.name if asset.name else ""
+
+    try:
+        result = compute_canonical_key(domains=domains, vendor=vendor, name=name)
+        return (result.primary_key, result.is_canonical, result.all_variants)
+    except ValueError as e:
+        # Fallback: sanitized name (should rarely happen)
+        import re
+        sanitized = re.sub(r'[^a-z0-9]', '', name.lower())
+        return (sanitized, False, [])
 
 
 def _get_parent_domain(domain: str) -> Optional[str]:

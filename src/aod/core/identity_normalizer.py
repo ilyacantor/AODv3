@@ -139,16 +139,29 @@ class IdentityNormalizer:
                 "canonical": canonical
             })
             return canonical
-        
+
+        # Jan 2026 Fix: Check if domain ends with PaaS root BEFORE tldextract
+        # This handles cases like mybucket.s3.amazonaws.com where tldextract
+        # sees amazonaws.com as registered domain but s3.amazonaws.com is the PaaS root
+        for paas_root in self.paas_roots:
+            if sanitized.endswith(f".{paas_root}") or sanitized == paas_root:
+                # Preserve full domain for PaaS subdomains
+                logger.debug("identity_normalizer.paas_matched_early", extra={
+                    "input": sanitized,
+                    "paas_root": paas_root,
+                    "result": sanitized
+                })
+                return sanitized
+
         extracted = tldextract.extract(sanitized)
-        
+
         if not extracted.domain or not extracted.suffix:
             return None
-        
+
         registered_domain = f"{extracted.domain}.{extracted.suffix}"
-        
-        # PaaS check FIRST - preserve tenant subdomains before alias collapsing
-        # This ensures flowsoft.okta.com stays as-is even though okta.com might be in alias_map
+
+        # PaaS check for simple cases (e.g., flowsoft.okta.com where okta.com is PaaS root)
+        # The early check above handles multi-level PaaS (e.g., mybucket.s3.amazonaws.com)
         if registered_domain in self.paas_roots:
             if extracted.subdomain:
                 full_domain = f"{extracted.subdomain}.{registered_domain}"

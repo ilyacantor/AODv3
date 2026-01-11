@@ -106,7 +106,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "splunkcloud.com",  # Splunk
     "docusign.net",  # DocuSign
     "adobelogin.com",  # Adobe
-    "cloudflareinsights.com",  # Cloudflare
+    # NOTE: cloudflareinsights.com is a distinct analytics/monitoring service, NOT collapsed
     "snowflakecomputing.com",  # Snowflake (app.snowflakecomputing.com)
 }
 

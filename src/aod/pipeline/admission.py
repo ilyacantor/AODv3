@@ -1551,9 +1551,14 @@ def apply_admission_criteria(
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(
-        observations, 
+        observations,
         canonical_key=effective_domain or entity.canonical_name if entity else None
     )
+
+    # DEBUG: Log discovery admission check for specific domains
+    debug_domain = effective_domain or (entity.canonical_name if entity else None)
+    if debug_domain and debug_domain.lower() in ['cloudflareinsights.com', 'tiktok.com']:
+        logger.info(f"DEBUG_DISCOVERY_ADMISSION: {debug_domain} | admitted={discovery_admitted} | reason={discovery_reason} | obs_count={len(observations) if observations else 0}")
     
     # NOTE: Vendor governance propagation does NOT cause admission
     # It is recorded as metadata for classification/explanation only

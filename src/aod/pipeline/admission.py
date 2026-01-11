@@ -1442,9 +1442,12 @@ def apply_admission_criteria(
     
     NOTE (Dec 2025 fix): Discovery admission gates on distinct SOURCES (browser, proxy, dns = 3),
     NOT distinct planes. Plane diversity is an annotation/confidence signal only.
-    
+
+    VENDOR GOVERNANCE PROPAGATION (Jan 2026 fix):
+    Propagated IdP/CMDB from vendor siblings CAN cause admission, matching Farm's policy.
+    Example: googleapis.com inherits HAS_IDP from "Google+" IdP record via vendor propagation.
+
     INVARIANTS:
-    - Vendor governance NEVER causes admission (only explains/classifies)
     - Corporate/marketing root domains are ALWAYS rejected
     - Vendor alone is not admission
     
@@ -1454,9 +1457,9 @@ def apply_admission_criteria(
         run_id: Run ID
         snapshot_id: Snapshot ID
         observations: Discovery observations for this entity
-        propagated_idp: IdP governance propagated from vendor sibling (for classification only)
-        propagated_cmdb: CMDB governance propagated from vendor sibling (for classification only)
-        propagation_reason: Explanation of governance propagation (for metadata only)
+        propagated_idp: IdP governance propagated from vendor sibling (can cause admission)
+        propagated_cmdb: CMDB governance propagated from vendor sibling (can cause admission)
+        propagation_reason: Explanation of governance propagation (stored in asset metadata)
         idp_activity_map: Optional mapping of IdP name -> max login timestamp for cross-IdP activity
         
     Returns:
@@ -1559,13 +1562,11 @@ def apply_admission_criteria(
     debug_domain = effective_domain or (entity.canonical_name if entity else None)
     if debug_domain and debug_domain.lower() in ['cloudflareinsights.com', 'tiktok.com']:
         logger.info(f"DEBUG_DISCOVERY_ADMISSION: {debug_domain} | admitted={discovery_admitted} | reason={discovery_reason} | obs_count={len(observations) if observations else 0}")
-    
-    # NOTE: Vendor governance propagation does NOT cause admission
-    # It is recorded as metadata for classification/explanation only
-    
+
     # =========================================================================
     # FARM ADMISSION POLICY (Jan 2026 Fix)
     # Farm's admission policy: discovery >= 2 OR cloud_present OR idp_present OR cmdb_present
+    # NOTE: idp_present and cmdb_present include BOTH direct matches AND vendor-propagated governance
     #
     # Critical: IdP/CMDB/Cloud alone is SUFFICIENT for admission (no discovery requirement)
     # Only discovery-only assets require 2+ sources for corroboration
@@ -1591,8 +1592,9 @@ def apply_admission_criteria(
 
     # Farm policy: IdP/CMDB/Cloud alone is sufficient (no discovery corroboration needed)
     # Only discovery-only assets need 2+ sources
-    idp_can_admit = idp_admitted  # Domain-aligned IdP is sufficient
-    cmdb_can_admit = cmdb_admitted  # CMDB alone is sufficient
+    # Jan 2026 Fix: Include vendor-propagated governance for admission
+    idp_can_admit = idp_admitted or propagated_idp  # Direct OR vendor-propagated IdP
+    cmdb_can_admit = cmdb_admitted or propagated_cmdb  # Direct OR vendor-propagated CMDB
 
     # Admission: IdP OR CMDB OR Cloud OR Discovery (≥2) OR Finance (with corroboration)
     if not any([idp_can_admit, cmdb_can_admit, cloud_admitted, finance_can_admit, discovery_admitted]):
@@ -1651,6 +1653,9 @@ def apply_admission_criteria(
         admission_reasons.append(finance_reason)
     if discovery_admitted:
         admission_reasons.append(discovery_reason)
+    # Jan 2026 Fix: Add vendor propagation reason if that's what caused admission
+    if propagation_reason and (propagated_idp or propagated_cmdb):
+        admission_reasons.append(f"Vendor governance: {propagation_reason}")
     
     lens_status = LensStatuses(
         idp=LensStatus(correlation.idp.status.value),

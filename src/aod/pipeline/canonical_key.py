@@ -65,7 +65,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "azure.com",
     "office.com",
     "office365.com",
-    "sharepoint.com",
+    # NOTE: sharepoint.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     "live.com",
     "outlook.com",
     "onedrive.com",
@@ -73,7 +73,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     # Google family - collapse to google.com
     "googleapis.com",
     "gstatic.com",
-    "googleusercontent.com",
+    # NOTE: googleusercontent.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     # Zoom family - collapse to zoom.us
     "zoom.com",
     "zoom-video.com",

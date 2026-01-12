@@ -1219,7 +1219,8 @@ def extract_activity_timestamps(
     correlation: CorrelationResult,
     entity: CandidateEntity,
     observations: Optional[list[Observation]] = None,
-    idp_activity_map: Optional[dict[str, datetime]] = None
+    idp_activity_map: Optional[dict[str, datetime]] = None,
+    propagated_idp: bool = False
 ) -> ActivityEvidence:
     """
     Extract activity timestamps from correlation evidence and observations.
@@ -1406,7 +1407,13 @@ def extract_activity_timestamps(
         # Finance is metadata for ongoing_finance flag, NOT activity evidence.
     
     latest_activity_at = max(timestamps) if timestamps else None
-    
+
+    # Jan 2026 Fix: Vendor-propagated IdP governance counts as domain-aligned
+    # Vendor family relationships (e.g., googleapis.com inheriting from google.com)
+    # are strong governance signals and should be treated as aligned for shadow detection
+    if propagated_idp and not idp_governance_aligned:
+        idp_governance_aligned = True
+
     return ActivityEvidence(
         idp_last_login_at=idp_last_login_at,
         discovery_observed_at=discovery_observed_at,
@@ -1657,10 +1664,21 @@ def apply_admission_criteria(
     # Jan 2026 Fix: Add vendor propagation reason if that's what caused admission
     if propagation_reason and (propagated_idp or propagated_cmdb):
         admission_reasons.append(f"Vendor governance: {propagation_reason}")
-    
+
+    # Jan 2026 Fix: Include propagated governance in lens_status for classification
+    # When vendor governance is propagated, set lens_status to MATCHED so classification
+    # logic recognizes the asset as governed (not shadow IT).
+    idp_status = correlation.idp.status.value
+    if propagated_idp and correlation.idp.status == MatchStatus.UNMATCHED:
+        idp_status = MatchStatus.MATCHED.value
+
+    cmdb_status = correlation.cmdb.status.value
+    if propagated_cmdb and correlation.cmdb.status == MatchStatus.UNMATCHED:
+        cmdb_status = MatchStatus.MATCHED.value
+
     lens_status = LensStatuses(
-        idp=LensStatus(correlation.idp.status.value),
-        cmdb=LensStatus(correlation.cmdb.status.value),
+        idp=LensStatus(idp_status),
+        cmdb=LensStatus(cmdb_status),
         cloud=LensStatus(correlation.cloud.status.value),
         finance=LensStatus(correlation.finance.status.value)
     )
@@ -1668,10 +1686,12 @@ def apply_admission_criteria(
     # Single source of truth: discovery_sources from footprint
     # lens_coverage.discovery is DERIVED from discovery_sources (not independent)
     discovery_sources_list = sorted(footprint.discovery_sources)
-    
+
+    # Jan 2026 Fix: Include propagated governance in lens_coverage
+    # lens_coverage indicates whether asset has governance "coverage" (direct or propagated)
     lens_coverage = LensCoverage(
-        idp=idp_admitted,
-        cmdb=cmdb_admitted,
+        idp=idp_admitted or propagated_idp,
+        cmdb=cmdb_admitted or propagated_cmdb,
         cloud=cloud_admitted,
         finance=finance_admitted,
         discovery=bool(discovery_sources_list)  # Derived from discovery_sources
@@ -1722,7 +1742,7 @@ def apply_admission_criteria(
     if discovery_admitted:
         tags.append("discovery_only")
     
-    activity_evidence = extract_activity_timestamps(correlation, entity, observations, idp_activity_map)
+    activity_evidence = extract_activity_timestamps(correlation, entity, observations, idp_activity_map, propagated_idp)
     
     from ..models.output_contracts import VendorHypothesis
     vendor_hypothesis = None

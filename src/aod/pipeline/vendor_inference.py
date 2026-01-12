@@ -76,6 +76,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "aws.amazon.com": "Amazon Web Services",
     "amazonaws.com": "Amazon Web Services",
     "cloudfront.net": "Amazon Web Services",
+    "awsstatic.com": "Amazon Web Services",
     "okta.com": "Okta",
     "oktapreview.com": "Okta",
     "auth0.com": "Auth0",

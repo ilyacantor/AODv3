@@ -1466,7 +1466,7 @@ def apply_admission_criteria(
         AdmissionResult indicating whether entity is admitted
     """
     entity = correlation.entity
-    
+
     # =========================================================================
     # PRE-STEP 0: POST-CORRELATION DOMAIN RECOVERY
     # If entity has no domain, try to recover from correlation match keys
@@ -1558,11 +1558,6 @@ def apply_admission_criteria(
         canonical_key=effective_domain or entity.canonical_name if entity else None
     )
 
-    # DEBUG: Log discovery admission check for specific domains
-    debug_domain = effective_domain or (entity.canonical_name if entity else None)
-    if debug_domain and debug_domain.lower() in ['cloudflareinsights.com', 'tiktok.com']:
-        logger.info(f"DEBUG_DISCOVERY_ADMISSION: {debug_domain} | admitted={discovery_admitted} | reason={discovery_reason} | obs_count={len(observations) if observations else 0}")
-
     # =========================================================================
     # FARM ADMISSION POLICY (Jan 2026 Fix)
     # Farm's admission policy: discovery >= 2 OR cloud_present OR idp_present OR cmdb_present
@@ -1630,6 +1625,8 @@ def apply_admission_criteria(
             is_stale_activity = latest_activity < cutoff
     
     # Determine provisioning status based on Traffic Light rules
+    # Jan 2026 Fix: Farm catalogs discovery-only assets (>= 2 sources), not shadow
+    # Only stale CMDB-only assets go to REVIEW (zombie candidates)
     if has_governance:
         if cmdb_can_admit and is_stale_activity and not idp_can_admit:
             # STEP 2: AMBER - CMDB but stale activity (zombie candidate)
@@ -1637,9 +1634,13 @@ def apply_admission_criteria(
         else:
             # STEP 1: GREEN - Has IdP or active CMDB
             provisioning_status = ProvisioningStatus.ACTIVE
+    elif discovery_admitted:
+        # STEP 1: GREEN - Discovery-only with >= 2 sources + recent activity
+        # Farm catalogs these as active assets, not shadow IT
+        provisioning_status = ProvisioningStatus.ACTIVE
     else:
-        # STEP 3: RED - Cloud/Finance/Discovery only (no governance)
-        # This is Shadow IT - saved for triage but BLOCKED from DCL
+        # STEP 3: RED - Cloud/Finance only (insufficient evidence)
+        # These need governance or discovery corroboration
         provisioning_status = ProvisioningStatus.QUARANTINE
     
     admission_reasons = []
@@ -1777,7 +1778,7 @@ def apply_admission_criteria(
     # These ensure discovery_sources remains the single source of truth
     # =========================================================================
     _validate_discovery_invariants(asset, discovery_sources_list, asset_key)
-    
+
     return AdmissionResult(
         admitted=True,
         provisioning_status=provisioning_status,

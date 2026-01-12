@@ -124,13 +124,19 @@ def _build_policy_asset_data(
             monthly_spend = max(monthly_spend, record.amount or 0)
     
     from .admission import source_to_plane, DISCOVERY_CORROBORATION_PLANES
-    
+
+    # Jan 2026 Fix: Count SOURCES not PLANES for discovery admission
+    # Farm's policy: dns + proxy = 2 sources (both network plane, but distinct sources)
+    # This matches the admission.py fix that gates on source count, not plane diversity
+    discovery_sources = set()
     discovery_planes = set()
     latest_observed_at: datetime | None = None
     for obs in observations:
         if obs.source:
-            plane = source_to_plane(obs.source)
+            source_lower = obs.source.lower()
+            plane = source_to_plane(source_lower)
             if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                discovery_sources.add(source_lower)
                 discovery_planes.add(plane)
         if obs.observed_at:
             obs_ts = obs.observed_at if obs.observed_at.tzinfo else obs.observed_at.replace(tzinfo=timezone.utc)
@@ -164,7 +170,9 @@ def _build_policy_asset_data(
         "ci_type": ci_type,
         "lifecycle": lifecycle,
         "monthly_spend": monthly_spend,
-        "discovery_planes_count": len(discovery_planes),
+        # Jan 2026 Fix: Pass SOURCE count, not plane count
+        # This ensures policy engine uses same metric as admission.py
+        "discovery_planes_count": len(discovery_sources),  # NOTE: Misnomer - actually source count now
         "is_active": is_active,
     }
 
@@ -282,9 +290,9 @@ def run_pipeline_ephemeral(
             
             policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)
             policy_decision = policy_engine.evaluate(policy_asset_data)
-            
+
             should_admit = policy_decision.admitted if use_policy_engine else admission_result.admitted
-            
+
             if should_admit and admission_result.asset:
                 assets.append(admission_result.asset)
             else:

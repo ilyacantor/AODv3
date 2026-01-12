@@ -197,18 +197,23 @@ class PolicyEngine:
     
     def _check_discovery_gate(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Discovery/Shadow Gate: plane_count >= noise_floor.
-        
-        CRITICAL: Count DISTINCT PLANES, not raw sources.
-        - dns + proxy = 1 plane (network)
-        - dns + edr = 2 planes (network, endpoint)
-        
+        Discovery/Shadow Gate: source_count >= noise_floor.
+
+        JAN 2026 FIX: Farm's admission policy gates on DISTINCT SOURCES, not planes.
+        - dns + proxy = 2 sources (both network plane, but distinct sources) ✓ ADMIT
+        - dns alone = 1 source ❌ REJECT
+
+        Rationale: Corroboration comes from observing the same asset via DIFFERENT
+        detection mechanisms (dns vs proxy), regardless of plane mapping.
+
         Finance and CMDB do NOT count as discovery corroboration.
-        Only: network, endpoint, idp, cloud, discovery
+        Only: network, endpoint, idp, cloud, discovery sources
+
+        NOTE: Field name is "discovery_planes_count" but actually contains source count (misnomer)
         """
-        plane_count = data.get("discovery_planes_count", 0) or 0
-        if plane_count >= self.config.admission.noise_floor:
-            return True, ["HAS_DISCOVERY", f"PLANE_COUNT_{plane_count}"]
+        source_count = data.get("discovery_planes_count", 0) or 0  # Misnomer - actually source count
+        if source_count >= self.config.admission.noise_floor:
+            return True, ["HAS_DISCOVERY", f"SOURCE_COUNT_{source_count}"]
         return False, []
     
     def _classify(self, data: dict) -> tuple[str, list[str]]:

@@ -81,33 +81,25 @@ class PolicyEngine:
         
         gates_passed = []
         all_codes = []
-
-        # Jan 2026 Fix: Finance is NOT a standalone admission gate
-        # Finance can only admit if there's ALSO governance or sufficient discovery
-        # Check finance for metadata/classification, not admission
-        finance_present, finance_codes = self._check_finance_gate(asset_data)
+        
+        finance_pass, finance_codes = self._check_finance_gate(asset_data)
         all_codes.extend(finance_codes)
-
+        if finance_pass:
+            gates_passed.append("finance")
+            reason_codes.extend(finance_codes)
+        
         governance_pass, gov_codes = self._check_governance_gate(asset_data)
         all_codes.extend(gov_codes)
         if governance_pass:
             gates_passed.append("governance")
             reason_codes.extend(gov_codes)
-            # Finance with governance can admit
-            if finance_present:
-                gates_passed.append("finance_with_governance")
-                reason_codes.extend(finance_codes)
-
+        
         discovery_pass, disc_codes = self._check_discovery_gate(asset_data)
         all_codes.extend(disc_codes)
         if discovery_pass:
             gates_passed.append("discovery")
             reason_codes.extend(disc_codes)
-            # Finance with sufficient discovery can admit
-            if finance_present and not governance_pass:
-                gates_passed.append("finance_with_discovery")
-                reason_codes.extend(finance_codes)
-
+        
         if not gates_passed:
             no_codes = self._compute_negative_codes(asset_data)
             all_codes.extend(no_codes)

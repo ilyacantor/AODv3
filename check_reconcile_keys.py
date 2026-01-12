@@ -83,3 +83,18 @@ for key in google_keys[:10]:
 print(f"\n==================== All Microsoft-related keys ====================")
 for key in microsoft_keys[:10]:
     print(f"  - {key}: {actual_results.admission_actual[key]}")
+
+# Check for AWS/Amazon keys
+aws_keys = [k for k in actual_results.admission_actual.keys() if 'aws' in k.lower() or 'amazon' in k.lower()]
+print(f"\n==================== All AWS/Amazon-related keys ====================")
+if aws_keys:
+    for key in aws_keys[:10]:
+        status = actual_results.admission_actual[key]
+        print(f"  - Key: {key}")
+        print(f"    Status: {status}")
+        if key in actual_results.asset_details:
+            details = actual_results.asset_details[key]
+            print(f"    Name: {details.get('name')}")
+            print(f"    Alias keys: {details.get('alias_keys', [])}")
+else:
+    print("  ❌ NO AWS/Amazon keys found")

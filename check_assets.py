@@ -67,3 +67,36 @@ if office_rejections:
     print(f"\n  Found in rejections:")
     for rej in office_rejections:
         print(f"    - {rej}")
+
+# Check if awsstatic.com is in assets
+awsstatic_assets = [a for a in result.assets if 'awsstatic' in a.name.lower() or
+                 (a.identifiers and a.identifiers.domains and
+                  any('awsstatic' in d.lower() for d in a.identifiers.domains))]
+
+print(f"\n==================== awsstatic.com assets ====================")
+if awsstatic_assets:
+    for asset in awsstatic_assets:
+        print(f"  - Name: {asset.name}")
+        print(f"    Domains: {asset.identifiers.domains if asset.identifiers else []}")
+        print(f"    Provisioning status: {asset.provisioning_status}")
+        print(f"    Admission reason: {asset.admission_reason}")
+else:
+    print("  ❌ NO awsstatic.com assets found")
+
+# Check if awsstatic.com is in rejections
+awsstatic_rejections = [r for r in result.rejections if 'awsstatic' in str(r).lower()]
+if awsstatic_rejections:
+    print(f"\n  Found in rejections:")
+    for rej in awsstatic_rejections:
+        print(f"    - {rej}")
+
+# Check for amazon.com assets
+amazon_assets = [a for a in result.assets if 'amazon' in a.name.lower() or 'aws' in a.name.lower() or
+                 (a.identifiers and a.identifiers.domains and
+                  any('amazon' in d.lower() or 'aws' in d.lower() for d in a.identifiers.domains))]
+
+print(f"\n==================== amazon/aws assets ====================")
+for asset in amazon_assets[:5]:
+    print(f"  - Name: {asset.name}")
+    print(f"    Domains: {asset.identifiers.domains if asset.identifiers else []}")
+    print(f"    Provisioning status: {asset.provisioning_status}")

@@ -53,7 +53,7 @@ def analyze_snapshot(snapshot_path: str):
     print(f"\nTotal vendor governance propagations: {len(propagated)}")
 
     # Target domains to investigate
-    target_domains = ['googleapis.com', 'office.com']
+    target_domains = ['googleapis.com', 'office.com', 'awsstatic.com']
 
     for target_domain in target_domains:
         print("\n" + "=" * 80)

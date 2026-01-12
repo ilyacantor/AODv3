@@ -89,8 +89,8 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "githubusercontent.com",
     # Amazon/AWS aliases
     "amazonaws.com",
-    "cloudfront.net",
-    "awsstatic.com",
+    # NOTE: cloudfront.net is a CDN domain - distinct service, NOT an alias
+    # NOTE: awsstatic.com is a static asset domain - distinct service, NOT an alias
     # Dropbox aliases
     "dropboxapi.com",
     "dropboxusercontent.io",  # Added: was causing KEY_NORMALIZATION_MISMATCH

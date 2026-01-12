@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional
 
 from ..models.input_contracts import Snapshot, Observation
 from ..models.output_contracts import (
@@ -19,7 +19,7 @@ from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
-from .vendor_governance import propagate_vendor_governance
+from .vendor_governance import propagate_vendor_governance, PropagatedGovernance
 from .admission import (
     apply_admission_criteria, AdmissionResult, build_idp_activity_map,
     _extract_all_domains_from_correlation, _extract_domain_from_correlation
@@ -85,18 +85,27 @@ def _extract_plane_timestamps(correlation: 'CorrelationResult') -> list[datetime
 def _build_policy_asset_data(
     candidate: CandidateEntity,
     correlation: CorrelationResult,
-    observations: list[Observation]
+    observations: list[Observation],
+    propagated_gov: Optional[PropagatedGovernance] = None
 ) -> dict:
     """
     Build asset_data dict for PolicyEngine evaluation.
-    
+
     Translates correlation results into the flat structure expected by PolicyEngine.
+
+    Jan 2026 Fix: Include vendor-propagated governance AND metadata in policy evaluation.
     """
-    in_idp = correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
-    in_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    # Jan 2026: Include both direct matches AND vendor-propagated governance
+    direct_idp = correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    direct_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    propagated_idp = propagated_gov.idp_present if propagated_gov else False
+    propagated_cmdb = propagated_gov.cmdb_present if propagated_gov else False
+    in_idp = direct_idp or propagated_idp
+    in_cmdb = direct_cmdb or propagated_cmdb
     in_cloud = correlation.cloud.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
     in_finance = correlation.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
-    
+
+    # Extract IdP metadata from direct matches
     has_sso = False
     has_scim = False
     is_service_principal = False
@@ -107,7 +116,15 @@ def _build_policy_asset_data(
             has_scim = True
         if hasattr(record, 'idp_type') and record.idp_type == "service_principal":
             is_service_principal = True
-    
+
+    # Jan 2026: If no direct IdP but has propagated IdP, use propagated metadata
+    if not direct_idp and propagated_idp and propagated_gov:
+        has_sso = propagated_gov.has_sso
+        has_scim = propagated_gov.has_scim
+        if propagated_gov.idp_type == "service_principal":
+            is_service_principal = True
+
+    # Extract CMDB metadata from direct matches
     ci_type = ""
     lifecycle = ""
     for record in correlation.cmdb.matched_records:
@@ -115,6 +132,13 @@ def _build_policy_asset_data(
             ci_type = record.ci_type
         if hasattr(record, 'lifecycle') and record.lifecycle:
             lifecycle = record.lifecycle
+
+    # Jan 2026: If no direct CMDB but has propagated CMDB, use propagated metadata
+    if not direct_cmdb and propagated_cmdb and propagated_gov:
+        if propagated_gov.ci_type:
+            ci_type = propagated_gov.ci_type
+        if propagated_gov.lifecycle:
+            lifecycle = propagated_gov.lifecycle
     
     monthly_spend = 0.0
     for record in correlation.finance.matched_records:
@@ -287,8 +311,12 @@ def run_pipeline_ephemeral(
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map
             )
-            
-            policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)
+
+            # Jan 2026 Fix: Pass propagated governance with metadata to policy engine
+            policy_asset_data = _build_policy_asset_data(
+                candidate, correlation, entity_observations,
+                propagated_gov=prop_gov
+            )
             policy_decision = policy_engine.evaluate(policy_asset_data)
 
             should_admit = policy_decision.admitted if use_policy_engine else admission_result.admitted
@@ -575,8 +603,12 @@ async def execute_pipeline(
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map
             )
-            
-            policy_asset_data = _build_policy_asset_data(candidate, correlation, entity_observations)
+
+            # Jan 2026 Fix: Pass propagated governance with metadata to policy engine
+            policy_asset_data = _build_policy_asset_data(
+                candidate, correlation, entity_observations,
+                propagated_gov=prop_gov
+            )
             policy_decision = policy_engine.evaluate(policy_asset_data)
             
             if admission_result.admitted != policy_decision.admitted:

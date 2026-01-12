@@ -63,7 +63,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "microsoftonline.com",
     "microsoft365.com",  # Added: was missing in original
     "azure.com",
-    "office.com",
+    # NOTE: office.com is a distinct service domain - NOT an alias (preserve identity)
     "office365.com",
     # NOTE: sharepoint.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     "live.com",
@@ -71,7 +71,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "onedrive.com",
     "powerbi.com",
     # Google family - collapse to google.com
-    "googleapis.com",
+    # NOTE: googleapis.com is a distinct service domain - NOT an alias (preserve identity)
     "gstatic.com",
     # NOTE: googleusercontent.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     # Zoom family - collapse to zoom.us

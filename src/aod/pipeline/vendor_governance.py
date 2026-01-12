@@ -20,11 +20,21 @@ from .vendor_inference import infer_vendor_from_domain, DOMAIN_TO_VENDOR
 
 @dataclass
 class PropagatedGovernance:
-    """Governance signals propagated from vendor siblings."""
+    """Governance signals propagated from vendor siblings.
+
+    Jan 2026 Fix: Include metadata fields so policy engine can evaluate strict requirements.
+    """
     idp_present: bool = False
     cmdb_present: bool = False
     source_entity: Optional[str] = None
     propagation_reason: Optional[str] = None
+    # IdP metadata (for policy engine strict requirements)
+    has_sso: bool = False
+    has_scim: bool = False
+    idp_type: Optional[str] = None
+    # CMDB metadata (for policy engine strict requirements)
+    ci_type: Optional[str] = None
+    lifecycle: Optional[str] = None
 
 
 def get_effective_vendor(entity: CandidateEntity) -> Optional[str]:
@@ -66,7 +76,7 @@ def propagate_vendor_governance(
     for vendor, vendor_correlations in vendor_to_entities.items():
         idp_source: Optional[CorrelationResult] = None
         cmdb_source: Optional[CorrelationResult] = None
-        
+
         for corr in vendor_correlations:
             if corr.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
                 if idp_source is None:
@@ -74,31 +84,53 @@ def propagate_vendor_governance(
             if corr.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
                 if cmdb_source is None:
                     cmdb_source = corr
-        
+
         if idp_source or cmdb_source:
             for corr in vendor_correlations:
                 has_direct_idp = corr.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
                 has_direct_cmdb = corr.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
-                
+
                 needs_idp = not has_direct_idp and idp_source is not None
                 needs_cmdb = not has_direct_cmdb and cmdb_source is not None
-                
+
                 if needs_idp or needs_cmdb:
                     reasons = []
                     source_name = None
-                    
-                    if needs_idp and idp_source:
+
+                    # Jan 2026: Extract metadata from source records for policy engine
+                    has_sso = False
+                    has_scim = False
+                    idp_type = None
+                    ci_type = None
+                    lifecycle = None
+
+                    if needs_idp and idp_source and idp_source.idp.matched_records:
                         reasons.append(f"IdP from {idp_source.entity.original_name}")
                         source_name = idp_source.entity.original_name
-                    if needs_cmdb and cmdb_source:
+                        # Extract IdP metadata from first matched record
+                        idp_record = idp_source.idp.matched_records[0]
+                        has_sso = getattr(idp_record, 'has_sso', False)
+                        has_scim = getattr(idp_record, 'has_scim', False)
+                        idp_type = getattr(idp_record, 'idp_type', None)
+
+                    if needs_cmdb and cmdb_source and cmdb_source.cmdb.matched_records:
                         reasons.append(f"CMDB from {cmdb_source.entity.original_name}")
                         source_name = source_name or cmdb_source.entity.original_name
-                    
+                        # Extract CMDB metadata from first matched record
+                        cmdb_record = cmdb_source.cmdb.matched_records[0]
+                        ci_type = getattr(cmdb_record, 'ci_type', None)
+                        lifecycle = getattr(cmdb_record, 'lifecycle', None)
+
                     propagated[corr.entity.entity_id] = PropagatedGovernance(
                         idp_present=needs_idp or has_direct_idp,
                         cmdb_present=needs_cmdb or has_direct_cmdb,
                         source_entity=source_name,
-                        propagation_reason=f"Vendor '{vendor}': " + ", ".join(reasons)
+                        propagation_reason=f"Vendor '{vendor}': " + ", ".join(reasons),
+                        has_sso=has_sso,
+                        has_scim=has_scim,
+                        idp_type=idp_type,
+                        ci_type=ci_type,
+                        lifecycle=lifecycle
                     )
     
     return propagated

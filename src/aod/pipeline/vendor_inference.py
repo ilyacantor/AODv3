@@ -184,6 +184,12 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "pivotaltracker.com": "Pivotal",
     "broadcom.com": "CA Technologies",
     "apache.org": "Apache",
+    "teamsuite.cloud": "TeamSuite",
+    "teamsuite.ai": "TeamSuite",
+    "teamsuite.org": "TeamSuite",
+    "corelabs.tech": "CoreLabs",
+    "corelabs.app": "CoreLabs",
+    "teamdesk.net": "TeamDesk",
 }
 
 

@@ -54,6 +54,8 @@ To debug specific assets:
 import pytest
 import json
 from pathlib import Path
+from typing import Optional
+from dataclasses import dataclass
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -73,15 +75,57 @@ ADMISSION_RECALL_THRESHOLD = 0.95
 ADMISSION_PRECISION_THRESHOLD = 0.95
 
 
-def load_snapshot():
-    """Load the real Farm snapshot fixture"""
-    with open(FIXTURES_DIR / "real_farm_snapshot.json", "r") as f:
+@dataclass
+class SnapshotConfig:
+    """Configuration for a snapshot test case"""
+    name: str
+    snapshot_file: str
+    expected_file: Optional[str] = None
+    snapshot_id: Optional[str] = None
+
+
+# Available snapshot configurations
+SNAPSHOT_CONFIGS = {
+    "netsystems": SnapshotConfig(
+        name="NetSystems-67KO",
+        snapshot_file="real_farm_snapshot.json",
+        expected_file="golden_expected_outcomes.json",
+        snapshot_id="08127784-f919-4a89-b827-ddd5578f358f"
+    ),
+    "aerosystems": SnapshotConfig(
+        name="AeroSystems-9FGY",
+        snapshot_file="aerosystems_snapshot.json",
+        expected_file="aerosystems_expected_outcomes.json",
+        snapshot_id="90a2fd69-42d7-4639-bc27-7ff973c3b084"
+    ),
+    "cyberhub": SnapshotConfig(
+        name="CyberHub-A2KA",
+        snapshot_file="cyberhub_snapshot.json",
+        expected_file="cyberhub_expected_outcomes.json",
+        snapshot_id="996ce7b6-be17-464d-b184-6d0a7b22772c"
+    ),
+}
+
+# Default snapshot for backward compatibility
+DEFAULT_SNAPSHOT = "netsystems"
+
+
+def load_snapshot(config_name: str = DEFAULT_SNAPSHOT):
+    """Load a Farm snapshot fixture by config name"""
+    config = SNAPSHOT_CONFIGS.get(config_name, SNAPSHOT_CONFIGS[DEFAULT_SNAPSHOT])
+    with open(FIXTURES_DIR / config.snapshot_file, "r") as f:
         return json.load(f)
 
 
-def load_expected_outcomes():
-    """Load the golden expected outcomes from Farm"""
-    with open(FIXTURES_DIR / "golden_expected_outcomes.json", "r") as f:
+def load_expected_outcomes(config_name: str = DEFAULT_SNAPSHOT):
+    """Load expected outcomes for a snapshot by config name"""
+    config = SNAPSHOT_CONFIGS.get(config_name, SNAPSHOT_CONFIGS[DEFAULT_SNAPSHOT])
+    if not config.expected_file:
+        return None
+    expected_path = FIXTURES_DIR / config.expected_file
+    if not expected_path.exists():
+        return None
+    with open(expected_path, "r") as f:
         return json.load(f)
 
 
@@ -186,10 +230,11 @@ def print_metrics_report(metrics: dict, recall_threshold: float, precision_thres
             print(f"    ... and {len(metrics['false_positives']) - 20} more")
 
 
-def run_pipeline_and_get_results():
+def run_pipeline_and_get_results(config_name: str = DEFAULT_SNAPSHOT):
     """Run the pipeline and return actual results - shared by all tests"""
-    snapshot = load_snapshot()
-    run_id = "golden_test"
+    snapshot = load_snapshot(config_name)
+    config = SNAPSHOT_CONFIGS.get(config_name, SNAPSHOT_CONFIGS[DEFAULT_SNAPSHOT])
+    run_id = f"golden_test_{config.name}"
     
     result = run_pipeline_ephemeral(
         snapshot,
@@ -210,6 +255,15 @@ def run_pipeline_and_get_results():
     )
     
     return actual_results
+
+
+def get_available_snapshots_with_expected():
+    """Get list of snapshot configs that have expected outcomes files"""
+    available = []
+    for key, config in SNAPSHOT_CONFIGS.items():
+        if config.expected_file and (FIXTURES_DIR / config.expected_file).exists():
+            available.append(key)
+    return available
 
 
 class TestGoldenReconciliation:

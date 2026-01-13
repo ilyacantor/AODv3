@@ -1154,21 +1154,60 @@ def _extract_base_name_from_domain(domain: Optional[str]) -> Optional[str]:
 def _extract_idp_domain(record: IdPObject) -> Optional[str]:
     """
     Extract registered domain from IdP record.
-    
-    Jan 2026: Domain-scoped IdP activity gating.
-    Checks domain field, then external_ref in raw_data.
-    
+
+    Jan 2026: Domain-scoped IdP activity gating + vendor-based domain inference.
+
+    Extraction logic (in order):
+    1. record.domain field
+    2. record.raw_data['external_ref']
+    3. Infer from record.name via VENDOR_TO_DOMAIN mapping
+
+    Step 3 enables vendor-based governance for name-only IdP matches.
+    Example: IdP record "Teamsuite" (no domain field) → infers "teamsuite.cloud"
+             which matches entity "teamsuite.ai" via vendor="TeamSuite"
+
     Returns:
         Registered domain (eTLD+1) if found, None otherwise
     """
+    from .vendor_inference import VENDOR_TO_DOMAIN
+
+    # Step 1: Check domain field
     idp_domain = record.domain
+
+    # Step 2: Check external_ref in raw_data
     if not idp_domain and record.raw_data and isinstance(record.raw_data, dict):
         ext_ref = record.raw_data.get('external_ref')
         if ext_ref and isinstance(ext_ref, str):
             ext_result = extract_domain(ext_ref)
             if ext_result.registered_domain:
                 idp_domain = ext_result.registered_domain
-    
+
+    # Step 3: Infer from name via VENDOR_TO_DOMAIN
+    # This enables cross-domain vendor governance for name-only IdP matches
+    if not idp_domain and record.name:
+        # Normalize IdP name for vendor lookup
+        normalized_name = record.name.lower().strip()
+
+        # Direct lookup (e.g., "microsoft 365" → "microsoft.com")
+        if normalized_name in VENDOR_TO_DOMAIN:
+            idp_domain = VENDOR_TO_DOMAIN[normalized_name]
+        else:
+            # Try matching vendor names (e.g., "Teamsuite" → find "TeamSuite" vendor → "teamsuite.cloud")
+            # Build reverse vendor map (vendor → domain)
+            from .vendor_inference import DOMAIN_TO_VENDOR
+            vendor_to_canonical_domain = {}
+            for domain, vendor in DOMAIN_TO_VENDOR.items():
+                vendor_lower = vendor.lower().strip()
+                if vendor_lower not in vendor_to_canonical_domain:
+                    # Prefer .com/.so/.io/.us domains as canonical
+                    vendor_to_canonical_domain[vendor_lower] = domain
+                elif domain.endswith(('.com', '.so', '.io', '.us')):
+                    vendor_to_canonical_domain[vendor_lower] = domain
+
+            # Check if IdP name matches a known vendor
+            if normalized_name in vendor_to_canonical_domain:
+                idp_domain = vendor_to_canonical_domain[normalized_name]
+
     if idp_domain:
         return extract_registered_domain(idp_domain)
     return None

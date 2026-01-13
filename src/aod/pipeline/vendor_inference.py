@@ -190,6 +190,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "corelabs.tech": "CoreLabs",
     "corelabs.app": "CoreLabs",
     "teamdesk.net": "TeamDesk",
+    "probox.co": "Probox",
 }
 
 

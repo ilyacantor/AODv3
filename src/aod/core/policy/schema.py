@@ -17,7 +17,7 @@ class AdmissionConfig:
     These values control when an entity qualifies for admission as an asset.
     """
     minimum_spend: float = 200.0
-    noise_floor: int = 2
+    noise_floor: int = 1
     zombie_window_days: int = 90
     require_sso_for_idp: bool = True
     require_valid_ci_type: bool = True

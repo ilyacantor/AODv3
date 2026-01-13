@@ -1,7 +1,7 @@
 [project]
-name = "repl-nix-workspace"
-version = "0.1.0"
-description = "Add your description here"
+name = "aod"
+version = "1.0.0"
+description = "AutonomOS Discover - Enterprise Asset Discovery Module"
 requires-python = ">=3.11"
 dependencies = [
     "aiosqlite>=0.21.0",
@@ -16,3 +16,10 @@ dependencies = [
     "python-multipart>=0.0.20",
     "uvicorn>=0.38.0",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

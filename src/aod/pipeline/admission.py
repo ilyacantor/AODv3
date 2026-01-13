@@ -1182,25 +1182,26 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Jan 2026 Fix: Farm requires EXACT registered domain matches for IdP governance.
+    Jan 2026 Fix: Multi-domain vendor governance alignment.
 
-    Critical finding: Cross-domain IdP matches (e.g., dataflow.cloud entity matched to
-    dataflow.net IdP) do NOT provide domain-aligned governance. Only exact domain matches count.
+    Domains match if:
+    1. Exact domain match (e.g., salesforce.com == salesforce.com)
+    2. Same vendor (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
 
-    Examples from Farm data:
-    - dataflow.cloud (entity) vs dataflow.net (IdP) → NO match (different TLDs)
-    - linkify.org (entity) vs linkify.app (IdP) → NO match (different TLDs)
-    - maxworks.app (entity) vs maxworks.net (IdP) → NO match (different TLDs)
-    - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact match)
+    This enables cross-domain IdP governance for multi-TLD vendors while preserving
+    the strict matching for unrelated domains with the same base name.
+
+    Examples:
+    - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH (same vendor "TeamSuite")
+    - dataflow.cloud (entity) vs dataflow.net (IdP) → NO MATCH (no vendor mapping)
+    - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
 
     Matching rules:
     1. IdP has no domain → False (name-only match, no domain alignment)
     2. Entity has no domain → True (allow match)
     3. Exact registered domain match → True
-    4. Different domains → False (including different TLDs of same base)
-
-    This fixes the bug where TLD-family matching incorrectly classified cross-domain
-    IdP matches as governed, causing Farm to expect them as shadows.
+    4. Same vendor (via DOMAIN_TO_VENDOR) → True
+    5. Different domains, no vendor link → False
     """
     # If IdP has no domain, it's a name-only match - NOT domain-aligned for governance
     if not idp_registered_domain:
@@ -1210,9 +1211,24 @@ def _idp_domain_matches_entity(
     if not entity_registered_domain:
         return True
 
-    # Farm requires EXACT registered domain match
-    # Cross-domain matches (different TLDs) do NOT count as governance
-    return idp_registered_domain == entity_registered_domain
+    # Exact registered domain match
+    if idp_registered_domain == entity_registered_domain:
+        return True
+
+    # Jan 2026 Fix: Check if both domains belong to the same vendor
+    # This enables multi-TLD vendor governance (teamsuite.cloud inherits from teamsuite.org)
+    from .vendor_inference import infer_vendor_from_domain
+
+    idp_vendor_result = infer_vendor_from_domain(idp_registered_domain)
+    entity_vendor_result = infer_vendor_from_domain(entity_registered_domain)
+
+    if idp_vendor_result and entity_vendor_result:
+        # Both domains have vendor mappings - check if they're the same vendor
+        if idp_vendor_result.value.lower() == entity_vendor_result.value.lower():
+            return True
+
+    # Different domains with no vendor link
+    return False
 
 
 def extract_activity_timestamps(

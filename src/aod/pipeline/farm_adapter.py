@@ -183,6 +183,45 @@ def _normalize_datetime(value: Any) -> str | None:
     return str(value)
 
 
+def _extract_domain_from_url(value: str | None) -> str | None:
+    """
+    Extract domain from a URL or return as-is if already a domain.
+    
+    Examples:
+        "https://salesforce.com" -> "salesforce.com"
+        "https://app.salesforce.com/login" -> "salesforce.com"
+        "salesforce.com" -> "salesforce.com"
+        None -> None
+    """
+    if not value:
+        return None
+    
+    value = str(value).strip()
+    
+    # Remove protocol prefix
+    if value.startswith(("https://", "http://")):
+        value = value.split("://", 1)[1]
+    
+    # Remove path/query/fragment
+    value = value.split("/")[0].split("?")[0].split("#")[0]
+    
+    # Remove port
+    if ":" in value:
+        value = value.split(":")[0]
+    
+    # Try to extract registered domain (eTLD+1)
+    try:
+        from tldextract import extract
+        ext = extract(value)
+        if ext.domain and ext.suffix:
+            return f"{ext.domain}.{ext.suffix}"
+    except ImportError:
+        pass
+    
+    # Fallback: return the cleaned hostname
+    return value.lower() if value else None
+
+
 def _generate_run_id(snapshot_id: str | None) -> str:
     """Generate deterministic run_id from snapshot_id."""
     if snapshot_id:
@@ -293,7 +332,11 @@ def _normalize_idp_objects(raw_list: list) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         try:
-            result.append(_apply_mapping(raw, IDP_OBJECT_MAPPING, "IdPObject"))
+            normalized = _apply_mapping(raw, IDP_OBJECT_MAPPING, "IdPObject")
+            # Jan 2026 Fix: Extract domain from URL (external_ref may be a full URL)
+            if normalized.get("domain"):
+                normalized["domain"] = _extract_domain_from_url(normalized["domain"])
+            result.append(normalized)
         except NormalizationError:
             pass
     return result
@@ -306,7 +349,11 @@ def _normalize_cmdb_cis(raw_list: list) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         try:
-            result.append(_apply_mapping(raw, CMDB_CI_MAPPING, "CMDBConfigItem"))
+            normalized = _apply_mapping(raw, CMDB_CI_MAPPING, "CMDBConfigItem")
+            # Jan 2026 Fix: Extract domain from URL (external_ref may be a full URL)
+            if normalized.get("domain"):
+                normalized["domain"] = _extract_domain_from_url(normalized["domain"])
+            result.append(normalized)
         except NormalizationError:
             pass
     return result

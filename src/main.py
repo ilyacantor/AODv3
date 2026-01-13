@@ -38,6 +38,12 @@ async def startup():
     await get_db_direct()
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment"""
+    return {"status": "ok"}
+
+
 @app.get("/favicon.ico")
 async def favicon():
     """Serve favicon"""

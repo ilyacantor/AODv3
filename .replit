@@ -40,8 +40,8 @@ externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd src && uvicorn main:app --host 0.0.0.0 --port 5000"]
-build = ["bash", "-c", "pip install -e ."]
+run = ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port"]
+build = ["pip", "install", "-r", "requirements.txt"]
 
 [userenv]
 

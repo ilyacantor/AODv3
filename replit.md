@@ -36,13 +36,6 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   Reason codes use `lens_coverage` (governance outcome), NOT `lens_status` (match existence)
 -   Heuristic correlations preserved in `lens_match_debug` for enrichment but don't set HAS_CMDB/HAS_IDP
 
-**Domain Merge (Jan 2026 Fix):**
--   Uses union-find on exact domains in `asset.identifiers.domains` only
--   Assets sharing ANY registered domain get merged into one
--   Merged asset preserves best governance (OR of all `lens_coverage` values)
--   Does NOT extract additional domains from correlations (that caused over-merging)
--   Eliminates duplicate assets that caused zombie false positives
-
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
 -   **Policy Categories:**

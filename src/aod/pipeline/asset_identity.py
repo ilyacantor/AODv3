@@ -52,16 +52,7 @@ def late_bind_and_merge_assets(
     run_logger: Optional[logging.Logger] = None
 ) -> list[Asset]:
     """
-    Apply late-binding domain naming and merge assets by shared domains.
-    
-    Uses union-find to group assets that share ANY domain in their identifiers.
-    This ensures assets like:
-      - easyforce (domains: ['easyforce.io'])
-      - Easyforce Legacy (domains: ['easyforce.co', 'easyforce.io'])
-    get merged because they share 'easyforce.io'.
-    
-    IMPORTANT: Only uses domains already in asset.identifiers.domains.
-    Does NOT extract additional domains from correlations (that was too aggressive).
+    Apply late-binding domain naming and merge assets by registered domain.
     
     Args:
         assets: List of admitted assets
@@ -79,27 +70,21 @@ def late_bind_and_merge_assets(
     
     log = run_logger or logger
     
+    groups: dict[str, list[Asset]] = defaultdict(list)
     standalone: list[Asset] = []
-    assets_with_domains: list[Asset] = []
     
     for asset in assets:
-        if asset.identifiers and asset.identifiers.domains:
-            assets_with_domains.append(asset)
+        merge_key = _compute_merge_key(asset)
+        if merge_key:
+            groups[merge_key].append(asset)
         else:
             standalone.append(asset)
-    
-    if not assets_with_domains:
-        return standalone
-    
-    groups = _group_assets_by_shared_domains(assets_with_domains, log)
     
     merged: list[Asset] = []
     merge_count = 0
     normalized_count = 0
     
-    for group in groups:
-        merge_key = _compute_canonical_merge_key(group)
-        
+    for merge_key, group in groups.items():
         if len(group) == 1:
             original = group[0]
             normalized_asset = _normalize_singleton(original, merge_key, log)
@@ -130,114 +115,6 @@ def late_bind_and_merge_assets(
         })
     
     return merged
-
-
-class _UnionFind:
-    """Union-Find data structure for grouping assets by shared domains."""
-    
-    def __init__(self, n: int):
-        self.parent = list(range(n))
-        self.rank = [0] * n
-    
-    def find(self, x: int) -> int:
-        if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])
-        return self.parent[x]
-    
-    def union(self, x: int, y: int) -> None:
-        px, py = self.find(x), self.find(y)
-        if px == py:
-            return
-        if self.rank[px] < self.rank[py]:
-            px, py = py, px
-        self.parent[py] = px
-        if self.rank[px] == self.rank[py]:
-            self.rank[px] += 1
-
-
-def _group_assets_by_shared_domains(
-    assets: list[Asset],
-    log: logging.Logger
-) -> list[list[Asset]]:
-    """
-    Group assets that share any registered domain using union-find.
-    
-    This groups assets like:
-      - Asset A: domains=['a.com', 'b.com']
-      - Asset B: domains=['b.com', 'c.com']
-    Into the same group because they share 'b.com'.
-    
-    Only uses registered domains (eTLD+1), excludes infrastructure domains.
-    """
-    if not assets:
-        return []
-    
-    n = len(assets)
-    uf = _UnionFind(n)
-    
-    domain_to_asset_idx: dict[str, int] = {}
-    
-    for idx, asset in enumerate(assets):
-        if not asset.identifiers or not asset.identifiers.domains:
-            continue
-        
-        for domain in asset.identifiers.domains:
-            if not domain:
-                continue
-            
-            registered = extract_registered_domain(domain)
-            if not registered:
-                continue
-            
-            if _is_sso_or_infrastructure_domain(registered):
-                continue
-            
-            if registered in domain_to_asset_idx:
-                other_idx = domain_to_asset_idx[registered]
-                uf.union(idx, other_idx)
-            else:
-                domain_to_asset_idx[registered] = idx
-    
-    groups_by_root: dict[int, list[Asset]] = defaultdict(list)
-    for idx, asset in enumerate(assets):
-        root = uf.find(idx)
-        groups_by_root[root].append(asset)
-    
-    return list(groups_by_root.values())
-
-
-def _compute_canonical_merge_key(assets: list[Asset]) -> str:
-    """
-    Compute canonical merge key for a group of assets.
-    
-    Picks the best registered domain across all assets:
-    1. Prefer non-SSO, non-infrastructure domains
-    2. Pick lexicographically smallest for determinism
-    """
-    candidates: set[str] = set()
-    
-    for asset in assets:
-        if not asset.identifiers or not asset.identifiers.domains:
-            continue
-        for domain in asset.identifiers.domains:
-            if not domain:
-                continue
-            registered = extract_registered_domain(domain)
-            if registered and not _is_sso_or_infrastructure_domain(registered):
-                candidates.add(registered)
-    
-    if candidates:
-        return sorted(candidates)[0]
-    
-    for asset in assets:
-        if not asset.identifiers or not asset.identifiers.domains:
-            continue
-        for domain in asset.identifiers.domains:
-            registered = extract_registered_domain(domain)
-            if registered:
-                return registered
-    
-    return "unknown"
 
 
 def _compute_merge_key(asset: Asset) -> Optional[str]:

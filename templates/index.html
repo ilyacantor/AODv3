@@ -23,6 +23,7 @@
                 <button class="header-nav-tab" data-tab="overview">Overview</button>
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
+                <button class="header-nav-tab" data-tab="policy">Policy</button>
                 <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
             </nav>
         </div>
@@ -257,6 +258,15 @@
                 </div>
             </div>
         </main>
+    </div>
+    
+    <div id="policyTabContent" class="main-tab-content">
+        <iframe 
+            id="policyIframe"
+            class="overview-iframe"
+            title="Policy Switchboard"
+            src="/static/policy-switchboard.html"
+        ></iframe>
     </div>
     
     <div id="testTabContent" class="main-tab-content">

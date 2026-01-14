@@ -32,11 +32,11 @@ class AdmissionGatesConfig:
     require_sso_for_idp: bool = True
     require_valid_ci_type: bool = True
     require_valid_lifecycle: bool = True
-    min_discovery_sources_for_shadow: int = 2
+    min_discovery_sources_for_shadow: int = 1  # Match Farm: single source is sufficient
     allow_finance_only_admission: bool = False
     enable_vendor_propagation: bool = True
     finance_requires_discovery: bool = True
-    require_corroboration: bool = True
+    require_corroboration: bool = False  # Match Farm: honor noise_floor=1
     stale_window_days: int = 30
 
 

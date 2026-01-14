@@ -80,11 +80,11 @@ def _load_from_master(data: dict) -> PolicyConfig:
         require_sso_for_idp=_extract_value(ag_section, "require_sso_for_idp", True),
         require_valid_ci_type=_extract_value(ag_section, "require_valid_ci_type", True),
         require_valid_lifecycle=_extract_value(ag_section, "require_valid_lifecycle", True),
-        min_discovery_sources_for_shadow=_extract_value(ag_section, "min_discovery_sources_for_shadow", 2),
+        min_discovery_sources_for_shadow=_extract_value(ag_section, "min_discovery_sources_for_shadow", 1),  # Match Farm
         allow_finance_only_admission=_extract_value(ag_section, "allow_finance_only_admission", False),
         enable_vendor_propagation=_extract_value(ag_section, "enable_vendor_propagation", True),
         finance_requires_discovery=_extract_value(ag_section, "finance_requires_discovery", True),
-        require_corroboration=_extract_value(ag_section, "require_corroboration", True),
+        require_corroboration=_extract_value(ag_section, "require_corroboration", False),  # Match Farm
         stale_window_days=_extract_value(ag_section, "stale_window_days", 30),
     )
     

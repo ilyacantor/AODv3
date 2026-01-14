@@ -1745,8 +1745,8 @@ def apply_admission_criteria(
     # =========================================================================
     # FARM ADMISSION POLICY (Jan 2026 Fix) - Now policy-driven
     # =========================================================================
-    from aod.core.policy.loader import get_policy_config
-    policy_config = get_policy_config()
+    from aod.core.policy.loader import get_current_config
+    policy_config = get_current_config()
     
     # Policy toggles
     enable_vendor_propagation = policy_config.admission_gates.enable_vendor_propagation

@@ -405,10 +405,12 @@ def classify_shadow(asset: Asset, activity_window_days: Optional[int] = None) ->
             evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
         )
     
-    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Use lens_coverage for governance (reflects gate-validated admission, not raw match)
+    # This aligns with Farm's passes_gate logic
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
     
-    has_cloud = asset.lens_coverage.cloud
+    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
     # Source of truth: asset.discovery_sources (set by admission from footprint)
     has_discovery = bool(getattr(asset, "discovery_sources", None))
     
@@ -483,7 +485,7 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
     
     Where:
-    - is_governed = has_idp OR has_cmdb (matches PolicyEngine._classify)
+    - is_governed = has_idp OR has_cmdb (uses lens_coverage for gate-validated admission)
     - activity_status==STALE means we have timestamps outside the window
     - has_ongoing_finance = recurring contracts/subscriptions (paying for it)
     - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
@@ -498,8 +500,9 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     Returns:
         Tuple of (is_zombie, is_indeterminate, reason)
     """
-    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Use lens_coverage for governance (reflects gate-validated admission, not raw match)
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
     
     is_governed = has_idp or has_cmdb
     
@@ -563,8 +566,9 @@ def classify_zombie(asset: Asset, activity_window_days: Optional[int] = None) ->
         )
     
     if asset.provisioning_status == ProvisioningStatus.REVIEW:
-        has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        # Use lens_coverage for governance (reflects gate-validated admission)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
         
         official_sources = []
         if has_idp:
@@ -597,8 +601,9 @@ def classify_zombie(asset: Asset, activity_window_days: Optional[int] = None) ->
             evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
         )
     
-    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Use lens_coverage for governance (reflects gate-validated admission)
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
     
     if not (has_idp or has_cmdb):
         return ClassificationResult(
@@ -976,10 +981,11 @@ def compute_domain_rollups(
     for asset in assets:
         domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
         
-        has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_finance = asset.lens_status.finance in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-        has_cloud = asset.lens_status.cloud in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+        # Use lens_coverage for governance (reflects gate-validated admission)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+        has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
         # Source of truth: asset.discovery_sources (set by admission from footprint)
         has_discovery = bool(getattr(asset, "discovery_sources", None))
         has_ongoing_finance = any(

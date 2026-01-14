@@ -557,16 +557,28 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     return False, ""
 
 
-def check_cmdb_admission(correlation: CorrelationResult) -> tuple[bool, str]:
+def check_cmdb_admission(
+    correlation: CorrelationResult,
+    require_valid_ci_type: bool = True,
+    require_valid_lifecycle: bool = True
+) -> tuple[bool, str]:
     """
-    Check CMDB plane admission criteria:
-    - CMDB match (any CI is sufficient for admission)
-    - Prefer: ci_type in app/service/database/infra AND lifecycle in prod/staging (stronger signal)
-    NOTE: Both MATCHED and AMBIGUOUS count as having CMDB evidence.
+    Check CMDB plane admission criteria with policy-driven gate enforcement.
     
-    RELAXED: Any CMDB match counts. Valid ci_type/lifecycle provides stronger confidence but is not required.
+    Gate logic:
+    - If require_valid_ci_type=True, ci_type must be in VALID_CI_TYPES
+    - If require_valid_lifecycle=True, lifecycle must be in VALID_LIFECYCLES
+    - A record must pass ALL enabled gates to be admitted
+    - No fallback: if gates are enabled and all records fail, admission is denied
+    
+    This aligns with Farm's behavior where passes_gate=false means no governance.
+    
+    NOTE: Both MATCHED and AMBIGUOUS correlation status count as having CMDB evidence.
     """
     if correlation.cmdb.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return False, ""
+    
+    if not correlation.cmdb.matched_records:
         return False, ""
     
     for record in correlation.cmdb.matched_records:
@@ -574,13 +586,13 @@ def check_cmdb_admission(correlation: CorrelationResult) -> tuple[bool, str]:
             ci_type_valid = record.ci_type.lower() in VALID_CI_TYPES
             lifecycle_valid = record.lifecycle.lower() in VALID_LIFECYCLES
             
-            if ci_type_valid and lifecycle_valid:
+            ci_passes = ci_type_valid or not require_valid_ci_type
+            lifecycle_passes = lifecycle_valid or not require_valid_lifecycle
+            
+            if ci_passes and lifecycle_passes:
                 return True, f"CMDB match: {record.ci_type} in {record.lifecycle}"
     
-    if correlation.cmdb.matched_records:
-        return True, "CMDB match (configuration item)"
-    
-    return False, ""
+    return False, "CMDB match failed gate validation (ci_type/lifecycle)"
 
 
 def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
@@ -1718,9 +1730,17 @@ def apply_admission_criteria(
             rejection_reason=f"Corporate root domain: {registered_domain} (from {effective_domain})"
         )
     
+    # Load policy config BEFORE admission checks (needed for CMDB gates)
+    from aod.core.policy.loader import get_current_config
+    policy_config = get_current_config()
+    
     # Check each admission criterion FIRST (before infrastructure filter)
     idp_admitted, idp_reason = check_idp_admission(correlation, entity_registered_domain=registered_domain)
-    cmdb_admitted, cmdb_reason = check_cmdb_admission(correlation)
+    cmdb_admitted, cmdb_reason = check_cmdb_admission(
+        correlation,
+        require_valid_ci_type=policy_config.admission_gates.require_valid_ci_type,
+        require_valid_lifecycle=policy_config.admission_gates.require_valid_lifecycle
+    )
 
     # GATE 2: Reject infrastructure/tooling domains ONLY if they lack governance
     # Jan 2026 Fix: Farm admits infrastructure domains (postgresql.org, mongodb.com, etc.)
@@ -1745,8 +1765,7 @@ def apply_admission_criteria(
     # =========================================================================
     # FARM ADMISSION POLICY (Jan 2026 Fix) - Now policy-driven
     # =========================================================================
-    from aod.core.policy.loader import get_current_config
-    policy_config = get_current_config()
+    # policy_config already loaded above (before CMDB gates)
     
     # Policy toggles
     enable_vendor_propagation = policy_config.admission_gates.enable_vendor_propagation

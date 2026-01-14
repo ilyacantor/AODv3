@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 AOS Discover operates on core principles including no ground truth ingestion, no ML/anomaly scores, determinism, and evidence-only decisions, distinguishing between assets and artifacts to prevent asset count inflation.
 
-The system processes data through an 8-stage sequential pipeline: Validation, Normalization, Indexing, Correlation, **Domain Merge**, Admission, Artifact Handling, and Findings Generation.
+The system processes data through a 7-stage sequential pipeline: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Findings Generation.
 
 **Governance Trinity:** Assets are classified as "Shadow" if they lack Visibility (CMDB registration), Validation (IdP presence), or Control (managed lifecycle). The system rejects the concept of "Grey IT."
 
@@ -59,7 +59,6 @@ The system processes data through an 8-stage sequential pipeline: Validation, No
 -   **Indexing Enhancements:** Extracts and indexes base names from registered domains and vendor names from finance transactions.
 -   **Token-Based Finance Correlation:** Uses token-based matching for finance transactions based on domain base tokens and vendor names, with post-processing to expand finance records for complete vendor data.
 -   **Discovery Sources Single Source of Truth:** `discovery_sources` is the canonical source for `HAS_DISCOVERY`, ensuring consistent reconciliation labels.
--   **Domain Merge Stage (Jan 2026):** Enforces the invariant "one asset per registered domain" at materialization time. Uses union-find connected components to merge entities with overlapping registered domains before admission. Merge rules: governance via OR aggregation (`cmdb_present = OR(cmdb_present)` across merged entities), domains via union, activity via max timestamp. Eliminates duplicate assets that caused zombie/shadow classification conflicts.
 -   **Performance Optimizations:** Utilizes memoization and pre-computation for entity normalization tokens.
 -   **Traffic Light Provisioning:** A fail-closed system for asset provisioning with various statuses.
 -   **UI Design:** Adheres to the AutonomOS palette with cyan and purple accents, a dark slate foundation, and the Quicksand font.

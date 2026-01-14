@@ -19,9 +19,6 @@ from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
-from .merge_correlated_entities import (
-    merge_by_registered_domain, assert_domain_invariant, convert_merged_to_correlation
-)
 from .vendor_governance import propagate_vendor_governance, PropagatedGovernance
 from .admission import (
     apply_admission_criteria, AdmissionResult, build_idp_activity_map,
@@ -290,13 +287,8 @@ def run_pipeline_ephemeral(
         correlations = correlate_entities_to_planes(candidates, indexes)
         
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
-        filtered_entity_ids = {c.entity_id for c in filtered_candidates}
         
-        filtered_correlations = [c for c in correlations if c.entity.entity_id in filtered_entity_ids]
-        
-        merged_correlations, domain_to_component = merge_by_registered_domain(filtered_correlations)
-        assert_domain_invariant(merged_correlations, domain_to_component)
-        logger.info(f"Domain merge: {len(filtered_correlations)} entities -> {len(merged_correlations)} merged entities")
+        correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
         
         propagated_governance = propagate_vendor_governance(correlations)
         
@@ -307,24 +299,24 @@ def run_pipeline_ephemeral(
         assets = []
         rejections = []
         
-        for merged in sorted(merged_correlations, key=lambda m: m.primary_entity.entity_id):
-            candidate = merged.primary_entity
-            correlation = convert_merged_to_correlation(merged)
+        for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
+            correlation = correlation_by_entity_id.get(candidate.entity_id)
+            if not correlation:
+                rejections.append({
+                    "entity_key": candidate.entity_id,
+                    "entity_name": candidate.original_name,
+                    "reason_code": "no_correlation",
+                    "reason_detail": "Entity not found in correlation results",
+                    "evidence_summary": {"source": candidate.source, "domain": candidate.domain}
+                })
+                continue
             
-            prop_idp = merged.idp_present
-            prop_cmdb = merged.cmdb_present
-            prop_reason = None
-            for eid in merged.merged_entity_ids:
-                prop_gov = propagated_governance.get(eid)
-                if prop_gov:
-                    if prop_gov.idp_present:
-                        prop_idp = True
-                    if prop_gov.cmdb_present:
-                        prop_cmdb = True
-                    if prop_gov.propagation_reason:
-                        prop_reason = prop_gov.propagation_reason
+            prop_gov = propagated_governance.get(candidate.entity_id)
+            prop_idp = prop_gov.idp_present if prop_gov else False
+            prop_cmdb = prop_gov.cmdb_present if prop_gov else False
+            prop_reason = prop_gov.propagation_reason if prop_gov else None
             
-            entity_observations = [obs for obs in observations if obs.observation_id in merged.merged_observation_ids]
+            entity_observations = [obs for obs in observations if obs.observation_id in candidate.observation_ids]
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
@@ -594,14 +586,7 @@ async def execute_pipeline(
         run_log.counts.artifacts_recorded = len(artifacts)
         run_log.counts.candidates_out = len(filtered_candidates)
         
-        filtered_entity_ids = {c.entity_id for c in filtered_candidates}
-        filtered_correlations = [c for c in correlations if c.entity.entity_id in filtered_entity_ids]
-        
-        t_merge_start = time.perf_counter()
-        merged_correlations, domain_to_component = merge_by_registered_domain(filtered_correlations)
-        assert_domain_invariant(merged_correlations, domain_to_component)
-        timings['domain_merge'] = time.perf_counter() - t_merge_start
-        logger.info(f"Domain merge: {len(filtered_correlations)} entities -> {len(merged_correlations)} merged entities")
+        correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
         
         propagated_governance = propagate_vendor_governance(correlations)
         
@@ -617,24 +602,24 @@ async def execute_pipeline(
         assets = []
         rejections_batch = []
         
-        for merged in sorted(merged_correlations, key=lambda m: m.primary_entity.entity_id):
-            candidate = merged.primary_entity
-            correlation = convert_merged_to_correlation(merged)
+        for candidate in sorted(filtered_candidates, key=lambda c: c.entity_id):
+            correlation = correlation_by_entity_id.get(candidate.entity_id)
+            if not correlation:
+                rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
+                rejections_batch.append((
+                    rejection_id, run_id, candidate.entity_id, candidate.original_name,
+                    "no_correlation", "Entity not found in correlation results",
+                    json.dumps({"source": candidate.source, "domain": candidate.domain}),
+                    started_at.isoformat()
+                ))
+                continue
             
-            prop_idp = merged.idp_present
-            prop_cmdb = merged.cmdb_present
-            prop_reason = None
-            for eid in merged.merged_entity_ids:
-                prop_gov = propagated_governance.get(eid)
-                if prop_gov:
-                    if prop_gov.idp_present:
-                        prop_idp = True
-                    if prop_gov.cmdb_present:
-                        prop_cmdb = True
-                    if prop_gov.propagation_reason:
-                        prop_reason = prop_gov.propagation_reason
+            prop_gov = propagated_governance.get(candidate.entity_id)
+            prop_idp = prop_gov.idp_present if prop_gov else False
+            prop_cmdb = prop_gov.cmdb_present if prop_gov else False
+            prop_reason = prop_gov.propagation_reason if prop_gov else None
             
-            entity_observations = [obs for obs in observations if obs.observation_id in merged.merged_observation_ids]
+            entity_observations = [obs for obs in observations if obs.observation_id in candidate.observation_ids]
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,

@@ -230,14 +230,14 @@ def compute_asset_reasons(
     """
     Compute the canonical reason codes for an asset's current state.
     
-    IMPORTANT: HAS_CMDB/HAS_IDP codes mean GOVERNANCE PRESENCE (matching, not admission).
-    - HAS_CMDB = CMDB match exists (regardless of ci_type/lifecycle admission criteria)
-    - HAS_IDP = IdP match exists (regardless of has_sso/has_scim admission criteria)
+    IMPORTANT: HAS_CMDB/HAS_IDP codes mean GOVERNANCE GRANTED (passes gates + authoritative match).
+    - HAS_CMDB = CMDB match with authoritative method (domain/uri/canonical_name) passing gates
+    - HAS_IDP = IdP match with authoritative method (domain/uri/canonical_name) passing gates
     - HAS_FINANCE = finance evidence with RECURRING spend (one-time purchases excluded)
     - HAS_DISCOVERY = discovery observations exist (even if stale)
     
-    Uses lens_status (raw matching) for CMDB/IDP governance to ensure any match
-    counts as governed, regardless of whether admission criteria are met.
+    Jan 2026 Fix: Uses lens_coverage (governance granted) for CMDB/IDP, not lens_status (match exists).
+    Heuristic matches (fuzzy, vendor, contains) appear in lens_match_debug but don't grant governance.
     Uses lens_coverage for finance/cloud to respect policy filters.
     
     Args:
@@ -253,8 +253,10 @@ def compute_asset_reasons(
     reasons = []
     evidence = {}
     
-    has_idp = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    has_cmdb = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Jan 2026 Fix: Use lens_coverage (governance granted) not lens_status (match exists)
+    # HAS_CMDB/HAS_IDP mean "passes gates + authoritative match", not "any correlation"
+    has_idp = asset.lens_coverage.idp
+    has_cmdb = asset.lens_coverage.cmdb
     has_finance = asset.lens_coverage.finance
     has_cloud = asset.lens_coverage.cloud
     # Source of truth: asset.discovery_sources (set by admission from footprint)

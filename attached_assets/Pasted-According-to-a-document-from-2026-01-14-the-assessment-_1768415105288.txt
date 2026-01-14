@@ -1,0 +1,52 @@
+According to a document from **2026-01-14**, the assessment is calling `smartcloud.org` a *missed shadow* because AOD’s reason codes include **`HAS_CMDB`**, while Farm’s include **`NO_CMDB`**.
+
+Your AOD trace says something that *cannot* be true at the same time:
+
+* Trace: `lens_coverage.cmdb = false` (so “CMDB did **not** grant governance”)
+* Report: AOD reason codes include `HAS_CMDB` (so “CMDB **is present**”)
+
+That contradiction is the whole story.
+
+## What’s happening
+
+There are **two different CMDB concepts** in AOD, but they’re being **collapsed into one label** in the assessment output:
+
+1. **CMDB matched** (a correlation exists — even heuristic)
+2. **CMDB governed** (passes gates → should influence governance)
+
+Your trace is showing (2) is false — good.
+But the assessment is still seeing (1) and printing it as **`HAS_CMDB`** — bad / misleading.
+
+So “old code” is almost certainly **not** the issue here. The issue is that the assessment (or decision trace/reason code builder) is using the wrong field:
+
+* It’s using **“matched_records exists” ⇒ `HAS_CMDB`**
+  instead of
+* **“cmdb_present / cmdb_governed” ⇒ `HAS_CMDB`**
+
+That matches exactly what the report says: “AOD correlated … to a CMDB CI” and then tags `HAS_CMDB` even though Farm’s governance contract is about *passing gates*, not “some match exists.”
+
+## Why this keeps looking like “old code”
+
+Because even after you fixed admission/gating, the assessment will **still** show `HAS_CMDB` as long as:
+
+* heuristic correlations are preserved (as you want), and
+* the reason-code generator treats “any correlation” as `HAS_CMDB`.
+
+So every time you run, it *looks like the fix didn’t take*, because the label is wrong.
+
+## The one fix to resolve this cleanly
+
+Rename / split reason codes so they reflect the two states:
+
+* `HAS_CMDB_MATCH` (correlation exists, possibly heuristic)
+* `HAS_CMDB_GOVERNANCE` (passes gates; equivalent to Farm’s `HAS_CMDB`)
+
+Then update the assessment comparator:
+
+* Compare Farm `HAS_CMDB` only against **AOD `HAS_CMDB_GOVERNANCE`**, not against “any match.”
+
+## Sanity check against the report
+
+The report explicitly frames the mismatch as **“AOD found governance correlation”**, but the trace shows governance was not granted. That means the report is **equating correlation with governance**, which is the bug.
+
+If you paste the exact code that builds AOD reason codes (`HAS_CMDB`, `HAS_IDP`, `ANCHORED`) I’ll point to the specific conditional that needs to change (it’ll be a 1–3 line fix: use `lens_coverage.cmdb` / `cmdb_present` instead of `matched_records`).

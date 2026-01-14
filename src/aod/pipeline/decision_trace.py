@@ -202,8 +202,10 @@ def compute_decision_trace(asset: Asset, activity_window_days: int = 90) -> Deci
     
     is_active, activity_source, latest_at = _get_activity_info(asset, activity_window_days)
     
-    idp_present = asset.lens_status.idp in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
-    cmdb_present = asset.lens_status.cmdb in (LensStatus.MATCHED, LensStatus.AMBIGUOUS)
+    # Jan 2026 Fix: Use lens_coverage (governance granted) not lens_status (match exists)
+    # HAS_CMDB/HAS_IDP mean "passes gates + authoritative match", not "any correlation"
+    idp_present = asset.lens_coverage.idp
+    cmdb_present = asset.lens_coverage.cmdb
     
     is_shadow = False
     reason_codes = []

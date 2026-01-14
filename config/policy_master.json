@@ -85,7 +85,7 @@
       "ui_label": "Require Valid Lifecycle"
     },
     "min_discovery_sources_for_shadow": {
-      "value": 2,
+      "value": 1,
       "type": "integer",
       "min": 1,
       "max": 10,
@@ -111,7 +111,7 @@
       "ui_label": "Finance Requires Discovery"
     },
     "require_corroboration": {
-      "value": true,
+      "value": false,
       "type": "boolean",
       "description": "Require 2+ discovery sources for discovery-only admission (set false to honor noise_floor=1)",
       "ui_label": "Require Discovery Corroboration"

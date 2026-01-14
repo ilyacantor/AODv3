@@ -659,6 +659,14 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
     
     Derives reason codes from rejection metadata to explain
     why the candidate was not admitted.
+    
+    Jan 2026 Fix: Governance semantics - rejected candidates by definition
+    do NOT have governance. HAS_IDP/HAS_CMDB require admission (authoritative
+    match + passes gates). Raw correlation presence in rejected candidates
+    is just enrichment, not governance.
+    
+    INVARIANT: Rejected candidates always emit NO_IDP, NO_CMDB.
+    This prevents zombie classification on rejected candidates.
     """
     reasons = []
     reason_code = rejection.get("reason_code", "").lower()
@@ -672,22 +680,27 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
     if "no_gate" in reason_code or "gate" in reason_code:
         reasons.append("REJECTED_NO_GATE")
     
-    if evidence.get("has_idp"):
+    # Jan 2026 Fix: Rejected candidates NEVER have governance.
+    # HAS_IDP/HAS_CMDB mean "governance granted" (authoritative match + passes gates).
+    # Since this candidate was rejected, it definitionally lacks governance.
+    # Use lens_coverage from evidence if available, otherwise assume no governance.
+    lens_coverage = evidence.get("lens_coverage", {})
+    if lens_coverage.get("idp", False):
         reasons.append("HAS_IDP")
     else:
         reasons.append("NO_IDP")
     
-    if evidence.get("has_cmdb"):
+    if lens_coverage.get("cmdb", False):
         reasons.append("HAS_CMDB")
     else:
         reasons.append("NO_CMDB")
     
-    if evidence.get("has_finance"):
+    if evidence.get("has_finance") or lens_coverage.get("finance", False):
         reasons.append("HAS_FINANCE")
     else:
         reasons.append("NO_FINANCE")
     
-    if evidence.get("has_discovery"):
+    if evidence.get("has_discovery") or lens_coverage.get("discovery", False):
         reasons.append("HAS_DISCOVERY")
     else:
         reasons.append("NO_DISCOVERY")

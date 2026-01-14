@@ -94,10 +94,21 @@ def _build_policy_asset_data(
     Translates correlation results into the flat structure expected by PolicyEngine.
 
     Jan 2026 Fix: Include vendor-propagated governance AND metadata in policy evaluation.
+    
+    Jan 2026 Fix: Governance principle - only AUTHORITATIVE matches can assert governance.
+    Heuristic matches (fuzzy, vendor, contains) provide enrichment but not governance.
+    in_idp/in_cmdb now require both match existence AND authoritative match method.
     """
-    # Jan 2026: Include both direct matches AND vendor-propagated governance
-    direct_idp = correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
-    direct_cmdb = correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+    # Jan 2026 Fix: Governance requires AUTHORITATIVE match, not just any match
+    # Heuristic matches (fuzzy, vendor, contains) are enrichment-only, cannot grant governance
+    direct_idp = (
+        correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+        and correlation.idp.is_authoritative
+    )
+    direct_cmdb = (
+        correlation.cmdb.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
+        and correlation.cmdb.is_authoritative
+    )
     propagated_idp = propagated_gov.idp_present if propagated_gov else False
     propagated_cmdb = propagated_gov.cmdb_present if propagated_gov else False
     in_idp = direct_idp or propagated_idp

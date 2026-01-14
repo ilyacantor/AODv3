@@ -1,0 +1,73 @@
+Yep — this run shows **systemic** issues very clearly, and they’re now small in number.
+
+### Where you are now (run_30b8c2c26802)
+
+* **Admission:** 98.0% (1182/1206)
+* **Classification:** 89.6% (543/554)
+* **Combined:** 95.2%
+
+The remaining errors are concentrated in just a few buckets:
+
+1. **FP_FROM_CLEAN = 43** (biggest systemic problem)
+2. **FP_FROM_NOT-ADMITTED = 9** (systemic admission leak)
+3. **CMDB/IdP correlation mismatch = 10 total** (now small)
+4. **UNGOVERNED_ACTIVE = 1** (edge)
+
+---
+
+## Systemic issue #1: “Clean → Shadow” false positives (43)
+
+Look at the pattern in the examples: Farm says **HAS_IDP** (governed) but AOD says **NO_IDP** and then calls it shadow.
+
+That means one of these is true (systemic):
+
+* **AOD is failing to set `idp_present` when it should** (IdP gate logic too strict / wrong signal like “has_sso” missing), or
+* **AOD is computing reason code NO_IDP off the wrong field** (matched vs present), just like the earlier HAS_CMDB labeling issue.
+
+**Fix target (systemic):** make AOD’s `HAS_IDP` / `NO_IDP` reason codes derive from the same authoritative flag that drives governance (`lens_coverage.idp` / `idp_present`), not from “any idp match exists” or “any idp object exists.”
+This is the same “matched vs present” split, but on IdP.
+
+Why this is the top priority: it’s 43 errors, the biggest bucket.
+
+---
+
+## Systemic issue #2: AOD is classifying “not-admitted” assets as Zombies (9)
+
+The zombie false positives show **NO_DISCOVERY** plus **HAS_CMDB** plus **ZOMBIE_CLASSIFICATION**.
+
+Two systemic problems are implied:
+
+* Zombie classifier is running on assets that should have been **rejected/not admitted**, and/or
+* The same **HAS_CMDB labeling** problem: AOD is emitting `HAS_CMDB` on assets where Farm has `NO_CMDB`.
+
+**Fix target (systemic):**
+
+* Enforce invariant: **Zombie classification only applies to admitted/cataloged assets**, never to “not admitted” ones.
+* Ensure `HAS_CMDB` in reason codes means **cmdb_present (gate-passed)**, not “some correlation exists.”
+
+This bucket is small (9) but it’s a clean systemic rule and easy to stamp out.
+
+---
+
+## Systemic issue #3: Correlation mismatch labeling is still confusing (but now only 10 assets)
+
+The “Policy Differences” section still lists CMDB mismatch assets where AOD reason codes include `HAS_CMDB` even when Farm says `NO_CMDB`.
+
+Given your earlier trace on smartcloud.org, this is likely **labeling**, not governance.
+
+**Fix target (systemic):**
+
+* Rename reason codes or change the comparator:
+
+  * `HAS_CMDB` should mean **governance** (gate-passed presence).
+  * If you want to keep enrichment matches, emit `HAS_CMDB_MATCH` separately.
+
+---
+
+## What I would do next (order)
+
+1. **Fix IdP “present vs matched” semantics** → should collapse most of the 43 FP_FROM_CLEAN
+2. **Stop zombie classification from running on not-admitted assets** + fix `HAS_CMDB` semantics → kills the 9 FP zombies
+3. **Clean up reason-code labeling/comparator** → removes the remaining “correlation mismatch” noise (8+2)
+
+If you paste the AOD fields used to compute `HAS_IDP/NO_IDP` and the zombie classifier trigger condition (“which assets get evaluated as zombie”), I’ll give you the exact invariant checks to add (usually 2–5 lines each) to eliminate these classes of errors.

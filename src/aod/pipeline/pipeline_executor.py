@@ -292,7 +292,7 @@ def run_pipeline_ephemeral(
             correlation = correlation_by_entity_id.get(candidate.entity_id)
             if not correlation:
                 rejections.append({
-                    "entity_key": f"entity:{candidate.entity_id}",
+                    "entity_key": candidate.entity_id,
                     "entity_name": candidate.original_name,
                     "reason_code": "no_correlation",
                     "reason_detail": "Entity not found in correlation results",
@@ -331,7 +331,7 @@ def run_pipeline_ephemeral(
                 rejection_registered_domain = extract_registered_domain(rejection_domain) if rejection_domain else None
                 
                 rejections.append({
-                    "entity_key": f"entity:{candidate.entity_id}",
+                    "entity_key": candidate.entity_id,
                     "entity_name": candidate.original_name,
                     "reason_code": "admission_failed",
                     "reason_detail": admission_result.rejection_reason or "No admission criteria satisfied",

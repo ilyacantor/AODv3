@@ -6,21 +6,30 @@ and supports runtime reloading without restart.
 """
 
 import json
-import os
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from .schema import PolicyConfig, AdmissionConfig, ScopeConfig
+from .schema import (
+    PolicyConfig,
+    AdmissionConfig,
+    ScopeConfig,
+    ActivityWindowsConfig,
+    FinanceThresholdsConfig,
+    AdmissionGatesConfig,
+    ScopeTogglesConfig,
+    FuzzyMatchingConfig,
+    VendorInferenceConfig,
+    QueryLimitsConfig,
+    ExclusionListsConfig,
+    FarmSyncConfig,
+)
 
 
 _current_config: Optional[PolicyConfig] = None
+_master_config_data: Optional[dict] = None
 
 CORPORATE_ROOT_DOMAINS: set[str] = set()
-# Empty - SaaS vendor domains are legitimate discovery targets.
-# This was incorrectly populated with major SaaS vendors (pagerduty.com,
-# zendesk.com, okta.com, etc.) which caused them to be killed at admission.
-# Corporate root domains are meant for MARKETING websites of a tenant's
-# own company, not third-party SaaS platforms they use.
 
 
 def _get_infrastructure_domains() -> set[str]:
@@ -38,60 +47,232 @@ def _get_infrastructure_domains() -> set[str]:
         }
 
 
-def load_config(path: Optional[str] = None) -> PolicyConfig:
-    """
-    Load policy configuration from JSON file.
+def _extract_value(section: dict, key: str, default: Any) -> Any:
+    """Extract the 'value' field from a policy_master.json setting."""
+    setting = section.get(key, {})
+    if isinstance(setting, dict) and "value" in setting:
+        return setting["value"]
+    return default
+
+
+def _load_from_master(data: dict) -> PolicyConfig:
+    """Load PolicyConfig from policy_master.json format."""
+    global _master_config_data
+    _master_config_data = data
     
-    Falls back to sensible defaults if file doesn't exist.
+    aw_section = data.get("activity_windows", {})
+    activity_windows = ActivityWindowsConfig(
+        discovery_activity_window_days=_extract_value(aw_section, "discovery_activity_window_days", 90),
+        zombie_window_days=_extract_value(aw_section, "zombie_window_days", 90),
+        default_activity_window_days=_extract_value(aw_section, "default_activity_window_days", 90),
+    )
     
-    Args:
-        path: Optional path to config file. Defaults to config/policy.json
+    ft_section = data.get("finance_thresholds", {})
+    finance_thresholds = FinanceThresholdsConfig(
+        minimum_spend=_extract_value(ft_section, "minimum_spend", 200.0),
+        finance_gap_monthly_threshold=_extract_value(ft_section, "finance_gap_monthly_threshold", 200.0),
+        finance_gap_annual_threshold=_extract_value(ft_section, "finance_gap_annual_threshold", 2000.0),
+    )
     
-    Returns:
-        PolicyConfig instance
-    """
-    global _current_config
+    ag_section = data.get("admission_gates", {})
+    admission_gates = AdmissionGatesConfig(
+        noise_floor=_extract_value(ag_section, "noise_floor", 1),
+        require_sso_for_idp=_extract_value(ag_section, "require_sso_for_idp", True),
+        require_valid_ci_type=_extract_value(ag_section, "require_valid_ci_type", True),
+        require_valid_lifecycle=_extract_value(ag_section, "require_valid_lifecycle", True),
+        min_discovery_sources_for_shadow=_extract_value(ag_section, "min_discovery_sources_for_shadow", 2),
+    )
     
-    config_path = Path(path) if path else Path("config/policy.json")
+    st_section = data.get("scope_toggles", {})
+    scope_toggles = ScopeTogglesConfig(
+        include_infra=_extract_value(st_section, "include_infra", False),
+        treat_directory_as_idp=_extract_value(st_section, "treat_directory_as_idp", False),
+        use_policy_engine=_extract_value(st_section, "use_policy_engine", True),
+        late_binding_domain_merge=_extract_value(st_section, "late_binding_domain_merge", True),
+    )
     
-    admission = AdmissionConfig()
-    scope = ScopeConfig()
-    exclusions: list[str] = []
+    fm_section = data.get("fuzzy_matching", {})
+    fuzzy_matching = FuzzyMatchingConfig(
+        max_edit_distance=_extract_value(fm_section, "max_edit_distance", 2),
+        max_edit_ratio=_extract_value(fm_section, "max_edit_ratio", 0.20),
+        min_name_length=_extract_value(fm_section, "min_name_length", 4),
+    )
     
-    if config_path.exists():
-        try:
-            with open(config_path) as f:
-                data = json.load(f)
-            
-            adm_data = data.get("admission", {})
-            admission = AdmissionConfig(
-                minimum_spend=adm_data.get("minimum_spend", 200.0),
-                noise_floor=adm_data.get("noise_floor", 1),
-                zombie_window_days=adm_data.get("zombie_window_days", 90),
-                require_sso_for_idp=adm_data.get("require_sso_for_idp", True),
-                require_valid_ci_type=adm_data.get("require_valid_ci_type", True),
-                require_valid_lifecycle=adm_data.get("require_valid_lifecycle", True),
-            )
-            
-            scope_data = data.get("scope", {})
-            scope = ScopeConfig(
-                include_infra=scope_data.get("include_infra", False),
-                treat_directory_as_idp=scope_data.get("treat_directory_as_idp", False),
-                use_policy_engine=scope_data.get("use_policy_engine", False),
-            )
-            
-            exclusions = data.get("exclusions", [])
-        except (json.JSONDecodeError, IOError):
-            pass
+    vi_section = data.get("vendor_inference", {})
+    vendor_inference = VendorInferenceConfig(
+        max_confidence=_extract_value(vi_section, "max_confidence", 0.9),
+    )
     
-    _current_config = PolicyConfig(
+    ql_section = data.get("query_limits", {})
+    query_limits = QueryLimitsConfig(
+        max_observation_samples=_extract_value(ql_section, "max_observation_samples", 2000),
+        default_rejection_limit=_extract_value(ql_section, "default_rejection_limit", 1000),
+        default_query_limit=_extract_value(ql_section, "default_query_limit", 1000),
+    )
+    
+    el_section = data.get("exclusion_lists", {})
+    exclusion_lists = ExclusionListsConfig(
+        custom_exclusions=_extract_value(el_section, "custom_exclusions", []),
+        banned_domains=_extract_value(el_section, "banned_domains", []),
+        infrastructure_domains=_extract_value(el_section, "infrastructure_domains", []),
+        corporate_root_domains=_extract_value(el_section, "corporate_root_domains", []),
+    )
+    
+    fs_section = data.get("farm_sync", {})
+    farm_sync = FarmSyncConfig(
+        webhook_url=_extract_value(fs_section, "webhook_url", ""),
+        auto_notify_on_change=_extract_value(fs_section, "auto_notify_on_change", True),
+        sync_interval_seconds=_extract_value(fs_section, "sync_interval_seconds", 0),
+    )
+    
+    admission = AdmissionConfig(
+        minimum_spend=finance_thresholds.minimum_spend,
+        noise_floor=admission_gates.noise_floor,
+        zombie_window_days=activity_windows.zombie_window_days,
+        require_sso_for_idp=admission_gates.require_sso_for_idp,
+        require_valid_ci_type=admission_gates.require_valid_ci_type,
+        require_valid_lifecycle=admission_gates.require_valid_lifecycle,
+    )
+    
+    scope = ScopeConfig(
+        include_infra=scope_toggles.include_infra,
+        treat_directory_as_idp=scope_toggles.treat_directory_as_idp,
+        use_policy_engine=scope_toggles.use_policy_engine,
+        late_binding_domain_merge=scope_toggles.late_binding_domain_merge,
+    )
+    
+    exclusions = exclusion_lists.custom_exclusions.copy()
+    
+    infra_domains = set(exclusion_lists.infrastructure_domains) if exclusion_lists.infrastructure_domains else _get_infrastructure_domains()
+    corp_domains = set(exclusion_lists.corporate_root_domains) if exclusion_lists.corporate_root_domains else CORPORATE_ROOT_DOMAINS.copy()
+    
+    return PolicyConfig(
+        activity_windows=activity_windows,
+        finance_thresholds=finance_thresholds,
+        admission_gates=admission_gates,
+        scope_toggles=scope_toggles,
+        fuzzy_matching=fuzzy_matching,
+        vendor_inference=vendor_inference,
+        query_limits=query_limits,
+        exclusion_lists=exclusion_lists,
+        farm_sync=farm_sync,
+        admission=admission,
+        scope=scope,
+        exclusions=exclusions,
+        corporate_root_domains=corp_domains,
+        infrastructure_domains=infra_domains,
+    )
+
+
+def _load_from_legacy(data: dict) -> PolicyConfig:
+    """Load PolicyConfig from legacy policy.json format."""
+    adm_data = data.get("admission", {})
+    admission = AdmissionConfig(
+        minimum_spend=adm_data.get("minimum_spend", 200.0),
+        noise_floor=adm_data.get("noise_floor", 1),
+        zombie_window_days=adm_data.get("zombie_window_days", 90),
+        require_sso_for_idp=adm_data.get("require_sso_for_idp", True),
+        require_valid_ci_type=adm_data.get("require_valid_ci_type", True),
+        require_valid_lifecycle=adm_data.get("require_valid_lifecycle", True),
+    )
+    
+    scope_data = data.get("scope", {})
+    scope = ScopeConfig(
+        include_infra=scope_data.get("include_infra", False),
+        treat_directory_as_idp=scope_data.get("treat_directory_as_idp", False),
+        use_policy_engine=scope_data.get("use_policy_engine", False),
+        late_binding_domain_merge=scope_data.get("late_binding_domain_merge", False),
+    )
+    
+    exclusions = data.get("exclusions", [])
+    
+    activity_windows = ActivityWindowsConfig(
+        zombie_window_days=admission.zombie_window_days,
+    )
+    
+    finance_thresholds = FinanceThresholdsConfig(
+        minimum_spend=admission.minimum_spend,
+    )
+    
+    admission_gates = AdmissionGatesConfig(
+        noise_floor=admission.noise_floor,
+        require_sso_for_idp=admission.require_sso_for_idp,
+        require_valid_ci_type=admission.require_valid_ci_type,
+        require_valid_lifecycle=admission.require_valid_lifecycle,
+    )
+    
+    scope_toggles = ScopeTogglesConfig(
+        include_infra=scope.include_infra,
+        treat_directory_as_idp=scope.treat_directory_as_idp,
+        use_policy_engine=scope.use_policy_engine,
+        late_binding_domain_merge=scope.late_binding_domain_merge,
+    )
+    
+    return PolicyConfig(
+        activity_windows=activity_windows,
+        finance_thresholds=finance_thresholds,
+        admission_gates=admission_gates,
+        scope_toggles=scope_toggles,
+        fuzzy_matching=FuzzyMatchingConfig(),
+        vendor_inference=VendorInferenceConfig(),
+        query_limits=QueryLimitsConfig(),
+        exclusion_lists=ExclusionListsConfig(custom_exclusions=exclusions),
+        farm_sync=FarmSyncConfig(),
         admission=admission,
         scope=scope,
         exclusions=exclusions,
         corporate_root_domains=CORPORATE_ROOT_DOMAINS.copy(),
         infrastructure_domains=_get_infrastructure_domains().copy(),
     )
+
+
+def load_config(path: Optional[str] = None) -> PolicyConfig:
+    """
+    Load policy configuration from JSON file.
     
+    Checks for config/policy_master.json first, falls back to config/policy.json.
+    
+    Args:
+        path: Optional path to config file.
+    
+    Returns:
+        PolicyConfig instance
+    """
+    global _current_config
+    
+    if path:
+        config_path = Path(path)
+        master_path = None
+    else:
+        master_path = Path("config/policy_master.json")
+        config_path = Path("config/policy.json")
+    
+    if master_path and master_path.exists():
+        try:
+            with open(master_path) as f:
+                data = json.load(f)
+            _current_config = _load_from_master(data)
+            return _current_config
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                data = json.load(f)
+            
+            if "activity_windows" in data or "admission_gates" in data:
+                _current_config = _load_from_master(data)
+            else:
+                _current_config = _load_from_legacy(data)
+            return _current_config
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    _current_config = PolicyConfig(
+        corporate_root_domains=CORPORATE_ROOT_DOMAINS.copy(),
+        infrastructure_domains=_get_infrastructure_domains().copy(),
+    )
     return _current_config
 
 
@@ -123,6 +304,122 @@ def reload_config(path: Optional[str] = None) -> PolicyConfig:
     Returns:
         Newly loaded PolicyConfig instance
     """
-    global _current_config
+    global _current_config, _master_config_data
     _current_config = None
+    _master_config_data = None
     return load_config(path)
+
+
+def _update_setting_value(section: dict, key: str, value: Any) -> None:
+    """Update a setting's value while preserving metadata."""
+    if key in section and isinstance(section[key], dict):
+        section[key]["value"] = value
+    else:
+        section[key] = {"value": value}
+
+
+def save_config(config: PolicyConfig, path: Optional[str] = None) -> bool:
+    """
+    Save policy configuration to policy_master.json.
+    
+    Preserves the full metadata structure (type, min, max, description).
+    Updates the last_modified timestamp.
+    
+    Args:
+        config: PolicyConfig instance to save
+        path: Optional path to config file. Defaults to config/policy_master.json
+    
+    Returns:
+        True if save was successful, False otherwise
+    """
+    global _master_config_data
+    
+    config_path = Path(path) if path else Path("config/policy_master.json")
+    
+    if _master_config_data is None:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    _master_config_data = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                _master_config_data = {}
+        else:
+            _master_config_data = {}
+    
+    data = _master_config_data.copy()
+    
+    data["last_modified"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    if "activity_windows" not in data:
+        data["activity_windows"] = {"description": "Time windows for activity status calculations"}
+    aw = data["activity_windows"]
+    _update_setting_value(aw, "discovery_activity_window_days", config.activity_windows.discovery_activity_window_days)
+    _update_setting_value(aw, "zombie_window_days", config.activity_windows.zombie_window_days)
+    _update_setting_value(aw, "default_activity_window_days", config.activity_windows.default_activity_window_days)
+    
+    if "finance_thresholds" not in data:
+        data["finance_thresholds"] = {"description": "Financial thresholds for admission and findings"}
+    ft = data["finance_thresholds"]
+    _update_setting_value(ft, "minimum_spend", config.finance_thresholds.minimum_spend)
+    _update_setting_value(ft, "finance_gap_monthly_threshold", config.finance_thresholds.finance_gap_monthly_threshold)
+    _update_setting_value(ft, "finance_gap_annual_threshold", config.finance_thresholds.finance_gap_annual_threshold)
+    
+    if "admission_gates" not in data:
+        data["admission_gates"] = {"description": "Switches controlling admission gate behavior"}
+    ag = data["admission_gates"]
+    _update_setting_value(ag, "noise_floor", config.admission_gates.noise_floor)
+    _update_setting_value(ag, "require_sso_for_idp", config.admission_gates.require_sso_for_idp)
+    _update_setting_value(ag, "require_valid_ci_type", config.admission_gates.require_valid_ci_type)
+    _update_setting_value(ag, "require_valid_lifecycle", config.admission_gates.require_valid_lifecycle)
+    _update_setting_value(ag, "min_discovery_sources_for_shadow", config.admission_gates.min_discovery_sources_for_shadow)
+    
+    if "scope_toggles" not in data:
+        data["scope_toggles"] = {"description": "Feature toggles for operational modes"}
+    st = data["scope_toggles"]
+    _update_setting_value(st, "include_infra", config.scope_toggles.include_infra)
+    _update_setting_value(st, "treat_directory_as_idp", config.scope_toggles.treat_directory_as_idp)
+    _update_setting_value(st, "use_policy_engine", config.scope_toggles.use_policy_engine)
+    _update_setting_value(st, "late_binding_domain_merge", config.scope_toggles.late_binding_domain_merge)
+    
+    if "fuzzy_matching" not in data:
+        data["fuzzy_matching"] = {"description": "Parameters for fuzzy name matching in correlation"}
+    fm = data["fuzzy_matching"]
+    _update_setting_value(fm, "max_edit_distance", config.fuzzy_matching.max_edit_distance)
+    _update_setting_value(fm, "max_edit_ratio", config.fuzzy_matching.max_edit_ratio)
+    _update_setting_value(fm, "min_name_length", config.fuzzy_matching.min_name_length)
+    
+    if "vendor_inference" not in data:
+        data["vendor_inference"] = {"description": "Parameters for vendor hypothesis inference"}
+    vi = data["vendor_inference"]
+    _update_setting_value(vi, "max_confidence", config.vendor_inference.max_confidence)
+    
+    if "query_limits" not in data:
+        data["query_limits"] = {"description": "Database and storage limits"}
+    ql = data["query_limits"]
+    _update_setting_value(ql, "max_observation_samples", config.query_limits.max_observation_samples)
+    _update_setting_value(ql, "default_rejection_limit", config.query_limits.default_rejection_limit)
+    _update_setting_value(ql, "default_query_limit", config.query_limits.default_query_limit)
+    
+    if "exclusion_lists" not in data:
+        data["exclusion_lists"] = {"description": "Domain exclusion lists for admission filtering"}
+    el = data["exclusion_lists"]
+    _update_setting_value(el, "custom_exclusions", config.exclusion_lists.custom_exclusions)
+    _update_setting_value(el, "banned_domains", config.exclusion_lists.banned_domains)
+    _update_setting_value(el, "infrastructure_domains", config.exclusion_lists.infrastructure_domains)
+    _update_setting_value(el, "corporate_root_domains", config.exclusion_lists.corporate_root_domains)
+    
+    if "farm_sync" not in data:
+        data["farm_sync"] = {"description": "Farm synchronization settings"}
+    fs = data["farm_sync"]
+    _update_setting_value(fs, "webhook_url", config.farm_sync.webhook_url)
+    _update_setting_value(fs, "auto_notify_on_change", config.farm_sync.auto_notify_on_change)
+    _update_setting_value(fs, "sync_interval_seconds", config.farm_sync.sync_interval_seconds)
+    
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            json.dump(data, f, indent=2)
+        _master_config_data = data
+        return True
+    except IOError:
+        return False

@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
@@ -65,6 +65,12 @@ async def serve_overview(response: Response):
             content = f.read()
         return HTMLResponse(content=content, status_code=200)
     return HTMLResponse(content="<h1>Overview not found</h1>", status_code=404)
+
+
+@app.get("/switchboard")
+async def redirect_to_switchboard():
+    """Redirect to Policy Switchboard UI"""
+    return RedirectResponse(url="/static/policy-switchboard.html")
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -52,6 +52,7 @@ from ..models.output_contracts import Asset, LensStatus, ProvisioningStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 from .cache import get_domain_rollups_cache
+from ..core.policy import get_current_config
 
 
 def _utc_now() -> datetime:
@@ -86,7 +87,7 @@ class ActivityStatus(str, Enum):
 
 def get_activity_status(
     latest_activity_at: Optional[datetime],
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     snapshot_as_of: Optional[datetime] = None
 ) -> ActivityStatus:
     """
@@ -94,7 +95,7 @@ def get_activity_status(
     
     Args:
         latest_activity_at: The latest activity timestamp (may be None)
-        activity_window_days: Number of days for the activity window (default 90)
+        activity_window_days: Number of days for the activity window (default from policy config)
         snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
                        When processing historical snapshots, use the snapshot's generated_at
                        to avoid falsely marking active assets as stale.
@@ -104,6 +105,9 @@ def get_activity_status(
         ActivityStatus.STALE if activity is outside window
         ActivityStatus.NONE if no activity timestamp exists
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
     if latest_activity_at is None:
         return ActivityStatus.NONE
     
@@ -112,6 +116,8 @@ def get_activity_status(
         return ActivityStatus.NONE
     
     reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    if reference_time is None:
+        reference_time = _utc_now()
     cutoff = reference_time - timedelta(days=activity_window_days)
     
     if latest >= cutoff:
@@ -157,8 +163,10 @@ class DomainRollup:
     alias_keys: list[str] = field(default_factory=list)
     has_ongoing_finance: bool = False  # Recurring spend (contracts/subscriptions)
     
-    def get_activity_status(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
+    def get_activity_status(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
         """Get the activity status for this domain rollup."""
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
         return get_activity_status(self.latest_activity_at, activity_window_days, snapshot_as_of)
     
     def is_anchored(self) -> bool:
@@ -190,7 +198,7 @@ class DomainRollup:
         """
         return self.has_idp or self.has_cmdb
     
-    def is_shadow(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
+    def is_shadow(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level shadow: ungoverned AND activity_status==RECENT.
         
@@ -203,6 +211,9 @@ class DomainRollup:
         
         INVARIANT: activity_status must be RECENT. NONE (no timestamps) is indeterminate.
         """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
         if not self.is_domain_canonical:
             return False
         
@@ -226,7 +237,7 @@ class DomainRollup:
         """
         return self.has_cmdb or self.has_idp or self.has_finance
     
-    def is_zombie(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
+    def is_zombie(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level zombie: governed AND stale AND ongoing finance.
         
@@ -244,6 +255,9 @@ class DomainRollup:
         is indeterminate and does NOT count as zombie per design principle:
         "no evidence" ≠ "stale evidence"
         """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
         if not self.is_domain_canonical:
             return False
         
@@ -256,7 +270,7 @@ class DomainRollup:
         activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
         return activity_status == ActivityStatus.STALE
     
-    def is_parked(self, activity_window_days: int = 90, snapshot_as_of: Optional[datetime] = None) -> bool:
+    def is_parked(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
         Domain-level parked: ungoverned AND stale.
         
@@ -272,6 +286,9 @@ class DomainRollup:
         INVARIANT: activity_status must be STALE (proven stale). NONE (no timestamps)
         is indeterminate and does NOT count as parked.
         """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
         if not self.is_domain_canonical:
             return False
         
@@ -327,7 +344,7 @@ class DerivedClassificationSummary:
     domain_rollups: dict[str, DomainRollup] = field(default_factory=dict)
 
 
-def classify_shadow(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
+def classify_shadow(asset: Asset, activity_window_days: Optional[int] = None) -> ClassificationResult:
     """
     Determine if an asset is a Shadow Asset.
     
@@ -341,6 +358,9 @@ def classify_shadow(asset: Asset, activity_window_days: int = 90) -> Classificat
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
     if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
         return ClassificationResult(
             is_classified=False,
@@ -516,7 +536,7 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     return False, False, f"Not zombie: Recent activity at {latest.isoformat() if latest else 'unknown'}"
 
 
-def classify_zombie(asset: Asset, activity_window_days: int = 90) -> ClassificationResult:
+def classify_zombie(asset: Asset, activity_window_days: Optional[int] = None) -> ClassificationResult:
     """
     Determine if an asset is a Zombie Asset.
     
@@ -530,6 +550,9 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
         asset: The asset to classify
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
     if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
         return ClassificationResult(
             is_classified=False,
@@ -645,7 +668,7 @@ def classify_zombie(asset: Asset, activity_window_days: int = 90) -> Classificat
 
 def compute_derived_classifications(
     assets: list[Asset],
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     run_id: Optional[str] = None,
     snapshot_as_of: Optional[datetime] = None
 ) -> DerivedClassificationSummary:
@@ -664,13 +687,17 @@ def compute_derived_classifications(
 
     Args:
         assets: List of assets to classify
-        activity_window_days: Number of days to consider for recent activity (default 90)
+        activity_window_days: Number of days to consider for recent activity (default from policy config)
         run_id: Optional run ID for caching (recommended for API routes)
         snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
                        When processing historical snapshots, use the snapshot's generated_at
                        to avoid falsely marking active assets as stale.
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
     reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    if reference_time is None:
+        reference_time = _utc_now()
     cutoff_date = reference_time - timedelta(days=activity_window_days)
     distribution = DistributionDiagnostic(total_assets=len(assets))
     
@@ -902,7 +929,7 @@ def _get_parent_domain(domain: str) -> Optional[str]:
 
 def compute_domain_rollups(
     assets: list[Asset],
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     run_id: Optional[str] = None
 ) -> dict[str, DomainRollup]:
     """
@@ -928,12 +955,14 @@ def compute_domain_rollups(
 
     Args:
         assets: List of assets to aggregate
-        activity_window_days: Activity window for zombie classification (default 90)
+        activity_window_days: Activity window for zombie classification (default from policy config)
         run_id: Optional run ID for caching (recommended for API routes)
 
     Returns:
         Dictionary mapping domain keys to DomainRollup objects
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
     # Check cache if run_id is provided
     cache = get_domain_rollups_cache()
     if run_id:

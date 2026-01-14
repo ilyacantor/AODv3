@@ -24,7 +24,7 @@ from ...pipeline.pipeline_executor import execute_pipeline
 from ...models.output_contracts import RunStatus, SyncStatus
 from ...pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
 from ...pipeline.cache import invalidate_run_caches, get_domain_rollups_cache, get_derived_classifications_cache
-from ...config import policy
+from ...core.policy import get_current_config
 
 
 router = APIRouter(prefix="/runs")
@@ -313,7 +313,7 @@ async def create_run_from_farm(request: FarmRunRequest):
         result.run_log.sync_status = SyncStatus.PENDING
         await db.update_run(result.run_log)
         
-        rejections, _ = await db.get_rejections_by_run(run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
+        rejections, _ = await db.get_rejections_by_run(run_id, limit=get_current_config().query_limits.default_rejection_limit)
         
         snapshot_as_of = snapshot_generated_at
         
@@ -375,7 +375,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     assets = await db.get_assets_by_run(request.run_id)
     findings = await db.get_findings_by_run(request.run_id)
-    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
+    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=get_current_config().query_limits.default_rejection_limit)
     
     mode = request.mode or "sprawl"
     
@@ -405,7 +405,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     actual_results = emit_actual_results(
         run_id=request.run_id,
         assets=assets,
-        activity_window_days=90,
+        activity_window_days=get_current_config().activity_windows.default_activity_window_days,
         rejections=rejections,
         mode=mode,
         snapshot_as_of=snapshot_as_of
@@ -592,7 +592,7 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
     snapshot_as_of = _get_run_snapshot_as_of(run)
 
     if classification:
-        summary = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
+        summary = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
         if classification == "zombie":
             asset_ids = {a["asset_id"] for a in summary.zombie_assets}
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
@@ -637,7 +637,7 @@ async def get_run_summary(run_id: str):
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
-    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
+    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
         "run_id": run_id,
@@ -671,7 +671,7 @@ async def get_classifications(run_id: str):
 
     assets = await db.get_assets_by_run(run_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
-    derived = compute_derived_classifications(assets, activity_window_days=90, run_id=run_id, snapshot_as_of=snapshot_as_of)
+    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
         "run_id": run_id,
@@ -700,7 +700,7 @@ async def get_reconcile_payload(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     findings = await db.get_findings_by_run(run_id)
-    rejections, _ = await db.get_rejections_by_run(run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
+    rejections, _ = await db.get_rejections_by_run(run_id, limit=get_current_config().query_limits.default_rejection_limit)
     
     snapshot_id = run.input_meta.get("snapshot_id") if run.input_meta else None
     

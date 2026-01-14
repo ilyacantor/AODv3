@@ -1,8 +1,7 @@
 {
   "$schema": "./policy_master.schema.json",
   "version": "1.0.0",
-  "last_modified": "2026-01-14T00:00:00Z",
-
+  "last_modified": "2026-01-14T03:51:09Z",
   "activity_windows": {
     "description": "Time windows for activity status calculations",
     "discovery_activity_window_days": {
@@ -30,7 +29,6 @@
       "ui_label": "Default Activity Window (days)"
     }
   },
-
   "finance_thresholds": {
     "description": "Financial thresholds for admission and findings",
     "minimum_spend": {
@@ -58,7 +56,6 @@
       "ui_label": "Finance Gap Annual Threshold ($)"
     }
   },
-
   "admission_gates": {
     "description": "Switches controlling admission gate behavior",
     "noise_floor": {
@@ -96,7 +93,6 @@
       "ui_label": "Min Sources for Shadow"
     }
   },
-
   "scope_toggles": {
     "description": "Feature toggles for operational modes",
     "include_infra": {
@@ -124,7 +120,6 @@
       "ui_label": "Late Binding Domain Merge"
     }
   },
-
   "fuzzy_matching": {
     "description": "Parameters for fuzzy name matching in correlation",
     "max_edit_distance": {
@@ -136,7 +131,7 @@
       "ui_label": "Max Edit Distance"
     },
     "max_edit_ratio": {
-      "value": 0.20,
+      "value": 0.2,
       "type": "float",
       "min": 0,
       "max": 1,
@@ -152,7 +147,6 @@
       "ui_label": "Min Name Length for Fuzzy"
     }
   },
-
   "vendor_inference": {
     "description": "Parameters for vendor hypothesis inference",
     "max_confidence": {
@@ -164,7 +158,6 @@
       "ui_label": "Max Vendor Inference Confidence"
     }
   },
-
   "query_limits": {
     "description": "Database and storage limits",
     "max_observation_samples": {
@@ -192,15 +185,30 @@
       "ui_label": "Default Query Limit"
     }
   },
-
   "exclusion_lists": {
     "description": "Domain exclusion lists for admission filtering",
     "custom_exclusions": {
       "value": [
-        "platform.io", "hub.io", "data.io", "cdn.com", "edge.com",
-        "global.com", "api.co", "app.co", "pro.co", "quick.net",
-        "max.io", "smart.io", "sys.net", "force.com", "fast.io",
-        "plus.net", "cloud.net", "tech.net", "services.io", "world.net"
+        "platform.io",
+        "hub.io",
+        "data.io",
+        "cdn.com",
+        "edge.com",
+        "global.com",
+        "api.co",
+        "app.co",
+        "pro.co",
+        "quick.net",
+        "max.io",
+        "smart.io",
+        "sys.net",
+        "force.com",
+        "fast.io",
+        "plus.net",
+        "cloud.net",
+        "tech.net",
+        "services.io",
+        "world.net"
       ],
       "type": "string_array",
       "description": "Custom domains to exclude from discovery (operator-managed)",
@@ -208,11 +216,22 @@
     },
     "banned_domains": {
       "value": [
-        "googleapis.com", "gstatic.com", "googleusercontent.com",
-        "microsoft.com", "microsoftonline.com", "windows.net",
-        "azure.com", "office.com", "office365.com",
-        "apple.com", "icloud.com", "akamai.net", "akamaized.net",
-        "cloudfront.net", "amazonaws.com", "awsstatic.com"
+        "googleapis.com",
+        "gstatic.com",
+        "googleusercontent.com",
+        "microsoft.com",
+        "microsoftonline.com",
+        "windows.net",
+        "azure.com",
+        "office.com",
+        "office365.com",
+        "apple.com",
+        "icloud.com",
+        "akamai.net",
+        "akamaized.net",
+        "cloudfront.net",
+        "amazonaws.com",
+        "awsstatic.com"
       ],
       "type": "string_array",
       "description": "System banned domains (tech infrastructure)",
@@ -220,11 +239,25 @@
     },
     "infrastructure_domains": {
       "value": [
-        "redis.io", "redis.com", "postgresql.org", "mysql.com",
-        "docker.com", "kubernetes.io", "nginx.org", "apache.org",
-        "golang.org", "python.org", "nodejs.org", "npmjs.com",
-        "jenkins.io", "terraform.io", "hashicorp.com", "grafana.com",
-        "prometheus.io", "elastic.co", "mongodb.org"
+        "redis.io",
+        "redis.com",
+        "postgresql.org",
+        "mysql.com",
+        "docker.com",
+        "kubernetes.io",
+        "nginx.org",
+        "apache.org",
+        "golang.org",
+        "python.org",
+        "nodejs.org",
+        "npmjs.com",
+        "jenkins.io",
+        "terraform.io",
+        "hashicorp.com",
+        "grafana.com",
+        "prometheus.io",
+        "elastic.co",
+        "mongodb.org"
       ],
       "type": "string_array",
       "description": "Infrastructure technology domains",
@@ -237,7 +270,6 @@
       "ui_label": "Corporate Root Domains"
     }
   },
-
   "farm_sync": {
     "description": "Farm synchronization settings",
     "webhook_url": {

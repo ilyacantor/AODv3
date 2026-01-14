@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policy Switchboard - AutonomOS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Quicksand', sans-serif; }
+        .toggle-checkbox:checked { right: 0; border-color: #22d3d1; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #22d3d1; }
+        .toggle-checkbox { right: 1.25rem; transition: all 0.2s ease-in-out; }
+        .toggle-label { transition: background-color 0.2s ease-in-out; }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { opacity: 1; }
+        .toast { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyan: { 400: '#22d3d1', 500: '#06b6b4', 600: '#0891b2' },
+                        purple: { 400: '#c084fc', 500: '#a855f7', 600: '#9333ea' },
+                        slate: { 800: '#1e293b', 850: '#172033', 900: '#0f172a', 950: '#020617' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-950 text-gray-100 min-h-screen">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+    
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                        Policy Switchboard
+                    </h1>
+                    <p class="text-gray-400 mt-1">Configure admission gates, thresholds, and discovery rules</p>
+                </div>
+                <div id="version-info" class="text-right text-sm text-gray-500">
+                    <div>Version: <span id="version" class="text-gray-300">-</span></div>
+                    <div>Last Modified: <span id="last-modified" class="text-gray-300">-</span></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex gap-4 mb-6 flex-wrap">
+            <button id="save-btn" onclick="saveConfig()" 
+                class="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-semibold rounded-lg shadow-lg shadow-cyan-500/20 transition-all duration-200 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                Save Changes
+            </button>
+            <button id="sync-btn" onclick="syncToFarm()" 
+                class="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-semibold rounded-lg shadow-lg shadow-purple-500/20 transition-all duration-200 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Sync to Farm
+            </button>
+            <button onclick="loadConfig()" 
+                class="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Reload
+            </button>
+        </div>
+
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-cyan-400 border-t-transparent"></div>
+            <p class="mt-4 text-gray-400">Loading policy configuration...</p>
+        </div>
+
+        <div id="config-form" class="hidden grid gap-6 md:grid-cols-2">
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = null;
+
+        const sectionOrder = [
+            'activity_windows',
+            'finance_thresholds',
+            'admission_gates',
+            'scope_toggles',
+            'fuzzy_matching',
+            'vendor_inference',
+            'query_limits',
+            'exclusion_lists',
+            'farm_sync'
+        ];
+
+        const sectionIcons = {
+            activity_windows: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+            finance_thresholds: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+            admission_gates: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>',
+            scope_toggles: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>',
+            fuzzy_matching: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>',
+            vendor_inference: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>',
+            query_limits: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>',
+            exclusion_lists: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>',
+            farm_sync: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>'
+        };
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-yellow-600';
+            const icon = type === 'success' 
+                ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>'
+                : type === 'error'
+                ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>'
+                : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+            
+            toast.className = `toast ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-72`;
+            toast.innerHTML = `
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>
+                <span class="flex-1">${message}</span>
+                <button onclick="this.parentElement.remove()" class="text-white/80 hover:text-white">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        function formatSectionTitle(key) {
+            return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        }
+
+        function createToggle(sectionKey, settingKey, setting) {
+            const id = `${sectionKey}_${settingKey}`;
+            return `
+                <div class="flex items-center justify-between py-3 border-b border-slate-700/50 last:border-0">
+                    <div class="flex-1 pr-4">
+                        <label for="${id}" class="block text-gray-200 font-medium">${setting.ui_label || settingKey}</label>
+                        <p class="text-sm text-gray-500 mt-0.5">${setting.description || ''}</p>
+                    </div>
+                    <div class="relative inline-block w-12 align-middle select-none">
+                        <input type="checkbox" id="${id}" name="${id}" 
+                            ${setting.value ? 'checked' : ''} 
+                            class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 border-slate-600 appearance-none cursor-pointer"
+                            data-section="${sectionKey}" data-setting="${settingKey}" data-type="boolean">
+                        <label for="${id}" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-600 cursor-pointer"></label>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createNumberInput(sectionKey, settingKey, setting) {
+            const id = `${sectionKey}_${settingKey}`;
+            const step = setting.type === 'float' ? '0.01' : '1';
+            return `
+                <div class="py-3 border-b border-slate-700/50 last:border-0">
+                    <label for="${id}" class="block text-gray-200 font-medium mb-1">${setting.ui_label || settingKey}</label>
+                    <p class="text-sm text-gray-500 mb-2">${setting.description || ''}</p>
+                    <div class="flex items-center gap-3">
+                        <input type="number" id="${id}" name="${id}" 
+                            value="${setting.value}" 
+                            min="${setting.min !== undefined ? setting.min : ''}" 
+                            max="${setting.max !== undefined ? setting.max : ''}"
+                            step="${step}"
+                            class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                            data-section="${sectionKey}" data-setting="${settingKey}" data-type="${setting.type}">
+                        ${setting.min !== undefined || setting.max !== undefined ? 
+                            `<span class="text-xs text-gray-500 whitespace-nowrap">${setting.min !== undefined ? setting.min : ''} - ${setting.max !== undefined ? setting.max : ''}</span>` 
+                            : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function createTextInput(sectionKey, settingKey, setting) {
+            const id = `${sectionKey}_${settingKey}`;
+            return `
+                <div class="py-3 border-b border-slate-700/50 last:border-0">
+                    <label for="${id}" class="block text-gray-200 font-medium mb-1">${setting.ui_label || settingKey}</label>
+                    <p class="text-sm text-gray-500 mb-2">${setting.description || ''}</p>
+                    <input type="text" id="${id}" name="${id}" 
+                        value="${setting.value || ''}"
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                        data-section="${sectionKey}" data-setting="${settingKey}" data-type="string">
+                </div>
+            `;
+        }
+
+        function createTextArea(sectionKey, settingKey, setting) {
+            const id = `${sectionKey}_${settingKey}`;
+            const valueStr = Array.isArray(setting.value) ? setting.value.join('\n') : '';
+            return `
+                <div class="py-3 border-b border-slate-700/50 last:border-0">
+                    <label for="${id}" class="block text-gray-200 font-medium mb-1">${setting.ui_label || settingKey}</label>
+                    <p class="text-sm text-gray-500 mb-2">${setting.description || ''}</p>
+                    <textarea id="${id}" name="${id}" rows="6"
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all font-mono text-sm"
+                        data-section="${sectionKey}" data-setting="${settingKey}" data-type="string_array"
+                        placeholder="One domain per line">${valueStr}</textarea>
+                    <p class="text-xs text-gray-600 mt-1">${Array.isArray(setting.value) ? setting.value.length : 0} entries</p>
+                </div>
+            `;
+        }
+
+        function createInputForSetting(sectionKey, settingKey, setting) {
+            if (!setting || typeof setting !== 'object' || !('type' in setting)) return '';
+            
+            switch(setting.type) {
+                case 'boolean':
+                    return createToggle(sectionKey, settingKey, setting);
+                case 'integer':
+                case 'float':
+                    return createNumberInput(sectionKey, settingKey, setting);
+                case 'string':
+                    return createTextInput(sectionKey, settingKey, setting);
+                case 'string_array':
+                    return createTextArea(sectionKey, settingKey, setting);
+                default:
+                    return '';
+            }
+        }
+
+        function renderConfig(config) {
+            const form = document.getElementById('config-form');
+            form.innerHTML = '';
+            
+            document.getElementById('version').textContent = config.version || '-';
+            document.getElementById('last-modified').textContent = config.last_modified 
+                ? new Date(config.last_modified).toLocaleString() 
+                : '-';
+
+            for (const sectionKey of sectionOrder) {
+                const section = config[sectionKey];
+                if (!section || typeof section !== 'object') continue;
+
+                const isWideSection = sectionKey === 'exclusion_lists';
+                const card = document.createElement('div');
+                card.className = `bg-slate-900 border border-slate-800 rounded-xl p-6 ${isWideSection ? 'md:col-span-2' : ''}`;
+                
+                const icon = sectionIcons[sectionKey] || '';
+                let settingsHtml = '';
+                
+                for (const [settingKey, setting] of Object.entries(section)) {
+                    if (settingKey === 'description') continue;
+                    settingsHtml += createInputForSetting(sectionKey, settingKey, setting);
+                }
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-700">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-gray-100">${formatSectionTitle(sectionKey)}</h2>
+                            <p class="text-sm text-gray-500">${section.description || ''}</p>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        ${settingsHtml}
+                    </div>
+                `;
+                
+                form.appendChild(card);
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            form.classList.remove('hidden');
+        }
+
+        function collectFormData() {
+            const updates = {};
+            const inputs = document.querySelectorAll('[data-section]');
+            
+            inputs.forEach(input => {
+                const section = input.dataset.section;
+                const setting = input.dataset.setting;
+                const type = input.dataset.type;
+                
+                if (!updates[section]) updates[section] = {};
+                if (!updates[section][setting]) updates[section][setting] = {};
+                
+                let value;
+                switch(type) {
+                    case 'boolean':
+                        value = input.checked;
+                        break;
+                    case 'integer':
+                        value = parseInt(input.value, 10);
+                        break;
+                    case 'float':
+                        value = parseFloat(input.value);
+                        break;
+                    case 'string_array':
+                        value = input.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                        break;
+                    default:
+                        value = input.value;
+                }
+                
+                updates[section][setting] = { value };
+            });
+            
+            return updates;
+        }
+
+        async function loadConfig() {
+            try {
+                document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('config-form').classList.add('hidden');
+                
+                const response = await fetch('/api/v1/policy/master');
+                if (!response.ok) {
+                    throw new Error(`Failed to load config: ${response.statusText}`);
+                }
+                currentConfig = await response.json();
+                renderConfig(currentConfig);
+                showToast('Configuration loaded successfully', 'success');
+            } catch (error) {
+                console.error('Error loading config:', error);
+                showToast(`Error loading config: ${error.message}`, 'error');
+                document.getElementById('loading').innerHTML = `
+                    <div class="text-red-400">
+                        <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        <p class="mt-4">Failed to load configuration</p>
+                        <button onclick="loadConfig()" class="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const btn = document.getElementById('save-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span> Saving...';
+                
+                const updates = collectFormData();
+                const response = await fetch('/api/v1/policy/master', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || response.statusText);
+                }
+                
+                currentConfig = await response.json();
+                renderConfig(currentConfig);
+                showToast('Configuration saved successfully', 'success');
+            } catch (error) {
+                console.error('Error saving config:', error);
+                showToast(`Error saving config: ${error.message}`, 'error');
+            } finally {
+                const btn = document.getElementById('save-btn');
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Save Changes
+                `;
+            }
+        }
+
+        async function syncToFarm() {
+            try {
+                const btn = document.getElementById('sync-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span> Syncing...';
+                
+                const response = await fetch('/api/v1/policy/notify-farm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.detail || response.statusText);
+                }
+                
+                if (result.status === 'success') {
+                    showToast('Farm sync triggered successfully', 'success');
+                } else {
+                    showToast(`Farm sync failed: ${result.message}`, 'warning');
+                }
+            } catch (error) {
+                console.error('Error syncing to Farm:', error);
+                showToast(`Error syncing to Farm: ${error.message}`, 'error');
+            } finally {
+                const btn = document.getElementById('sync-btn');
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Sync to Farm
+                `;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>

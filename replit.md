@@ -24,6 +24,17 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 **Governance Policy:** `is_governed = has_idp OR has_cmdb`.
 
 **Key Technical Implementations & Features:**
+-   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
+-   **Policy Categories:**
+    - Activity Windows (discovery, zombie detection, default)
+    - Finance Thresholds (minimum spend, gap thresholds)
+    - Admission Gates (noise floor, SSO/CI/lifecycle requirements)
+    - Scope Toggles (infrastructure inclusion, policy engine, domain merge)
+    - Fuzzy Matching (edit distance, ratio, name length)
+    - Vendor Inference (max confidence)
+    - Query Limits (samples, rejection, query limits)
+    - Exclusion Lists (custom, banned, infrastructure, corporate domains)
+    - Farm Sync (webhook URL, auto-notify, sync interval)
 -   **Admission Gates:** Finance alone is insufficient for asset admission; it requires corroboration with governance or sufficient discovery.
 -   **Domain Normalization:** Standardizes domain names to eTLD+1 and collapses alias domains, including robust extraction from URLs.
 -   **Tenant Token Indexing:** Extracts and indexes tenant tokens from subdomain patterns for cross-matching.

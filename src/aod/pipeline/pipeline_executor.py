@@ -309,7 +309,8 @@ def run_pipeline_ephemeral(
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
-                idp_activity_map=idp_activity_map
+                idp_activity_map=idp_activity_map,
+                snapshot_timestamp=snapshot_as_of
             )
 
             # Jan 2026 Fix: Pass propagated governance with metadata to policy engine
@@ -601,7 +602,8 @@ async def execute_pipeline(
             admission_result = apply_admission_criteria(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
-                idp_activity_map=idp_activity_map
+                idp_activity_map=idp_activity_map,
+                snapshot_timestamp=snapshot_as_of
             )
 
             # Jan 2026 Fix: Pass propagated governance with metadata to policy engine

@@ -519,50 +519,41 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     """
     Check IdP plane admission criteria:
     - IdP match with DOMAIN-ALIGNED governance (exact domain match required)
-    - Prefer: has_sso OR has_scim (stronger signal that overrides domain alignment)
+    - SSO/SCIM provides stronger confidence but STILL requires domain alignment
     NOTE: Both MATCHED and AMBIGUOUS count as having IdP evidence.
 
     Jan 2026 Fix: Farm requires domain-aligned IdP for admission, NOT cross-domain matches.
+    SSO/SCIM does NOT override domain alignment - it's a stronger signal FOR domain-aligned matches.
 
-    Cross-domain IdP matches (e.g., easyworks.ai entity matched to easyworks.co IdP) do NOT
-    provide governance for admission. Only exact domain matches count, UNLESS the IdP has
-    SSO/SCIM which provides stronger governance signals.
+    Cross-domain IdP matches (e.g., fastbox.cloud matched to fastbox.ai IdP) do NOT
+    provide governance for admission, even if the IdP has SSO/SCIM enabled.
+    Farm's decision traces confirm: idp_present=False for cross-domain matches.
 
     Examples:
-    - easyworks.ai entity + easyworks.co IdP (no SSO/SCIM) → NOT admitted (cross-domain)
+    - fastbox.cloud entity + fastbox.ai IdP with SSO → NOT admitted (cross-domain)
+    - fastbox.cloud entity + fastbox.cloud IdP with SSO → admitted (domain-aligned + SSO)
     - easyworks.ai entity + easyworks.ai IdP → admitted (exact match)
-    - easyworks.ai entity + easyworks.co IdP with SSO → admitted (SSO overrides domain)
     """
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
 
-    # Track domain-aligned matches and strong governance signals separately
-    has_domain_aligned_match = False
-    has_strong_signal = False
-
     for record in correlation.idp.matched_records:
         if isinstance(record, IdPObject):
-            # Strong governance signals (SSO/SCIM) override domain alignment requirement
-            if record.has_sso:
-                has_strong_signal = True
-                return True, "IdP match with SSO enabled (domain-aligned governance)"
-            if record.has_scim:
-                has_strong_signal = True
-                return True, "IdP match with SCIM enabled (domain-aligned governance)"
-
-            # Check for exact domain match (domain-aligned governance)
+            # Check for domain alignment FIRST (required for all IdP admission)
             idp_domain = None
             if record.domain:
                 idp_domain = extract_registered_domain(record.domain)
 
             if _idp_domain_matches_entity(idp_domain, entity_registered_domain, idp_name=record.name):
-                has_domain_aligned_match = True
-                # Continue checking for stronger signals (SSO/SCIM)
+                # Domain-aligned match - check for SSO/SCIM as stronger signal
+                if record.has_sso:
+                    return True, "IdP match with SSO enabled (domain-aligned governance)"
+                if record.has_scim:
+                    return True, "IdP match with SCIM enabled (domain-aligned governance)"
+                # Domain-aligned match without SSO/SCIM still counts
+                return True, "IdP match with domain-aligned governance"
 
-    if has_domain_aligned_match:
-        return True, "IdP match with domain-aligned governance"
-
-    # Cross-domain IdP matches without SSO/SCIM do NOT provide admission governance
+    # Cross-domain IdP matches (even with SSO/SCIM) do NOT provide admission governance
     return False, ""
 
 
@@ -615,6 +606,34 @@ def check_cloud_admission(correlation: CorrelationResult) -> tuple[bool, str]:
         return True, "Cloud match (cloud resource)"
     
     return False, ""
+
+
+def has_recurring_finance_spend(correlation: CorrelationResult) -> bool:
+    """
+    Check if the correlation has recurring finance spend (ongoing finance).
+    
+    Returns True if there are:
+    - Recurring contracts with amount > 0, OR
+    - Recurring transactions with amount > 0
+    
+    NOTE: Multiple non-recurring transactions do NOT qualify as recurring spend.
+    Only explicitly marked is_recurring=True records count as ongoing finance.
+    
+    This is used by the admission policy to allow finance-only admission
+    when there's strong recurring spend evidence combined with recent activity.
+    """
+    if correlation.finance.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return False
+    
+    for record in correlation.finance.matched_records:
+        if isinstance(record, Contract):
+            if record.is_recurring and record.amount > 0:
+                return True
+        elif isinstance(record, Transaction):
+            if record.is_recurring and record.amount > 0:
+                return True
+    
+    return False
 
 
 def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
@@ -894,54 +913,79 @@ class DiscoveryFootprint:
 
 def build_discovery_footprint(
     observations: Optional[list[Observation]],
-    canonical_key: Optional[str] = None
+    canonical_key: Optional[str] = None,
+    snapshot_timestamp: Optional[datetime] = None
 ) -> DiscoveryFootprint:
     """
     Build an evidence footprint for a CandidateEntity's discovery observations.
     
+    Jan 2026 Fix: Count sources with RECENT activity relative to SNAPSHOT timestamp.
+    Farm uses the snapshot generation timestamp as the reference point for the 90-day
+    activity window, not the current time. This ensures consistent results across runs.
+    
     Returns:
         DiscoveryFootprint with:
-        - discovery_sources: set of distinct source names (e.g., {"browser", "proxy", "dns"})
-        - planes_present: set of mapped planes (e.g., {"network"})
-        - recent_activity: True if latest observation is within 90 days
+        - discovery_sources: set of distinct source names WITH RECENT ACTIVITY
+        - planes_present: set of mapped planes with recent activity
+        - recent_activity: True if any observation is within 90 days of snapshot
         - latest_activity_at: timestamp of most recent observation
         - reason_codes: list of reason codes for this footprint
     """
     from datetime import timedelta, timezone
     
-    discovery_sources: set = set()
-    planes_present: set = set()
+    all_discovery_sources: set = set()
+    all_planes_present: set = set()
     latest_activity: Optional[datetime] = None
     reason_codes: list = []
     
     if not observations:
         return DiscoveryFootprint(
-            discovery_sources=discovery_sources,
-            planes_present=planes_present,
+            discovery_sources=set(),
+            planes_present=set(),
             recent_activity=False,
             latest_activity_at=None,
             reason_codes=["NO_DISCOVERY"]
         )
     
-    for obs in observations:
-        if obs.source:
-            source_lower = obs.source.lower()
-            plane = source_to_plane(source_lower)
-            # Only count sources that map to discovery-corroboration planes
-            # Exclude CMDB and finance sources as they aren't "real" discovery evidence
-            if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
-                discovery_sources.add(source_lower)
-                planes_present.add(plane)
-        if obs.observed_at:
-            if latest_activity is None or obs.observed_at > latest_activity:
-                latest_activity = obs.observed_at
+    # Calculate cutoff for recent activity - use snapshot timestamp as reference if provided
+    # Farm uses snapshot timestamp, not current time, for consistent 90-day windows
+    reference_time = snapshot_timestamp if snapshot_timestamp else datetime.now(timezone.utc)
+    if reference_time.tzinfo is None:
+        reference_time = reference_time.replace(tzinfo=timezone.utc)
+    cutoff = reference_time - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
     
-    recent_activity = False
-    if latest_activity:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
-        if latest_activity.tzinfo is None:
-            latest_activity = latest_activity.replace(tzinfo=timezone.utc)
-        recent_activity = latest_activity >= cutoff
+    # Count only sources with RECENT activity (using snapshot timestamp as reference)
+    # Farm's policy: count sources where the observation is within 90 days of snapshot
+    for obs in observations:
+        # Track latest activity timestamp
+        if obs.observed_at:
+            obs_time = obs.observed_at
+            if obs_time.tzinfo is None:
+                obs_time = obs_time.replace(tzinfo=timezone.utc)
+            if latest_activity is None or obs_time > latest_activity:
+                latest_activity = obs_time
+        
+        # Only count sources with RECENT activity (within 90 days of snapshot)
+        if obs.source and obs.observed_at:
+            obs_time = obs.observed_at
+            if obs_time.tzinfo is None:
+                obs_time = obs_time.replace(tzinfo=timezone.utc)
+            
+            # Only count if observation is recent relative to snapshot timestamp
+            if obs_time >= cutoff:
+                source_lower = obs.source.lower()
+                plane = source_to_plane(source_lower)
+                # Only count sources that map to discovery-corroboration planes
+                # Exclude CMDB and finance sources as they aren't "real" discovery evidence
+                if plane is not None and plane in DISCOVERY_CORROBORATION_PLANES:
+                    all_discovery_sources.add(source_lower)
+                    all_planes_present.add(plane)
+    
+    recent_activity = latest_activity is not None and latest_activity >= cutoff
+    
+    # Use the sources with recent activity
+    discovery_sources = all_discovery_sources
+    planes_present = all_planes_present
     
     if len(discovery_sources) >= MIN_DISCOVERY_SOURCES:
         reason_codes.append("DISCOVERY_SOURCE_COUNT_GE_2")
@@ -977,7 +1021,8 @@ def build_discovery_footprint(
 def check_discovery_admission(
     observations: Optional[list[Observation]],
     min_sources: int = MIN_DISCOVERY_SOURCES,
-    canonical_key: Optional[str] = None
+    canonical_key: Optional[str] = None,
+    snapshot_timestamp: Optional[datetime] = None
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
@@ -996,11 +1041,12 @@ def check_discovery_admission(
         observations: List of discovery observations
         min_sources: Minimum distinct sources required (default: 2)
         canonical_key: Entity key for debug logging
+        snapshot_timestamp: Snapshot timestamp for 90-day window reference
         
     Returns:
         Tuple of (admitted: bool, reason: str)
     """
-    footprint = build_discovery_footprint(observations, canonical_key)
+    footprint = build_discovery_footprint(observations, canonical_key, snapshot_timestamp)
     
     source_count = len(footprint.discovery_sources)
     plane_count = len(footprint.planes_present)
@@ -1221,29 +1267,52 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Jan 2026 Fix: Multi-domain vendor governance alignment.
+    Jan 2026 Fix: Multi-domain vendor governance alignment and name-based fallback.
 
     Domains match if:
     1. Exact domain match (e.g., salesforce.com == salesforce.com)
     2. Same vendor (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
+    3. IdP has no domain but IdP name matches entity's base domain token
 
     This enables cross-domain IdP governance for multi-TLD vendors while preserving
     the strict matching for unrelated domains with the same base name.
 
     Examples:
     - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH (same vendor "TeamSuite")
+    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (name matches base token)
     - dataflow.cloud (entity) vs dataflow.net (IdP) → NO MATCH (no vendor mapping)
     - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
+    - fastbox.cloud (entity) vs fastbox.ai (IdP) → NO MATCH (different TLD, no vendor link)
 
     Matching rules:
-    1. IdP has no domain → False (name-only match, no domain alignment)
+    1. IdP has no domain → check if IdP name matches entity's base token
     2. Entity has no domain → True (allow match)
     3. Exact registered domain match → True
     4. Same vendor (via DOMAIN_TO_VENDOR) → True
     5. Different domains, no vendor link → False
     """
-    # If IdP has no domain, it's a name-only match - NOT domain-aligned for governance
+    # If IdP has no domain, check if the IdP name matches entity's base domain token
+    # This handles cases where the IdP record has no domain field but the name aligns
     if not idp_registered_domain:
+        if idp_name and entity_registered_domain:
+            # Extract base token from entity domain (e.g., "coreio.ai" → "coreio")
+            entity_base = entity_registered_domain.split('.')[0].lower()
+            
+            # Jan 2026 Fix: Apply the same suffix check as cross-TLD matching
+            # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
+            # applications, so they should NOT provide governance or activity inheritance
+            normalized_idp_name = idp_name.lower()
+            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
+                           ' legacy', ' deprecated', ' production', '-production']:
+                if normalized_idp_name.endswith(suffix):
+                    return False
+            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
+                return False
+            
+            # Now check if IdP name starts with or equals entity base token
+            idp_name_normalized = normalized_idp_name.replace('-', '').replace('_', '').replace(' ', '')
+            if idp_name_normalized == entity_base or idp_name_normalized.startswith(entity_base):
+                return True
         return False
 
     # If entity has no domain, allow the match
@@ -1266,7 +1335,44 @@ def _idp_domain_matches_entity(
         if idp_vendor_result.value.lower() == entity_vendor_result.value.lower():
             return True
 
-    # Different domains with no vendor link
+    # Jan 2026 Fix: Same base token with different TLD counts as a match, BUT
+    # Farm requires the IdP name to be a CLEAN match (no suffixes like "(Legacy)" or "-prod")
+    # 
+    # Farm's idp_present_direct=True for cases like:
+    # - cloudsync.io (entity) vs cloudsync.org (IdP) + name "cloudsync" → MATCH
+    # - datacloud.co (entity) vs datacloud.cloud (IdP) + name "datacloud" → MATCH
+    # 
+    # Farm's idp_present_direct=False for cases like:
+    # - fastbox.cloud (entity) vs fastbox.ai (IdP) + name "Fastbox (Legacy)" → NO MATCH
+    # - flowbase.dev (entity) vs flowbase.app (IdP) + name "Flowbase-prod" → NO MATCH
+    #
+    # The difference: "(Legacy)" and "-prod" suffixes indicate the IdP is not the
+    # canonical/current application for that brand, so cross-TLD governance doesn't apply.
+    
+    idp_base = idp_registered_domain.split('.')[0].lower()
+    entity_base = entity_registered_domain.split('.')[0].lower()
+    
+    if idp_base == entity_base:
+        # For cross-TLD match, also require IdP name to be a clean match
+        # Strip suffixes/modifiers and check if it matches entity base
+        if idp_name:
+            # Normalize IdP name: remove common suffixes, convert to lowercase
+            normalized_idp_name = idp_name.lower()
+            # Remove common suffixes that indicate non-canonical IdP
+            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
+                           ' legacy', ' deprecated', ' production', '-production']:
+                if normalized_idp_name.endswith(suffix):
+                    # IdP has a suffix indicating it's not canonical - reject cross-TLD match
+                    return False
+            
+            # Also check if IdP name contains the suffix as a substring (e.g., "(Legacy)")
+            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
+                return False
+        
+        # IdP name is clean, allow cross-TLD match
+        return True
+
+    # Different domains with no vendor or base-token link
     return False
 
 
@@ -1362,13 +1468,20 @@ def extract_activity_timestamps(
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject):
-                # Jan 2026 Fix: Check SSO/SCIM FIRST - these provide governance regardless of domain alignment
-                # This fixes the governance propagation bug where SSO/SCIM IdP records with cross-domain
-                # matches were skipped entirely, causing governed assets to be misclassified as shadows.
-                if record.has_sso or record.has_scim:
-                    idp_governance_aligned = True
-                    # Continue processing for activity timestamps
-
+                # Jan 2026 Fix: Check for non-canonical IdP name suffixes
+                # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
+                # applications that should NOT provide activity inheritance for cross-domain entities
+                is_canonical_idp = True
+                if record.name:
+                    normalized_idp_name = record.name.lower()
+                    for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
+                                   ' legacy', ' deprecated', ' production', '-production']:
+                        if normalized_idp_name.endswith(suffix):
+                            is_canonical_idp = False
+                            break
+                    if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
+                        is_canonical_idp = False
+                
                 idp_registered_domain = _extract_idp_domain(record)
 
                 # Use TLD-family matching for governance and activity
@@ -1377,11 +1490,18 @@ def extract_activity_timestamps(
                 )
 
                 if domain_aligned:
+                    # Exact or vendor-family domain match - provide governance and activity
                     idp_governance_aligned = True
-                    # Continue for activity timestamp extraction
-                elif not (record.has_sso or record.has_scim):
-                    # Skip activity inheritance for non-aligned domains WITHOUT SSO/SCIM
-                    # SSO/SCIM records inherit activity even if cross-domain
+                elif record.has_sso or record.has_scim:
+                    # SSO/SCIM provides governance for cross-domain matches, BUT:
+                    # - Only canonical IdPs (no Legacy/prod suffixes) should provide activity
+                    # - Non-canonical IdPs provide governance but NOT activity
+                    idp_governance_aligned = True
+                    if not is_canonical_idp:
+                        # Non-canonical IdP - provides governance but skip activity inheritance
+                        continue
+                else:
+                    # No domain match and no SSO/SCIM - skip entirely
                     continue
                 
                 login_ts = record.last_login_at
@@ -1490,7 +1610,8 @@ def apply_admission_criteria(
     propagated_idp: bool = False,
     propagated_cmdb: bool = False,
     propagation_reason: Optional[str] = None,
-    idp_activity_map: Optional[dict[str, datetime]] = None
+    idp_activity_map: Optional[dict[str, datetime]] = None,
+    snapshot_timestamp: Optional[datetime] = None
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -1617,7 +1738,8 @@ def apply_admission_criteria(
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(
         observations,
-        canonical_key=effective_domain or entity.canonical_name if entity else None
+        canonical_key=effective_domain or entity.canonical_name if entity else None,
+        snapshot_timestamp=snapshot_timestamp
     )
 
     # =========================================================================
@@ -1633,13 +1755,20 @@ def apply_admission_criteria(
     # =========================================================================
     footprint = build_discovery_footprint(
         observations,
-        canonical_key=effective_domain or entity.canonical_name if entity else None
+        canonical_key=effective_domain or entity.canonical_name if entity else None,
+        snapshot_timestamp=snapshot_timestamp
     )
     # Require at least 2 distinct discovery sources for discovery-only admission
     has_sufficient_discovery = len(footprint.discovery_sources) >= 2
 
-    # Finance can admit if it has other corroborating evidence
-    # (governance or sufficient discovery)
+    # Finance can admit ONLY if it has corroborating evidence
+    # (governance or sufficient discovery >= 2 sources)
+    #
+    # Jan 2026 Policy Clarification: Finance alone (even with recurring spend)
+    # is NOT sufficient for admission. Farm's decision traces confirm this:
+    # - Assets with HAS_ONGOING_FINANCE but 1 discovery source → REJECTED ("Single source")
+    # - Assets need IdP/CMDB/Cloud OR ≥2 discovery sources for admission
+    # - Finance is metadata/context, not an admission criterion on its own
     finance_can_admit = finance_admitted and (
         idp_admitted or
         cmdb_admitted or
@@ -1700,6 +1829,10 @@ def apply_admission_criteria(
         # STEP 1: GREEN - Discovery-only with >= 2 sources + recent activity
         # Farm catalogs these as active assets, not shadow IT
         provisioning_status = ProvisioningStatus.ACTIVE
+    elif finance_can_admit:
+        # STEP 2: AMBER - Finance with governance/discovery corroboration
+        # Finance-admitted assets go to REVIEW for validation
+        provisioning_status = ProvisioningStatus.REVIEW
     else:
         # STEP 3: RED - Cloud/Finance only (insufficient evidence)
         # These need governance or discovery corroboration

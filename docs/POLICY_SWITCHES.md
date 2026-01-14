@@ -43,6 +43,13 @@ Financial thresholds for admission and findings generation. Controls when financ
 | `finance_gap_monthly_threshold` | float | 200.00 | 0-100,000 | Minimum monthly spend (USD) to trigger FINANCE_GAP finding |
 | `finance_gap_annual_threshold` | float | 2,000.00 | 0-1,000,000 | Minimum annual spend (USD) to trigger FINANCE_GAP finding |
 
+**Note on Recurring Finance:** These thresholds only apply to **recurring** finance (contracts/subscriptions with `is_recurring=True`). One-time purchases are excluded from:
+- Zombie classification (requires ongoing finance + stale activity)
+- Finance Gap findings (requires recurring spend with no governance)
+- The "has_ongoing_finance" predicate used in derived classifications
+
+The `is_recurring` flag is set on individual finance records at ingestion, not controlled by policy.
+
 ---
 
 ## Admission Gates

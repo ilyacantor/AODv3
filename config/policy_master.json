@@ -1,0 +1,264 @@
+{
+  "$schema": "./policy_master.schema.json",
+  "version": "1.0.0",
+  "last_modified": "2026-01-14T00:00:00Z",
+
+  "activity_windows": {
+    "description": "Time windows for activity status calculations",
+    "discovery_activity_window_days": {
+      "value": 90,
+      "type": "integer",
+      "min": 1,
+      "max": 365,
+      "description": "Days to consider for discovery activity",
+      "ui_label": "Discovery Activity Window (days)"
+    },
+    "zombie_window_days": {
+      "value": 90,
+      "type": "integer",
+      "min": 1,
+      "max": 365,
+      "description": "Days of inactivity before asset is considered stale for zombie classification",
+      "ui_label": "Zombie Detection Window (days)"
+    },
+    "default_activity_window_days": {
+      "value": 90,
+      "type": "integer",
+      "min": 1,
+      "max": 365,
+      "description": "Default activity window for shadow/zombie classification",
+      "ui_label": "Default Activity Window (days)"
+    }
+  },
+
+  "finance_thresholds": {
+    "description": "Financial thresholds for admission and findings",
+    "minimum_spend": {
+      "value": 200.0,
+      "type": "float",
+      "min": 0,
+      "max": 100000,
+      "description": "Minimum monthly spend (USD) for finance gate admission",
+      "ui_label": "Minimum Spend for Admission ($)"
+    },
+    "finance_gap_monthly_threshold": {
+      "value": 200.0,
+      "type": "float",
+      "min": 0,
+      "max": 100000,
+      "description": "Minimum monthly spend (USD) to trigger FINANCE_GAP finding",
+      "ui_label": "Finance Gap Monthly Threshold ($)"
+    },
+    "finance_gap_annual_threshold": {
+      "value": 2000.0,
+      "type": "float",
+      "min": 0,
+      "max": 1000000,
+      "description": "Minimum annual spend (USD) to trigger FINANCE_GAP finding",
+      "ui_label": "Finance Gap Annual Threshold ($)"
+    }
+  },
+
+  "admission_gates": {
+    "description": "Switches controlling admission gate behavior",
+    "noise_floor": {
+      "value": 1,
+      "type": "integer",
+      "min": 1,
+      "max": 10,
+      "description": "Minimum number of discovery sources required for admission",
+      "ui_label": "Discovery Noise Floor"
+    },
+    "require_sso_for_idp": {
+      "value": true,
+      "type": "boolean",
+      "description": "Require SSO/SCIM for IdP-based admission",
+      "ui_label": "Require SSO for IdP Admission"
+    },
+    "require_valid_ci_type": {
+      "value": true,
+      "type": "boolean",
+      "description": "Require valid CI type for CMDB-based admission",
+      "ui_label": "Require Valid CI Type"
+    },
+    "require_valid_lifecycle": {
+      "value": true,
+      "type": "boolean",
+      "description": "Require valid lifecycle status for CMDB admission",
+      "ui_label": "Require Valid Lifecycle"
+    },
+    "min_discovery_sources_for_shadow": {
+      "value": 2,
+      "type": "integer",
+      "min": 1,
+      "max": 10,
+      "description": "Minimum corroborating sources for shadow classification",
+      "ui_label": "Min Sources for Shadow"
+    }
+  },
+
+  "scope_toggles": {
+    "description": "Feature toggles for operational modes",
+    "include_infra": {
+      "value": false,
+      "type": "boolean",
+      "description": "Include infrastructure assets in discovery results",
+      "ui_label": "Include Infrastructure Assets"
+    },
+    "treat_directory_as_idp": {
+      "value": false,
+      "type": "boolean",
+      "description": "Treat directory services (AD, LDAP) as IdP",
+      "ui_label": "Treat Directory as IdP"
+    },
+    "use_policy_engine": {
+      "value": true,
+      "type": "boolean",
+      "description": "Use new policy engine for admission decisions",
+      "ui_label": "Enable Policy Engine"
+    },
+    "late_binding_domain_merge": {
+      "value": true,
+      "type": "boolean",
+      "description": "Enable late-binding domain merge for multi-domain assets",
+      "ui_label": "Late Binding Domain Merge"
+    }
+  },
+
+  "fuzzy_matching": {
+    "description": "Parameters for fuzzy name matching in correlation",
+    "max_edit_distance": {
+      "value": 2,
+      "type": "integer",
+      "min": 0,
+      "max": 10,
+      "description": "Maximum edit distance for fuzzy name matching",
+      "ui_label": "Max Edit Distance"
+    },
+    "max_edit_ratio": {
+      "value": 0.20,
+      "type": "float",
+      "min": 0,
+      "max": 1,
+      "description": "Maximum edit distance ratio (distance/max_length)",
+      "ui_label": "Max Edit Ratio"
+    },
+    "min_name_length": {
+      "value": 4,
+      "type": "integer",
+      "min": 1,
+      "max": 20,
+      "description": "Minimum name length to apply fuzzy matching",
+      "ui_label": "Min Name Length for Fuzzy"
+    }
+  },
+
+  "vendor_inference": {
+    "description": "Parameters for vendor hypothesis inference",
+    "max_confidence": {
+      "value": 0.9,
+      "type": "float",
+      "min": 0,
+      "max": 1,
+      "description": "Maximum confidence for vendor hypothesis (never fully authoritative)",
+      "ui_label": "Max Vendor Inference Confidence"
+    }
+  },
+
+  "query_limits": {
+    "description": "Database and storage limits",
+    "max_observation_samples": {
+      "value": 2000,
+      "type": "integer",
+      "min": 100,
+      "max": 50000,
+      "description": "Maximum observation samples to store per run",
+      "ui_label": "Max Observation Samples"
+    },
+    "default_rejection_limit": {
+      "value": 1000,
+      "type": "integer",
+      "min": 100,
+      "max": 50000,
+      "description": "Default limit for rejection queries",
+      "ui_label": "Default Rejection Limit"
+    },
+    "default_query_limit": {
+      "value": 1000,
+      "type": "integer",
+      "min": 100,
+      "max": 50000,
+      "description": "Default limit for general queries",
+      "ui_label": "Default Query Limit"
+    }
+  },
+
+  "exclusion_lists": {
+    "description": "Domain exclusion lists for admission filtering",
+    "custom_exclusions": {
+      "value": [
+        "platform.io", "hub.io", "data.io", "cdn.com", "edge.com",
+        "global.com", "api.co", "app.co", "pro.co", "quick.net",
+        "max.io", "smart.io", "sys.net", "force.com", "fast.io",
+        "plus.net", "cloud.net", "tech.net", "services.io", "world.net"
+      ],
+      "type": "string_array",
+      "description": "Custom domains to exclude from discovery (operator-managed)",
+      "ui_label": "Custom Exclusions"
+    },
+    "banned_domains": {
+      "value": [
+        "googleapis.com", "gstatic.com", "googleusercontent.com",
+        "microsoft.com", "microsoftonline.com", "windows.net",
+        "azure.com", "office.com", "office365.com",
+        "apple.com", "icloud.com", "akamai.net", "akamaized.net",
+        "cloudfront.net", "amazonaws.com", "awsstatic.com"
+      ],
+      "type": "string_array",
+      "description": "System banned domains (tech infrastructure)",
+      "ui_label": "Banned Domains"
+    },
+    "infrastructure_domains": {
+      "value": [
+        "redis.io", "redis.com", "postgresql.org", "mysql.com",
+        "docker.com", "kubernetes.io", "nginx.org", "apache.org",
+        "golang.org", "python.org", "nodejs.org", "npmjs.com",
+        "jenkins.io", "terraform.io", "hashicorp.com", "grafana.com",
+        "prometheus.io", "elastic.co", "mongodb.org"
+      ],
+      "type": "string_array",
+      "description": "Infrastructure technology domains",
+      "ui_label": "Infrastructure Domains"
+    },
+    "corporate_root_domains": {
+      "value": [],
+      "type": "string_array",
+      "description": "Customer corporate marketing domains to exclude",
+      "ui_label": "Corporate Root Domains"
+    }
+  },
+
+  "farm_sync": {
+    "description": "Farm synchronization settings",
+    "webhook_url": {
+      "value": "",
+      "type": "string",
+      "description": "Farm webhook URL for policy change notifications",
+      "ui_label": "Farm Webhook URL"
+    },
+    "auto_notify_on_change": {
+      "value": true,
+      "type": "boolean",
+      "description": "Automatically notify Farm when policy changes",
+      "ui_label": "Auto-Notify Farm on Change"
+    },
+    "sync_interval_seconds": {
+      "value": 0,
+      "type": "integer",
+      "min": 0,
+      "max": 3600,
+      "description": "Periodic sync interval (0 = disabled, Farm pulls on demand)",
+      "ui_label": "Sync Interval (seconds)"
+    }
+  }
+}

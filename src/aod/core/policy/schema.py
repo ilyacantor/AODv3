@@ -34,6 +34,10 @@ class AdmissionGatesConfig:
     require_valid_lifecycle: bool = True
     min_discovery_sources_for_shadow: int = 2
     allow_finance_only_admission: bool = False
+    enable_vendor_propagation: bool = True
+    finance_requires_discovery: bool = True
+    require_corroboration: bool = True
+    stale_window_days: int = 30
 
 
 @dataclass
@@ -156,6 +160,10 @@ class PolicyConfig:
                 "require_valid_lifecycle": self.admission_gates.require_valid_lifecycle,
                 "min_discovery_sources_for_shadow": self.admission_gates.min_discovery_sources_for_shadow,
                 "allow_finance_only_admission": self.admission_gates.allow_finance_only_admission,
+                "enable_vendor_propagation": self.admission_gates.enable_vendor_propagation,
+                "finance_requires_discovery": self.admission_gates.finance_requires_discovery,
+                "require_corroboration": self.admission_gates.require_corroboration,
+                "stale_window_days": self.admission_gates.stale_window_days,
             },
             "scope_toggles": {
                 "include_infra": self.scope_toggles.include_infra,

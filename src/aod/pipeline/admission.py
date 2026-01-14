@@ -1743,57 +1743,66 @@ def apply_admission_criteria(
     )
 
     # =========================================================================
-    # FARM ADMISSION POLICY (Jan 2026 Fix)
-    # Farm's admission policy: discovery >= 2 OR cloud_present OR idp_present OR cmdb_present
-    # NOTE: idp_present and cmdb_present include BOTH direct matches AND vendor-propagated governance
-    #
-    # Critical: IdP/CMDB/Cloud alone is SUFFICIENT for admission (no discovery requirement)
-    # Only discovery-only assets require 2+ sources for corroboration
-    #
-    # Previous AOD logic incorrectly required IdP/CMDB to have 2+ discovery sources,
-    # causing 12 cataloged FN (cloudflareinsights.com, pivotaltracker.com, etc.)
+    # FARM ADMISSION POLICY (Jan 2026 Fix) - Now policy-driven
     # =========================================================================
+    from aod.core.policy.loader import get_policy_config
+    policy_config = get_policy_config()
+    
+    # Policy toggles
+    enable_vendor_propagation = policy_config.admission_gates.enable_vendor_propagation
+    allow_finance_only = policy_config.admission_gates.allow_finance_only_admission
+    finance_requires_discovery = policy_config.admission_gates.finance_requires_discovery
+    require_corroboration = policy_config.admission_gates.require_corroboration
+    noise_floor = policy_config.admission_gates.noise_floor
+    
     footprint = build_discovery_footprint(
         observations,
         canonical_key=effective_domain or entity.canonical_name if entity else None,
         snapshot_timestamp=snapshot_timestamp
     )
-    # Require at least 2 distinct discovery sources for discovery-only admission
-    has_sufficient_discovery = len(footprint.discovery_sources) >= 2
-
-    # Finance admission policy (controlled by allow_finance_only_admission toggle)
-    #
-    # When allow_finance_only_admission = False (default):
-    #   Finance can admit ONLY if it has corroborating evidence
-    #   (governance or sufficient discovery >= 2 sources)
-    #
-    # When allow_finance_only_admission = True:
-    #   Finance alone is sufficient for admission
-    #
-    # Jan 2026 Policy Clarification: By default, finance alone (even with recurring spend)
-    # is NOT sufficient for admission. Farm's decision traces confirm this:
-    # - Assets with HAS_ONGOING_FINANCE but 1 discovery source → REJECTED ("Single source")
-    # - Assets need IdP/CMDB/Cloud OR ≥2 discovery sources for admission
-    # - Finance is metadata/context, not an admission criterion on its own
-    from aod.core.policy.loader import get_policy_config
-    policy_config = get_policy_config()
-    allow_finance_only = policy_config.admission_gates.allow_finance_only_admission
     
+    # Discovery admission: controlled by require_corroboration toggle
+    # When require_corroboration=True (default): Require 2+ sources for discovery-only admission
+    # When require_corroboration=False: Honor noise_floor (can be 1)
+    if require_corroboration:
+        has_sufficient_discovery = len(footprint.discovery_sources) >= 2
+    else:
+        has_sufficient_discovery = len(footprint.discovery_sources) >= noise_floor
+    
+    # Override discovery_admitted based on corroboration policy
+    if not require_corroboration and len(footprint.discovery_sources) >= noise_floor:
+        discovery_admitted = True
+
+    # Finance admission policy (controlled by multiple toggles)
+    #
+    # allow_finance_only_admission=True: Finance alone is sufficient
+    # finance_requires_discovery=False: Finance doesn't need discovery corroboration
+    # (Both can independently relax the finance requirements)
     if allow_finance_only:
         finance_can_admit = finance_admitted
+    elif not finance_requires_discovery:
+        # Finance can admit with governance OR without discovery
+        finance_can_admit = finance_admitted and (
+            idp_admitted or cmdb_admitted or cloud_admitted or True  # No discovery required
+        )
     else:
+        # Default: Finance requires governance OR sufficient discovery
         finance_can_admit = finance_admitted and (
             idp_admitted or
             cmdb_admitted or
             cloud_admitted or
-            discovery_admitted  # discovery_admitted already requires >= 2 sources
+            discovery_admitted
         )
 
-    # Farm policy: IdP/CMDB/Cloud alone is sufficient (no discovery corroboration needed)
-    # Only discovery-only assets need 2+ sources
-    # Jan 2026 Fix: Include vendor-propagated governance for admission
-    idp_can_admit = idp_admitted or propagated_idp  # Direct OR vendor-propagated IdP
-    cmdb_can_admit = cmdb_admitted or propagated_cmdb  # Direct OR vendor-propagated CMDB
+    # Vendor propagation: controlled by enable_vendor_propagation toggle
+    # When enabled (default): vendor-propagated IdP/CMDB counts for admission
+    # When disabled: only direct matches count
+    if enable_vendor_propagation:
+        idp_can_admit = idp_admitted or propagated_idp
+        cmdb_can_admit = cmdb_admitted or propagated_cmdb
+    else:
+        idp_can_admit = idp_admitted
+        cmdb_can_admit = cmdb_admitted
 
     # Admission: IdP OR CMDB OR Cloud OR Discovery (≥2) OR Finance (with corroboration)
     if not any([idp_can_admit, cmdb_can_admit, cloud_admitted, finance_can_admit, discovery_admitted]):
@@ -1813,7 +1822,8 @@ def apply_admission_criteria(
     has_governance = idp_can_admit or cmdb_can_admit
     
     # STEP 2: AMBER LANE (Review) - CMDB + Stale Activity = REVIEW
-    # Check if activity is stale (zombie indicator)
+    # Check if activity is stale (zombie indicator) using policy-driven stale_window_days
+    stale_window_days = policy_config.admission_gates.stale_window_days
     is_stale_activity = False
     if observations:
         from datetime import timedelta, timezone
@@ -1823,7 +1833,7 @@ def apply_admission_criteria(
                 if latest_activity is None or obs.observed_at > latest_activity:
                     latest_activity = obs.observed_at
         if latest_activity:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=stale_window_days)
             if latest_activity.tzinfo is None:
                 latest_activity = latest_activity.replace(tzinfo=timezone.utc)
             is_stale_activity = latest_activity < cutoff

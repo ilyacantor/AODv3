@@ -82,6 +82,10 @@ def _load_from_master(data: dict) -> PolicyConfig:
         require_valid_lifecycle=_extract_value(ag_section, "require_valid_lifecycle", True),
         min_discovery_sources_for_shadow=_extract_value(ag_section, "min_discovery_sources_for_shadow", 2),
         allow_finance_only_admission=_extract_value(ag_section, "allow_finance_only_admission", False),
+        enable_vendor_propagation=_extract_value(ag_section, "enable_vendor_propagation", True),
+        finance_requires_discovery=_extract_value(ag_section, "finance_requires_discovery", True),
+        require_corroboration=_extract_value(ag_section, "require_corroboration", True),
+        stale_window_days=_extract_value(ag_section, "stale_window_days", 30),
     )
     
     st_section = data.get("scope_toggles", {})
@@ -374,6 +378,10 @@ def save_config(config: PolicyConfig, path: Optional[str] = None) -> bool:
     _update_setting_value(ag, "require_valid_lifecycle", config.admission_gates.require_valid_lifecycle)
     _update_setting_value(ag, "min_discovery_sources_for_shadow", config.admission_gates.min_discovery_sources_for_shadow)
     _update_setting_value(ag, "allow_finance_only_admission", config.admission_gates.allow_finance_only_admission)
+    _update_setting_value(ag, "enable_vendor_propagation", config.admission_gates.enable_vendor_propagation)
+    _update_setting_value(ag, "finance_requires_discovery", config.admission_gates.finance_requires_discovery)
+    _update_setting_value(ag, "require_corroboration", config.admission_gates.require_corroboration)
+    _update_setting_value(ag, "stale_window_days", config.admission_gates.stale_window_days)
     
     if "scope_toggles" not in data:
         data["scope_toggles"] = {"description": "Feature toggles for operational modes"}

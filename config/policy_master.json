@@ -97,6 +97,32 @@
       "type": "boolean",
       "description": "Allow finance-only admission without governance or discovery corroboration",
       "ui_label": "Allow Finance-Only Admission"
+    },
+    "enable_vendor_propagation": {
+      "value": true,
+      "type": "boolean",
+      "description": "Enable vendor governance propagation (IdP/CMDB from vendor siblings)",
+      "ui_label": "Enable Vendor Propagation"
+    },
+    "finance_requires_discovery": {
+      "value": true,
+      "type": "boolean",
+      "description": "Require discovery evidence for finance-based admission (set false to reduce rejections)",
+      "ui_label": "Finance Requires Discovery"
+    },
+    "require_corroboration": {
+      "value": true,
+      "type": "boolean",
+      "description": "Require 2+ discovery sources for discovery-only admission (set false to honor noise_floor=1)",
+      "ui_label": "Require Discovery Corroboration"
+    },
+    "stale_window_days": {
+      "value": 30,
+      "type": "integer",
+      "min": 1,
+      "max": 365,
+      "description": "Days of inactivity before asset is considered stale",
+      "ui_label": "Stale Window (days)"
     }
   },
   "scope_toggles": {

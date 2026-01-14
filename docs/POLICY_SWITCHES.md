@@ -64,6 +64,10 @@ Switches controlling admission gate behavior. These determine what evidence is r
 | `require_valid_lifecycle` | boolean | true | - | Require valid lifecycle status for CMDB governance |
 | `min_discovery_sources_for_shadow` | integer | 2 | 1-10 | Minimum corroborating sources for shadow classification |
 | `allow_finance_only_admission` | boolean | false | - | Allow finance-only admission without corroboration |
+| `enable_vendor_propagation` | boolean | true | - | Enable vendor governance propagation from siblings |
+| `finance_requires_discovery` | boolean | true | - | Require discovery evidence for finance admission |
+| `require_corroboration` | boolean | true | - | Require 2+ sources for discovery-only admission |
+| `stale_window_days` | integer | 30 | 1-365 | Days of inactivity before asset is considered stale |
 
 ### IdP Governance Gate (`require_sso_for_idp`)
 Controls when IdP presence counts as "governed":
@@ -90,6 +94,34 @@ Controls whether finance evidence alone can admit an asset:
 - **true**: Finance alone (recurring spend) is sufficient for admission
 
 When disabled (default behavior), assets with only finance evidence are rejected with "No admission criteria satisfied" unless they also have governance or sufficient discovery corroboration.
+
+### Vendor Propagation (`enable_vendor_propagation`)
+Controls whether governance can be inherited from vendor siblings:
+- **true** (default): Vendor-propagated IdP/CMDB from sibling domains counts for admission
+- **false**: Only direct IdP/CMDB matches count for governance
+
+Example: When enabled, `googleapis.com` inherits HAS_IDP from "Google+" IdP record.
+
+### Finance Discovery Requirement (`finance_requires_discovery`)
+Controls whether finance-based admission needs discovery evidence:
+- **true** (default): Finance must have governance or discovery corroboration
+- **false**: Finance can admit without discovery evidence (reduces rejections)
+
+Set to `false` to reduce rejection count for assets with valid finance but limited discovery.
+
+### Discovery Corroboration (`require_corroboration`)
+Controls the discovery source threshold for admission:
+- **true** (default): Require 2+ discovery sources for discovery-only admission
+- **false**: Honor the `noise_floor` setting (can be 1 source)
+
+Set to `false` to allow single-source discovery when `noise_floor=1`.
+
+### Stale Window (`stale_window_days`)
+Number of days of inactivity before an asset is considered stale in admission logic:
+- **Default**: 30 days
+- **Range**: 1-365 days
+
+Used in the Traffic Light provisioning logic to identify zombie candidates.
 
 ---
 

@@ -28,8 +28,20 @@ from ..models.output_contracts import (
 )
 from ..constants import INFRASTRUCTURE_DOMAINS
 from .vendor_inference import extract_registered_domain
+from .canonical_key import normalize_to_canonical_vendor_domain
 
 logger = logging.getLogger(__name__)
+
+# Minimum token length for base-token merging (prevents false matches on short tokens)
+MIN_BASE_TOKEN_LENGTH = 5
+
+# Generic tokens that should NOT trigger base-token merging (too common)
+GENERIC_BASE_TOKENS: set[str] = {
+    "app", "api", "web", "www", "dev", "test", "prod", "staging", "demo",
+    "admin", "portal", "login", "auth", "sso", "cdn", "static", "assets",
+    "data", "cloud", "hub", "flow", "sync", "core", "base", "link", "net",
+    "pro", "max", "easy", "fast", "smart", "prime", "ultra", "rapid", "flex",
+}
 
 
 SSO_PROVIDER_DOMAINS: set[str] = {
@@ -46,6 +58,43 @@ def _is_sso_or_infrastructure_domain(domain: str) -> bool:
     return domain in SSO_PROVIDER_DOMAINS or domain in INFRASTRUCTURE_DOMAINS
 
 
+def _extract_base_token(domain: str) -> Optional[str]:
+    """
+    Extract base token from a domain for cross-TLD merging.
+    
+    Examples:
+        rapidtech.dev → rapidtech
+        rapidtech.app → rapidtech
+        rapidtech.co → rapidtech
+        service-now.com → servicenow
+        
+    Returns None for generic tokens or tokens that are too short.
+    """
+    if not domain:
+        return None
+    
+    # Extract registered domain first
+    registered = extract_registered_domain(domain)
+    if not registered:
+        return None
+    
+    # Get the first part (before the TLD)
+    parts = registered.split(".")
+    if not parts:
+        return None
+    
+    # Normalize: lowercase, remove hyphens/underscores
+    token = parts[0].lower().replace("-", "").replace("_", "")
+    
+    # Skip if too short or generic
+    if len(token) < MIN_BASE_TOKEN_LENGTH:
+        return None
+    if token in GENERIC_BASE_TOKENS:
+        return None
+    
+    return token
+
+
 def late_bind_and_merge_assets(
     assets: list[Asset],
     feature_enabled: bool,
@@ -53,6 +102,10 @@ def late_bind_and_merge_assets(
 ) -> list[Asset]:
     """
     Apply late-binding domain naming and merge assets by registered domain.
+    
+    Two-pass merge strategy:
+    1. First pass: Group by canonical domain (with alias collapsing)
+    2. Second pass: Group singletons by base-token for cross-TLD merging
     
     Args:
         assets: List of admitted assets
@@ -70,6 +123,7 @@ def late_bind_and_merge_assets(
     
     log = run_logger or logger
     
+    # ===== PASS 1: Group by canonical domain (with alias collapsing) =====
     groups: dict[str, list[Asset]] = defaultdict(list)
     standalone: list[Asset] = []
     
@@ -80,7 +134,7 @@ def late_bind_and_merge_assets(
         else:
             standalone.append(asset)
     
-    merged: list[Asset] = []
+    pass1_merged: list[Asset] = []
     merge_count = 0
     normalized_count = 0
     
@@ -91,10 +145,10 @@ def late_bind_and_merge_assets(
             original_first = original.identifiers.domains[0] if original.identifiers and original.identifiers.domains else None
             if original_first != merge_key:
                 normalized_count += 1
-            merged.append(normalized_asset)
+            pass1_merged.append(normalized_asset)
         else:
             merged_asset = _merge_assets(group, merge_key, log)
-            merged.append(merged_asset)
+            pass1_merged.append(merged_asset)
             merge_count += 1
             log.info("asset_identity.merge", extra={
                 "merge_key": merge_key,
@@ -103,37 +157,77 @@ def late_bind_and_merge_assets(
                 "winner_asset_id": str(merged_asset.asset_id)
             })
     
-    merged.extend(standalone)
+    # ===== PASS 2: Cross-TLD base-token merging =====
+    # Group pass1 singletons by base token (e.g., rapidtech.dev + rapidtech.app → merged)
+    base_token_groups: dict[str, list[Asset]] = defaultdict(list)
+    final_merged: list[Asset] = []
     
-    if merge_count > 0 or normalized_count > 0:
+    for asset in pass1_merged:
+        domains = asset.identifiers.domains if asset.identifiers else []
+        if domains:
+            base_token = _extract_base_token(domains[0])
+            if base_token:
+                base_token_groups[base_token].append(asset)
+            else:
+                final_merged.append(asset)
+        else:
+            final_merged.append(asset)
+    
+    base_token_merge_count = 0
+    for base_token, group in base_token_groups.items():
+        if len(group) == 1:
+            final_merged.append(group[0])
+        else:
+            # Use first domain of first asset as merge key for the merged asset
+            merge_key = group[0].identifiers.domains[0] if group[0].identifiers and group[0].identifiers.domains else base_token
+            merged_asset = _merge_assets(group, merge_key, log)
+            final_merged.append(merged_asset)
+            base_token_merge_count += 1
+            log.info("asset_identity.base_token_merge", extra={
+                "base_token": base_token,
+                "merged_count": len(group),
+                "domains_merged": [a.identifiers.domains[0] if a.identifiers and a.identifiers.domains else "?" for a in group],
+                "winner_asset_id": str(merged_asset.asset_id)
+            })
+    
+    final_merged.extend(standalone)
+    
+    if merge_count > 0 or normalized_count > 0 or base_token_merge_count > 0:
         log.info("asset_identity.summary", extra={
             "input_assets": len(assets),
-            "output_assets": len(merged),
-            "merges_performed": merge_count,
+            "output_assets": len(final_merged),
+            "pass1_merges": merge_count,
+            "pass2_base_token_merges": base_token_merge_count,
             "singletons_normalized": normalized_count,
             "standalone_assets": len(standalone)
         })
     
-    return merged
+    return final_merged
 
 
 def _compute_merge_key(asset: Asset) -> Optional[str]:
     """
     Compute merge key from asset's domains.
-    Returns registered domain (eTLD+1) or None if no valid domain.
+    Returns canonical domain (after alias collapsing) or registered domain (eTLD+1).
     
     Scans ALL domains and prefers non-SSO/non-infrastructure domains.
     Does NOT create synthetic merge_key from asset name.
     Assets without domains stay standalone.
     
     Priority:
-    1. First non-SSO, non-infrastructure registered domain
+    1. First non-SSO, non-infrastructure registered domain (after alias collapse)
     2. Fallback to first valid registered domain if all are SSO/infrastructure
+    
+    Alias Collapsing (Jan 2026 fix):
+    - outlook.com → microsoft.com
+    - office365.com → microsoft.com
+    - zoom.com → zoom.us
+    - etc. (per ALIAS_DOMAINS_TO_COLLAPSE in canonical_key.py)
     """
     if not asset.identifiers or not asset.identifiers.domains:
         return None
     
-    first_registered: Optional[str] = None
+    first_canonical: Optional[str] = None
     
     for domain in asset.identifiers.domains:
         if not domain:
@@ -143,13 +237,17 @@ def _compute_merge_key(asset: Asset) -> Optional[str]:
         if not registered:
             continue
         
-        if first_registered is None:
-            first_registered = registered
+        # Apply alias collapsing (e.g., outlook.com → microsoft.com)
+        canonical = normalize_to_canonical_vendor_domain(registered)
+        merge_key = canonical if canonical else registered
         
-        if not _is_sso_or_infrastructure_domain(registered):
-            return registered
+        if first_canonical is None:
+            first_canonical = merge_key
+        
+        if not _is_sso_or_infrastructure_domain(merge_key):
+            return merge_key
     
-    return first_registered
+    return first_canonical
 
 
 def _normalize_singleton(asset: Asset, merge_key: str, log: logging.Logger) -> Asset:

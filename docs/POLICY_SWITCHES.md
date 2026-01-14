@@ -59,10 +59,29 @@ Switches controlling admission gate behavior. These determine what evidence is r
 | Setting | Type | Default | Range | Description |
 |---------|------|---------|-------|-------------|
 | `noise_floor` | integer | 1 | 1-10 | Minimum number of discovery sources required for admission |
-| `require_sso_for_idp` | boolean | true | - | Require SSO/SCIM for IdP-based admission |
-| `require_valid_ci_type` | boolean | true | - | Require valid CI type for CMDB-based admission |
-| `require_valid_lifecycle` | boolean | true | - | Require valid lifecycle status for CMDB admission |
+| `require_sso_for_idp` | boolean | true | - | Require SSO/SCIM for IdP-based governance |
+| `require_valid_ci_type` | boolean | true | - | Require valid CI type for CMDB-based governance |
+| `require_valid_lifecycle` | boolean | true | - | Require valid lifecycle status for CMDB governance |
 | `min_discovery_sources_for_shadow` | integer | 2 | 1-10 | Minimum corroborating sources for shadow classification |
+
+### IdP Governance Gate (`require_sso_for_idp`)
+Controls when IdP presence counts as "governed":
+- **true**: Asset must have SSO, SCIM provisioning, OR be a service principal to count as HAS_IDP
+- **false**: Any IdP presence counts as governed
+
+### CMDB Governance Gate (`require_valid_ci_type`)
+Controls when CMDB presence counts as "governed":
+- **true**: CI type must be one of: `app`, `application`, `service`, `database`, `infra`, `infrastructure`, `server`, `system`
+- **false**: Any CMDB presence counts as governed
+
+**Valid CI Types:** `app`, `application`, `service`, `database`, `infra`, `infrastructure`, `server`, `system`
+
+### Lifecycle Validation (`require_valid_lifecycle`)
+Only applies when `require_valid_ci_type` is also true:
+- **true**: Lifecycle status must be: `prod`, `production`, `staging`, `stage`, `live`, `active`
+- **false**: Any lifecycle status is accepted
+
+**Valid Lifecycles:** `prod`, `production`, `staging`, `stage`, `live`, `active`
 
 ---
 

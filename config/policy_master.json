@@ -91,6 +91,12 @@
       "max": 10,
       "description": "Minimum corroborating sources for shadow classification",
       "ui_label": "Min Sources for Shadow"
+    },
+    "allow_finance_only_admission": {
+      "value": false,
+      "type": "boolean",
+      "description": "Allow finance-only admission without governance or discovery corroboration",
+      "ui_label": "Allow Finance-Only Admission"
     }
   },
   "scope_toggles": {

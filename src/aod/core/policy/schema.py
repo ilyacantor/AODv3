@@ -33,6 +33,7 @@ class AdmissionGatesConfig:
     require_valid_ci_type: bool = True
     require_valid_lifecycle: bool = True
     min_discovery_sources_for_shadow: int = 2
+    allow_finance_only_admission: bool = False
 
 
 @dataclass
@@ -154,6 +155,7 @@ class PolicyConfig:
                 "require_valid_ci_type": self.admission_gates.require_valid_ci_type,
                 "require_valid_lifecycle": self.admission_gates.require_valid_lifecycle,
                 "min_discovery_sources_for_shadow": self.admission_gates.min_discovery_sources_for_shadow,
+                "allow_finance_only_admission": self.admission_gates.allow_finance_only_admission,
             },
             "scope_toggles": {
                 "include_infra": self.scope_toggles.include_infra,

@@ -81,6 +81,7 @@ def _load_from_master(data: dict) -> PolicyConfig:
         require_valid_ci_type=_extract_value(ag_section, "require_valid_ci_type", True),
         require_valid_lifecycle=_extract_value(ag_section, "require_valid_lifecycle", True),
         min_discovery_sources_for_shadow=_extract_value(ag_section, "min_discovery_sources_for_shadow", 2),
+        allow_finance_only_admission=_extract_value(ag_section, "allow_finance_only_admission", False),
     )
     
     st_section = data.get("scope_toggles", {})
@@ -372,6 +373,7 @@ def save_config(config: PolicyConfig, path: Optional[str] = None) -> bool:
     _update_setting_value(ag, "require_valid_ci_type", config.admission_gates.require_valid_ci_type)
     _update_setting_value(ag, "require_valid_lifecycle", config.admission_gates.require_valid_lifecycle)
     _update_setting_value(ag, "min_discovery_sources_for_shadow", config.admission_gates.min_discovery_sources_for_shadow)
+    _update_setting_value(ag, "allow_finance_only_admission", config.admission_gates.allow_finance_only_admission)
     
     if "scope_toggles" not in data:
         data["scope_toggles"] = {"description": "Feature toggles for operational modes"}

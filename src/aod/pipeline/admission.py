@@ -1761,20 +1761,33 @@ def apply_admission_criteria(
     # Require at least 2 distinct discovery sources for discovery-only admission
     has_sufficient_discovery = len(footprint.discovery_sources) >= 2
 
-    # Finance can admit ONLY if it has corroborating evidence
-    # (governance or sufficient discovery >= 2 sources)
+    # Finance admission policy (controlled by allow_finance_only_admission toggle)
     #
-    # Jan 2026 Policy Clarification: Finance alone (even with recurring spend)
+    # When allow_finance_only_admission = False (default):
+    #   Finance can admit ONLY if it has corroborating evidence
+    #   (governance or sufficient discovery >= 2 sources)
+    #
+    # When allow_finance_only_admission = True:
+    #   Finance alone is sufficient for admission
+    #
+    # Jan 2026 Policy Clarification: By default, finance alone (even with recurring spend)
     # is NOT sufficient for admission. Farm's decision traces confirm this:
     # - Assets with HAS_ONGOING_FINANCE but 1 discovery source → REJECTED ("Single source")
     # - Assets need IdP/CMDB/Cloud OR ≥2 discovery sources for admission
     # - Finance is metadata/context, not an admission criterion on its own
-    finance_can_admit = finance_admitted and (
-        idp_admitted or
-        cmdb_admitted or
-        cloud_admitted or
-        discovery_admitted  # discovery_admitted already requires >= 2 sources
-    )
+    from aod.core.policy.loader import get_policy_config
+    policy_config = get_policy_config()
+    allow_finance_only = policy_config.admission_gates.allow_finance_only_admission
+    
+    if allow_finance_only:
+        finance_can_admit = finance_admitted
+    else:
+        finance_can_admit = finance_admitted and (
+            idp_admitted or
+            cmdb_admitted or
+            cloud_admitted or
+            discovery_admitted  # discovery_admitted already requires >= 2 sources
+        )
 
     # Farm policy: IdP/CMDB/Cloud alone is sufficient (no discovery corroboration needed)
     # Only discovery-only assets need 2+ sources

@@ -63,6 +63,7 @@ Switches controlling admission gate behavior. These determine what evidence is r
 | `require_valid_ci_type` | boolean | true | - | Require valid CI type for CMDB-based governance |
 | `require_valid_lifecycle` | boolean | true | - | Require valid lifecycle status for CMDB governance |
 | `min_discovery_sources_for_shadow` | integer | 2 | 1-10 | Minimum corroborating sources for shadow classification |
+| `allow_finance_only_admission` | boolean | false | - | Allow finance-only admission without corroboration |
 
 ### IdP Governance Gate (`require_sso_for_idp`)
 Controls when IdP presence counts as "governed":
@@ -82,6 +83,13 @@ Only applies when `require_valid_ci_type` is also true:
 - **false**: Any lifecycle status is accepted
 
 **Valid Lifecycles:** `prod`, `production`, `staging`, `stage`, `live`, `active`
+
+### Finance Corroboration Gate (`allow_finance_only_admission`)
+Controls whether finance evidence alone can admit an asset:
+- **false** (default): Finance requires corroboration from IdP, CMDB, Cloud, OR 2+ discovery sources
+- **true**: Finance alone (recurring spend) is sufficient for admission
+
+When disabled (default behavior), assets with only finance evidence are rejected with "No admission criteria satisfied" unless they also have governance or sufficient discovery corroboration.
 
 ---
 

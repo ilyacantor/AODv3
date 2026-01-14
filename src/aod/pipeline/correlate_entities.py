@@ -134,6 +134,34 @@ def _is_fuzzy_match(
     return False
 
 
+class MatchQuality(Enum):
+    """
+    Distinguishes authoritative matches from heuristic matches.
+    
+    AUTHORITATIVE: Exact domain/URI/canonical_name matches - can assert governance
+    HEURISTIC: Fuzzy/vendor/contains matches - enrichment only, cannot assert governance
+    
+    Per governance policy: CMDB and IdP are authoritative truth sources.
+    An asset is governed only if there exists at least one CMDB or IdP record
+    that explicitly passes all governance gates via an AUTHORITATIVE match.
+    Heuristics may generate hypotheses and enrichment signals but may never
+    assert or override governance or classification outcomes.
+    """
+    AUTHORITATIVE = "authoritative"
+    HEURISTIC = "heuristic"
+    NONE = "none"
+
+
+# Match methods that are authoritative (exact matches)
+AUTHORITATIVE_MATCH_METHODS = {"domain", "uri", "canonical_name"}
+
+# Match methods that are heuristic (cannot assert governance)
+HEURISTIC_MATCH_METHODS = {
+    "fuzzy", "contains", "vendor", "domain_vendor", "vendor_fallback",
+    "name_contains_domain_token", "normalization_token"
+}
+
+
 @dataclass
 class PlaneMatch:
     """Match result for a single plane"""
@@ -144,6 +172,30 @@ class PlaneMatch:
     match_key: Optional[str] = None
     ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
     disambiguation_detail: Optional[str] = None
+    
+    @property
+    def match_quality(self) -> MatchQuality:
+        """
+        Determine if this match is authoritative or heuristic based on match_method.
+        
+        AUTHORITATIVE matches (domain, uri, canonical_name) can grant governance.
+        HEURISTIC matches (fuzzy, vendor, contains, etc.) are enrichment-only.
+        """
+        if self.status == MatchStatus.UNMATCHED:
+            return MatchQuality.NONE
+        if not self.match_method:
+            return MatchQuality.NONE
+        if self.match_method in AUTHORITATIVE_MATCH_METHODS:
+            return MatchQuality.AUTHORITATIVE
+        if self.match_method in HEURISTIC_MATCH_METHODS:
+            return MatchQuality.HEURISTIC
+        # Unknown method defaults to heuristic for safety
+        return MatchQuality.HEURISTIC
+    
+    @property
+    def is_authoritative(self) -> bool:
+        """Convenience property: True if this match can assert governance."""
+        return self.match_quality == MatchQuality.AUTHORITATIVE
 
 
 @dataclass

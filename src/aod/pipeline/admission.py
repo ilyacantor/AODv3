@@ -528,6 +528,9 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     Cross-domain IdP matches (e.g., fastbox.cloud matched to fastbox.ai IdP) do NOT
     provide governance for admission, even if the IdP has SSO/SCIM enabled.
     Farm's decision traces confirm: idp_present=False for cross-domain matches.
+    
+    Jan 2026: Governance principle - only AUTHORITATIVE matches can assert governance.
+    Heuristic matches (fuzzy, vendor, contains) provide enrichment but not governance.
 
     Examples:
     - fastbox.cloud entity + fastbox.ai IdP with SSO → NOT admitted (cross-domain)
@@ -535,6 +538,11 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     - easyworks.ai entity + easyworks.ai IdP → admitted (exact match)
     """
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return False, ""
+    
+    # Governance principle: Only authoritative matches can assert governance.
+    # Heuristic matches (fuzzy, vendor, contains) are enrichment-only.
+    if not correlation.idp.is_authoritative:
         return False, ""
 
     for record in correlation.idp.matched_records:
@@ -573,9 +581,17 @@ def check_cmdb_admission(
     
     This aligns with Farm's behavior where passes_gate=false means no governance.
     
+    Jan 2026: Governance principle - only AUTHORITATIVE matches can assert governance.
+    Heuristic matches (fuzzy, vendor, contains) provide enrichment but not governance.
+    
     NOTE: Both MATCHED and AMBIGUOUS correlation status count as having CMDB evidence.
     """
     if correlation.cmdb.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return False, ""
+    
+    # Governance principle: Only authoritative matches can assert governance.
+    # Heuristic matches (fuzzy, vendor, contains) are enrichment-only.
+    if not correlation.cmdb.is_authoritative:
         return False, ""
     
     if not correlation.cmdb.matched_records:

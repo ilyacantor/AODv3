@@ -416,6 +416,16 @@ async def execute_pipeline(
     
     tenant_id = data.get("meta", {}).get("tenant_id", "unknown")
     
+    snapshot_as_of = None
+    created_at_str = data.get("meta", {}).get("created_at") or data.get("meta", {}).get("generated_at")
+    if created_at_str:
+        try:
+            snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+            if snapshot_as_of.tzinfo is None:
+                snapshot_as_of = snapshot_as_of.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    
     input_meta = data.get("meta", {}).copy()
     if provenance:
         input_meta["provenance"] = provenance

@@ -23,6 +23,14 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 
 **Governance Policy:** `is_governed = has_idp OR has_cmdb`.
 
+**Authoritative vs Heuristic Match Quality:**
+-   CMDB and IdP are authoritative truth sources for governance decisions.
+-   An asset is governed only if there exists at least one CMDB or IdP record that explicitly passes all governance gates via an AUTHORITATIVE match.
+-   **AUTHORITATIVE** match methods: `domain`, `uri`, `canonical_name` - can assert governance.
+-   **HEURISTIC** match methods: `fuzzy`, `contains`, `vendor`, `domain_vendor`, `vendor_fallback`, `name_contains_domain_token`, `normalization_token` - enrichment only, cannot assert governance.
+-   If a record exists but fails gates (or was matched heuristically), the asset is explicitly NOT governed.
+-   Heuristics may generate hypotheses and enrichment signals but may never assert or override governance or classification outcomes.
+
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
 -   **Policy Categories:**

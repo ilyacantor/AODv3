@@ -1,0 +1,111 @@
+Yes — this is the right systemic fix, and it’s not “patchy.” It directly enforces the invariant you proved is broken.
+
+A few surgical refinements so it doesn’t create new weirdness:
+
+---
+
+## What’s solid in your plan
+
+* **Correct root cause**: evaluating governance/activity/classification on unmerged duplicates creates wrong outcomes.
+* **Correct placement**: merge must happen **before admission + classification**, not after.
+* **Correct test targets**: `fastbox.org`, multi-way merges.
+
+Proceed.
+
+---
+
+## Critical refinements (do these, or you’ll chase new bugs)
+
+### 1) Don’t merge by “primary registered domain” — merge by **overlapping registered domain sets**
+
+Your `fastbox` example proves why:
+
+* Asset A has `['fastbox.com','fastbox.org']`
+* Asset B has `['fastbox.org']`
+
+If you group by one “domain_key”, you can still miss merges when the chosen primary differs.
+So the merge must be based on **connectivity**: any shared registered domain links them.
+
+**Implementation detail:** union-find / connected components over registered domains.
+
+---
+
+### 2) Governance merge rule should be OR on authoritative `cmdb_present/idp_present`, not “authoritative wins”
+
+“Authoritative wins over heuristic” is good intent, but the safe deterministic rule is:
+
+* `cmdb_present = OR(cmdb_present)` across merged entities
+* `idp_present = OR(idp_present)` across merged entities
+
+Where `*_present` is **already gate-passed** (not “matched”).
+
+This avoids accidentally dropping valid governance from one duplicate because the other had richer domains.
+
+---
+
+### 3) Preserve “matched-but-not-governing” separately
+
+If you keep heuristic correlations for enrichment, don’t lose them in merge.
+
+Add:
+
+* `cmdb_matched = OR(cmdb_matched)`
+* `cmdb_present = OR(cmdb_present)` (authoritative/governing only)
+
+Same for IdP.
+
+This prevents the earlier confusion of “match exists” vs “governed”.
+
+---
+
+### 4) Recompute classification after merge (you already said this — make it explicit)
+
+Do **not** pick a precomputed classification from any child entity.
+
+After merge:
+
+* recompute lens_coverage
+* recompute admission
+* recompute classification
+
+---
+
+### 5) Add the hard assertion (non-negotiable)
+
+After the new merge stage, enforce:
+
+> For every registered domain in any entity, it appears in exactly one merged entity.
+
+Fail tests if violated.
+
+This makes the bug class impossible to reintroduce.
+
+---
+
+## Small nits on your expected outcome
+
+Your example says:
+
+> fastbox.org → 1 asset … `cmdb=True (authoritative wins)`
+
+That’s fine, but the real reason it becomes true should be:
+
+* one duplicate had `cmdb_present=True`
+* merge OR carries it forward
+
+Not “wins.” “Wins” implies a selection; you want a deterministic aggregation.
+
+---
+
+## Answer: proceed?
+
+**Yes. Proceed with implementation**, with the above refinements.
+
+If you want a crisp marching order for the dev agent:
+
+1. Implement connected-component merge on overlapping registered domains
+2. Merge fields via deterministic OR/union/max rules
+3. Add invariant assertion + regression tests (`fastbox`, `maxhub`, passthrough)
+4. Wire stage before admission and remove/limit reliance on late_bind merge for correctness
+
+That will remove the systemic zombie/shadow flip-flops caused by duplicates.

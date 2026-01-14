@@ -1,0 +1,117 @@
+Solid plan. A few tweaks to make it airtight and avoid accidental behavior changes.
+
+## What’s good
+
+* You correctly frame the bug: **unconditional CMDB admit** bypasses the gate intent.
+* Your proposed logic is clean: **only admit if a matched record passes the checks**, unless explicitly in “relaxed mode.”
+* Phases are practical: fix → wire policy through → audit other gates → tests.
+
+## Key corrections / improvements
+
+### 1) Your “root cause” wording is slightly off
+
+It’s not just “never consults PolicyConfig.”
+Even if policy didn’t exist, the function still **should not** admit on failed gate checks.
+
+So the true root cause is:
+
+* **Fallback admits any match even when no record passes validation.**
+* And secondarily: **policy flags aren’t being applied**, so “strict vs relaxed” can’t be expressed.
+
+Keep both, but lead with the fallback defect.
+
+---
+
+### 2) Decide what “relaxed mode” *means* (and make it explicit)
+
+Your logic defines relaxed mode as:
+
+> admit on any match only when BOTH require_valid_ci_type and require_valid_lifecycle are false.
+
+That’s reasonable, but make sure that is actually the intended semantics.
+
+Alternative semantics (more conservative, often better):
+
+* If `require_ci_type = false`, you still require lifecycle (if lifecycle required).
+* If `require_lifecycle = false`, you still require ci_type (if ci_type required).
+* **Only admit when the enabled checks pass.**
+* Only “admit-any-match” if you introduce a *separate* explicit flag like `allow_cmdb_match_without_validation`.
+
+Right now you’re overloading “both flags off” to mean “admit any match.” That’s OK, just be sure it’s intended.
+
+---
+
+### 3) Don’t put policy logic inside admission checks unless the pattern is consistent
+
+If other check_* functions already receive policy indirectly (e.g., via a policy engine or pipeline context), then changing the signature might create churn.
+
+Preferred wiring pattern:
+
+* Either pass `policy` into **all** admission gate functions consistently, or
+* Make `check_cmdb_admission` consume a precomputed “effective gates config” object from the pipeline context.
+
+Your Phase 2 is fine — just watch for inconsistency where CMDB has policy and others don’t.
+
+---
+
+### 4) Tests: don’t rely on “Rapidtech/Trello fixtures” only
+
+Do both:
+
+**Unit tests (fast, deterministic):**
+
+* “matched_records present, none valid → returns False (strict mode)”
+* “one valid record → returns True”
+* “policy relaxed → returns True on match” (if you keep relaxed-any-match behavior)
+
+**Integration test (guards against regressions):**
+
+* Feed a mini snapshot and confirm the final classification flips to Shadow.
+
+That gives you a tight safety net.
+
+---
+
+### 5) Expected outcome: “~100%” is risky to promise
+
+This fix should remove a big chunk of mismatches, but saying ~100% can backfire if other RCAs remain (vendor aliasing, tenant domains, true key drift, etc.).
+
+Better expectation statement:
+
+* “Should eliminate the 103 missed shadows attributable to CMDB bypass; overall reconciliation should materially improve.”
+
+---
+
+## Suggested tightened “Proposed behavior” (keep your intent, clearer)
+
+* Admit if **any record** passes the enabled checks.
+* Only allow “match-only admit” if you explicitly want it.
+
+If you keep your current approach, at least rename the fallback reason to make it obvious:
+
+* `"CMDB match (relaxed mode: validation disabled)"`
+
+---
+
+## Phase 3 audit list: add one more target
+
+In addition to your list, audit any place that sets:
+
+* `lens_status.cmdb = matched` vs `governed`
+  Because even if admission is fixed, **classification may still be using “matched” as “governed”** somewhere else.
+
+That’s the other common source of “still not shadow” after an admission fix.
+
+---
+
+## Bottom line
+
+✅ Plan direction is correct.
+Make these adjustments:
+
+1. Describe root cause as **fallback admits despite failed validation** (policy bypass is secondary).
+2. Be explicit about what “relaxed mode” means (or add a dedicated flag).
+3. Add unit tests + one integration test.
+4. Don’t promise ~100% reconciliation.
+
+If you want, paste the current `check_cmdb_admission` callers (just function names / files) and I’ll tell you the cleanest wiring approach with minimal blast radius.

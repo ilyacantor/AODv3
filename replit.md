@@ -54,6 +54,14 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   Each domain produces its own canonical key for accurate Farm reconciliation
 -   Fixes KEY_NORMALIZATION_MISMATCH errors for these infrastructure domains
 
+**Identity Model & Key Strategy (Jan 2026 CTO Guidance):**
+-   **Domain Provenance Tracking**: `identifiers.domain_provenance` maps each domain to its source: `discovery`, `cmdb`, `idp`, `vendor_map`, or `inferred`
+-   **CMDB Domain Promotion**: Authoritative CMDB domains (from `record.domain` field) can be added to `identifiers.domains` if they pass validation gates. external_ref URLs remain in `reference_domains` only (Stage 1 fix preserved)
+-   **Generic Collision Roots**: High-collision eTLD+1 domains (cdn.com, edge.com, cloud.com, etc.) suppressed from identity unless explicitly anchored. Configurable via `generic_collision_roots` policy category
+-   **Key Strategy Versioning**: `key_strategy_version` policy (v1/v2) controls canonical key generation. v2 uses domain provenance priority (idp → cmdb → discovery → vendor → fallback)
+-   **Reconciliation Mapping Layer**: `anchor_type` (IDP, CMDB, FINANCE, CLOUD, DISCOVERY, NONE), `absence_flags`, and `entity_key_v2` fields enable Farm reconciliation vocabulary alignment
+-   **Governance Invariant**: CMDB domain promotion only bypasses filters when MATCHED (not AMBIGUOUS) + authoritative match method + cmdb_admitted=True
+
 **Stage 1 Metrics (CMDB External Ref Domain Leakage):**
 -   CMDB external_ref domains stored in `reference_domains` (enrichment only)
 -   NOT added to `identifiers.domains` (prevents false key generation)

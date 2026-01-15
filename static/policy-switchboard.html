@@ -61,13 +61,18 @@
                 </svg>
                 Save Changes
             </button>
-            <button id="sync-btn" onclick="syncToFarm()" 
-                class="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-semibold rounded-lg shadow-lg shadow-purple-500/20 transition-all duration-200 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                Sync to Farm
-            </button>
+            <div class="relative group">
+                <button id="sync-btn" onclick="syncToFarm()" disabled
+                    class="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg shadow-purple-500/20 disabled:shadow-none transition-all duration-200 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Sync to Farm
+                </button>
+                <div id="sync-tooltip" class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-gray-300 text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none hidden">
+                    Configure webhook_url in Farm Sync section first
+                </div>
+            </div>
             <button onclick="loadConfig()" 
                 class="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -372,6 +377,18 @@
 
             document.getElementById('loading').classList.add('hidden');
             form.classList.remove('hidden');
+            
+            // Enable/disable Sync to Farm button based on webhook_url configuration
+            const syncBtn = document.getElementById('sync-btn');
+            const syncTooltip = document.getElementById('sync-tooltip');
+            const webhookUrl = config.farm_sync?.webhook_url?.value;
+            if (webhookUrl && webhookUrl.trim() !== '') {
+                syncBtn.disabled = false;
+                syncTooltip.classList.add('hidden');
+            } else {
+                syncBtn.disabled = true;
+                syncTooltip.classList.remove('hidden');
+            }
         }
 
         function collectFormData() {

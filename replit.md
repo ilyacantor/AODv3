@@ -43,6 +43,19 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   Reason codes use `lens_coverage` (governance outcome), NOT `lens_status` (match existence)
 -   Heuristic correlations preserved in `lens_match_debug` for enrichment but don't set HAS_CMDB/HAS_IDP
 
+**Key Normalization (Stage 4 - Jan 2026):**
+-   Infrastructure/service domains produce STABLE STANDALONE asset keys (not collapsed to vendor domain)
+-   Domains removed from `ALIAS_DOMAINS_TO_COLLAPSE`: outlook.com, gstatic.com
+-   Domains already preserved as standalone: office.com, cloudfront.net, awsstatic.com
+-   Each domain produces its own canonical key for accurate Farm reconciliation
+-   Fixes KEY_NORMALIZATION_MISMATCH errors for these infrastructure domains
+
+**Stage 1 Metrics (CMDB External Ref Domain Leakage):**
+-   CMDB external_ref domains stored in `reference_domains` (enrichment only)
+-   NOT added to `identifiers.domains` (prevents false key generation)
+-   Metrics available via `/api/runs/{run_id}/derived` → `stage1_metrics`
+-   Verification: `domains_in_both_identity_and_reference` must be 0
+
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
 -   **Policy Categories:**

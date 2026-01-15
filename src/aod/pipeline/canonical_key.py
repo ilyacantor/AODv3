@@ -58,6 +58,14 @@ class CanonicalKeyResult:
 # Domains that should collapse to their canonical vendor domain.
 # Note: Only aliases are listed here. Legitimate primary domains (atlassian.net,
 # notion.so, segment.io, datadoghq.com) are NOT in this set.
+#
+# Stage 4 Fix (Jan 2026): Infrastructure/service domains produce STABLE STANDALONE keys.
+# These domains are NOT collapsed to vendor domain:
+# - outlook.com: Microsoft email service (distinct SaaS endpoint)
+# - office.com: Microsoft Office suite (distinct SaaS endpoint)
+# - gstatic.com: Google static assets (distinct CDN/service)
+# - cloudfront.net: AWS CDN service (distinct infrastructure)
+# - awsstatic.com: AWS static assets (distinct infrastructure)
 ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     # Microsoft family - collapse to microsoft.com
     "microsoftonline.com",
@@ -67,12 +75,14 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "office365.com",
     # NOTE: sharepoint.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     "live.com",
-    "outlook.com",
+    # Stage 4: outlook.com is a distinct email service - NOT collapsed (produces stable key)
+    # "outlook.com",  # REMOVED - produces stable standalone key
     "onedrive.com",
     "powerbi.com",
     # Google family - collapse to google.com
     # NOTE: googleapis.com is a distinct service domain - NOT an alias (preserve identity)
-    "gstatic.com",
+    # Stage 4: gstatic.com is a distinct CDN service - NOT collapsed (produces stable key)
+    # "gstatic.com",  # REMOVED - produces stable standalone key
     # NOTE: googleusercontent.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     # Zoom family - collapse to zoom.us
     "zoom.com",

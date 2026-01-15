@@ -1,0 +1,57 @@
+Questions for AOD Team
+Based on Farm-side analysis of reconciliation discrepancies, here are the questions that need clarification:
+
+1. Multi-Domain Vendor Normalization
+Context: Farm normalizes googleapis.com, gstatic.com, googleusercontent.com → google.com (parent consolidation). Similarly for Microsoft: office.com, sharepoint.com → microsoft.com.
+
+Questions:
+
+Does AOD consolidate multi-domain vendor aliases to their parent domain, or keep them as separate catalog entries?
+If AOD keeps them separate, what is the canonical key format? (e.g., googleapis.com vs Google Workspace - googleapis.com)
+Should Farm disable parent consolidation for MULTI_DOMAIN_PRODUCTS to match AOD behavior?
+2. Zombie Detection Logic
+Context: Farm expects 25 zombies, AOD found only 4 (84% miss rate).
+
+Questions:
+
+What is AOD's zombie_window_days setting? (Farm uses 90 days)
+How does AOD determine "last activity timestamp"? Does it use:
+Last SSO event?
+Last finance transaction?
+Last discovery observation?
+All of the above (max)?
+Are zombies only detected for governed assets (in CMDB/IdP), or also for ungoverned assets with stale activity?
+Does AOD require minimum evidence thresholds before classifying as zombie (e.g., must have CMDB entry)?
+3. Synthetic Domain Passthrough
+Context: 21 synthetic SaaS domains (linkbox.dev, flexbase.co, workbox.app, etc.) show as KEY_NORMALIZATION_BUG.
+
+Questions:
+
+Does AOD apply any domain filtering/exclusions beyond the policy exclusions list?
+Are there minimum observation thresholds (e.g., discovery_source_count >= 2) that reject single-source synthetic domains?
+Does AOD strip any TLD patterns (.dev, .app, .tech) as non-production?
+4. Admission Gate Alignment
+Context: 72 assets rejected by AOD that Farm expected to admit.
+
+Questions:
+
+What are AOD's minimum admission criteria? Farm uses:
+In CMDB → admit
+In IdP → admit
+Has discovery + (cloud evidence OR finance spend > $0) → admit
+Does AOD have additional gates (e.g., minimum user count, activity recency)?
+5. False Positive Shadows (29 assets)
+Context: Farm classified as clean/governed but AOD says shadow.
+
+Questions:
+
+How does AOD determine governance status? Farm uses:
+governed = in_cmdb OR in_idp
+Does AOD require both CMDB and IdP for full governance, or just one?
+Are there CMDB lifecycle states that AOD treats as "ungoverned" (e.g., pending, draft)?
+6. Policy Snapshot Verification
+Questions:
+
+Does AOD include policy_snapshot in its run output so Farm can verify grading against the exact policy used?
+If policy differs between Farm and AOD, which takes precedence for reconciliation?
+These questions will help identify whether discrepancies are Farm bugs (Farm should change) or expected differences (AOD behavior is correct and Farm needs alignment)

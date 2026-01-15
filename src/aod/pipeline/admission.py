@@ -231,6 +231,37 @@ def _is_sso_or_infrastructure_domain(domain: str) -> bool:
     return registered in SSO_PROVIDER_DOMAINS or registered in infra_domains
 
 
+def extract_cmdb_external_ref_domains(correlation: CorrelationResult) -> list[str]:
+    """
+    Extract domains specifically from CMDB external_ref field.
+    
+    Stage 1 Metric: This function is used to track cmdb_external_ref_domains_extracted_total.
+    The domains returned here should NOT be in identifiers.domains after Stage 1 fix.
+    
+    Returns:
+        List of domains extracted from CMDB external_ref field only
+    """
+    domains = []
+    cmdb_match = correlation.cmdb
+    
+    if cmdb_match.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return domains
+    
+    for record in cmdb_match.matched_records:
+        if record is None:
+            continue
+        
+        raw_data = getattr(record, 'raw_data', None)
+        if raw_data and isinstance(raw_data, dict):
+            external_ref = raw_data.get('external_ref')
+            if external_ref:
+                cleaned = _clean_url_to_domain(external_ref)
+                if cleaned:
+                    domains.append(cleaned)
+    
+    return domains
+
+
 def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> list[str]:
     """
     Extract ALL domains from correlation matched records.

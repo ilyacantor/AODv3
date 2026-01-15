@@ -26,7 +26,8 @@ from .vendor_governance import (
 )
 from .admission import (
     apply_admission_criteria, AdmissionResult, build_idp_activity_map,
-    _extract_all_domains_from_correlation, _extract_domain_from_correlation
+    _extract_all_domains_from_correlation, _extract_domain_from_correlation,
+    extract_cmdb_external_ref_domains
 )
 from .vendor_inference import extract_registered_domain
 from .artifact_handler import handle_artifacts
@@ -237,6 +238,64 @@ class EphemeralPipelineResult:
     findings: list[Finding] = field(default_factory=list)
     snapshot_as_of: datetime | None = None
     error: str = ""
+    stage1_metrics: dict[str, Any] = field(default_factory=dict)
+
+
+def _compute_stage1_metrics(
+    assets: list[Asset],
+    correlation_by_entity_id: dict[str, 'CorrelationResult']
+) -> dict[str, int]:
+    """
+    Compute Stage 1 metrics to verify CMDB external_ref domain injection is stopped.
+    
+    Stage 1 Fix: CMDB external_ref domains should go to reference_domains (enrichment),
+    NOT to identifiers.domains (identity/admission).
+    
+    Metrics:
+    - cmdb_external_ref_domains_extracted_total: Total domains extracted from CMDB external_ref
+    - domains_added_to_identifiers_from_cmdb_external_ref_total: Should be 0 after Stage 1
+    
+    Returns:
+        Dict with both metrics
+    """
+    cmdb_external_ref_domains_total = 0
+    domains_in_identifiers_from_cmdb_total = 0
+    
+    for asset in assets:
+        entity_id = None
+        for evidence_ref in asset.evidence_refs:
+            if evidence_ref.startswith("discovery:"):
+                continue
+            entity_id_candidate = evidence_ref.split(":")[-1] if ":" in evidence_ref else None
+            if entity_id_candidate:
+                entity_id = entity_id_candidate
+                break
+        
+        correlation = None
+        for eid, corr in correlation_by_entity_id.items():
+            if corr.entity and corr.entity.canonical_name and asset.name:
+                from .normalize_observations import normalize_string
+                if normalize_string(corr.entity.canonical_name) == normalize_string(asset.name):
+                    correlation = corr
+                    break
+        
+        if not correlation:
+            continue
+        
+        cmdb_external_ref_domains = extract_cmdb_external_ref_domains(correlation)
+        cmdb_external_ref_domains_total += len(cmdb_external_ref_domains)
+        
+        if cmdb_external_ref_domains and asset.identifiers:
+            asset_domains = set(d.lower() for d in (asset.identifiers.domains or []))
+            for ext_domain in cmdb_external_ref_domains:
+                registered = extract_registered_domain(ext_domain)
+                if ext_domain.lower() in asset_domains or (registered and registered.lower() in asset_domains):
+                    domains_in_identifiers_from_cmdb_total += 1
+    
+    return {
+        "cmdb_external_ref_domains_extracted_total": cmdb_external_ref_domains_total,
+        "domains_added_to_identifiers_from_cmdb_external_ref_total": domains_in_identifiers_from_cmdb_total
+    }
 
 
 def run_pipeline_ephemeral(
@@ -375,6 +434,17 @@ def run_pipeline_ephemeral(
         # Propagates governance to all assets in the same vendor domain set
         assets = propagate_vendor_governance_farm_style(assets, logger)
         
+        # Stage 1 Metrics: Track CMDB external_ref domain injection
+        # cmdb_external_ref_domains_extracted_total: How many domains from CMDB external_ref
+        # domains_added_to_identifiers_from_cmdb_external_ref_total: Should be 0 after Stage 1
+        stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)
+        logger.info("stage1.cmdb_external_ref_metrics", extra={
+            "run_id": run_id,
+            "cmdb_external_ref_domains_extracted_total": stage1_metrics["cmdb_external_ref_domains_extracted_total"],
+            "domains_added_to_identifiers_from_cmdb_external_ref_total": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"],
+            "stage1_effective": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"] == 0
+        })
+        
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
         
         return EphemeralPipelineResult(
@@ -382,7 +452,8 @@ def run_pipeline_ephemeral(
             assets=assets,
             rejections=rejections,
             findings=findings,
-            snapshot_as_of=snapshot_as_of
+            snapshot_as_of=snapshot_as_of,
+            stage1_metrics=stage1_metrics
         )
         
     except ValidationError as e:
@@ -729,6 +800,15 @@ async def execute_pipeline(
         t_start = time.perf_counter()
         assets = propagate_vendor_governance_farm_style(assets, logger)
         timings['vendor_governance'] = time.perf_counter() - t_start
+        
+        # Stage 1 Metrics: Track CMDB external_ref domain injection
+        stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)
+        logger.info("stage1.cmdb_external_ref_metrics", extra={
+            "run_id": run_id,
+            "cmdb_external_ref_domains_extracted_total": stage1_metrics["cmdb_external_ref_domains_extracted_total"],
+            "domains_added_to_identifiers_from_cmdb_external_ref_total": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"],
+            "stage1_effective": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"] == 0
+        })
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

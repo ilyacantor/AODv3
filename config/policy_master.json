@@ -285,7 +285,34 @@
       "type": "string_array",
       "description": "Developer and build infrastructure. Open source project sites, package managers, and dev tools - not SaaS applications.",
       "ui_label": "Dev/Build Infrastructure"
+    },
+    "generic_collision_roots": {
+      "value": [
+        "cdn.com",
+        "edge.com",
+        "global.com",
+        "assets.com",
+        "static.com",
+        "api.com",
+        "app.com",
+        "data.com",
+        "img.com",
+        "media.com",
+        "content.com",
+        "files.com",
+        "images.com"
+      ],
+      "type": "string_array",
+      "description": "High-collision eTLD+1 domains that are likely extraction artifacts, not owned assets. If unanchored (no CMDB/IdP/Finance/Cloud), these are suppressed. If anchored, allowed but tagged RISK_GENERIC_DOMAIN=true.",
+      "ui_label": "Generic Collision Roots"
     }
+  },
+  "key_strategy_version": {
+    "value": "v1",
+    "type": "enum",
+    "options": ["v1", "v2"],
+    "description": "Key generation strategy version. v1=current (domains[0]), v2=provenance-aware priority (discovery > cmdb > idp > name)",
+    "ui_label": "Key Strategy Version"
   },
   "custom_exclusions": {
     "description": "Operator-managed domain exclusions for tenant-specific noise filtering",

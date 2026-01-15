@@ -85,6 +85,21 @@ class ReasonCode(str, Enum):
     PARKED_CLASSIFICATION = "PARKED_CLASSIFICATION"
 
 
+class AnchorType(str, Enum):
+    """
+    Jan 2026: Reconciliation anchor type vocabulary.
+    
+    Separates anchor source from reason codes to enable Farm/AOD comparison
+    without string wars. This is a RECONCILIATION OUTPUT field, not core logic.
+    """
+    IDP = "IDP"           # Asset anchored via IdP match
+    CMDB = "CMDB"         # Asset anchored via CMDB match
+    FINANCE = "FINANCE"   # Asset anchored via finance (spend evidence)
+    CLOUD = "CLOUD"       # Asset anchored via cloud resource
+    DISCOVERY = "DISCOVERY"  # Asset anchored via discovery only
+    NONE = "NONE"         # Not anchored (ungoverned + no discovery)
+
+
 @dataclass
 class AssetActualResult:
     """Actual classification result for a single asset."""
@@ -97,6 +112,16 @@ class AssetActualResult:
     is_parked: bool
     reasons: list[ReasonCode]
     evidence_summary: dict
+    # Jan 2026: Reconciliation mapping layer (CTO guidance)
+    # These fields normalize vocabulary for Farm/AOD comparison
+    anchor_type: AnchorType = AnchorType.NONE
+    absence_flags: list[str] = None  # List of NO_* flags for reconciliation
+    key_strategy_version: str = "v1"
+    entity_key_v2: str = None  # Preview of v2 key for comparison
+    
+    def __post_init__(self):
+        if self.absence_flags is None:
+            self.absence_flags = []
 
 
 @dataclass
@@ -671,6 +696,48 @@ def classify_actual(
         print(f"  all_reasons: {[r.value for r in reasons]}")
         print(f"=== END DEBUG ===\n")
     
+    # Jan 2026: Compute reconciliation mapping layer fields (CTO guidance)
+    # anchor_type: Priority order IDP > CMDB > FINANCE > CLOUD > DISCOVERY > NONE
+    if has_idp:
+        anchor_type = AnchorType.IDP
+    elif has_cmdb:
+        anchor_type = AnchorType.CMDB
+    elif has_finance:
+        anchor_type = AnchorType.FINANCE
+    elif has_cloud:
+        anchor_type = AnchorType.CLOUD
+    elif has_discovery:
+        anchor_type = AnchorType.DISCOVERY
+    else:
+        anchor_type = AnchorType.NONE
+    
+    # absence_flags: Extract all NO_* reason codes for reconciliation
+    absence_flags = [r.value for r in reasons if r.value.startswith("NO_")]
+    
+    # Compute v2 key for preview (uses domain_provenance if available)
+    from .canonical_key import compute_canonical_key_v2
+    from ..core.policy import get_current_config
+    
+    domain_provenance = {}
+    if asset.identifiers and hasattr(asset.identifiers, 'domain_provenance'):
+        domain_provenance = asset.identifiers.domain_provenance or {}
+    
+    domains = list(asset.identifiers.domains) if asset.identifiers and asset.identifiers.domains else []
+    
+    try:
+        v2_result = compute_canonical_key_v2(
+            domains=domains,
+            domain_provenance=domain_provenance,
+            vendor=asset.vendor,
+            name=asset.name,
+            idp_app_id=None  # TODO: Extract IdP app_id if available
+        )
+        entity_key_v2 = v2_result.primary_key
+    except Exception:
+        entity_key_v2 = asset_key  # Fall back to v1 key on error
+    
+    key_strategy_version = get_current_config().key_strategy_version
+    
     return AssetActualResult(
         asset_key=asset_key,
         asset_id=str(asset.asset_id),
@@ -680,7 +747,11 @@ def classify_actual(
         is_zombie=is_zombie,
         is_parked=is_parked,
         reasons=reasons,
-        evidence_summary=evidence
+        evidence_summary=evidence,
+        anchor_type=anchor_type,
+        absence_flags=absence_flags,
+        key_strategy_version=key_strategy_version,
+        entity_key_v2=entity_key_v2
     )
 
 

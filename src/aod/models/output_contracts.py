@@ -99,6 +99,15 @@ class LensMatchDebug(BaseModel):
     finance: Optional[MatchDebugInfo] = None
 
 
+class DomainSource(str, Enum):
+    """Source of a domain in identifiers.domains - separates 'where domain came from' from 'how we matched'"""
+    DISCOVERY = "discovery"      # From discovery observations (network, endpoint, etc.)
+    CMDB = "cmdb"               # From CMDB record.domain (primary domain field)
+    IDP = "idp"                 # From IdP record.domain
+    VENDOR_MAP = "vendor_map"   # From VENDOR_TO_DOMAIN mapping
+    INFERRED = "inferred"       # From name/vendor inference
+
+
 class AssetIdentifiers(BaseModel):
     """Asset identifiers"""
     domains: list[str] = Field(default_factory=list)
@@ -106,6 +115,13 @@ class AssetIdentifiers(BaseModel):
     uris: list[str] = Field(default_factory=list)
     # Reference domains from CMDB external_ref/URLs - enrichment only, not for identity/admission
     reference_domains: list[str] = Field(default_factory=list)
+    # Jan 2026: Domain provenance tracking (parallel field, backward compatible)
+    # Maps domain -> source enum to track where each domain came from
+    # This is SEPARATE from match_method (how we correlated) - tracks domain origin
+    domain_provenance: dict[str, str] = Field(
+        default_factory=dict,
+        description="Maps domain to its source: discovery, cmdb, idp, vendor_map, inferred"
+    )
 
 
 class ActivityEvidence(BaseModel):

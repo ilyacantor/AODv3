@@ -1,0 +1,163 @@
+Good. Dev agent’s analysis is mostly right. Here’s the CTO call: **do the minimum schema + key changes that (a) converge Farm/AOD and (b) don’t torch historical deltas.**
+
+## 0) The north star
+
+We need two things:
+
+1. **Identity should be deterministic and explainable.**
+2. **Reconciliation must survive schema/key evolution.**
+
+So: **version keys**, **add provenance without breaking old consumers**, and **separate “match method” from “domain source.”**
+
+---
+
+## 1) CMDB `record.domain` → `identifiers.domains`
+
+**Approve. Implement now.**
+
+But do it with guardrails:
+
+**Validation gate for CMDB domains**
+
+* must parse as a domain (no URL, no path, no scheme)
+* must not be an IP
+* must not be in shared infra / vendor root / generic “generic collision roots” *unless* the asset is CMDB-anchored and CI type supports it
+* optional: require presence of a dot + reasonable TLD length
+
+**Why this is safe**
+
+* It doesn’t undo Stage 1 fix (external_ref URL leakage) because you’re using `record.domain`, not `external_ref`.
+* It will reduce the “name-only vs domain-key” split immediately.
+
+---
+
+## 2) Domain provenance: do NOT blow up the schema
+
+Dev is right: changing `domains: list[str]` to objects will cascade into DCL/Farm/UI.
+
+**CTO decision: add a parallel field, keep `domains` as-is.**
+
+Add:
+
+* `identifiers.domain_provenance: dict[str, str]` (domain → source enum)
+* `identifiers.domain_confidence: dict[str, float]` (optional, later)
+* keep `identifiers.domains: list[str]` for backward compat
+
+Where `source ∈ {discovery, cmdb, idp, vendor_map, inferred}`
+
+This cleanly separates:
+
+* **match_method** (how correlated)
+* **domain_source** (where a domain came from)
+
+No conflation.
+
+---
+
+## 3) Key generation: align, but VERSION IT
+
+Dev is also right: changing `compute_canonical_key()` without versioning will wreck historical reconciliation.
+
+**CTO decision: implement v2 key strategy but keep v1 available.**
+
+### Key strategy versioning
+
+* Add `policy_snapshot.key_strategy_version = "v1" | "v2"`
+* Store it in run metadata and in every `ReconciliationResult`
+* During reconciliation:
+
+  * If Farm and AOD versions mismatch, compute **both keys** and compare using a mapping.
+
+### v2 algorithm (what I want)
+
+`entity_key_v2` priority:
+
+1. **discovery registered_domain** (domain_source=discovery)
+2. **cmdb_primary_domain** (domain_source=cmdb, only if CMDB matched)
+3. **idp_app_id / service_principal_id** (only if IdP matched and stable ID exists)
+4. **name_slug** fallback (stable normalization)
+
+**Important nuance**: dev flagged a real gap:
+
+> current code can’t prioritize discovery domain vs CMDB domain because both land in `domains[]`
+
+Fix that by using `domain_provenance` to pick the highest-priority domain, not `domains[0]`.
+
+### What to do about “idp_app_id as key”
+
+Implement it in v2 **only if you can guarantee stability**:
+
+* Prefer a stable IdP object ID (app object id / service principal id), not display name.
+* If you don’t have that reliably today, skip step (3) for now and log “IDP_KEY_MISSING”.
+
+---
+
+## 4) Generic eTLD+1 suppression
+
+**Approve. Add it.**
+Call it something like `generic_collision_roots` or `suspicious_generic_domains`.
+
+Behavior:
+
+* If domain is generic AND **not anchored** (no CMDB/IdP/Finance/Cloud), it should not become an admitted asset.
+* If anchored, allow but tag it as `RISK_GENERIC_DOMAIN=true` for visibility.
+
+This will reduce junk assets like `cdn.com` that are extraction artifacts.
+
+---
+
+## 5) Reason code vocabulary mapping
+
+**Approve. Treat as reconciliation-layer output normalization.**
+Don’t touch core pipeline.
+
+Deliverable:
+
+* In reconciliation output, emit:
+
+  * `anchor_type` (IDP/CMDB/FINANCE/CLOUD/DISCOVERY/NONE)
+  * `absence_flags` (NO_IDP/NO_CMDB/etc.)
+  * keep existing reason codes, but add a mapping so Farm and AOD can be compared without string wars.
+
+---
+
+## 6) What to do *right now* (order of operations)
+
+1. **Implement CMDB domain promotion** into `identifiers.domains` + populate `domain_provenance`.
+2. **Implement generic collision roots suppression** (policy additive).
+3. **Implement reconciliation mapping layer** for anchor/absence.
+4. **Add key strategy versioning** and compute `entity_key_v2` alongside `entity_key_v1` (don’t flip default yet).
+5. Run Farm snapshot again and report:
+
+   * key normalization mismatch count (v1 vs v2)
+   * shadow FP delta (v1 vs v2)
+   * zombie miss delta (v1 vs v2)
+
+Only after that do we decide whether to make v2 the default.
+
+---
+
+## 7) Explicit answers to dev agent’s “DO NOT IMPLEMENT YET” list
+
+* **Changing key generation without versioning** → Correct. Don’t.
+* **Schema change to domains objects** → Correct. Don’t.
+* **CMDB domain promotion** → Do it now.
+* **Provenance** → Do it now, via parallel field.
+* **IdP app_id key** → Implement in v2 only if stable IDs exist; otherwise defer.
+
+---
+
+## 8) The one thing dev missed
+
+Key stability isn’t just historical reconciliation — it’s also **asset continuity in product UX**.
+
+So in UI / API, expose:
+
+* `entity_key` (current)
+* `entity_key_v2` (preview)
+* `key_strategy_version`
+* and a small “why” trace: which input won.
+
+That makes the transition survivable.
+
+If you want, paste the current `compute_canonical_key()` code block and where `identifiers` gets built, and I’ll give you a precise patch plan (file/function edits + tests) — but the decisions above are the ones to execute.

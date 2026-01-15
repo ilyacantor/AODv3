@@ -125,7 +125,13 @@ def _load_from_master(data: dict) -> PolicyConfig:
         shared_infrastructure_domains=_extract_value(idh_section, "shared_infrastructure_domains", []),
         vendor_root_portals=_extract_value(idh_section, "vendor_root_portals", []),
         dev_build_infrastructure=_extract_value(idh_section, "dev_build_infrastructure", []),
+        generic_collision_roots=_extract_value(idh_section, "generic_collision_roots", []),
     )
+    
+    # Jan 2026: Key strategy versioning for reconciliation compatibility
+    key_strategy_version = _extract_value(data.get("key_strategy_version", {}), "value", "v1")
+    if not key_strategy_version or key_strategy_version not in ("v1", "v2"):
+        key_strategy_version = "v1"
     
     # New custom exclusions (Jan 2026)
     ce_section = data.get("custom_exclusions", {})
@@ -203,6 +209,7 @@ def _load_from_master(data: dict) -> PolicyConfig:
         infrastructure_domain_handling=infrastructure_domain_handling,
         custom_exclusions_config=custom_exclusions_config,
         corporate_root_domains_config=corporate_root_domains_config,
+        key_strategy_version=key_strategy_version,
         admission=admission,
         scope=scope,
         exclusions=exclusions,

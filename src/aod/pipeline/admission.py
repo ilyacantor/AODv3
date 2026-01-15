@@ -231,6 +231,144 @@ def _is_sso_or_infrastructure_domain(domain: str) -> bool:
     return registered in SSO_PROVIDER_DOMAINS or registered in infra_domains
 
 
+def validate_cmdb_domain_for_identity(
+    domain: str,
+    is_cmdb_anchored: bool = False
+) -> tuple[bool, str]:
+    """
+    Validate a CMDB domain for promotion to identifiers.domains.
+    
+    Jan 2026: CTO-mandated validation gates for CMDB domain promotion:
+    1. Must parse as domain (no URL, path, scheme, @)
+    2. Must not be an IP address
+    3. Must have at least one dot
+    4. Must not be in generic_collision_roots UNLESS anchored
+    5. Must not be in shared_infra/vendor_root UNLESS anchored
+    
+    This is DIFFERENT from external_ref - we're validating record.domain (primary).
+    Stage 1 fix protects against external_ref URL leakage.
+    
+    Args:
+        domain: The domain to validate
+        is_cmdb_anchored: True if CMDB match is authoritative (bypasses some checks)
+        
+    Returns:
+        Tuple of (is_valid, reason)
+    """
+    import re
+    from ..core.policy import get_current_config
+    
+    if not domain:
+        return False, "empty_domain"
+    
+    cleaned = domain.lower().strip()
+    
+    # Gate 1: No URLs, paths, schemes
+    if '://' in cleaned or cleaned.startswith('http'):
+        return False, "contains_url_scheme"
+    if '/' in cleaned:
+        return False, "contains_path"
+    if '@' in cleaned:
+        return False, "contains_email_symbol"
+    
+    # Clean any port or www prefix
+    cleaned = cleaned.split(':')[0]
+    cleaned = cleaned.removeprefix('www.')
+    
+    # Gate 2: Must have a dot (valid domain structure)
+    if '.' not in cleaned:
+        return False, "no_dot_invalid_domain"
+    
+    # Gate 3: Must not be an IP address
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    if re.match(ip_pattern, cleaned):
+        return False, "is_ip_address"
+    
+    # Gate 4: Reasonable TLD (at least 2 chars)
+    parts = cleaned.split('.')
+    tld = parts[-1]
+    if len(tld) < 2:
+        return False, "invalid_tld"
+    
+    config = get_current_config()
+    registered = extract_registered_domain(cleaned)
+    
+    # Gate 5: Generic collision roots - suppress unless anchored
+    if not is_cmdb_anchored:
+        if config.infrastructure_domain_handling.is_generic_collision_root(registered or cleaned):
+            return False, "generic_collision_root_unanchored"
+    
+    # Gate 6: Shared infrastructure - suppress unless anchored
+    if not is_cmdb_anchored:
+        all_infra = config.infrastructure_domain_handling.get_all_infrastructure_domains()
+        if registered in all_infra or cleaned in all_infra:
+            return False, "infrastructure_domain_unanchored"
+    
+    return True, "valid"
+
+
+def extract_cmdb_primary_domain(
+    correlation: CorrelationResult,
+    is_authoritative_match: bool = False
+) -> tuple[str | None, bool]:
+    """
+    Extract the primary domain from CMDB record.domain field.
+    
+    Jan 2026: This is the AUTHORITATIVE CMDB domain, distinct from external_ref URLs.
+    Only extracts from record.domain (the CMDBConfigItem.domain field), not from
+    raw_data URLs or external_ref fields.
+    
+    GOVERNANCE SEMANTICS (Architect Review Jan 2026):
+    - is_authoritative_match should be True ONLY when CMDB match is MATCHED (not AMBIGUOUS)
+      AND passes all governance gates (valid CI type, valid lifecycle, etc.)
+    - Validation bypasses generic_collision_root/infrastructure checks only for authoritative matches
+    - AMBIGUOUS matches still validate against all filters
+    
+    Args:
+        correlation: The correlation result
+        is_authoritative_match: True only if CMDB match is authoritative (MATCHED + gates passed)
+    
+    Returns:
+        Tuple of (domain, is_valid) where domain is the cleaned primary domain
+    """
+    cmdb_match = correlation.cmdb
+    
+    if cmdb_match.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return None, False
+    
+    # Only MATCHED status (not AMBIGUOUS) with authoritative match method can bypass filters
+    cmdb_is_authoritative = (
+        cmdb_match.status == MatchStatus.MATCHED and 
+        is_authoritative_match and
+        cmdb_match.match_method in ("domain", "uri", "canonical_name")
+    )
+    
+    for record in cmdb_match.matched_records:
+        if record is None:
+            continue
+        
+        # ONLY use record.domain (primary domain field)
+        # NOT external_ref or raw_data URLs (those go to reference_domains)
+        domain = getattr(record, 'domain', None)
+        if domain:
+            is_valid, reason = validate_cmdb_domain_for_identity(
+                domain, 
+                is_cmdb_anchored=cmdb_is_authoritative
+            )
+            if is_valid:
+                cleaned = domain.lower().strip()
+                cleaned = cleaned.split(':')[0]
+                cleaned = cleaned.removeprefix('www.')
+                return cleaned, True
+            else:
+                logger.debug(
+                    f"CMDB_DOMAIN_REJECTED domain={domain} reason={reason} "
+                    f"authoritative={cmdb_is_authoritative}"
+                )
+    
+    return None, False
+
+
 def extract_cmdb_external_ref_domains(correlation: CorrelationResult) -> list[str]:
     """
     Extract domains specifically from CMDB external_ref field.
@@ -2016,17 +2154,54 @@ def _build_admitted_asset(
         vendor_governed=propagated_idp or propagated_cmdb  # Governance via vendor family
     )
 
-    # Build domain list (discovery domain ONLY - no CMDB external_ref injection)
-    # Stage 1 Fix: identifiers.domains = observed-only (from discovery observations)
-    # CMDB URL domains = reference-only (enrichment, never identity/admission)
+    # Build domain list with provenance tracking (Jan 2026 CTO guidance)
+    # Priority order for identity:
+    #   1. Discovery domain (from entity.domain or recovered from discovery observations)
+    #   2. CMDB primary domain (from record.domain, NOT external_ref URLs)
+    # Stage 1 Fix PRESERVED: external_ref URLs still go to reference_domains only
     domain_list = []
+    domain_provenance = {}  # domain -> source (discovery, cmdb, idp, vendor_map, inferred)
     seen_domains = set()
+    
+    # Step 1: Add discovery domain (highest priority)
+    # Determine provenance more precisely based on where effective_domain came from
     if effective_domain:
         normalized = effective_domain.lower().strip()
         domain_list.append(normalized)
         seen_domains.add(normalized)
+        # Determine source: check if came from discovery entity directly vs recovered from planes
+        if recovered_from_correlation:
+            # Recovered from plane records during domain recovery - determine actual source
+            # Check which plane provided the domain
+            if correlation.idp.status == MatchStatus.MATCHED:
+                domain_provenance[normalized] = "idp"
+            elif correlation.cmdb.status == MatchStatus.MATCHED:
+                domain_provenance[normalized] = "cmdb"
+            else:
+                domain_provenance[normalized] = "inferred"
+        else:
+            domain_provenance[normalized] = "discovery"
+    
+    # Step 2: Promote CMDB primary domain if not already in list (Jan 2026)
+    # This is record.domain (primary field), NOT external_ref URLs
+    # Only promotes if entity has CMDB match and record.domain passes validation
+    # evidence.cmdb_admitted = True means CMDB match passed all governance gates
+    cmdb_primary, cmdb_valid = extract_cmdb_primary_domain(
+        correlation, 
+        is_authoritative_match=evidence.cmdb_admitted
+    )
+    if cmdb_primary and cmdb_valid and cmdb_primary not in seen_domains:
+        domain_list.append(cmdb_primary)
+        seen_domains.add(cmdb_primary)
+        domain_provenance[cmdb_primary] = "cmdb"
+        logger.debug(
+            f"CMDB_DOMAIN_PROMOTED entity={entity.original_name} "
+            f"cmdb_domain={cmdb_primary} discovery_domain={effective_domain} "
+            f"authoritative={evidence.cmdb_admitted}"
+        )
     
     # Extract plane domains for reference/enrichment only (NOT for identifiers.domains)
+    # This includes external_ref URLs which are Stage 1 protected
     plane_domains = _extract_all_domains_from_correlation(correlation)
     reference_domains = [pd for pd in plane_domains if pd not in seen_domains]
 
@@ -2034,7 +2209,8 @@ def _build_admitted_asset(
         domains=domain_list,
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else [],
-        reference_domains=reference_domains
+        reference_domains=reference_domains,
+        domain_provenance=domain_provenance
     )
 
     # Build tags

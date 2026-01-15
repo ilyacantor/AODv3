@@ -337,3 +337,137 @@ def compute_canonical_key(
 
     # No key could be determined
     raise ValueError("Cannot compute canonical key: no domains, vendor, or name provided")
+
+
+def compute_canonical_key_v2(
+    domains: list[str],
+    domain_provenance: dict[str, str],
+    vendor: Optional[str] = None,
+    name: str = "",
+    idp_app_id: Optional[str] = None
+) -> CanonicalKeyResult:
+    """
+    V2 Key Generation Strategy (Jan 2026 CTO guidance).
+    
+    Provenance-aware priority order:
+    1. Discovery domain (domain_provenance[domain] == "discovery")
+    2. CMDB primary domain (domain_provenance[domain] == "cmdb")  
+    3. IdP app_id / service_principal_id (if stable ID exists)
+    4. Name slug fallback (stable normalization)
+    
+    This function computes entity_key_v2 alongside the current v1 strategy.
+    Both keys can be compared during reconciliation to align Farm/AOD.
+    
+    Args:
+        domains: List of domain strings from identifiers.domains
+        domain_provenance: Map of domain -> source (discovery, cmdb, idp, vendor_map, inferred)
+        vendor: Optional vendor name
+        name: Asset name for fallback
+        idp_app_id: Optional IdP app object ID or service principal ID
+        
+    Returns:
+        CanonicalKeyResult with v2-prioritized primary_key
+    """
+    all_variants_set = set()
+    
+    # Step 1: Find highest-priority domain based on provenance
+    priority_order = ["discovery", "cmdb", "idp", "vendor_map", "inferred"]
+    best_domain = None
+    best_priority = len(priority_order)  # Lower is better
+    
+    for domain in domains:
+        if not domain or "." not in domain:
+            continue
+        source = domain_provenance.get(domain, "inferred")
+        try:
+            priority = priority_order.index(source)
+        except ValueError:
+            priority = len(priority_order)
+        
+        if priority < best_priority:
+            best_priority = priority
+            best_domain = domain
+            
+    # Step 2: Use the highest-priority domain
+    if best_domain:
+        raw_domain = best_domain.lower().strip()
+        all_variants_set.add(raw_domain)
+        
+        registered = extract_registered_domain(raw_domain)
+        if registered:
+            if registered != raw_domain:
+                all_variants_set.add(registered)
+            canonical = normalize_to_canonical_vendor_domain(registered)
+            if canonical:
+                all_variants_set.add(canonical)
+                primary_key = canonical
+            else:
+                primary_key = registered
+            
+            source = domain_provenance.get(best_domain, "unknown")
+            logger.debug(
+                f"canonical_key_v2: domain={raw_domain} source={source} -> "
+                f"registered={registered} -> primary={primary_key}"
+            )
+            
+            return CanonicalKeyResult(
+                primary_key=primary_key,
+                registered_domain=registered,
+                is_canonical=True,
+                all_variants=sorted(all_variants_set)
+            )
+    
+    # Step 3: IdP app_id fallback (only if stable ID exists)
+    if idp_app_id and idp_app_id.lower() not in ("unknown", "", "none"):
+        # Only use if it looks like a stable ID (UUID-like or app object ID)
+        import re
+        uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        if re.match(uuid_pattern, idp_app_id.lower()) or len(idp_app_id) >= 20:
+            logger.debug(f"canonical_key_v2: using idp_app_id={idp_app_id} as key")
+            return CanonicalKeyResult(
+                primary_key=f"idp:{idp_app_id}",
+                registered_domain=None,
+                is_canonical=False,  # Not a domain, so not canonical
+                all_variants=[]
+            )
+        else:
+            logger.debug(f"canonical_key_v2: IDP_KEY_UNSTABLE idp_app_id={idp_app_id}")
+    
+    # Step 4: Fall back to v1 behavior (vendor then name)
+    return compute_canonical_key(domains=domains, vendor=vendor, name=name)
+
+
+def compute_both_keys(
+    domains: list[str],
+    domain_provenance: dict[str, str],
+    vendor: Optional[str] = None,
+    name: str = "",
+    idp_app_id: Optional[str] = None
+) -> tuple[CanonicalKeyResult, CanonicalKeyResult]:
+    """
+    Compute both v1 and v2 keys for comparison during reconciliation.
+    
+    This allows us to:
+    1. Track key drift between strategies
+    2. Provide preview of v2 keys before switching
+    3. Support Farm alignment without breaking existing consumers
+    
+    Returns:
+        Tuple of (v1_result, v2_result)
+    """
+    v1_result = compute_canonical_key(domains=domains, vendor=vendor, name=name)
+    v2_result = compute_canonical_key_v2(
+        domains=domains, 
+        domain_provenance=domain_provenance,
+        vendor=vendor, 
+        name=name,
+        idp_app_id=idp_app_id
+    )
+    
+    if v1_result.primary_key != v2_result.primary_key:
+        logger.info(
+            f"KEY_STRATEGY_DRIFT v1={v1_result.primary_key} v2={v2_result.primary_key} "
+            f"domains={domains} provenance={domain_provenance}"
+        )
+    
+    return v1_result, v2_result

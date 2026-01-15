@@ -83,6 +83,12 @@ class InfrastructureDomainHandlingConfig:
     shared_infrastructure_domains: list[str] = field(default_factory=list)
     vendor_root_portals: list[str] = field(default_factory=list)
     dev_build_infrastructure: list[str] = field(default_factory=list)
+    # Jan 2026: Generic collision roots - high-collision eTLD+1 domains
+    # that are likely extraction artifacts, not owned assets
+    # Examples: cdn.com, edge.com, global.com, assets.com, static.com
+    # Behavior: If unanchored (no CMDB/IdP/Finance/Cloud) -> suppress
+    # If anchored -> allow but tag RISK_GENERIC_DOMAIN=true
+    generic_collision_roots: list[str] = field(default_factory=list)
     
     def get_all_excluded_domains(self) -> set[str]:
         """Get all domains that should be excluded based on current mode."""
@@ -97,6 +103,10 @@ class InfrastructureDomainHandlingConfig:
         return set(self.shared_infrastructure_domains + 
                   self.vendor_root_portals + 
                   self.dev_build_infrastructure)
+    
+    def is_generic_collision_root(self, domain: str) -> bool:
+        """Check if domain is a generic collision root (high-collision eTLD+1)."""
+        return domain.lower() in [d.lower() for d in self.generic_collision_roots]
 
 
 @dataclass
@@ -181,6 +191,10 @@ class PolicyConfig:
     custom_exclusions_config: CustomExclusionsConfig = field(default_factory=CustomExclusionsConfig)
     corporate_root_domains_config: CorporateRootDomainsConfig = field(default_factory=CorporateRootDomainsConfig)
     
+    # Jan 2026: Key strategy versioning for reconciliation compatibility
+    # v1 = current (domains[0] based), v2 = new (provenance-aware priority)
+    key_strategy_version: str = "v1"
+    
     # Legacy fields for backward compatibility
     admission: AdmissionConfig = field(default_factory=AdmissionConfig)
     scope: ScopeConfig = field(default_factory=ScopeConfig)
@@ -252,7 +266,9 @@ class PolicyConfig:
                 "shared_infrastructure_domains": self.infrastructure_domain_handling.shared_infrastructure_domains,
                 "vendor_root_portals": self.infrastructure_domain_handling.vendor_root_portals,
                 "dev_build_infrastructure": self.infrastructure_domain_handling.dev_build_infrastructure,
+                "generic_collision_roots": self.infrastructure_domain_handling.generic_collision_roots,
             },
+            "key_strategy_version": self.key_strategy_version,
             "custom_exclusions": {
                 "domains": self.custom_exclusions_config.domains,
             },

@@ -221,6 +221,31 @@ def build_vendor_to_domain_map() -> dict[str, str]:
 # Build and export VENDOR_TO_DOMAIN as single source of truth
 VENDOR_TO_DOMAIN = build_vendor_to_domain_map()
 
+
+def build_vendor_domain_sets() -> dict[str, set[str]]:
+    """
+    Build mapping from vendor name to all its domains.
+    
+    Farm-style mapping used for vendor governance propagation.
+    Example: "Microsoft" -> {"microsoft.com", "office.com", "sharepoint.com", "outlook.com", ...}
+    
+    Returns:
+        Dictionary mapping lowercase vendor names to sets of their domains
+    """
+    vendor_sets: dict[str, set[str]] = {}
+    
+    for domain, vendor in DOMAIN_TO_VENDOR.items():
+        vendor_key = vendor.lower().strip()
+        if vendor_key not in vendor_sets:
+            vendor_sets[vendor_key] = set()
+        vendor_sets[vendor_key].add(domain.lower().strip())
+    
+    return vendor_sets
+
+
+# Farm-style mapping: vendor -> all domains for that vendor
+VENDOR_DOMAIN_SETS = build_vendor_domain_sets()
+
 # Add product name aliases that don't match vendor names exactly
 VENDOR_TO_DOMAIN.update({
     "microsoft 365": "microsoft.com",

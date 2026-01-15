@@ -76,6 +76,9 @@ class LensCoverage(BaseModel):
     cloud: bool = False
     finance: bool = False
     discovery: bool = False
+    # Stage 3: Farm-style vendor governance propagation
+    # True if governance inherited from another asset sharing the same vendor domain set
+    vendor_governed: bool = False
 
 
 class MatchDebugInfo(BaseModel):
@@ -162,6 +165,18 @@ class LLMMetadata(BaseModel):
     idp_match_method: Optional[str] = None
 
 
+class VendorGovernanceTrace(BaseModel):
+    """
+    Stage 3: Trace info for vendor governance propagation.
+    
+    Records the vendor and seed domain that granted governance via propagation.
+    Fully traceable - no magic governance assertions.
+    """
+    vendor: str = Field(description="Vendor name that granted governance")
+    seed_domain: str = Field(description="Domain that had authoritative governance and seeded propagation")
+    seed_asset_id: Optional[str] = Field(default=None, description="Asset ID that provided the governance seed")
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
@@ -187,6 +202,11 @@ class Asset(BaseModel):
     discovery_sources: list[str] = Field(
         default_factory=list,
         description="Single source of truth for discovery evidence. lens_coverage.discovery and HAS_DISCOVERY derive from this."
+    )
+    # Stage 3: Farm-style vendor governance propagation trace
+    vendor_governance_trace: Optional[VendorGovernanceTrace] = Field(
+        default=None, 
+        description="Trace info when governance was inherited via vendor domain set propagation"
     )
     created_at: datetime = Field(default_factory=now_pst)
 

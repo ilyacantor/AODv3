@@ -162,6 +162,8 @@ class DomainRollup:
     is_domain_canonical: bool = True
     alias_keys: list[str] = field(default_factory=list)
     has_ongoing_finance: bool = False  # Recurring spend (contracts/subscriptions)
+    # Stage 3: Farm-style vendor governance propagation
+    has_vendor_governed: bool = False  # True if governance inherited via vendor domain set
     
     def get_activity_status(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
         """Get the activity status for this domain rollup."""
@@ -191,12 +193,16 @@ class DomainRollup:
         """
         Check if asset is governed (aligned with Policy Engine).
         
-        Governed = has_idp OR has_cmdb
+        Stage 3 Update: Governed = has_idp OR has_cmdb OR has_vendor_governed
         
         This is the single source of truth for governance status,
         matching the PolicyEngine._classify() logic.
+        
+        vendor_governed is set via Farm-style vendor governance propagation:
+        - If any asset in a vendor's domain set has authoritative governance,
+          all assets in that vendor's domain set inherit governance.
         """
-        return self.has_idp or self.has_cmdb
+        return self.has_idp or self.has_cmdb or getattr(self, 'has_vendor_governed', False)
     
     def is_shadow(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
         """
@@ -409,13 +415,15 @@ def classify_shadow(asset: Asset, activity_window_days: Optional[int] = None) ->
     # This aligns with Farm's passes_gate logic
     has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
     has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    # Stage 3: Include vendor_governed in governance check
+    has_vendor_governed = asset.lens_coverage.vendor_governed if asset.lens_coverage else False
     
     has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
     # Source of truth: asset.discovery_sources (set by admission from footprint)
     has_discovery = bool(getattr(asset, "discovery_sources", None))
     
-    # GOVERNANCE: IdP OR CMDB (not Trinity AND logic)
-    if has_idp or has_cmdb:
+    # GOVERNANCE: IdP OR CMDB OR vendor_governed (Stage 3)
+    if has_idp or has_cmdb or has_vendor_governed:
         return ClassificationResult(
             is_classified=False,
             is_indeterminate=False,
@@ -481,11 +489,11 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     """
     Shared zombie status computation used by BOTH KPI counts and debug explainer.
     
-    ALIGNED WITH POLICY ENGINE (Dec 2025):
+    ALIGNED WITH POLICY ENGINE (Dec 2025, Stage 3 Jan 2026 update):
     Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
     
     Where:
-    - is_governed = has_idp OR has_cmdb (uses lens_coverage for gate-validated admission)
+    - is_governed = has_idp OR has_cmdb OR vendor_governed (uses lens_coverage for gate-validated admission)
     - activity_status==STALE means we have timestamps outside the window
     - has_ongoing_finance = recurring contracts/subscriptions (paying for it)
     - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
@@ -503,11 +511,13 @@ def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bo
     # Use lens_coverage for governance (reflects gate-validated admission, not raw match)
     has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
     has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    # Stage 3: Include vendor_governed in governance check
+    has_vendor_governed = asset.lens_coverage.vendor_governed if asset.lens_coverage else False
     
-    is_governed = has_idp or has_cmdb
+    is_governed = has_idp or has_cmdb or has_vendor_governed
     
     if not is_governed:
-        return False, False, "Not governed (no IdP or CMDB) - cannot be zombie"
+        return False, False, "Not governed (no IdP, CMDB, or vendor propagation) - cannot be zombie"
     
     # Check for ongoing finance (recurring spend)
     has_ongoing_finance = any(

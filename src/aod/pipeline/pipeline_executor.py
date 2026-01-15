@@ -19,7 +19,11 @@ from .validate_snapshot import validate_snapshot, ValidationError
 from .normalize_observations import normalize_observations, CandidateEntity
 from .build_plane_indexes import build_plane_indexes, PlaneIndexes
 from .correlate_entities import correlate_entities_to_planes, CorrelationResult, MatchStatus
-from .vendor_governance import propagate_vendor_governance, PropagatedGovernance
+from .vendor_governance import (
+    propagate_vendor_governance, 
+    PropagatedGovernance,
+    propagate_vendor_governance_farm_style
+)
 from .admission import (
     apply_admission_criteria, AdmissionResult, build_idp_activity_map,
     _extract_all_domains_from_correlation, _extract_domain_from_correlation
@@ -365,6 +369,11 @@ def run_pipeline_ephemeral(
         
         late_binding_enabled = policy_config.scope.late_binding_domain_merge
         assets = late_bind_and_merge_assets(assets, late_binding_enabled, logger)
+        
+        # Stage 3: Farm-style vendor governance propagation
+        # Seeds from authoritative matches only (lens_coverage.idp/cmdb=True)
+        # Propagates governance to all assets in the same vendor domain set
+        assets = propagate_vendor_governance_farm_style(assets, logger)
         
         findings = generate_findings(assets, correlations, indexes, tenant_id, run_id, snapshot_id)
         
@@ -713,6 +722,13 @@ async def execute_pipeline(
                     "post_merge_count": post_merge_count,
                     "merged_count": pre_merge_count - post_merge_count
                 })
+        
+        # Stage 3: Farm-style vendor governance propagation
+        # Seeds from authoritative matches only (lens_coverage.idp/cmdb=True)
+        # Propagates governance to all assets in the same vendor domain set
+        t_start = time.perf_counter()
+        assets = propagate_vendor_governance_farm_style(assets, logger)
+        timings['vendor_governance'] = time.perf_counter() - t_start
         
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={

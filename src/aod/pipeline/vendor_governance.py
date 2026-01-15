@@ -1,21 +1,43 @@
 """
 Vendor Governance Propagation
 
-Propagates governance signals (IdP, CMDB presence) across entities sharing the same vendor.
-If any entity for a vendor has IdP/CMDB match, all entities for that vendor inherit governance.
+Stage 3: Farm-style vendor governance propagation.
+
+Propagates governance signals (IdP, CMDB presence) across assets sharing the same vendor domain set.
+Only seeds from AUTHORITATIVE matches that pass gates (lens_coverage.idp=True OR lens_coverage.cmdb=True).
+
+Key Rules:
+1. Seed a vendor as governed if any asset in that vendor's domain set has:
+   - cmdb_present == True (gate-passed authoritative match), OR
+   - idp_present == True (gate-passed authoritative match)
+2. Propagate: For any asset whose registered domain maps to a seeded vendor, set vendor_governed=True
+3. Governance becomes: is_governed = cmdb_present OR idp_present OR vendor_governed
+4. Guardrails:
+   - Vendor propagation does NOT add domains
+   - Does NOT seed from heuristic "matched" (lens_status.MATCHED alone is insufficient)
+   - Is fully traceable via vendor_governance_trace (vendor, seed_domain, seed_asset_id)
 
 Example:
-- zoom.us has IdP match (SSO enabled)
-- zoom-video.com has same vendor "zoom" but no direct IdP match
-- After propagation, zoom-video.com inherits idp_present=True from zoom.us
+- outlook.com has IdP match (SSO enabled) -> lens_coverage.idp=True
+- office.com/sharepoint.com map to same vendor "Microsoft" but no direct IdP match
+- After propagation, office.com/sharepoint.com get vendor_governed=True
 """
 
 from dataclasses import dataclass
 from typing import Optional
+import logging
 
 from .correlate_entities import CorrelationResult, MatchStatus
 from .normalize_observations import CandidateEntity
-from .vendor_inference import infer_vendor_from_domain, DOMAIN_TO_VENDOR
+from .vendor_inference import (
+    infer_vendor_from_domain, 
+    DOMAIN_TO_VENDOR, 
+    VENDOR_DOMAIN_SETS,
+    extract_registered_domain
+)
+from ..models.output_contracts import Asset, VendorGovernanceTrace
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -134,3 +156,171 @@ def propagate_vendor_governance(
                     )
     
     return propagated
+
+
+@dataclass
+class VendorSeed:
+    """Seed info for vendor governance propagation."""
+    vendor: str
+    seed_domain: str
+    seed_asset_id: str
+    source: str  # "idp" or "cmdb" or "both"
+
+
+def propagate_vendor_governance_farm_style(
+    assets: list[Asset],
+    run_logger: Optional[logging.Logger] = None
+) -> list[Asset]:
+    """
+    Stage 3: Farm-style vendor governance propagation.
+    
+    Propagates governance across assets sharing the same vendor domain set.
+    Only seeds from AUTHORITATIVE matches that pass gates:
+    - lens_coverage.idp=True (not just lens_status.MATCHED)
+    - lens_coverage.cmdb=True (not just lens_status.MATCHED)
+    
+    Guardrails:
+    - Does NOT add domains to assets
+    - Does NOT seed from heuristic matches
+    - Is fully traceable via vendor_governance_trace
+    
+    Args:
+        assets: List of assets to process
+        run_logger: Optional logger for propagation events
+        
+    Returns:
+        List of assets with vendor_governed field updated where applicable
+    """
+    if not assets:
+        return assets
+    
+    log = run_logger or logger
+    
+    # Step 1: Find governed vendors - seed only from authoritative gate-passed matches
+    vendor_seeds: dict[str, VendorSeed] = {}
+    
+    for asset in assets:
+        # Check for authoritative governance (lens_coverage, not lens_status)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        
+        if not (has_idp or has_cmdb):
+            continue
+        
+        # Check each domain in identifiers.domains for vendor mapping
+        if not asset.identifiers or not asset.identifiers.domains:
+            continue
+        
+        for domain in asset.identifiers.domains:
+            if not domain:
+                continue
+            
+            registered = extract_registered_domain(domain)
+            if not registered:
+                continue
+            
+            # Check if domain maps to a vendor
+            vendor = DOMAIN_TO_VENDOR.get(registered.lower())
+            if not vendor:
+                continue
+            
+            vendor_key = vendor.lower().strip()
+            
+            # Record the seed (first one wins for each vendor)
+            if vendor_key not in vendor_seeds:
+                source = "both" if (has_idp and has_cmdb) else ("idp" if has_idp else "cmdb")
+                vendor_seeds[vendor_key] = VendorSeed(
+                    vendor=vendor,
+                    seed_domain=registered,
+                    seed_asset_id=str(asset.asset_id),
+                    source=source
+                )
+                log.info("vendor_governance.seed", extra={
+                    "vendor": vendor,
+                    "seed_domain": registered,
+                    "seed_asset_id": str(asset.asset_id),
+                    "source": source
+                })
+    
+    if not vendor_seeds:
+        log.info("vendor_governance.no_seeds", extra={
+            "asset_count": len(assets),
+            "message": "No vendors seeded for governance propagation"
+        })
+        return assets
+    
+    # Step 2: Propagate governance to assets with matching vendor domains
+    propagation_count = 0
+    result_assets: list[Asset] = []
+    
+    for asset in assets:
+        # Skip if already directly governed (no need to propagate)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        
+        if has_idp or has_cmdb:
+            result_assets.append(asset)
+            continue
+        
+        # Check if any domain maps to a seeded vendor
+        matching_seed: Optional[VendorSeed] = None
+        matching_domain: Optional[str] = None
+        
+        if asset.identifiers and asset.identifiers.domains:
+            for domain in asset.identifiers.domains:
+                if not domain:
+                    continue
+                
+                registered = extract_registered_domain(domain)
+                if not registered:
+                    continue
+                
+                vendor = DOMAIN_TO_VENDOR.get(registered.lower())
+                if not vendor:
+                    continue
+                
+                vendor_key = vendor.lower().strip()
+                if vendor_key in vendor_seeds:
+                    matching_seed = vendor_seeds[vendor_key]
+                    matching_domain = registered
+                    break
+        
+        if matching_seed:
+            # Create updated asset with vendor_governed=True and trace info
+            updated_coverage = asset.lens_coverage.model_copy() if asset.lens_coverage else None
+            if updated_coverage:
+                updated_coverage.vendor_governed = True
+            
+            trace = VendorGovernanceTrace(
+                vendor=matching_seed.vendor,
+                seed_domain=matching_seed.seed_domain,
+                seed_asset_id=matching_seed.seed_asset_id
+            )
+            
+            # Create new asset with propagated governance
+            updated_asset = asset.model_copy(update={
+                "lens_coverage": updated_coverage,
+                "vendor_governance_trace": trace
+            })
+            
+            result_assets.append(updated_asset)
+            propagation_count += 1
+            
+            log.info("vendor_governance.propagate", extra={
+                "asset_id": str(asset.asset_id),
+                "asset_domain": matching_domain,
+                "vendor": matching_seed.vendor,
+                "seed_domain": matching_seed.seed_domain,
+                "seed_asset_id": matching_seed.seed_asset_id
+            })
+        else:
+            result_assets.append(asset)
+    
+    if propagation_count > 0:
+        log.info("vendor_governance.summary", extra={
+            "input_assets": len(assets),
+            "vendors_seeded": len(vendor_seeds),
+            "assets_propagated": propagation_count
+        })
+    
+    return result_assets

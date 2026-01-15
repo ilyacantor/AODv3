@@ -21,7 +21,14 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   **Zombie Asset**: Governed (has IdP OR has CMDB) AND STALE activity AND ongoing finance.
 -   **Parked Asset**: Ungoverned (no IdP AND no CMDB) AND STALE activity.
 
-**Governance Policy:** `is_governed = has_idp OR has_cmdb`.
+**Governance Policy:** `is_governed = has_idp OR has_cmdb OR vendor_governed`.
+
+**Vendor Governance Propagation (Stage 3 - Jan 2026):**
+-   Farm-style vendor governance propagation using `VENDOR_DOMAIN_SETS` and `DOMAIN_TO_VENDOR` mappings.
+-   Seeds from authoritative matches only: `lens_coverage.idp=True` or `lens_coverage.cmdb=True` (gate-passed).
+-   Propagates: All assets whose registered domain maps to a seeded vendor get `vendor_governed=True`.
+-   Guardrails: Does NOT add domains, does NOT seed from heuristic matches, is fully traceable via `vendor_governance_trace`.
+-   Example: outlook.com governed via IdP → office.com/sharepoint.com get `vendor_governed=True` (same vendor "Microsoft").
 
 **Authoritative vs Heuristic Match Quality:**
 -   CMDB and IdP are authoritative truth sources for governance decisions.

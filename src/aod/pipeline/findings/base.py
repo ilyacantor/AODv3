@@ -3,7 +3,7 @@
 from ...models.output_contracts import (
     FindingType, FindingCategory, Confidence, Materiality, TriagePriority
 )
-from ...config import policy
+from ...core.policy import get_current_config
 
 # Finding type categories
 SECURITY_RISK_TYPES = {
@@ -32,8 +32,10 @@ SECURITY_RELEVANT_FIELDS = {
     "lifecycle",
 }
 
-# Minimum monthly spend threshold for FINANCE_GAP (in USD)
-FINANCE_GAP_MONTHLY_THRESHOLD = policy.FINANCE_GAP_MONTHLY_THRESHOLD
+
+def get_finance_gap_monthly_threshold() -> float:
+    """Get the minimum monthly spend threshold for FINANCE_GAP from policy."""
+    return get_current_config().finance_thresholds.finance_gap_monthly_threshold
 
 
 def get_category(finding_type: FindingType) -> FindingCategory:

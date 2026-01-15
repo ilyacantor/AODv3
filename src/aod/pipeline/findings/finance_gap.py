@@ -7,7 +7,7 @@ from ...models.input_contracts import Contract, Transaction
 from ..correlate_entities import CorrelationResult, MatchStatus
 from ..build_plane_indexes import PlaneIndexes
 from ..deterministic_ids import deterministic_uuid
-from .base import get_category, compute_triage_priority, FINANCE_GAP_MONTHLY_THRESHOLD
+from .base import get_category, compute_triage_priority, get_finance_gap_monthly_threshold
 
 
 def generate_finance_gap_findings(
@@ -59,7 +59,7 @@ def generate_finance_gap_findings(
         if not is_recurring:
             continue
 
-        if monthly_amount < FINANCE_GAP_MONTHLY_THRESHOLD:
+        if monthly_amount < get_finance_gap_monthly_threshold():
             continue
 
         # Get vendor/product name for aggregation

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Optional
 import re
 
-from ..config import policy
+from ..core.policy import get_current_config
 
 
 @dataclass
@@ -286,7 +286,7 @@ def infer_vendor_from_domain(domain: Optional[str]) -> Optional[VendorHypothesis
     if not registered:
         return None
     
-    confidence = policy.VENDOR_HYPOTHESIS_MAX_CONFIDENCE
+    confidence = get_current_config().vendor_inference.max_confidence
 
     if registered in DOMAIN_TO_VENDOR:
         return VendorHypothesisResult(

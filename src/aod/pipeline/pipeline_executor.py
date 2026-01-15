@@ -32,7 +32,7 @@ from .asset_identity import late_bind_and_merge_assets
 
 logger = logging.getLogger(__name__)
 
-MAX_OBSERVATION_SAMPLES = 2000
+# Note: MAX_OBSERVATION_SAMPLES removed - use get_current_config().query_limits.max_observation_samples
 
 
 def _extract_plane_timestamps(correlation: 'CorrelationResult') -> list[datetime]:
@@ -493,7 +493,8 @@ async def execute_pipeline(
             await db.create_rejections_batch(iron_dome_batch)
         
         obs_samples = []
-        for candidate in candidates[:MAX_OBSERVATION_SAMPLES]:
+        max_samples = get_current_config().query_limits.max_observation_samples
+        for candidate in candidates[:max_samples]:
             sample_id = str(deterministic_uuid(snapshot_id, run_id, "obs_sample", candidate.entity_id))
             raw_data = {
                 "entity_id": candidate.entity_id,

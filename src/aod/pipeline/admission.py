@@ -14,7 +14,6 @@ from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity, normalize_domain
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .domain_cache import extract_domain
-from ..constants import INFRASTRUCTURE_DOMAINS
 
 
 def build_idp_activity_map(idp_records: dict) -> dict[str, datetime]:
@@ -222,12 +221,14 @@ def _resolve_effective_domain_from_record(record) -> Optional[str]:
 
 def _is_sso_or_infrastructure_domain(domain: str) -> bool:
     """Check if domain is an SSO provider or infrastructure domain that should be filtered."""
+    from ..core.policy import get_current_config
     if not domain:
         return False
     registered = extract_registered_domain(domain)
     if not registered:
         return False
-    return registered in SSO_PROVIDER_DOMAINS or registered in INFRASTRUCTURE_DOMAINS
+    infra_domains = get_current_config().infrastructure_domains
+    return registered in SSO_PROVIDER_DOMAINS or registered in infra_domains
 
 
 def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> list[str]:
@@ -433,17 +434,31 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
     return None
 
 
-# Banned domains - immediately BLOCKED (not QUARANTINE)
-# These are domains that are policy-forbidden regardless of governance status
-# Note: tiktok.com removed Jan 2026 - it's a common marketing platform, not policy-forbidden
-BANNED_DOMAINS = {
-    "kaspersky.com",
-}
+# Note: BANNED_DOMAINS, CORPORATE_ROOT_DOMAINS, INFRASTRUCTURE_DOMAINS
+# are now loaded from policy config via get_current_config()
+
+
+def _get_banned_domains() -> set[str]:
+    """Get banned domains from policy config."""
+    from ..core.policy import get_current_config
+    return set(get_current_config().exclusion_lists.banned_domains)
+
+
+def _get_corporate_root_domains() -> set[str]:
+    """Get corporate root domains from policy config."""
+    from ..core.policy import get_current_config
+    return get_current_config().corporate_root_domains
+
+
+def _get_infrastructure_domains() -> set[str]:
+    """Get infrastructure domains from policy config."""
+    from ..core.policy import get_current_config
+    return get_current_config().infrastructure_domains
 
 
 def is_banned_domain(domain: Optional[str]) -> bool:
-    """Check if domain is in the BANNED_DOMAINS policy list.
-    
+    """Check if domain is in the banned domains policy list.
+
     Banned domains are immediately blocked regardless of any governance evidence.
     Returns True if the registered domain (eTLD+1) matches a banned domain.
     """
@@ -452,20 +467,8 @@ def is_banned_domain(domain: Optional[str]) -> bool:
     registered = extract_registered_domain(domain)
     if not registered:
         return False
-    return registered.lower() in BANNED_DOMAINS
-
-
-# Corporate/marketing root domains - NEVER admit these
-# These are the TENANT'S OWN domains (not vendor SaaS platforms)
-# NOTE: SaaS vendor domains (okta.com, workday.com, etc.) are OPERATIONAL
-# assets that SHOULD be admitted and classified as shadow IT if ungoverned.
-# Only block the tenant's own corporate domains.
-CORPORATE_ROOT_DOMAINS = {
-    # Placeholder - populated dynamically per tenant if available
-    # Example: "acme-corp.com", "acme.io" for tenant ACME
-    # For now, we don't block any domains globally since all vendor
-    # SaaS platforms are legitimate discovery targets.
-}
+    banned_domains = _get_banned_domains()
+    return registered.lower() in banned_domains
 
 
 def is_corporate_root_domain(domain: Optional[str]) -> bool:
@@ -473,7 +476,8 @@ def is_corporate_root_domain(domain: Optional[str]) -> bool:
     if not domain:
         return False
     domain_lower = domain.lower().strip()
-    return domain_lower in CORPORATE_ROOT_DOMAINS
+    corporate_domains = _get_corporate_root_domains()
+    return domain_lower in corporate_domains
 
 
 def is_infrastructure_domain(domain: Optional[str]) -> bool:
@@ -483,7 +487,8 @@ def is_infrastructure_domain(domain: Optional[str]) -> bool:
     registered = extract_registered_domain(domain)
     if not registered:
         return False
-    return registered in INFRASTRUCTURE_DOMAINS
+    infra_domains = _get_infrastructure_domains()
+    return registered in infra_domains
 
 
 VALID_CLOUD_RESOURCE_TYPES = {
@@ -708,7 +713,7 @@ def check_finance_admission(correlation: CorrelationResult) -> tuple[bool, str]:
     return False, ""
 
 
-DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
+# Note: DISCOVERY_ACTIVITY_WINDOW_DAYS removed - use get_current_config().activity_windows.discovery_activity_window_days
 
 SOURCE_TO_PLANE = {
     "dns": "network",
@@ -887,7 +892,7 @@ USER_ACTIVITY_EXHAUST = {
     "network",  # Generic "network" is too ambiguous
 }
 
-MIN_DISCOVERY_SOURCES = 2
+# Note: MIN_DISCOVERY_SOURCES removed - use get_current_config().admission_gates.noise_floor
 
 import logging
 logger = logging.getLogger(__name__)
@@ -942,7 +947,8 @@ class DiscoveryFootprint:
 def build_discovery_footprint(
     observations: Optional[list[Observation]],
     canonical_key: Optional[str] = None,
-    snapshot_timestamp: Optional[datetime] = None
+    snapshot_timestamp: Optional[datetime] = None,
+    activity_window_days: Optional[int] = None
 ) -> DiscoveryFootprint:
     """
     Build an evidence footprint for a CandidateEntity's discovery observations.
@@ -960,12 +966,17 @@ def build_discovery_footprint(
         - reason_codes: list of reason codes for this footprint
     """
     from datetime import timedelta, timezone
-    
+    from ..core.policy import get_current_config
+
+    # Load activity window from policy if not provided
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.discovery_activity_window_days
+
     all_discovery_sources: set = set()
     all_planes_present: set = set()
     latest_activity: Optional[datetime] = None
     reason_codes: list = []
-    
+
     if not observations:
         return DiscoveryFootprint(
             discovery_sources=set(),
@@ -974,13 +985,13 @@ def build_discovery_footprint(
             latest_activity_at=None,
             reason_codes=["NO_DISCOVERY"]
         )
-    
+
     # Calculate cutoff for recent activity - use snapshot timestamp as reference if provided
     # Farm uses snapshot timestamp, not current time, for consistent 90-day windows
     reference_time = snapshot_timestamp if snapshot_timestamp else datetime.now(timezone.utc)
     if reference_time.tzinfo is None:
         reference_time = reference_time.replace(tzinfo=timezone.utc)
-    cutoff = reference_time - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
+    cutoff = reference_time - timedelta(days=activity_window_days)
     
     # Count only sources with RECENT activity (using snapshot timestamp as reference)
     # Farm's policy: count sources where the observation is within 90 days of snapshot
@@ -1015,10 +1026,11 @@ def build_discovery_footprint(
     discovery_sources = all_discovery_sources
     planes_present = all_planes_present
     
-    if len(discovery_sources) >= MIN_DISCOVERY_SOURCES:
-        reason_codes.append("DISCOVERY_SOURCE_COUNT_GE_2")
+    min_sources = get_current_config().admission_gates.noise_floor
+    if len(discovery_sources) >= min_sources:
+        reason_codes.append(f"DISCOVERY_SOURCE_COUNT_GE_{min_sources}")
     else:
-        reason_codes.append("DISCOVERY_SOURCE_COUNT_LT_2")
+        reason_codes.append(f"DISCOVERY_SOURCE_COUNT_LT_{min_sources}")
     
     if len(planes_present) >= 2:
         reason_codes.append("PLANE_DIVERSITY_GE_2")
@@ -1048,32 +1060,36 @@ def build_discovery_footprint(
 
 def check_discovery_admission(
     observations: Optional[list[Observation]],
-    min_sources: int = MIN_DISCOVERY_SOURCES,
+    min_sources: Optional[int] = None,
     canonical_key: Optional[str] = None,
     snapshot_timestamp: Optional[datetime] = None
 ) -> tuple[bool, str]:
     """
     Check discovery-only admission criteria.
-    
+
     Admit discovery-only candidates when usage is corroborated and recent:
     - Evidence from ≥2 distinct DISCOVERY SOURCES (not planes!)
     - Recent activity ≤ 90 days
-    
+
     CRITICAL FIX (Dec 2025):
     - Gate on distinct SOURCES (browser, proxy, dns = 3 sources) NOT distinct planes
     - Plane diversity is an annotation/confidence signal, NOT an admission blocker
     - This fixes shadow misses where assets like asana.com with 3 sources
       (browser, proxy, dns) were rejected because they all map to "network" plane
-    
+
     Args:
         observations: List of discovery observations
-        min_sources: Minimum distinct sources required (default: 2)
+        min_sources: Minimum distinct sources required (default from policy: noise_floor)
         canonical_key: Entity key for debug logging
         snapshot_timestamp: Snapshot timestamp for 90-day window reference
-        
+
     Returns:
         Tuple of (admitted: bool, reason: str)
     """
+    from ..core.policy import get_current_config
+    if min_sources is None:
+        min_sources = get_current_config().admission_gates.noise_floor
+
     footprint = build_discovery_footprint(observations, canonical_key, snapshot_timestamp)
     
     source_count = len(footprint.discovery_sources)

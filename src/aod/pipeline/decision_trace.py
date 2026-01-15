@@ -16,6 +16,7 @@ from typing import Optional
 
 from ..models.output_contracts import Asset, LensStatus
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
+from ..core.policy import get_current_config
 
 
 class ActivitySource(str, Enum):
@@ -29,18 +30,9 @@ class ActivitySource(str, Enum):
     NONE = "none"
 
 
-INFRASTRUCTURE_DOMAINS = {
-    "redis.io", "redis.com", "postgresql.org", "mysql.com", "mariadb.org",
-    "docker.com", "docker.io", "kubernetes.io", "k8s.io", "nginx.org",
-    "nginx.com", "apache.org", "golang.org", "go.dev", "python.org",
-    "nodejs.org", "npmjs.com", "npmjs.org", "pypi.org", "rubygems.org",
-    "maven.org", "gradle.org", "jenkins.io", "circleci.com", "travisci.com",
-    "travis-ci.com", "terraform.io", "hashicorp.com", "vault.hashicorp.com",
-    "consul.io", "nomad.io", "elastic.co", "elasticsearch.org", "mongodb.org",
-    "mongodb.com", "couchdb.apache.org", "kafka.apache.org", "rabbitmq.com",
-    "nats.io", "prometheus.io", "grafana.com", "influxdata.com", "rust-lang.org",
-    "ruby-lang.org", "linux.org", "gnu.org",
-}
+def _get_infrastructure_domains() -> set[str]:
+    """Get infrastructure domains from policy config (single source of truth)."""
+    return get_current_config().infrastructure_domains
 
 
 @dataclass
@@ -118,18 +110,19 @@ def _is_external(asset: Asset) -> bool:
     raw = _extract_raw_domain(asset)
     if not raw:
         return False
-    
+
+    infra_domains = _get_infrastructure_domains()
     registered = extract_registered_domain(raw)
-    if registered and registered in INFRASTRUCTURE_DOMAINS:
+    if registered and registered in infra_domains:
         return False
-    if raw in INFRASTRUCTURE_DOMAINS:
+    if raw in infra_domains:
         return False
-    
+
     if registered and registered in DOMAIN_TO_VENDOR:
         return True
     if raw in DOMAIN_TO_VENDOR:
         return True
-    
+
     return True
 
 
@@ -138,26 +131,30 @@ def _is_infra_excluded(asset: Asset) -> bool:
     raw = _extract_raw_domain(asset)
     if not raw:
         return False
-    
+
+    infra_domains = _get_infrastructure_domains()
     registered = extract_registered_domain(raw)
-    if registered and registered in INFRASTRUCTURE_DOMAINS:
+    if registered and registered in infra_domains:
         return True
-    if raw in INFRASTRUCTURE_DOMAINS:
+    if raw in infra_domains:
         return True
-    
+
     return False
 
 
-def _get_activity_info(asset: Asset, window_days: int = 90) -> tuple[bool, ActivitySource, Optional[datetime]]:
+def _get_activity_info(asset: Asset, window_days: Optional[int] = None) -> tuple[bool, ActivitySource, Optional[datetime]]:
     """
     Determine activity status, source, and timestamp.
-    
+
     Returns: (is_active, activity_source, latest_activity_at)
     """
+    if window_days is None:
+        window_days = get_current_config().activity_windows.default_activity_window_days
+
     activity = asset.activity_evidence
     if not activity:
         return False, ActivitySource.NONE, None
-    
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
     latest: Optional[datetime] = None
     source = ActivitySource.NONE
@@ -185,12 +182,15 @@ def _get_activity_info(asset: Asset, window_days: int = 90) -> tuple[bool, Activ
     return is_active, source, latest
 
 
-def compute_decision_trace(asset: Asset, activity_window_days: int = 90) -> DecisionTrace:
+def compute_decision_trace(asset: Asset, activity_window_days: Optional[int] = None) -> DecisionTrace:
     """
     Compute the decision trace for a single asset.
-    
+
     This produces exactly the 13 fields needed to compare Farm and AOD logic.
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+
     raw_domain = _extract_raw_domain(asset)
     asset_key = raw_domain if raw_domain else asset.name.lower().strip()
     
@@ -253,8 +253,10 @@ def compute_decision_trace(asset: Asset, activity_window_days: int = 90) -> Deci
     )
 
 
-def compute_all_decision_traces(assets: list[Asset], activity_window_days: int = 90) -> list[DecisionTrace]:
+def compute_all_decision_traces(assets: list[Asset], activity_window_days: Optional[int] = None) -> list[DecisionTrace]:
     """Compute decision traces for all assets."""
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
     return [compute_decision_trace(a, activity_window_days) for a in assets]
 
 

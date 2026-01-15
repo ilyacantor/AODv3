@@ -36,6 +36,7 @@ from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN, extract_regist
 from ..constants import INFRASTRUCTURE_DOMAINS
 from ..utils.normalization import normalize_key as _normalize_key, normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 from .derived_classifications import _resolve_domain_key
+from ..core.policy import get_current_config
 
 
 class ReasonCode(str, Enum):
@@ -224,32 +225,35 @@ def is_reconciliation_eligible(asset: Asset, mode: str = "sprawl") -> bool:
 
 def compute_asset_reasons(
     asset: Asset,
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     snapshot_as_of: Optional[datetime] = None
 ) -> tuple[list[ReasonCode], dict]:
     """
     Compute the canonical reason codes for an asset's current state.
-    
+
     IMPORTANT: HAS_CMDB/HAS_IDP codes mean GOVERNANCE GRANTED (passes gates + authoritative match).
     - HAS_CMDB = CMDB match with authoritative method (domain/uri/canonical_name) passing gates
     - HAS_IDP = IdP match with authoritative method (domain/uri/canonical_name) passing gates
     - HAS_FINANCE = finance evidence with RECURRING spend (one-time purchases excluded)
     - HAS_DISCOVERY = discovery observations exist (even if stale)
-    
-    Jan 2026 Fix: Uses lens_coverage (governance granted) for CMDB/IDP, not lens_status (match exists).
+
+    Uses lens_coverage (governance granted) for CMDB/IDP, not lens_status (match exists).
     Heuristic matches (fuzzy, vendor, contains) appear in lens_match_debug but don't grant governance.
     Uses lens_coverage for finance/cloud to respect policy filters.
-    
+
     Args:
         asset: The asset to compute reasons for
-        activity_window_days: Activity window in days (default 90)
+        activity_window_days: Activity window in days (default from policy)
         snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
                        When processing historical snapshots, use the snapshot's generated_at
                        to avoid falsely marking active assets as stale.
-    
+
     Returns:
         Tuple of (reasons list, evidence summary dict)
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+
     reasons = []
     evidence = {}
     
@@ -441,41 +445,44 @@ def _extract_registered_domain(asset: Asset) -> str | None:
 
 def classify_actual(
     asset: Asset,
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     mode: str = "sprawl",
     snapshot_as_of: Optional[datetime] = None,
     debug_keys: Optional[set[str]] = None
 ) -> AssetActualResult:
     """
     Produce the actual classification result for an asset.
-    
+
     This is AOD's view of what the asset IS - not what it should be.
-    
+
     IMPORTANT: Only reconciliation-eligible assets (registered domains, known SaaS)
     are classified as shadow/zombie/parked. Internal identifiers are excluded to prevent
     false positives.
-    
+
     KEY INVARIANT: asset_key is the registered domain when available.
     Name-derived keys are only used when no domain exists.
-    
-    ALIGNED WITH POLICY ENGINE (Dec 2025):
+
+    ALIGNED WITH POLICY ENGINE:
     Classification rules match PolicyEngine._classify() exactly:
     - is_governed = has_idp OR has_cmdb
     - is_shadow = NOT is_governed AND activity_status==RECENT
     - is_zombie = is_governed AND activity_status==STALE
     - is_parked = NOT is_governed AND activity_status==STALE
-    
+
     This is the single source of truth for classification logic.
-    
+
     Key rule: NO_ACTIVITY_TIMESTAMPS is indeterminate, not stale.
-    
+
     Args:
         asset: The asset to classify
-        activity_window_days: Activity window for classification
+        activity_window_days: Activity window for classification (default from policy)
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
         snapshot_as_of: Reference time for recency calculation (default: wall-clock now)
         debug_keys: Set of asset keys to dump diagnostic info for (from DEBUG_RECONCILE_ASSETS)
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+
     reasons, evidence = compute_asset_reasons(asset, activity_window_days, snapshot_as_of)
     
     eligible = is_reconciliation_eligible(asset, mode=mode)
@@ -714,45 +721,47 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
 def emit_actual_results(
     run_id: str,
     assets: list[Asset],
-    activity_window_days: int = 90,
+    activity_window_days: Optional[int] = None,
     rejections: list[dict] | None = None,
     mode: str = "sprawl",
     snapshot_as_of: Optional[datetime] = None
 ) -> ActualResultsOutput:
     """
     Emit AOD's actual results for a run.
-    
+
     This is the ONLY output function. AOD does not consume expected data.
     Farm will take this output and compute diffs/RCA on its side.
-    
+
     IMPORTANT: Includes BOTH admitted assets AND rejected candidates.
     This ensures Farm reconciliation always has aod_reason_codes for every
     asset it asks about.
-    
+
     DOMAIN-LEVEL AGGREGATION: Assets are aggregated by registered domain key
     (e.g., app.asana.com and api.asana.com both map to asana.com key).
     Uses _resolve_domain_key() from derived_classifications for consistent
     key resolution across UI and reconciliation.
-    
+
     ALIAS PROPAGATION: All original subdomains and domain variants are preserved
     in domain_aliases and alias_keys fields, enabling Farm to match against
     any key variant (canonical domain OR original subdomain).
-    
+
     Shadow/zombie status is OR'd across assets sharing the same domain key.
-    
+
     Args:
         run_id: The run ID
         assets: List of admitted assets from AOD
-        activity_window_days: Activity window for classification
+        activity_window_days: Activity window for classification (default from policy)
         rejections: Optional list of rejected candidates with their metadata
         mode: Reconciliation mode - "sprawl" (SaaS only) or "infra" (all assets)
         snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
                        When processing historical snapshots, use the snapshot's generated_at
                        to avoid falsely marking active assets as stale.
-    
+
     Returns:
         ActualResultsOutput with all actual classifications and reason codes
     """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
     debug_keys_env = os.environ.get("DEBUG_RECONCILE_ASSETS", "")
     debug_keys: Optional[set[str]] = None
     if debug_keys_env:

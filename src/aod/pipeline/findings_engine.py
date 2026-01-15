@@ -20,11 +20,11 @@ from .findings import (
     get_category,
     is_security_risk,
     compute_triage_priority,
+    get_finance_gap_monthly_threshold,
     SECURITY_RISK_TYPES,
     VISIBILITY_GAP_TYPES,
     GOVERNANCE_HYGIENE_TYPES,
     SECURITY_RELEVANT_FIELDS,
-    FINANCE_GAP_MONTHLY_THRESHOLD,
 
     # Finding generators
     generate_identity_gap_finding,
@@ -47,11 +47,11 @@ __all__ = [
     'get_category',
     'is_security_risk',
     'compute_triage_priority',
+    'get_finance_gap_monthly_threshold',
     'SECURITY_RISK_TYPES',
     'VISIBILITY_GAP_TYPES',
     'GOVERNANCE_HYGIENE_TYPES',
     'SECURITY_RELEVANT_FIELDS',
-    'FINANCE_GAP_MONTHLY_THRESHOLD',
 
     # Finding generators
     'generate_identity_gap_finding',

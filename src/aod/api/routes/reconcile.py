@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from ...config import policy
+from ...core.policy import get_current_config
 from ..schemas import (
     AODActualResultsRequest,
     AODActualResultsResponse,
@@ -113,7 +113,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
 
     assets = await db.get_assets_by_run(request.run_id)
 
-    rejections_result = await db.get_rejections_by_run(request.run_id, limit=policy.DEFAULT_REJECTION_LIMIT)
+    rejections_result = await db.get_rejections_by_run(request.run_id, limit=get_current_config().query_limits.default_rejection_limit)
     rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
 
     if not assets and not rejections:

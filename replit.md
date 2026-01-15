@@ -47,6 +47,11 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   **Documentation**: Full details in `docs/TLD_VARIANT_FIX.md`, unit tests in `tests/test_tld_variant_isolation.py`.
 -   **Impact**: Eliminates 82 false positives (63% from TLD variant merging, 32% from key normalization).
 
+**Governance Correlation Fixes (Jan 2026):**
+-   **Registered Domain Fallback**: When exact domain lookup fails in Pass 1, tries registered domain (eTLD+1) as fallback. This enables matches like entity "maxsoft.org" matching CMDB "api.maxsoft.org" with authoritative "domain" method.
+-   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery" when entity has discovery observations, ensuring v2 key selection uses the correct discovery domains.
+-   **Test Coverage**: 32 tests including TLD isolation, match method classification, registered domain fallback validation.
+
 **Reason Code Semantics (Jan 2026 Fix):**
 -   `HAS_CMDB` / `HAS_IDP` = Direct authoritative match only (domain/uri/canonical_name that passes gates)
 -   `VENDOR_GOVERNED` = Governance via vendor family propagation (explicit rule, can flip classification)

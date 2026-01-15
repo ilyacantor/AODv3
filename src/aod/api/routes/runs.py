@@ -676,6 +676,42 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
     }
 
 
+@router.get("/{run_id}/policy")
+async def get_run_policy(run_id: str):
+    """
+    Get the policy snapshot used for a specific run.
+    
+    Returns the exact policy configuration that was in effect when
+    the pipeline executed for this run. This enables reproducible
+    grading - Farm can fetch this endpoint to grade with identical policy.
+    
+    Args:
+        run_id: The run to get the policy snapshot for
+    
+    Returns:
+        The policy configuration used for this run, or 404 if not found
+    """
+    db = await get_db_direct()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    if not run.policy_snapshot:
+        return {
+            "run_id": run_id,
+            "status": "no_snapshot",
+            "message": "Policy snapshot not available for this run. Runs before Jan 2026 may not have snapshots.",
+            "current_policy": get_current_config().to_dict()
+        }
+    
+    return {
+        "run_id": run_id,
+        "status": "ok",
+        "policy": run.policy_snapshot
+    }
+
+
 def _compute_stage1_asset_metrics(assets: list) -> dict:
     """
     Compute Stage 1 metrics from persisted assets.

@@ -1,7 +1,7 @@
 {
   "$schema": "./policy_master.schema.json",
   "version": "1.0.0",
-  "last_modified": "2026-01-14T03:51:09Z",
+  "last_modified": "2026-01-15T13:01:12Z",
   "activity_windows": {
     "description": "Time windows for activity status calculations",
     "discovery_activity_window_days": {
@@ -32,7 +32,7 @@
   "finance_thresholds": {
     "description": "Financial thresholds for admission and findings",
     "minimum_spend": {
-      "value": 200.0,
+      "value": 200,
       "type": "float",
       "min": 0,
       "max": 100000,
@@ -40,7 +40,7 @@
       "ui_label": "Minimum Spend for Admission ($)"
     },
     "finance_gap_monthly_threshold": {
-      "value": 200.0,
+      "value": 200,
       "type": "float",
       "min": 0,
       "max": 100000,
@@ -48,7 +48,7 @@
       "ui_label": "Finance Gap Monthly Threshold ($)"
     },
     "finance_gap_annual_threshold": {
-      "value": 2000.0,
+      "value": 2000,
       "type": "float",
       "min": 0,
       "max": 1000000,
@@ -222,7 +222,10 @@
     "mode": {
       "value": "exclude",
       "type": "enum",
-      "options": ["exclude", "observe_only"],
+      "options": [
+        "exclude",
+        "observe_only"
+      ],
       "description": "How to handle infrastructure domains: 'exclude' = never catalog or classify, 'observe_only' = visible in catalog but never classified as shadow/zombie",
       "ui_label": "Infrastructure Handling Mode"
     },

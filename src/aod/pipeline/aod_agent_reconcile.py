@@ -26,6 +26,8 @@ Outputs per run:
 """
 
 import os
+import logging
+from collections import Counter
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
@@ -1076,6 +1078,48 @@ def emit_actual_results(
     zombie_actual = sorted(set(zombie_actual))
     parked_actual = sorted(set(parked_actual))
     
+    # ========== INVARIANT METRICS & DOMAIN UNIQUENESS ASSERTION ==========
+    # Stage 0: Track key pipeline health metrics per run
+    logger = logging.getLogger("aod.reconcile")
+    
+    # Collect all registered domains from emitted assets (asset_results)
+    all_registered_domains: list[str] = []
+    for key, agg in asset_results.items():
+        reg_domain = agg.get("registered_domain")
+        if reg_domain:
+            all_registered_domains.append(reg_domain)
+    
+    # Count domain occurrences to find duplicates
+    domain_counts = Counter(all_registered_domains)
+    unique_registered_domains = len(domain_counts)
+    duplicate_domains = {d: c for d, c in domain_counts.items() if c > 1}
+    domain_duplicates_count = len(duplicate_domains)
+    
+    # Counts for metrics
+    assets_emitted = len(asset_results)  # Unique asset keys
+    admitted_count = len([v for v in admission_actual.values() if v == "admitted"])
+    rejected_count = len([v for v in admission_actual.values() if v == "rejected"])
+    shadows_count = len(set(shadow_actual))
+    zombies_count = len(set(zombie_actual))
+    
+    # Log invariant metrics
+    logger.info(
+        f"[INVARIANT_METRICS] run_id={run_id} | "
+        f"assets_emitted={assets_emitted} | "
+        f"unique_registered_domains={unique_registered_domains} | "
+        f"domain_duplicates={domain_duplicates_count} | "
+        f"admitted={admitted_count} | rejected={rejected_count} | "
+        f"shadows={shadows_count} | zombies={zombies_count}"
+    )
+    
+    # Hard assertion (warn-only for now): No registered domain in more than one asset
+    if duplicate_domains:
+        logger.warning(
+            f"[DOMAIN_UNIQUENESS_VIOLATION] {len(duplicate_domains)} registered domains appear in >1 asset: "
+            f"{list(duplicate_domains.items())[:10]}{'...' if len(duplicate_domains) > 10 else ''}"
+        )
+    # ========== END INVARIANT METRICS ==========
+    
     summary = {
         "total_assets": len(assets),
         "total_candidates": len(assets) + (len(rejections) if rejections else 0),
@@ -1083,8 +1127,12 @@ def emit_actual_results(
         "shadow_actual_count": len(shadow_actual),
         "zombie_actual_count": len(zombie_actual),
         "parked_actual_count": len(parked_actual),
-        "admitted_count": len([v for v in admission_actual.values() if v == "admitted"]),
-        "rejected_count": len([v for v in admission_actual.values() if v == "rejected"])
+        "admitted_count": admitted_count,
+        "rejected_count": rejected_count,
+        # Invariant metrics (Stage 0)
+        "unique_registered_domains": unique_registered_domains,
+        "domain_duplicates_count": domain_duplicates_count,
+        "duplicate_domains": list(duplicate_domains.keys()) if duplicate_domains else []
     }
     
     return ActualResultsOutput(

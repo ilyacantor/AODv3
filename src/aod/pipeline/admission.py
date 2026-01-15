@@ -1697,147 +1697,158 @@ def _compute_provisioning_status(
         return ProvisioningStatus.QUARANTINE
 
 
-def apply_admission_criteria(
-    correlation: CorrelationResult,
-    tenant_id: str,
-    run_id: str,
-    snapshot_id: str,
-    observations: Optional[list[Observation]] = None,
-    propagated_idp: bool = False,
-    propagated_cmdb: bool = False,
-    propagation_reason: Optional[str] = None,
-    idp_activity_map: Optional[dict[str, datetime]] = None,
-    snapshot_timestamp: Optional[datetime] = None
-) -> AdmissionResult:
+@dataclass
+class DomainGateResult:
+    """Result of domain gate checks (gates 0, 0.5, 1)."""
+    passed: bool
+    effective_domain: Optional[str] = None
+    registered_domain: Optional[str] = None
+    recovered_from_correlation: bool = False
+    rejection: Optional[AdmissionResult] = None
+
+
+@dataclass
+class AdmissionEvidence:
+    """Collected admission evidence from all planes."""
+    idp_admitted: bool
+    idp_reason: str
+    cmdb_admitted: bool
+    cmdb_reason: str
+    cloud_admitted: bool
+    cloud_reason: str
+    finance_admitted: bool
+    finance_reason: str
+    discovery_admitted: bool
+    discovery_reason: str
+    footprint: 'DiscoveryFootprint'
+    # Policy-adjusted values
+    idp_can_admit: bool = False
+    cmdb_can_admit: bool = False
+    finance_can_admit: bool = False
+
+
+def _check_domain_gates(
+    entity: CandidateEntity,
+    correlation: CorrelationResult
+) -> DomainGateResult:
     """
-    Apply admission criteria to determine if entity should be admitted as asset.
-    
-    Admit as asset only if it satisfies at least one hard criterion:
-    - Identity plane: IdP match AND (has_sso OR has_scim OR idp_type==service_principal)
-    - CMDB plane: CMDB match AND (ci_type in app/service/database/infra) AND (lifecycle in prod/staging)
-    - Cloud plane: cloud match AND resource_type indicates real system/resource
-    - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
-    - Discovery plane: ≥2 distinct SOURCES AND recent activity ≤90 days (allows shadow IT admission)
-    
-    NOTE: Discovery admission gates on distinct SOURCES (browser, proxy, dns = 3),
-    NOT distinct planes. Plane diversity is an annotation/confidence signal only.
+    Check domain eligibility gates 0, 0.5, and 1.
 
-    VENDOR GOVERNANCE PROPAGATION:
-    Propagated IdP/CMDB from vendor siblings CAN cause admission, matching Farm's policy.
-    Example: googleapis.com inherits HAS_IDP from "Google+" IdP record via vendor propagation.
+    Gates:
+    - GATE 0: Invalid TLD / internal hostname -> IGNORED
+    - GATE 0.5: BANNED_DOMAINS policy -> BLOCKED
+    - GATE 1: Corporate root domains -> IGNORED
 
-    INVARIANTS:
-    - Corporate/marketing root domains are ALWAYS rejected
-    - Vendor alone is not admission
-    
-    Args:
-        correlation: Correlation result for the entity
-        tenant_id: Tenant ID
-        run_id: Run ID
-        snapshot_id: Snapshot ID
-        observations: Discovery observations for this entity
-        propagated_idp: IdP governance propagated from vendor sibling (can cause admission)
-        propagated_cmdb: CMDB governance propagated from vendor sibling (can cause admission)
-        propagation_reason: Explanation of governance propagation (stored in asset metadata)
-        idp_activity_map: Optional mapping of IdP name -> max login timestamp for cross-IdP activity
-        
+    Note: Gate 2 (infrastructure domains) requires governance check results
+    and is handled separately in apply_admission_criteria.
+
     Returns:
-        AdmissionResult indicating whether entity is admitted
+        DomainGateResult with pass/fail status and domain info
     """
-    entity = correlation.entity
-
-    # =========================================================================
-    # PRE-STEP 0: POST-CORRELATION DOMAIN RECOVERY
-    # If entity has no domain, try to recover from correlation match keys
-    # This fixes KEY_NORMALIZATION_MISMATCH where name-keyed entities have plane matches
-    # =========================================================================
+    # Domain recovery
     effective_domain = entity.domain
     recovered_from_correlation = False
-    
+
     if not effective_domain:
         recovered_domain = _extract_domain_from_correlation(correlation, debug_log=True)
         if recovered_domain:
             effective_domain = recovered_domain
             recovered_from_correlation = True
-            # Persist recovered domain onto entity for downstream consistency
             entity.domain = effective_domain
-    
-    # =========================================================================
-    # STEP 0: HARD REJECTION (The Filter) - Results in IGNORED status
-    # These assets are dropped and do not enter Triage
-    # =========================================================================
-    
-    # GATE 0: Reject invalid TLDs / internal hostnames
-    # Must have a valid public suffix (e.g., .com, .io, .org)
+
+    # GATE 0: Invalid TLD / internal hostname
     if effective_domain:
         extracted = extract_domain(effective_domain)
         if not extracted.suffix:
-            return AdmissionResult(
-                admitted=False,
-                provisioning_status=ProvisioningStatus.IGNORED,
-                rejection_reason=f"Invalid TLD / Internal hostname: {effective_domain}"
+            return DomainGateResult(
+                passed=False,
+                rejection=AdmissionResult(
+                    admitted=False,
+                    provisioning_status=ProvisioningStatus.IGNORED,
+                    rejection_reason=f"Invalid TLD / Internal hostname: {effective_domain}"
+                )
             )
     else:
-        # No domain at all - reject
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason="No resolvable domain - requires domain-first identity"
+        return DomainGateResult(
+            passed=False,
+            rejection=AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
+                rejection_reason="No resolvable domain - requires domain-first identity"
+            )
         )
-    
-    # Compute registered domain (eTLD+1) ONCE for all subsequent gates
-    # This ensures mail.google.com -> google.com for gate checks
+
+    # Compute registered domain
     registered_domain = extract_registered_domain(effective_domain)
     if not registered_domain:
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Cannot extract registered domain from: {effective_domain}"
+        return DomainGateResult(
+            passed=False,
+            rejection=AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
+                rejection_reason=f"Cannot extract registered domain from: {effective_domain}"
+            )
         )
-    
-    # GATE 0.5: BANNED_DOMAINS policy - immediately BLOCKED (not QUARANTINE/IGNORED)
-    # These domains are policy-forbidden regardless of any governance evidence
-    # Results in BLOCKED status - enters triage but is permanently blocked
+
+    # GATE 0.5: BANNED_DOMAINS policy
     if is_banned_domain(registered_domain):
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.BLOCKED,
-            rejection_reason=f"BANNED_DOMAINS policy: {registered_domain} is policy-forbidden"
+        return DomainGateResult(
+            passed=False,
+            effective_domain=effective_domain,
+            registered_domain=registered_domain,
+            rejection=AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.BLOCKED,
+                rejection_reason=f"BANNED_DOMAINS policy: {registered_domain} is policy-forbidden"
+            )
         )
-    
-    # GATE 1: Reject corporate/marketing root domains unconditionally
-    # Check against REGISTERED domain, not raw FQDN (fixes mail.google.com -> google.com)
+
+    # GATE 1: Corporate root domains
     if is_corporate_root_domain(registered_domain):
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason=f"Corporate root domain: {registered_domain} (from {effective_domain})"
+        return DomainGateResult(
+            passed=False,
+            effective_domain=effective_domain,
+            registered_domain=registered_domain,
+            rejection=AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
+                rejection_reason=f"Corporate root domain: {registered_domain} (from {effective_domain})"
+            )
         )
-    
-    # Load policy config BEFORE admission checks (needed for CMDB gates)
-    from aod.core.policy.loader import get_current_config
-    policy_config = get_current_config()
-    
-    # Check each admission criterion FIRST (before infrastructure filter)
-    idp_admitted, idp_reason = check_idp_admission(correlation, entity_registered_domain=registered_domain)
+
+    return DomainGateResult(
+        passed=True,
+        effective_domain=effective_domain,
+        registered_domain=registered_domain,
+        recovered_from_correlation=recovered_from_correlation
+    )
+
+
+def _collect_admission_evidence(
+    correlation: CorrelationResult,
+    observations: Optional[list[Observation]],
+    effective_domain: str,
+    registered_domain: str,
+    entity: CandidateEntity,
+    snapshot_timestamp: Optional[datetime],
+    policy_config,
+    propagated_idp: bool,
+    propagated_cmdb: bool
+) -> AdmissionEvidence:
+    """
+    Collect admission evidence from all planes and apply policy adjustments.
+
+    Returns AdmissionEvidence with raw and policy-adjusted admission flags.
+    """
+    # Check each admission criterion
+    idp_admitted, idp_reason = check_idp_admission(
+        correlation, entity_registered_domain=registered_domain
+    )
     cmdb_admitted, cmdb_reason = check_cmdb_admission(
         correlation,
         require_valid_ci_type=policy_config.admission_gates.require_valid_ci_type,
         require_valid_lifecycle=policy_config.admission_gates.require_valid_lifecycle
     )
-
-    # GATE 2: Reject infrastructure/tooling domains ONLY if they lack governance
-    # Farm admits infrastructure domains (postgresql.org, mongodb.com, etc.) if they
-    # have IdP or CMDB governance. Only reject ungoverned infrastructure.
-    # Check against REGISTERED domain, not raw FQDN
-    if is_infrastructure_domain(registered_domain):
-        if not (idp_admitted or cmdb_admitted):
-            return AdmissionResult(
-                admitted=False,
-                provisioning_status=ProvisioningStatus.IGNORED,
-                rejection_reason=f"Infrastructure domain without governance: {registered_domain} (from {effective_domain})"
-            )
-        # Infrastructure domain WITH governance - continue to admission
     cloud_admitted, cloud_reason = check_cloud_admission(correlation)
     finance_admitted, finance_reason = check_finance_admission(correlation)
     discovery_admitted, discovery_reason = check_discovery_admission(
@@ -1846,60 +1857,36 @@ def apply_admission_criteria(
         snapshot_timestamp=snapshot_timestamp
     )
 
-    # =========================================================================
-    # FARM ADMISSION POLICY - Policy-driven
-    # =========================================================================
-    # policy_config already loaded above (before CMDB gates)
-    
+    footprint = build_discovery_footprint(
+        observations,
+        canonical_key=effective_domain or entity.canonical_name if entity else None,
+        snapshot_timestamp=snapshot_timestamp
+    )
+
     # Policy toggles
     enable_vendor_propagation = policy_config.admission_gates.enable_vendor_propagation
     allow_finance_only = policy_config.admission_gates.allow_finance_only_admission
     finance_requires_discovery = policy_config.admission_gates.finance_requires_discovery
     require_corroboration = policy_config.admission_gates.require_corroboration
     noise_floor = policy_config.admission_gates.noise_floor
-    
-    footprint = build_discovery_footprint(
-        observations,
-        canonical_key=effective_domain or entity.canonical_name if entity else None,
-        snapshot_timestamp=snapshot_timestamp
-    )
-    
-    # Discovery admission: controlled by require_corroboration toggle
-    # When require_corroboration=True (default): Require 2+ sources for discovery-only admission
-    # When require_corroboration=False: Honor noise_floor (can be 1)
-    if require_corroboration:
-        has_sufficient_discovery = len(footprint.discovery_sources) >= 2
-    else:
-        has_sufficient_discovery = len(footprint.discovery_sources) >= noise_floor
-    
-    # Override discovery_admitted based on corroboration policy
+
+    # Discovery admission adjustment
     if not require_corroboration and len(footprint.discovery_sources) >= noise_floor:
         discovery_admitted = True
 
-    # Finance admission policy (controlled by multiple toggles)
-    #
-    # allow_finance_only_admission=True: Finance alone is sufficient
-    # finance_requires_discovery=False: Finance doesn't need discovery corroboration
-    # (Both can independently relax the finance requirements)
+    # Finance admission policy
     if allow_finance_only:
         finance_can_admit = finance_admitted
     elif not finance_requires_discovery:
-        # Finance can admit with governance OR without discovery
         finance_can_admit = finance_admitted and (
-            idp_admitted or cmdb_admitted or cloud_admitted or True  # No discovery required
+            idp_admitted or cmdb_admitted or cloud_admitted or True
         )
     else:
-        # Default: Finance requires governance OR sufficient discovery
         finance_can_admit = finance_admitted and (
-            idp_admitted or
-            cmdb_admitted or
-            cloud_admitted or
-            discovery_admitted
+            idp_admitted or cmdb_admitted or cloud_admitted or discovery_admitted
         )
 
-    # Vendor propagation: controlled by enable_vendor_propagation toggle
-    # When enabled (default): vendor-propagated IdP/CMDB counts for admission
-    # When disabled: only direct matches count
+    # Vendor propagation
     if enable_vendor_propagation:
         idp_can_admit = idp_admitted or propagated_idp
         cmdb_can_admit = cmdb_admitted or propagated_cmdb
@@ -1907,46 +1894,62 @@ def apply_admission_criteria(
         idp_can_admit = idp_admitted
         cmdb_can_admit = cmdb_admitted
 
-    # Admission: IdP OR CMDB OR Cloud OR Discovery (≥2) OR Finance (with corroboration)
-    if not any([idp_can_admit, cmdb_can_admit, cloud_admitted, finance_can_admit, discovery_admitted]):
-        return AdmissionResult(
-            admitted=False,
-            provisioning_status=ProvisioningStatus.IGNORED,
-            rejection_reason="No admission criteria satisfied"
-        )
-    
-    # =========================================================================
-    # TRAFFIC LIGHT LOGIC - Determine provisioning_status
-    # Uses helper for testability. See _compute_provisioning_status for rules.
-    # =========================================================================
-    stale_window_days = policy_config.admission_gates.stale_window_days
-    provisioning_status = _compute_provisioning_status(
+    return AdmissionEvidence(
+        idp_admitted=idp_admitted,
+        idp_reason=idp_reason,
+        cmdb_admitted=cmdb_admitted,
+        cmdb_reason=cmdb_reason,
+        cloud_admitted=cloud_admitted,
+        cloud_reason=cloud_reason,
+        finance_admitted=finance_admitted,
+        finance_reason=finance_reason,
+        discovery_admitted=discovery_admitted,
+        discovery_reason=discovery_reason,
+        footprint=footprint,
         idp_can_admit=idp_can_admit,
         cmdb_can_admit=cmdb_can_admit,
-        discovery_admitted=discovery_admitted,
-        finance_can_admit=finance_can_admit,
-        observations=observations,
-        stale_window_days=stale_window_days
+        finance_can_admit=finance_can_admit
     )
 
+
+def _build_admitted_asset(
+    entity: CandidateEntity,
+    correlation: CorrelationResult,
+    evidence: AdmissionEvidence,
+    provisioning_status: ProvisioningStatus,
+    effective_domain: str,
+    registered_domain: str,
+    tenant_id: str,
+    run_id: str,
+    snapshot_id: str,
+    observations: Optional[list[Observation]],
+    propagated_idp: bool,
+    propagated_cmdb: bool,
+    propagation_reason: Optional[str],
+    idp_activity_map: Optional[dict[str, datetime]],
+    recovered_from_correlation: bool
+) -> Asset:
+    """
+    Build the admitted Asset object with all metadata.
+
+    Constructs identifiers, tags, lens status/coverage, and activity evidence.
+    """
+    # Build admission reasons
     admission_reasons = []
-    if idp_admitted:
-        admission_reasons.append(idp_reason)
-    if cmdb_admitted:
-        admission_reasons.append(cmdb_reason)
-    if cloud_admitted:
-        admission_reasons.append(cloud_reason)
-    if finance_admitted:
-        admission_reasons.append(finance_reason)
-    if discovery_admitted:
-        admission_reasons.append(discovery_reason)
-    # Add vendor propagation reason if that's what caused admission
+    if evidence.idp_admitted:
+        admission_reasons.append(evidence.idp_reason)
+    if evidence.cmdb_admitted:
+        admission_reasons.append(evidence.cmdb_reason)
+    if evidence.cloud_admitted:
+        admission_reasons.append(evidence.cloud_reason)
+    if evidence.finance_admitted:
+        admission_reasons.append(evidence.finance_reason)
+    if evidence.discovery_admitted:
+        admission_reasons.append(evidence.discovery_reason)
     if propagation_reason and (propagated_idp or propagated_cmdb):
         admission_reasons.append(f"Vendor governance: {propagation_reason}")
 
-    # Include propagated governance in lens_status for classification
-    # When vendor governance is propagated, set lens_status to MATCHED so classification
-    # logic recognizes the asset as governed (not shadow IT).
+    # Build lens status with propagated governance
     idp_status = correlation.idp.status.value
     if propagated_idp and correlation.idp.status == MatchStatus.UNMATCHED:
         idp_status = MatchStatus.MATCHED.value
@@ -1961,68 +1964,58 @@ def apply_admission_criteria(
         cloud=LensStatus(correlation.cloud.status.value),
         finance=LensStatus(correlation.finance.status.value)
     )
-    
-    # Single source of truth: discovery_sources from footprint
-    # lens_coverage.discovery is DERIVED from discovery_sources (not independent)
-    discovery_sources_list = sorted(footprint.discovery_sources)
 
-    # Include propagated governance in lens_coverage
-    # lens_coverage indicates whether asset has governance "coverage" (direct or propagated)
+    # Discovery sources
+    discovery_sources_list = sorted(evidence.footprint.discovery_sources)
+
+    # Lens coverage
     lens_coverage = LensCoverage(
-        idp=idp_admitted or propagated_idp,
-        cmdb=cmdb_admitted or propagated_cmdb,
-        cloud=cloud_admitted,
-        finance=finance_admitted,
-        discovery=bool(discovery_sources_list)  # Derived from discovery_sources
+        idp=evidence.idp_admitted or propagated_idp,
+        cmdb=evidence.cmdb_admitted or propagated_cmdb,
+        cloud=evidence.cloud_admitted,
+        finance=evidence.finance_admitted,
+        discovery=bool(discovery_sources_list)
     )
-    
-    # KEY_NORMALIZATION_MISMATCH fix:
-    # Include ALL domains from correlated plane records (IdP, CMDB, etc.)
-    # This allows reconciliation to match against ANY domain variant.
-    # 
-    # CRITICAL: Discovery domain MUST be first (index 0) - it is the Primary Key.
-    # Governance domains (from IdP/CMDB) are aliases that enable correlation,
-    # but must NOT hijack the asset's identity.
-    # 
-    # Priority hierarchy:
-    # 1. effective_domain (Discovery) - "Observed Reality", anchor for Activity
-    # 2. plane_domains (Governance) - "Bureaucratic Records", anchors for Status
+
+    # Build domain list (discovery domain first)
     domain_list = []
     seen_domains = set()
-    
-    # Discovery domain is PRIMARY - must be first
     if effective_domain:
         normalized = effective_domain.lower().strip()
         domain_list.append(normalized)
         seen_domains.add(normalized)
-    
-    # Add governance domains as secondary aliases (preserving correlation without breaking identity)
     plane_domains = _extract_all_domains_from_correlation(correlation)
     for pd in plane_domains:
         if pd not in seen_domains:
             domain_list.append(pd)
             seen_domains.add(pd)
-    
+
     identifiers = AssetIdentifiers(
         domains=domain_list,
         hostnames=[entity.hostname] if entity.hostname else [],
         uris=[entity.uri] if entity.uri else []
     )
-    
+
+    # Build tags
     tags = []
-    if idp_admitted:
+    if evidence.idp_admitted:
         tags.append("identity_managed")
-    if cmdb_admitted:
+    if evidence.cmdb_admitted:
         tags.append("cmdb_registered")
-    if cloud_admitted:
+    if evidence.cloud_admitted:
         tags.append("cloud_hosted")
-    if finance_admitted:
+    if evidence.finance_admitted:
         tags.append("finance_tracked")
-    if discovery_admitted:
+    if evidence.discovery_admitted:
         tags.append("discovery_only")
-    
-    activity_evidence = extract_activity_timestamps(correlation, entity, observations, idp_activity_map, propagated_idp)
-    
+    tags.append(f"traffic_light:{provisioning_status.value}")
+
+    # Activity evidence
+    activity_evidence = extract_activity_timestamps(
+        correlation, entity, observations, idp_activity_map, propagated_idp
+    )
+
+    # Vendor hypothesis
     from ..models.output_contracts import VendorHypothesis
     vendor_hypothesis = None
     if entity.vendor_hypothesis:
@@ -2031,12 +2024,9 @@ def apply_admission_criteria(
             confidence=entity.vendor_hypothesis.confidence,
             basis=entity.vendor_hypothesis.basis
         )
-    
-    canonical_domain = registered_domain
-    
-    # PRIMARY KEY FREEZE: The key was chosen in normalize_observations - never change it
-    asset_key = canonical_domain
-    
+
+    asset_key = registered_domain
+
     import os
     if os.environ.get("AOD_DEBUG_KEYS"):
         logger.info("admission.primary_key_freeze", extra={
@@ -2045,17 +2035,12 @@ def apply_admission_criteria(
             "asset_key": asset_key,
             "from_correlation_recovery": recovered_from_correlation
         })
-    
-    display_name = entity.original_name
-    
-    # Add traffic light status tag
-    tags.append(f"traffic_light:{provisioning_status.value}")
-    
+
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, run_id, "asset", asset_key),
         tenant_id=tenant_id,
         run_id=run_id,
-        name=display_name,
+        name=entity.original_name,
         asset_type=determine_asset_type(correlation, entity),
         identifiers=identifiers,
         vendor=entity.vendor,
@@ -2069,14 +2054,146 @@ def apply_admission_criteria(
         tags=tags,
         admission_reason="; ".join(admission_reasons),
         provisioning_status=provisioning_status,
-        discovery_sources=discovery_sources_list  # Single source of truth
+        discovery_sources=discovery_sources_list
     )
-    
-    # =========================================================================
-    # RUNTIME INVARIANTS: Fail fast if discovery evidence diverges
-    # These ensure discovery_sources remains the single source of truth
-    # =========================================================================
+
     _validate_discovery_invariants(asset, discovery_sources_list, asset_key)
+
+    return asset
+
+
+def apply_admission_criteria(
+    correlation: CorrelationResult,
+    tenant_id: str,
+    run_id: str,
+    snapshot_id: str,
+    observations: Optional[list[Observation]] = None,
+    propagated_idp: bool = False,
+    propagated_cmdb: bool = False,
+    propagation_reason: Optional[str] = None,
+    idp_activity_map: Optional[dict[str, datetime]] = None,
+    snapshot_timestamp: Optional[datetime] = None
+) -> AdmissionResult:
+    """
+    Apply admission criteria to determine if entity should be admitted as asset.
+
+    Uses composable helpers for testability:
+    - _check_domain_gates(): Gates 0, 0.5, 1 (TLD, banned, corporate)
+    - _collect_admission_evidence(): All plane checks + policy application
+    - _compute_provisioning_status(): Traffic light logic
+    - _build_admitted_asset(): Asset construction
+
+    Admission criteria (at least one required):
+    - IdP: match with SSO/SCIM/service_principal
+    - CMDB: match with valid ci_type and lifecycle
+    - Cloud: match with real resource type
+    - Finance: match with contract/transaction evidence
+    - Discovery: ≥2 distinct sources with recent activity
+
+    Returns:
+        AdmissionResult indicating whether entity is admitted
+    """
+    entity = correlation.entity
+
+    # STEP 1: Domain gates (0, 0.5, 1)
+    gate_result = _check_domain_gates(entity, correlation)
+    if not gate_result.passed:
+        return gate_result.rejection
+
+    effective_domain = gate_result.effective_domain
+    registered_domain = gate_result.registered_domain
+
+    # STEP 2: Load policy and check IdP/CMDB for gate 2
+    from aod.core.policy.loader import get_current_config
+    policy_config = get_current_config()
+
+    idp_admitted, _ = check_idp_admission(correlation, entity_registered_domain=registered_domain)
+    cmdb_admitted, _ = check_cmdb_admission(
+        correlation,
+        require_valid_ci_type=policy_config.admission_gates.require_valid_ci_type,
+        require_valid_lifecycle=policy_config.admission_gates.require_valid_lifecycle
+    )
+
+    # GATE 2: Infrastructure domains without governance
+    if is_infrastructure_domain(registered_domain):
+        if not (idp_admitted or cmdb_admitted):
+            return AdmissionResult(
+                admitted=False,
+                provisioning_status=ProvisioningStatus.IGNORED,
+                rejection_reason=f"Infrastructure domain without governance: {registered_domain} (from {effective_domain})"
+            )
+
+    # STEP 3: Collect all admission evidence
+    evidence = _collect_admission_evidence(
+        correlation=correlation,
+        observations=observations,
+        effective_domain=effective_domain,
+        registered_domain=registered_domain,
+        entity=entity,
+        snapshot_timestamp=snapshot_timestamp,
+        policy_config=policy_config,
+        propagated_idp=propagated_idp,
+        propagated_cmdb=propagated_cmdb
+    )
+
+    # STEP 4: Check if any admission criteria satisfied
+    if not any([
+        evidence.idp_can_admit,
+        evidence.cmdb_can_admit,
+        evidence.cloud_admitted,
+        evidence.finance_can_admit,
+        evidence.discovery_admitted
+    ]):
+        return AdmissionResult(
+            admitted=False,
+            provisioning_status=ProvisioningStatus.IGNORED,
+            rejection_reason="No admission criteria satisfied"
+        )
+
+    # STEP 5: Compute traffic light status
+    stale_window_days = policy_config.admission_gates.stale_window_days
+    provisioning_status = _compute_provisioning_status(
+        idp_can_admit=evidence.idp_can_admit,
+        cmdb_can_admit=evidence.cmdb_can_admit,
+        discovery_admitted=evidence.discovery_admitted,
+        finance_can_admit=evidence.finance_can_admit,
+        observations=observations,
+        stale_window_days=stale_window_days
+    )
+
+    # STEP 6: Build the admitted asset
+    asset = _build_admitted_asset(
+        entity=entity,
+        correlation=correlation,
+        evidence=evidence,
+        provisioning_status=provisioning_status,
+        effective_domain=effective_domain,
+        registered_domain=registered_domain,
+        tenant_id=tenant_id,
+        run_id=run_id,
+        snapshot_id=snapshot_id,
+        observations=observations,
+        propagated_idp=propagated_idp,
+        propagated_cmdb=propagated_cmdb,
+        propagation_reason=propagation_reason,
+        idp_activity_map=idp_activity_map,
+        recovered_from_correlation=gate_result.recovered_from_correlation
+    )
+
+    # Build admission reason string
+    admission_reasons = []
+    if evidence.idp_admitted:
+        admission_reasons.append(evidence.idp_reason)
+    if evidence.cmdb_admitted:
+        admission_reasons.append(evidence.cmdb_reason)
+    if evidence.cloud_admitted:
+        admission_reasons.append(evidence.cloud_reason)
+    if evidence.finance_admitted:
+        admission_reasons.append(evidence.finance_reason)
+    if evidence.discovery_admitted:
+        admission_reasons.append(evidence.discovery_reason)
+    if propagation_reason and (propagated_idp or propagated_cmdb):
+        admission_reasons.append(f"Vendor governance: {propagation_reason}")
 
     return AdmissionResult(
         admitted=True,

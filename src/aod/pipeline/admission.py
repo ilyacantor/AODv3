@@ -506,7 +506,7 @@ VALID_CLOUD_RESOURCE_TYPES = {
 class AdmissionResult:
     """
     Result of admission evaluation with Traffic Light status.
-    
+
     Traffic Light System (fail-closed):
     - IGNORED: Hard rejection (invalid TLD, infrastructure domain) - dropped
     - ACTIVE: Trusted (has IdP or CMDB) - flows to DCL
@@ -1645,6 +1645,58 @@ def extract_activity_timestamps(
     )
 
 
+# =============================================================================
+# ADMISSION HELPER FUNCTIONS
+# Extracted from apply_admission_criteria for composability and testability
+# =============================================================================
+
+
+def _compute_provisioning_status(
+    idp_can_admit: bool,
+    cmdb_can_admit: bool,
+    discovery_admitted: bool,
+    finance_can_admit: bool,
+    observations: Optional[list[Observation]],
+    stale_window_days: int
+) -> ProvisioningStatus:
+    """
+    Compute provisioning status using Traffic Light rules.
+
+    Traffic Light precedence:
+    - GREEN (ACTIVE): IdP OR CMDB (with discovery) OR Discovery-only
+    - AMBER (REVIEW): CMDB + stale activity, OR Finance
+    - RED (QUARANTINE): Cloud/Finance only without corroboration
+    """
+    from datetime import timedelta, timezone
+
+    has_governance = idp_can_admit or cmdb_can_admit
+
+    # Check if activity is stale (zombie indicator)
+    is_stale_activity = False
+    if observations:
+        latest_activity = None
+        for obs in observations:
+            if obs.observed_at:
+                if latest_activity is None or obs.observed_at > latest_activity:
+                    latest_activity = obs.observed_at
+        if latest_activity:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=stale_window_days)
+            if latest_activity.tzinfo is None:
+                latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+            is_stale_activity = latest_activity < cutoff
+
+    if has_governance:
+        if cmdb_can_admit and is_stale_activity and not idp_can_admit:
+            return ProvisioningStatus.REVIEW
+        return ProvisioningStatus.ACTIVE
+    elif discovery_admitted:
+        return ProvisioningStatus.ACTIVE
+    elif finance_can_admit:
+        return ProvisioningStatus.REVIEW
+    else:
+        return ProvisioningStatus.QUARANTINE
+
+
 def apply_admission_criteria(
     correlation: CorrelationResult,
     tenant_id: str,
@@ -1865,53 +1917,18 @@ def apply_admission_criteria(
     
     # =========================================================================
     # TRAFFIC LIGHT LOGIC - Determine provisioning_status
-    # Strict precedence order: GREEN (ACTIVE) > AMBER (REVIEW) > RED (QUARANTINE)
+    # Uses helper for testability. See _compute_provisioning_status for rules.
     # =========================================================================
-    
-    # STEP 1: GREEN LANE (Trusted) - IdP OR CMDB (with discovery corroboration) = ACTIVE
-    # These flow to DCL automatically
-    has_governance = idp_can_admit or cmdb_can_admit
-    
-    # STEP 2: AMBER LANE (Review) - CMDB + Stale Activity = REVIEW
-    # Check if activity is stale (zombie indicator) using policy-driven stale_window_days
     stale_window_days = policy_config.admission_gates.stale_window_days
-    is_stale_activity = False
-    if observations:
-        from datetime import timedelta, timezone
-        latest_activity = None
-        for obs in observations:
-            if obs.observed_at:
-                if latest_activity is None or obs.observed_at > latest_activity:
-                    latest_activity = obs.observed_at
-        if latest_activity:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=stale_window_days)
-            if latest_activity.tzinfo is None:
-                latest_activity = latest_activity.replace(tzinfo=timezone.utc)
-            is_stale_activity = latest_activity < cutoff
-    
-    # Determine provisioning status based on Traffic Light rules
-    # Farm catalogs discovery-only assets (>= 2 sources), not shadow
-    # Only stale CMDB-only assets go to REVIEW (zombie candidates)
-    if has_governance:
-        if cmdb_can_admit and is_stale_activity and not idp_can_admit:
-            # STEP 2: AMBER - CMDB but stale activity (zombie candidate)
-            provisioning_status = ProvisioningStatus.REVIEW
-        else:
-            # STEP 1: GREEN - Has IdP or active CMDB
-            provisioning_status = ProvisioningStatus.ACTIVE
-    elif discovery_admitted:
-        # STEP 1: GREEN - Discovery-only with >= 2 sources + recent activity
-        # Farm catalogs these as active assets, not shadow IT
-        provisioning_status = ProvisioningStatus.ACTIVE
-    elif finance_can_admit:
-        # STEP 2: AMBER - Finance with governance/discovery corroboration
-        # Finance-admitted assets go to REVIEW for validation
-        provisioning_status = ProvisioningStatus.REVIEW
-    else:
-        # STEP 3: RED - Cloud/Finance only (insufficient evidence)
-        # These need governance or discovery corroboration
-        provisioning_status = ProvisioningStatus.QUARANTINE
-    
+    provisioning_status = _compute_provisioning_status(
+        idp_can_admit=idp_can_admit,
+        cmdb_can_admit=cmdb_can_admit,
+        discovery_admitted=discovery_admitted,
+        finance_can_admit=finance_can_admit,
+        observations=observations,
+        stale_window_days=stale_window_days
+    )
+
     admission_reasons = []
     if idp_admitted:
         admission_reasons.append(idp_reason)

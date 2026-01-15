@@ -477,7 +477,7 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 | ~~Misnomer field name~~ | ~~High~~ | ~~Low~~ | ~~P1~~ | ✅ FIXED |
 | ~~Database duplication~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
 | ~~Silent exceptions~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
-| Monolithic `apply_admission_criteria` | High | High | P1 | Open |
+| Monolithic `apply_admission_criteria` | High | High | P1 | ✅ Partial - extracted `_compute_provisioning_status()` |
 | ~~Date-tagged comments~~ | ~~Low~~ | ~~Medium~~ | ~~P3~~ | ✅ FIXED |
 | ~~Magic numbers~~ | ~~Low~~ | ~~Low~~ | ~~P3~~ | ✅ FIXED (partial) |
 | Route file size | Low | Medium | P3 | Open |

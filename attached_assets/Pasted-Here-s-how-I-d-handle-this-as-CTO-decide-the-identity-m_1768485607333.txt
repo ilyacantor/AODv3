@@ -1,0 +1,123 @@
+Here’s how I’d handle this as CTO: **decide the identity model first**, then chase bugs. Right now Farm and AOD are disagreeing on *what an asset is* (identity + keys), so correlation debugging is mostly noise until we lock the rules.
+
+## 1) Should CMDB primary domains be used for entity key generation?
+
+**Yes — but only as “authoritative identity” when CMDB is authoritative for that asset.**
+
+Rule:
+
+* If an asset has a **CMDB match**, and CMDB provides a **primary domain / FQDN**, that value should be allowed to populate **`identifiers.domains`** (identity), not just `reference_domains` (enrichment).
+* Keep provenance: `identifiers.domains[]` entries should carry `source=CMDB` so we can explain merges and avoid “CMDB overwrote discovery” confusion.
+
+Why:
+
+* Otherwise you’re explicitly preventing CMDB from influencing identity, and then complaining that identity keys don’t match. That’s self-inflicted.
+
+Guardrail:
+
+* Don’t blindly inject “domains” from CMDB if they’re actually **aliases, vendor roots, or shared service domains**. Use only fields that represent *the asset’s own domain*, not “related URLs.”
+
+## 2) Should Farm adopt AOD’s name-based keys for assets without discovery domains?
+
+**Yes, but only as a deterministic fallback, and only when there is no better anchor.**
+
+Rule order for key generation (deterministic):
+
+1. `registered_domain` (from discovered domain/FQDN)
+2. `cmdb_primary_domain` (if CMDB matched + validated)
+3. `idp_app_id` / `service_principal_id` (if IdP matched but no domain)
+4. `canonical_name` (normalized name-only fallback: slug + stable prefix)
+
+So: Farm should mirror AOD’s fallback behavior *if* the asset truly has no domain anchor. Otherwise Farm will keep expecting `hubsync.ai` while AOD only has `hubsync` and you’ll never converge.
+
+## 3) Are domains like cdn.com, edge.com, global.com valid assets or false extractions?
+
+**Default stance: treat them as suspicious and do not let them become first-class assets unless anchored.**
+
+Policy:
+
+* **Unanchored “generic eTLD+1” extracted from subdomains** is usually garbage. These strings are high-collision and often represent infrastructure patterns, not owned assets.
+* If `cdn.com` / `edge.com` shows up with **no CMDB/IdP/Finance/Cloud anchor** and weak discovery, it should be:
+
+  * either **suppressed** (dropped),
+  * or **downgraded** into a “candidate/needs-review” bucket (not admitted).
+
+But:
+
+* If there’s **strong anchor** (CMDB CI with that domain as primary, or finance contract, etc.), then it can be valid. Anchors decide.
+
+Implementation hint:
+
+* Maintain a small deny/gray list of “generic roots” (cdn, edge, global, assets, static, img, api, etc.) **only when they appear as bare eTLD+1 extractions** without supporting evidence.
+
+## 4) Investigate correlation logic now, or align key generation at design level first?
+
+**Align design first. Then investigate.**
+Because your biggest bucket is “Key Normalization” (26) and it contaminates *all* downstream counts (shadow FPs, zombie misses, etc.). Fix the identity/key contract and you’ll see half the other issues evaporate.
+
+---
+
+# Concrete decisions I want you (dev agent) to implement
+
+## A) Identity contract update (AOD)
+
+1. If CMDB matched:
+
+   * Promote **CMDB primary domain** into `identifiers.domains` (not only `reference_domains`).
+   * Keep `reference_domains` for secondary/related domains.
+2. Recompute `entity_key` after this promotion (or ensure it’s computed from the updated identifiers).
+
+## B) Key generation spec (shared with Farm)
+
+Publish a short spec both systems must follow:
+
+**`entity_key` =**
+
+* `registered_domain` if present else
+* `cmdb_primary_domain` if CMDB matched else
+* `idp_app_id`/`sp_id` if IdP matched else
+* `name_slug` fallback
+
+No other variation. No “sometimes use hostname, sometimes use name.”
+
+## C) Reason code vocabulary mismatch
+
+This is simple: create a mapping layer for reconciliation. Don’t treat it as a product bug.
+
+Example mapping:
+
+* AOD `ANCHORED_FINANCE` / `ANCHORED_CLOUD` (or `ANCHORED`) ≈ Farm “has non-IdP/CMDB authoritative evidence”
+* Farm `NO_IDP`, `NO_CMDB` are *absence flags*, not outcomes. They shouldn’t be compared to AOD admission/gating reason codes 1:1.
+
+**Action:** define a reconciliation schema with categories:
+
+* `ANCHOR_TYPE: {IDP, CMDB, FINANCE, CLOUD, DISCOVERY_ONLY, NONE}`
+* `ABSENCE_FLAGS: {NO_IDP, NO_CMDB, ...}`
+
+Then both systems emit those fields and you stop arguing about strings.
+
+---
+
+# Why you’re seeing Shadow FPs + Zombie misses
+
+This is almost certainly **identity drift**:
+
+* When keys don’t merge correctly, you split one real asset into multiple partials.
+* Partial with “governance missing” looks like **shadow**.
+* Partial without enough activity evidence doesn’t get classified as **zombie** (or vice versa).
+
+Fix keys first, then re-score shadow/zombie deltas.
+
+---
+
+# What I want back from the dev agent (tight deliverable)
+
+1. A one-page **Key Generation Spec** (the ordering above) + where it’s implemented in code (file/function).
+2. AOD change: CMDB primary domain promotion into `identifiers.domains` with provenance.
+3. A before/after reconciliation run on the same Farm snapshot:
+
+   * Key normalization mismatches count
+   * Shadow FP count
+   * Zombie missed count
+
+If key mismatches drop hard, we know the direction is correct. If not, *then* we inspect the correlation logic.

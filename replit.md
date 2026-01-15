@@ -39,8 +39,12 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   Heuristics may generate hypotheses and enrichment signals but may never assert or override governance or classification outcomes.
 
 **Reason Code Semantics (Jan 2026 Fix):**
--   `HAS_CMDB` / `HAS_IDP` = Governance granted (authoritative match + passes gates) via `lens_coverage`
--   Reason codes use `lens_coverage` (governance outcome), NOT `lens_status` (match existence)
+-   `HAS_CMDB` / `HAS_IDP` = Direct authoritative match only (domain/uri/canonical_name that passes gates)
+-   `VENDOR_GOVERNED` = Governance via vendor family propagation (explicit rule, can flip classification)
+-   Classification uses: `is_governed = HAS_IDP OR HAS_CMDB OR VENDOR_GOVERNED`
+-   But reason codes distinguish the SOURCE of governance for audit trail
+-   `lens_coverage.idp/cmdb` = direct matches only, NOT from vendor propagation
+-   `lens_coverage.vendor_governed` = governance inherited from vendor family
 -   Heuristic correlations preserved in `lens_match_debug` for enrichment but don't set HAS_CMDB/HAS_IDP
 
 **Key Normalization (Stage 4 - Jan 2026):**

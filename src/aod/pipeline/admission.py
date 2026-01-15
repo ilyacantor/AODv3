@@ -2001,17 +2001,15 @@ def _build_admitted_asset(
 
     # Lens coverage - DIRECT matches only, NOT from vendor propagation
     # HAS_CMDB/HAS_IDP reason codes should mean actual record match, not inheritance
-    # Vendor propagation sets vendor_governed=True separately
+    # Vendor propagation sets lens_coverage.vendor_governed=True separately
     lens_coverage = LensCoverage(
         idp=evidence.idp_admitted,  # Direct IdP match only
         cmdb=evidence.cmdb_admitted,  # Direct CMDB match only
         cloud=evidence.cloud_admitted,
         finance=evidence.finance_admitted,
-        discovery=bool(discovery_sources_list)
+        discovery=bool(discovery_sources_list),
+        vendor_governed=propagated_idp or propagated_cmdb  # Governance via vendor family
     )
-    
-    # Vendor governance propagation - separate from direct matches
-    is_vendor_governed = propagated_idp or propagated_cmdb
 
     # Build domain list (discovery domain ONLY - no CMDB external_ref injection)
     # Stage 1 Fix: identifiers.domains = observed-only (from discovery observations)
@@ -2086,14 +2084,13 @@ def _build_admitted_asset(
         environment=determine_environment(correlation),
         evidence_refs=correlation.all_evidence_refs(),
         lens_status=lens_status,
-        lens_coverage=lens_coverage,
+        lens_coverage=lens_coverage,  # vendor_governed is on lens_coverage
         lens_match_debug=build_lens_match_debug(correlation),
         activity_evidence=activity_evidence,
         tags=tags,
         admission_reason="; ".join(admission_reasons),
         provisioning_status=provisioning_status,
-        discovery_sources=discovery_sources_list,
-        vendor_governed=is_vendor_governed
+        discovery_sources=discovery_sources_list
     )
 
     _validate_discovery_invariants(asset, discovery_sources_list, asset_key)

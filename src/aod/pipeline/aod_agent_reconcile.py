@@ -42,13 +42,22 @@ from ..core.policy import get_current_config
 
 
 class ReasonCode(str, Enum):
-    """Canonical reason codes for admission and classification decisions."""
+    """Canonical reason codes for admission and classification decisions.
+    
+    GOVERNANCE SEMANTICS (Jan 2026):
+    - HAS_CMDB/HAS_IDP = Direct authoritative match (domain/uri/canonical_name)
+    - VENDOR_GOVERNED = Governance via vendor family propagation (explicit rule, not heuristic)
+    
+    Classification uses: is_governed = HAS_IDP OR HAS_CMDB OR VENDOR_GOVERNED
+    But reason codes distinguish the SOURCE of governance for audit trail.
+    """
     HAS_IDP = "HAS_IDP"
     HAS_CMDB = "HAS_CMDB"
     HAS_FINANCE = "HAS_FINANCE"
     HAS_ONGOING_FINANCE = "HAS_ONGOING_FINANCE"
     HAS_CLOUD = "HAS_CLOUD"
     HAS_DISCOVERY = "HAS_DISCOVERY"
+    VENDOR_GOVERNED = "VENDOR_GOVERNED"  # Governance via vendor family propagation
     NO_IDP = "NO_IDP"
     NO_CMDB = "NO_CMDB"
     NO_FINANCE = "NO_FINANCE"
@@ -306,6 +315,13 @@ def compute_asset_reasons(
     else:
         reasons.append(ReasonCode.NO_DISCOVERY)
     
+    # VENDOR_GOVERNED: Governance via vendor family propagation
+    # This is an explicit governance rule (not just enrichment) - can flip classification
+    # But distinct from HAS_CMDB/HAS_IDP which mean direct authoritative match
+    is_vendor_governed = asset.lens_coverage.vendor_governed if asset.lens_coverage else False
+    if is_vendor_governed:
+        reasons.append(ReasonCode.VENDOR_GOVERNED)
+    
     latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
     reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
     cutoff = reference_time - timedelta(days=activity_window_days)
@@ -345,7 +361,8 @@ def compute_asset_reasons(
         "cmdb": asset.lens_coverage.cmdb,
         "cloud": asset.lens_coverage.cloud,
         "finance": asset.lens_coverage.finance,
-        "discovery": asset.lens_coverage.discovery
+        "discovery": asset.lens_coverage.discovery,
+        "vendor_governed": asset.lens_coverage.vendor_governed
     }
     
     return reasons, evidence
@@ -501,6 +518,7 @@ def classify_actual(
     has_recent_activity = ReasonCode.RECENT_ACTIVITY in reasons
     has_stale_activity = ReasonCode.STALE_ACTIVITY in reasons
     has_no_activity = ReasonCode.NO_ACTIVITY_TIMESTAMPS in reasons
+    is_vendor_governed = ReasonCode.VENDOR_GOVERNED in reasons
     
     # Cloud presence for anchoring (not used in governance/classification)
     has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
@@ -515,19 +533,22 @@ def classify_actual(
         asset.activity_evidence.idp_governance_aligned
     )
     
-    # Track BOTH broad and strict governance for different classification needs
-    # - Shadows: Use strict (domain-aligned IdP only) - cross-domain matches don't count
-    # - Zombies: Use broad (any IdP match) - cross-domain matches DO count as governance
+    # GOVERNANCE SEMANTICS (Jan 2026):
+    # - HAS_CMDB/HAS_IDP = Direct authoritative match only
+    # - VENDOR_GOVERNED = Governance via vendor family propagation (explicit rule)
     #
-    # admission.py now requires EXACT domain matches for idp_governance_aligned flag.
-    # Cross-domain IdP matches (e.g., dataflow.cloud entity vs dataflow.net IdP) correctly
-    # set idp_governance_aligned=False.
-    has_governance_broad = has_idp or has_cmdb
-    has_governance_strict = has_domain_aligned_idp or has_cmdb
+    # Classification uses: is_governed = HAS_IDP OR HAS_CMDB OR VENDOR_GOVERNED
+    # But reason codes distinguish the SOURCE of governance for audit trail.
+    #
+    # Governance variants:
+    # - Strict: domain-aligned IdP OR CMDB OR vendor_governed (used for shadows)
+    # - Broad: any IdP OR CMDB OR vendor_governed (used for zombies)
+    has_governance_broad = has_idp or has_cmdb or is_vendor_governed
+    has_governance_strict = has_domain_aligned_idp or has_cmdb or is_vendor_governed
     has_governance = has_governance_strict  # Default to strict for backward compatibility
 
     # Store both in evidence_summary for downstream use
-    is_anchored = has_idp or has_cmdb or has_finance or has_cloud
+    is_anchored = has_idp or has_cmdb or has_finance or has_cloud or is_vendor_governed
     financially_anchored = has_ongoing_finance
     
     if is_anchored:
@@ -541,6 +562,7 @@ def classify_actual(
     evidence["is_anchored"] = is_anchored
     evidence["has_governance"] = has_governance_strict  # Shadows use this (strict)
     evidence["has_governance_broad"] = has_governance_broad  # Zombies use this (broad)
+    evidence["vendor_governed"] = is_vendor_governed  # Governance via vendor family
     evidence["financially_anchored"] = financially_anchored
     
     is_shadow = False

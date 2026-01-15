@@ -329,7 +329,7 @@
   "farm_sync": {
     "description": "Farm synchronization settings",
     "webhook_url": {
-      "value": "",
+      "value": "https://aos-farm-jq5x6f-64a70a9c5f3a.replit.app/api/policy/webhook",
       "type": "string",
       "description": "Farm webhook URL for policy change notifications",
       "ui_label": "Farm Webhook URL"

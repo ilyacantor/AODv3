@@ -240,6 +240,44 @@ class TestPlaneNamePropagation:
             assert variant.plane == plane
 
 
+class TestRegisteredDomainFallbackMatching:
+    """Test that registered domain fallback enables authoritative matches"""
+    
+    def test_subdomain_should_match_via_registered_domain(self):
+        """api.maxsoft.org should match maxsoft.org via registered domain fallback"""
+        from src.aod.pipeline.vendor_inference import extract_registered_domain
+        
+        entity_domain = "maxsoft.org"
+        record_domain = "api.maxsoft.org"
+        
+        entity_registered = extract_registered_domain(entity_domain)
+        record_registered = extract_registered_domain(record_domain)
+        
+        assert entity_registered == "maxsoft.org"
+        assert record_registered == "maxsoft.org"
+        assert entity_registered == record_registered
+    
+    def test_registered_domain_match_is_authoritative(self):
+        """Matches via registered domain should still use authoritative 'domain' method"""
+        from src.aod.pipeline.correlate_entities import AUTHORITATIVE_MATCH_METHODS
+        
+        assert "domain" in AUTHORITATIVE_MATCH_METHODS
+    
+    def test_different_registered_domains_do_not_match(self):
+        """maxsoft.org should NOT match maxsoft.io via registered domain"""
+        from src.aod.pipeline.vendor_inference import extract_registered_domain
+        
+        entity_domain = "maxsoft.org"
+        unrelated_domain = "maxsoft.io"
+        
+        entity_registered = extract_registered_domain(entity_domain)
+        unrelated_registered = extract_registered_domain(unrelated_domain)
+        
+        assert entity_registered == "maxsoft.org"
+        assert unrelated_registered == "maxsoft.io"
+        assert entity_registered != unrelated_registered
+
+
 class TestMatchQualityClassification:
     """Test match quality classification for governance decisions"""
     

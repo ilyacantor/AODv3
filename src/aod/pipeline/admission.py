@@ -2182,10 +2182,19 @@ def _build_admitted_asset(
         normalized = effective_domain.lower().strip()
         domain_list.append(normalized)
         seen_domains.add(normalized)
-        # Determine source: check if came from discovery entity directly vs recovered from planes
-        if recovered_from_correlation:
-            # Recovered from plane records during domain recovery - determine actual source
-            # Check which plane provided the domain
+        # Jan 2026 FIX: If entity has discovery observations (entity.source == "discovery"),
+        # the domain is a discovery domain even if it was recovered from correlation.
+        # The domain recovery process finds the domain from correlated planes, but the
+        # entity itself was discovered via discovery observations - so the domain should
+        # be considered "discovery" for key selection purposes.
+        # This fixes KEY_NORMALIZATION_MISMATCH where entities with discovery observations
+        # had recovered domains marked as "idp"/"cmdb" and were excluded from discovery_domains.
+        entity_is_discovery = getattr(entity, 'source', 'discovery') == 'discovery'
+        entity_has_discovery_obs = bool(entity.observation_ids) if entity else False
+        
+        if recovered_from_correlation and not (entity_is_discovery or entity_has_discovery_obs):
+            # Only mark as idp/cmdb if entity is NOT from discovery plane
+            # (this is for entities that originated from planes, not discovery)
             if correlation.idp.status == MatchStatus.MATCHED:
                 domain_provenance[normalized] = "idp"
             elif correlation.cmdb.status == MatchStatus.MATCHED:
@@ -2193,6 +2202,8 @@ def _build_admitted_asset(
             else:
                 domain_provenance[normalized] = "inferred"
         else:
+            # Entity has discovery observations - domain is a discovery domain
+            # regardless of whether it was recovered from correlation
             domain_provenance[normalized] = "discovery"
     
     # Step 2: Promote CMDB primary domain if not already in list (Jan 2026)

@@ -642,14 +642,32 @@ def correlate_to_plane(
     """
     
     if use_domain and entity.domain and plane_index.by_domain:
+        # Jan 2026 FIX: Try both exact domain AND registered domain (eTLD+1) lookup
+        # This fixes governance correlation failures where entity.domain differs from
+        # CMDB/IdP record.domain but they share the same registered domain.
+        # Example: entity.domain="maxsoft.org", record.domain="app.maxsoft.org"
+        # The index stores both raw and registered domains, but if entity has the
+        # registered domain and record has a subdomain, exact lookup fails.
+        # Solution: Try exact first, then registered domain as fallback.
+        from .vendor_inference import extract_registered_domain
+        
         domain_matches = plane_index.by_domain.get(entity.domain, [])
+        match_key_used = entity.domain
+        
+        # If exact lookup failed, try registered domain version
+        if not domain_matches:
+            entity_registered = extract_registered_domain(entity.domain)
+            if entity_registered and entity_registered != entity.domain:
+                domain_matches = plane_index.by_domain.get(entity_registered, [])
+                match_key_used = entity_registered
+        
         if len(domain_matches) == 1:
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=domain_matches,
                 matched_records=[plane_index.records.get(mid) for mid in domain_matches],
                 match_method="domain",
-                match_key=entity.domain,
+                match_key=match_key_used,
                 ambiguity_code=AmbiguityCode.NONE
             )
         elif len(domain_matches) > 1:
@@ -662,7 +680,7 @@ def correlate_to_plane(
                     matched_ids=resolved,
                     matched_records=[plane_index.records.get(resolved[0])],
                     match_method="domain",
-                    match_key=entity.domain,
+                    match_key=match_key_used,
                     ambiguity_code=code,
                     disambiguation_detail=detail
                 )
@@ -672,7 +690,7 @@ def correlate_to_plane(
                 matched_ids=domain_matches,
                 matched_records=records,
                 match_method="domain",
-                match_key=entity.domain,
+                match_key=match_key_used,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )

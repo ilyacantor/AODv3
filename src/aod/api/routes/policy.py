@@ -256,9 +256,9 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     rejections, total = await db.get_rejections_by_run(run_id, limit=2000)
     
     policy_impact = {
-        "banned_domains": {"count": 0, "domains": []},
-        "infrastructure_domains": {"count": 0, "domains": []},
-        "corporate_domains": {"count": 0, "domains": []},
+        "shared_infrastructure": {"count": 0, "domains": []},
+        "vendor_root_portals": {"count": 0, "domains": []},
+        "dev_build_infrastructure": {"count": 0, "domains": []},
         "custom_exclusions": {"count": 0, "domains": []},
         "admission_gates": {"count": 0, "domains": []},
         "other": {"count": 0, "domains": []}
@@ -275,20 +275,24 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
             domain = entity_name
         
         domain_info = {"domain": domain, "name": entity_name, "detail": reason_detail}
+        reason_upper = reason_detail.upper()
         
-        if "BANNED_DOMAINS" in reason_detail.upper():
-            policy_impact["banned_domains"]["count"] += 1
-            policy_impact["banned_domains"]["domains"].append(domain_info)
-        elif "INFRASTRUCTURE" in reason_detail.upper():
-            policy_impact["infrastructure_domains"]["count"] += 1
-            policy_impact["infrastructure_domains"]["domains"].append(domain_info)
-        elif "CORPORATE" in reason_detail.upper():
-            policy_impact["corporate_domains"]["count"] += 1
-            policy_impact["corporate_domains"]["domains"].append(domain_info)
-        elif "CUSTOM" in reason_detail.upper() or "EXCLUSION" in reason_detail.upper():
+        if "SHARED_INFRASTRUCTURE" in reason_upper or "CDN" in reason_upper or "STATIC_HOST" in reason_upper:
+            policy_impact["shared_infrastructure"]["count"] += 1
+            policy_impact["shared_infrastructure"]["domains"].append(domain_info)
+        elif "VENDOR_PORTAL" in reason_upper or "VENDOR_ROOT" in reason_upper:
+            policy_impact["vendor_root_portals"]["count"] += 1
+            policy_impact["vendor_root_portals"]["domains"].append(domain_info)
+        elif "DEV_BUILD" in reason_upper or "BUILD_INFRASTRUCTURE" in reason_upper:
+            policy_impact["dev_build_infrastructure"]["count"] += 1
+            policy_impact["dev_build_infrastructure"]["domains"].append(domain_info)
+        elif "BANNED_DOMAINS" in reason_upper or "INFRASTRUCTURE" in reason_upper:
+            policy_impact["shared_infrastructure"]["count"] += 1
+            policy_impact["shared_infrastructure"]["domains"].append(domain_info)
+        elif "CUSTOM" in reason_upper or "EXCLUSION" in reason_upper:
             policy_impact["custom_exclusions"]["count"] += 1
             policy_impact["custom_exclusions"]["domains"].append(domain_info)
-        elif any(gate in reason_detail.upper() for gate in ["NOISE_FLOOR", "MINIMUM_SPEND", "ADMISSION", "GATE"]):
+        elif any(gate in reason_upper for gate in ["NOISE_FLOOR", "MINIMUM_SPEND", "ADMISSION", "GATE"]):
             policy_impact["admission_gates"]["count"] += 1
             policy_impact["admission_gates"]["domains"].append(domain_info)
         else:
@@ -300,15 +304,16 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     
     config = get_current_config()
     
+    idh = config.infrastructure_domain_handling
     return {
         "run_id": run_id,
         "run_status": run.status.value,
         "total_rejections": total,
         "policy_impact": policy_impact,
         "current_policy": {
-            "banned_domains_count": len(config.exclusion_lists.banned_domains),
-            "infrastructure_domains_count": len(config.exclusion_lists.infrastructure_domains),
-            "corporate_domains_count": len(config.exclusion_lists.corporate_root_domains),
-            "custom_exclusions_count": len(config.exclusion_lists.custom_exclusions)
+            "shared_infrastructure_count": len(idh.shared_infrastructure_domains) if idh else 0,
+            "vendor_portals_count": len(idh.vendor_root_portals) if idh else 0,
+            "dev_build_count": len(idh.dev_build_infrastructure) if idh else 0,
+            "custom_exclusions_count": len(config.custom_exclusions_config.domains) if config.custom_exclusions_config else 0
         }
     }

@@ -1,281 +1,239 @@
-# Key Selection Contract v1.0
+# Key Selection Contract v2.0
 
 ## Overview
 
-This document defines the deterministic contract for canonical key generation in AOD.
-Farm MUST implement identical logic to achieve reconciliation alignment.
+This document defines the **minimal, deterministic, alignable** contract for canonical key generation.
+Both Farm and AOD MUST implement identical logic to achieve reconciliation alignment.
+
+---
 
 ## Contract Summary
 
-| Question | AOD Answer |
-|----------|------------|
-| Which domain becomes canonical key? | `identifiers.domains[0]` after normalization |
-| Domain priority order? | Discovery → CMDB primary → (others are reference only) |
-| When do aliases collapse? | Only domains in `ALIAS_DOMAINS_TO_COLLAPSE` set |
-| When do we exclude by policy? | Admission gates reject, key never generated |
+| Step | Rule |
+|------|------|
+| 1. Build candidate set | `observed_registered_domains = {eTLD+1(domain) for domain in discovery_observations}` |
+| 2. Apply policy exclusions | Remove domains in `BANNED_DOMAINS` → if empty, emit as rejected |
+| 3. Apply alias collapse | Only for domains in `ALIAS_DOMAINS_TO_COLLAPSE` |
+| 4. Select canonical key | **Lexicographic sort** on registered domain, pick first |
 
 ---
 
-## 1. Domain Priority Order
-
-When building `identifiers.domains`, AOD uses this strict priority:
-
-```
-1. Discovery domain (highest priority)
-   - Source: entity.domain from discovery observations
-   - Provenance: "discovery"
-   
-2. CMDB primary domain (if not already in list)
-   - Source: record.domain field (NOT external_ref URLs)
-   - Condition: Authoritative match + gates passed (cmdb_admitted=True)
-   - Provenance: "cmdb"
-   
-3. Reference domains (NOT in identifiers.domains)
-   - Source: All other plane domains (external_ref URLs, etc.)
-   - Location: identifiers.reference_domains (enrichment only)
-```
-
-**Result**: `domains[0]` is ALWAYS the discovery domain if present.
-
----
-
-## 2. Canonical Key Computation
-
-The canonical key is computed from `domains[0]`:
+## 1. Build Observed Registered Domains
 
 ```python
-def compute_canonical_key(domains: list[str], ...) -> CanonicalKeyResult:
-    # Step 1: Get domains[0]
-    raw_domain = domains[0].lower().strip()
+def build_observed_domains(discovery_observations: list[Observation]) -> set[str]:
+    """Extract eTLD+1 domains from discovery observations ONLY."""
+    domains = set()
+    for obs in discovery_observations:
+        if obs.domain:
+            registered = extract_registered_domain(obs.domain)  # eTLD+1
+            if registered:
+                domains.add(registered)
+    return domains
+```
+
+**Source**: Discovery observations only. NOT from CMDB, IdP, or other planes.
+
+---
+
+## 2. Apply Policy Exclusions
+
+```python
+def apply_policy_exclusions(domains: set[str], banned_domains: set[str]) -> set[str]:
+    """Remove banned domains. If empty, entity is REJECTED."""
+    remaining = domains - banned_domains
+    if not remaining:
+        return None  # Emit as rejected, no key generated
+    return remaining
+```
+
+**Rule**: If all observed domains are banned, the entity is **rejected** (not silently dropped).
+
+---
+
+## 3. Apply Alias Collapse
+
+```python
+def apply_alias_collapse(domains: set[str]) -> set[str]:
+    """Collapse known aliases to canonical vendor domain."""
+    result = set()
+    for domain in domains:
+        if domain in ALIAS_DOMAINS_TO_COLLAPSE:
+            canonical = VENDOR_TO_DOMAIN[DOMAIN_TO_VENDOR[domain]]
+            result.add(canonical)
+        else:
+            result.add(domain)
+    return result
+```
+
+**Rule**: Only domains explicitly in `ALIAS_DOMAINS_TO_COLLAPSE` are collapsed.
+
+---
+
+## 4. Select Canonical Key (Deterministic Tie-Breaker)
+
+```python
+def select_canonical_key(domains: set[str]) -> str:
+    """Select canonical key via deterministic lexicographic sort."""
+    if not domains:
+        raise ValueError("No domains available for key selection")
     
-    # Step 2: Extract eTLD+1 (registered domain)
-    registered = extract_registered_domain(raw_domain)
-    # Example: login.microsoftonline.com -> microsoftonline.com
+    # Sort lexicographically, pick first
+    sorted_domains = sorted(domains)
+    return sorted_domains[0]
+```
+
+**Rule**: Lexicographic sort ensures identical key selection regardless of ingestion order.
+
+---
+
+## 5. Full Algorithm
+
+```python
+def compute_canonical_key_v2(discovery_observations: list[Observation]) -> str | None:
+    # Step 1: Build observed domains from discovery only
+    observed = build_observed_domains(discovery_observations)
     
-    # Step 3: Collapse known aliases to vendor domain
-    if registered in ALIAS_DOMAINS_TO_COLLAPSE:
-        canonical = VENDOR_TO_DOMAIN[DOMAIN_TO_VENDOR[registered]]
-        primary_key = canonical
-    else:
-        primary_key = registered
+    # Step 2: Apply policy exclusions
+    after_exclusions = apply_policy_exclusions(observed, BANNED_DOMAINS)
+    if after_exclusions is None:
+        return None  # Entity rejected
     
-    return CanonicalKeyResult(primary_key=primary_key, ...)
+    # Step 3: Apply alias collapse
+    after_collapse = apply_alias_collapse(after_exclusions)
+    
+    # Step 4: Deterministic selection
+    canonical_key = select_canonical_key(after_collapse)
+    
+    return canonical_key
 ```
 
 ---
 
-## 3. Alias Collapse Rules
+## CMDB / IdP Domains
 
-### 3.1 Domains That COLLAPSE to Vendor Domain
+**Rule**: CMDB and IdP domains are stored as **reference/enrichment only**.
+
+They do NOT participate in canonical key selection unless:
+- Explicitly promoted by policy (e.g., `enable_cmdb_domain_promotion: true`)
+- AND the entity has NO discovery domains
+
+```python
+# Reference domains stored separately
+asset.identifiers.reference_domains = cmdb_domains + idp_domains
+
+# Only used for keying if discovery domains are empty AND policy allows
+if not observed_domains and policy.enable_cmdb_domain_promotion:
+    observed_domains = extract_cmdb_primary_domain(correlation)
+```
+
+---
+
+## What is NOT Allowed
+
+To prevent repeat regressions:
+
+| Forbidden Pattern | Reason |
+|-------------------|--------|
+| Using CMDB `external_ref` extracted domains for keying | Stage 1 fix - external_ref URLs are often vendor portals |
+| Adding correlation-extracted domains to `identifiers.domains` | Pollutes identity with non-discovery domains |
+| Choosing key based on list position (`domains[0]`) | Ingestion-order-dependent, non-deterministic |
+| "First observation wins" | Same problem as list position |
+| Rolling up to vendor roots unless in `ALIAS_DOMAINS_TO_COLLAPSE` | Loses granularity for infrastructure domains |
+
+---
+
+## Alias Collapse List
+
+Only these domains collapse to their vendor root:
 
 ```python
 ALIAS_DOMAINS_TO_COLLAPSE = {
     # Microsoft -> microsoft.com
-    "microsoftonline.com",
-    "microsoft365.com",
-    "azure.com",
-    "office365.com",
-    "live.com",
-    "onedrive.com",
-    "powerbi.com",
-    
-    # Google -> google.com
-    # (none currently - googleapis.com etc are NOT collapsed)
+    "microsoftonline.com", "microsoft365.com", "azure.com",
+    "office365.com", "live.com", "onedrive.com", "powerbi.com",
     
     # Zoom -> zoom.us
-    "zoom.com",
-    "zoom-video.com",
-    "zoom-meetings.net",
-    "zoomapp.io",
+    "zoom.com", "zoom-video.com", "zoom-meetings.net", "zoomapp.io",
     
     # Atlassian -> atlassian.com
-    "jira.com",
-    "confluence.com",
-    "opsgenie.com",
+    "jira.com", "confluence.com", "opsgenie.com",
     
     # GitHub -> github.com
-    "github.io",
-    "githubusercontent.com",
+    "github.io", "githubusercontent.com",
     
     # AWS -> amazon.com
     "amazonaws.com",
     
     # Other vendor aliases
-    "dropboxapi.com",
-    "dropboxusercontent.io",
-    "slackb2b.com",
-    "boxcdn.net",
-    "oktapreview.com",
-    "sendgrid.net",
-    "stripe.network",
-    "zdassets.com",
-    "hubspotusercontent.com",
-    "splunkcloud.com",
-    "docusign.net",
-    "adobelogin.com",
-    "snowflakecomputing.com",
+    "dropboxapi.com", "dropboxusercontent.io", "slackb2b.com",
+    "boxcdn.net", "oktapreview.com", "sendgrid.net", "stripe.network",
+    "zdassets.com", "hubspotusercontent.com", "splunkcloud.com",
+    "docusign.net", "adobelogin.com", "snowflakecomputing.com",
 }
 ```
 
-### 3.2 Domains That DO NOT COLLAPSE (Standalone Keys)
-
-These produce their own canonical keys despite belonging to a vendor family:
-
-```python
-# Infrastructure/service domains - Stage 4 Fix (Jan 2026)
-STANDALONE_DOMAINS = {
-    # Microsoft services (distinct SaaS endpoints)
-    "outlook.com",      # Email service
-    "office.com",       # Office suite
-    "sharepoint.com",   # PaaS root (multi-tenant)
-    
-    # Google services
-    "gstatic.com",      # Static assets/CDN
-    "googleapis.com",   # API service
-    "googleusercontent.com",  # PaaS root
-    
-    # AWS services
-    "cloudfront.net",   # CDN service
-    "awsstatic.com",    # Static assets
-    
-    # Other legitimate primary domains
-    "atlassian.net",    # Jira Cloud (not an alias)
-    "notion.so",        # Canonical domain
-    "segment.io",       # Canonical domain
-    "datadoghq.com",    # Canonical SaaS domain
-}
-```
-
-### 3.3 Decision Tree
-
-```
-Given: registered_domain
-├─ Is it in ALIAS_DOMAINS_TO_COLLAPSE?
-│   ├─ YES: canonical_key = VENDOR_TO_DOMAIN[vendor]
-│   └─ NO:  canonical_key = registered_domain (standalone)
-```
+**Standalone domains** (NOT in collapse list, keep their own key):
+- `outlook.com`, `office.com`, `sharepoint.com` (Microsoft services)
+- `gstatic.com`, `googleapis.com`, `googleusercontent.com` (Google services)
+- `cloudfront.net`, `awsstatic.com` (AWS CDN/static)
+- `atlassian.net`, `notion.so`, `segment.io`, `datadoghq.com` (canonical SaaS)
 
 ---
 
-## 4. Policy Exclusions
+## Alignment Checklist
 
-### 4.1 When Keys Are NOT Generated
+Farm and AOD MUST verify:
 
-An entity is rejected (no key generated) when:
-
-1. **Infrastructure domain without governance**
-   - Domain in `shared_infrastructure_domains` AND no IdP/CMDB match
-   
-2. **Vendor portal excluded by policy**
-   - Domain in `vendor_root_portals` AND mode="exclude"
-   
-3. **Dev/build infrastructure excluded**
-   - Domain in `dev_build_infrastructure` AND mode="exclude"
-   
-4. **Custom exclusion list**
-   - Domain in `policy_master.json → custom_exclusions`
-
-### 4.2 Representation in Expected Blocks
-
-Rejected entities appear in **expected.rejected** (not expected.admitted):
-
-```json
-{
-  "expected": {
-    "admitted": ["slack.com", "zoom.us"],
-    "rejected": [
-      {
-        "entity_key": "entity:cloudfront.net",
-        "reason_code": "INFRASTRUCTURE_NO_GOVERNANCE",
-        "reason_detail": "Infrastructure domain without IdP/CMDB match"
-      }
-    ]
-  }
-}
-```
+- [ ] Both use the same `extract_registered_domain()` implementation (same PSL behavior)
+- [ ] Both enforce `BANNED_DOMAINS` during key selection (reject, don't silently drop)
+- [ ] Both apply the same `ALIAS_DOMAINS_TO_COLLAPSE` set
+- [ ] Both use the same deterministic tie-breaker (lexicographic sort)
+- [ ] Neither uses CMDB URL domains for key selection
+- [ ] Neither uses list order (`domains[0]`) for key selection
+- [ ] Both use discovery observations as the source for key candidates
 
 ---
 
-## 5. Multi-Domain Entity Examples
+## Examples
 
-### Example 1: Discovery + CMDB Same Vendor
+### Example 1: Single Domain
+```
+Discovery: app.slack.com
+observed_registered_domains = {"slack.com"}
+→ canonical_key = "slack.com"
+```
 
+### Example 2: Multiple Domains (Lexicographic)
+```
+Discovery: [zoom.us, app.webex.com, teams.microsoft.com]
+observed_registered_domains = {"zoom.us", "webex.com", "microsoft.com"}
+after_collapse = {"zoom.us", "webex.com", "microsoft.com"}
+sorted = ["microsoft.com", "webex.com", "zoom.us"]
+→ canonical_key = "microsoft.com" (lexicographically first)
+```
+
+### Example 3: Alias Collapse
 ```
 Discovery: login.microsoftonline.com
-CMDB: azure.com (authoritative match)
-
-identifiers.domains = ["microsoftonline.com", "azure.com"]
-canonical_key = "microsoft.com" (both collapse to same vendor)
+observed_registered_domains = {"microsoftonline.com"}
+after_collapse = {"microsoft.com"}
+→ canonical_key = "microsoft.com"
 ```
 
-### Example 2: Discovery + CMDB Different
-
+### Example 4: Standalone Infrastructure
 ```
-Discovery: slack.com
-CMDB: slackb2b.com (authoritative match)
-
-identifiers.domains = ["slack.com", "slackb2b.com"]
-canonical_key = "slack.com" (discovery has priority, slackb2b.com collapses to slack.com anyway)
+Discovery: mail.outlook.com
+observed_registered_domains = {"outlook.com"}
+after_collapse = {"outlook.com"}  # NOT collapsed to microsoft.com
+→ canonical_key = "outlook.com"
 ```
 
-### Example 3: Standalone Infrastructure Domain
-
+### Example 5: Policy Rejection
 ```
-Discovery: app.outlook.com
-
-identifiers.domains = ["outlook.com"]
-canonical_key = "outlook.com" (NOT collapsed to microsoft.com)
+Discovery: cdn.cloudflare.com
+observed_registered_domains = {"cloudflare.com"}
+BANNED_DOMAINS = {"cloudflare.com", ...}
+after_exclusions = {} (empty)
+→ REJECTED (no key generated)
 ```
-
-### Example 4: No Discovery, CMDB Only
-
-```
-Discovery: (none - no domain in observations)
-CMDB: zoom.us (authoritative match)
-
-identifiers.domains = ["zoom.us"]
-canonical_key = "zoom.us"
-```
-
----
-
-## 6. V2 Key Strategy (Preview)
-
-V2 uses domain provenance priority instead of position:
-
-```python
-priority_order = ["discovery", "cmdb", "idp", "vendor_map", "inferred"]
-
-def compute_canonical_key_v2(domains, domain_provenance, ...):
-    # Find highest-priority domain based on provenance
-    best_domain = min(domains, key=lambda d: priority_order.index(domain_provenance.get(d, "inferred")))
-    return compute_key_from(best_domain)
-```
-
-**Key Difference**: V1 uses `domains[0]` position. V2 uses provenance source.
-Both should produce same result if domain ordering is consistent.
-
----
-
-## 7. Farm Alignment Checklist
-
-Farm MUST implement:
-
-- [ ] Same `ALIAS_DOMAINS_TO_COLLAPSE` set
-- [ ] Same standalone domain exceptions (outlook.com, gstatic.com, etc.)
-- [ ] Same domain priority order (discovery → cmdb → reference)
-- [ ] Same eTLD+1 extraction (using public suffix list)
-- [ ] Same vendor-to-domain mapping for alias collapse
-
----
-
-## 8. Reconciliation Diagnostics
-
-When keys don't match, check:
-
-1. **Different domain sources**: AOD using discovery, Farm using CMDB?
-2. **Alias collapse mismatch**: One system collapses, other doesn't?
-3. **eTLD+1 extraction bug**: Different PSL versions or extraction logic?
-4. **Missing domain in observations**: Farm indexed domain AOD didn't see?
-
-Use `KEY_NORMALIZATION_MISMATCH` log entries to diagnose.

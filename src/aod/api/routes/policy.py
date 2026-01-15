@@ -217,3 +217,98 @@ async def notify_farm() -> dict:
             "message": f"Failed to send notification to {webhook_url}",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
+
+@router.get("/impact")
+async def get_policy_impact(run_id: str | None = None) -> dict:
+    """
+    Get the impact of current policy configuration on a specific run.
+    
+    Shows which domains are being blocked/rejected by each policy rule
+    and how many assets are affected. This helps operators understand
+    the real-world effect of their policy settings.
+    
+    Args:
+        run_id: Optional run ID. If not provided, uses the latest run.
+    
+    Returns:
+        Policy impact summary including blocked domains by policy rule
+    """
+    from ...db.database import get_db_direct
+    
+    db = await get_db_direct()
+    
+    if not run_id:
+        runs = await db.get_all_runs()
+        if not runs:
+            return {
+                "status": "no_runs",
+                "message": "No runs available to analyze policy impact"
+            }
+        runs.sort(key=lambda r: r.started_at or "", reverse=True)
+        run_id = runs[0].run_id
+    
+    run = await db.get_run(run_id)
+    if not run:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    rejections, total = await db.get_rejections_by_run(run_id, limit=2000)
+    
+    policy_impact = {
+        "banned_domains": {"count": 0, "domains": []},
+        "infrastructure_domains": {"count": 0, "domains": []},
+        "corporate_domains": {"count": 0, "domains": []},
+        "custom_exclusions": {"count": 0, "domains": []},
+        "admission_gates": {"count": 0, "domains": []},
+        "other": {"count": 0, "domains": []}
+    }
+    
+    for rej in rejections:
+        reason_detail = rej.get("reason_detail", "") or ""
+        entity_key = rej.get("entity_key", "")
+        entity_name = rej.get("entity_name", "")
+        
+        if entity_key.startswith("entity:"):
+            domain = entity_key[7:]
+        else:
+            domain = entity_name
+        
+        domain_info = {"domain": domain, "name": entity_name, "detail": reason_detail}
+        
+        if "BANNED_DOMAINS" in reason_detail.upper():
+            policy_impact["banned_domains"]["count"] += 1
+            policy_impact["banned_domains"]["domains"].append(domain_info)
+        elif "INFRASTRUCTURE" in reason_detail.upper():
+            policy_impact["infrastructure_domains"]["count"] += 1
+            policy_impact["infrastructure_domains"]["domains"].append(domain_info)
+        elif "CORPORATE" in reason_detail.upper():
+            policy_impact["corporate_domains"]["count"] += 1
+            policy_impact["corporate_domains"]["domains"].append(domain_info)
+        elif "CUSTOM" in reason_detail.upper() or "EXCLUSION" in reason_detail.upper():
+            policy_impact["custom_exclusions"]["count"] += 1
+            policy_impact["custom_exclusions"]["domains"].append(domain_info)
+        elif any(gate in reason_detail.upper() for gate in ["NOISE_FLOOR", "MINIMUM_SPEND", "ADMISSION", "GATE"]):
+            policy_impact["admission_gates"]["count"] += 1
+            policy_impact["admission_gates"]["domains"].append(domain_info)
+        else:
+            policy_impact["other"]["count"] += 1
+            policy_impact["other"]["domains"].append(domain_info)
+    
+    for category in policy_impact.values():
+        category["domains"] = category["domains"][:50]
+    
+    config = get_current_config()
+    
+    return {
+        "run_id": run_id,
+        "run_status": run.status.value,
+        "total_rejections": total,
+        "policy_impact": policy_impact,
+        "current_policy": {
+            "banned_domains_count": len(config.exclusion_lists.banned_domains),
+            "infrastructure_domains_count": len(config.exclusion_lists.infrastructure_domains),
+            "corporate_domains_count": len(config.exclusion_lists.corporate_root_domains),
+            "custom_exclusions_count": len(config.exclusion_lists.custom_exclusions)
+        }
+    }

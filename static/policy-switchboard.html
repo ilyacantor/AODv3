@@ -77,6 +77,76 @@
             </button>
         </div>
 
+        <!-- Policy Impact Panel -->
+        <div id="policy-impact" class="mb-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-100">Policy Impact</h2>
+                        <p class="text-sm text-gray-500">Domains blocked by current policy in latest run</p>
+                    </div>
+                </div>
+                <button onclick="loadImpact()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+            <div id="impact-loading" class="text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-400 border-t-transparent"></div>
+                <p class="mt-2 text-gray-500 text-sm">Loading impact data...</p>
+            </div>
+            <div id="impact-content" class="hidden">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="banned_domains">
+                        <div class="text-2xl font-bold text-red-400" id="impact-banned">0</div>
+                        <div class="text-xs text-gray-500">Banned Domains</div>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="infrastructure_domains">
+                        <div class="text-2xl font-bold text-orange-400" id="impact-infra">0</div>
+                        <div class="text-xs text-gray-500">Infrastructure</div>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="corporate_domains">
+                        <div class="text-2xl font-bold text-yellow-400" id="impact-corporate">0</div>
+                        <div class="text-xs text-gray-500">Corporate</div>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="custom_exclusions">
+                        <div class="text-2xl font-bold text-purple-400" id="impact-custom">0</div>
+                        <div class="text-xs text-gray-500">Custom</div>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="admission_gates">
+                        <div class="text-2xl font-bold text-blue-400" id="impact-gates">0</div>
+                        <div class="text-xs text-gray-500">Admission Gates</div>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="other">
+                        <div class="text-2xl font-bold text-gray-400" id="impact-other">0</div>
+                        <div class="text-xs text-gray-500">Other</div>
+                    </div>
+                </div>
+                <div id="impact-details" class="hidden bg-slate-800 rounded-lg p-4 mt-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-medium text-gray-200" id="impact-details-title">Blocked Domains</h3>
+                        <button onclick="document.getElementById('impact-details').classList.add('hidden')" class="text-gray-500 hover:text-gray-300">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="impact-details-list" class="max-h-48 overflow-y-auto space-y-1 text-sm"></div>
+                </div>
+                <p class="text-xs text-gray-600 mt-3" id="impact-run-info">Run: -</p>
+            </div>
+            <div id="impact-empty" class="hidden text-center py-6 text-gray-500">
+                No runs available to analyze policy impact
+            </div>
+        </div>
+
         <div id="loading" class="text-center py-12">
             <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-cyan-400 border-t-transparent"></div>
             <p class="mt-4 text-gray-400">Loading policy configuration...</p>
@@ -414,7 +484,93 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadConfig);
+        let currentImpactData = null;
+
+        async function loadImpact() {
+            try {
+                document.getElementById('impact-loading').classList.remove('hidden');
+                document.getElementById('impact-content').classList.add('hidden');
+                document.getElementById('impact-empty').classList.add('hidden');
+                
+                const response = await fetch('/api/v1/policy/impact');
+                if (!response.ok) {
+                    throw new Error(`Failed to load impact: ${response.statusText}`);
+                }
+                const data = await response.json();
+                
+                if (data.status === 'no_runs') {
+                    document.getElementById('impact-loading').classList.add('hidden');
+                    document.getElementById('impact-empty').classList.remove('hidden');
+                    return;
+                }
+                
+                currentImpactData = data;
+                
+                // Update counts
+                const impact = data.policy_impact;
+                document.getElementById('impact-banned').textContent = impact.banned_domains.count;
+                document.getElementById('impact-infra').textContent = impact.infrastructure_domains.count;
+                document.getElementById('impact-corporate').textContent = impact.corporate_domains.count;
+                document.getElementById('impact-custom').textContent = impact.custom_exclusions.count;
+                document.getElementById('impact-gates').textContent = impact.admission_gates.count;
+                document.getElementById('impact-other').textContent = impact.other.count;
+                
+                // Update run info
+                document.getElementById('impact-run-info').textContent = 
+                    `Run: ${data.run_id} | Total rejections: ${data.total_rejections}`;
+                
+                document.getElementById('impact-loading').classList.add('hidden');
+                document.getElementById('impact-content').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading impact:', error);
+                document.getElementById('impact-loading').classList.add('hidden');
+                document.getElementById('impact-empty').classList.remove('hidden');
+                document.getElementById('impact-empty').innerHTML = 
+                    `<span class="text-red-400">Error loading impact: ${error.message}</span>`;
+            }
+        }
+
+        function showImpactDetails(category) {
+            if (!currentImpactData) return;
+            
+            const categoryData = currentImpactData.policy_impact[category];
+            if (!categoryData || categoryData.domains.length === 0) return;
+            
+            const titles = {
+                banned_domains: 'Banned Domains',
+                infrastructure_domains: 'Infrastructure Domains',
+                corporate_domains: 'Corporate Domains',
+                custom_exclusions: 'Custom Exclusions',
+                admission_gates: 'Admission Gates',
+                other: 'Other Rejections'
+            };
+            
+            document.getElementById('impact-details-title').textContent = 
+                `${titles[category]} (${categoryData.count})`;
+            
+            const listHtml = categoryData.domains.map(d => `
+                <div class="flex justify-between items-center py-1 border-b border-slate-700/50 last:border-0">
+                    <span class="font-mono text-cyan-300">${d.domain}</span>
+                    <span class="text-gray-500 text-xs truncate ml-4 max-w-xs" title="${d.detail}">${d.name || d.detail}</span>
+                </div>
+            `).join('');
+            
+            document.getElementById('impact-details-list').innerHTML = listHtml;
+            document.getElementById('impact-details').classList.remove('hidden');
+        }
+
+        // Add click handlers for impact categories
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.impact-category').forEach(el => {
+                el.addEventListener('click', () => {
+                    showImpactDetails(el.dataset.category);
+                });
+            });
+            
+            loadConfig();
+            loadImpact();
+        });
     </script>
 </body>
 </html>

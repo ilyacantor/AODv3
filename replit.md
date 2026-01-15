@@ -58,6 +58,7 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
+-   **Policy Impact Panel (Jan 2026):** The Policy Switchboard now displays a Policy Impact panel showing which domains are blocked by each policy rule and their counts. Categories include: Banned Domains, Infrastructure, Corporate, Custom Exclusions, Admission Gates, and Other. Operators can click categories to see detailed lists. API: `GET /api/v1/policy/impact?run_id=optional`.
 -   **Policy Categories:**
     - Activity Windows (discovery, zombie detection, default)
     - Finance Thresholds (minimum spend, gap thresholds)

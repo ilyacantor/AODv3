@@ -173,20 +173,17 @@ def compute_canonical_key(
     name: str = ""
 ) -> CanonicalKeyResult:
     """
-    SINGLE SOURCE OF TRUTH for domain-to-key conversion.
+    Compute canonical key from domain list for reconciliation/matching.
 
-    This function replaces all domain normalization logic across the codebase.
-    All modules MUST call this function for canonical key computation.
-
-    Contract v2.0 (Jan 2026): Deterministic lexicographic selection.
-    See docs/contracts/KEY_SELECTION_CONTRACT.md for full specification.
+    This function is used for alias expansion and reconciliation matching.
+    For actual asset key selection during admission, see admission.py which
+    uses lexicographic sort on discovery domains.
 
     Normalization pipeline:
-    1. Extract registered domain (eTLD+1) for all domains
+    1. Extract registered domain (eTLD+1) from domains[0]
     2. Apply alias collapse for domains in ALIAS_DOMAINS_TO_COLLAPSE
-    3. Select canonical key via LEXICOGRAPHIC SORT (deterministic, order-independent)
-    4. Collect all domain variants for alias expansion
-    5. Return CanonicalKeyResult with primary key + all variants
+    3. Collect all domain variants for alias expansion
+    4. Return CanonicalKeyResult with primary key + all variants
 
     Vendor fallback (LAST RESORT ONLY):
     - Only executes if domains list is empty/None
@@ -198,16 +195,16 @@ def compute_canonical_key(
         -> primary_key="microsoft.com", registered="microsoftonline.com"
         -> all_variants=["login.microsoftonline.com", "microsoft.com", "microsoftonline.com"]
 
-        domains=["zoom.us", "webex.com", "microsoft.com"]
-        -> primary_key="microsoft.com" (lexicographically first after collapse)
-        -> all_variants=["microsoft.com", "webex.com", "zoom.us"]
+        domains=["api.slack.com", "slack.com"]
+        -> primary_key="slack.com", registered="slack.com"
+        -> all_variants=["api.slack.com", "slack.com"]
 
         domains=[], vendor="Microsoft"
         -> primary_key="microsoft.com", registered=None
         -> all_variants=["microsoft.com"]
 
     Args:
-        domains: List of domain strings (order does NOT matter - uses lexicographic sort)
+        domains: List of domain strings (uses domains[0] for primary key)
         vendor: Optional vendor name for fallback lookup
         name: Optional asset name for fallback lookup
 
@@ -215,12 +212,13 @@ def compute_canonical_key(
         CanonicalKeyResult with primary_key, registered_domain, is_canonical, all_variants
     """
     all_variants_set = set()
-    collapsed_candidates = set()  # Candidates for key selection (after collapse)
-    registered_to_raw = {}  # Map registered -> first raw domain seen
+    primary_key = None
+    registered_domain = None
+    is_canonical = False
 
-    # Step 1 & 2: Extract eTLD+1 and apply alias collapse for all domains
+    # Process domains (prioritize domains[0] for primary key)
     if domains:
-        for domain in domains:
+        for idx, domain in enumerate(domains):
             if not domain or "." not in domain:
                 continue
 
@@ -232,50 +230,38 @@ def compute_canonical_key(
             if registered:
                 if registered != raw_domain:
                     all_variants_set.add(registered)
-                
-                # Track first raw domain for this registered domain
-                if registered not in registered_to_raw:
-                    registered_to_raw[registered] = raw_domain
 
-                # Apply alias collapse
+                # Normalize to canonical vendor domain if this is an alias
                 canonical = normalize_to_canonical_vendor_domain(registered)
                 if canonical:
                     all_variants_set.add(canonical)
-                    collapsed_candidates.add(canonical)
-                else:
-                    collapsed_candidates.add(registered)
-            else:
+
+                # PRIMARY KEY: Only set from first domain (index 0)
+                if idx == 0 and primary_key is None:
+                    if canonical:
+                        primary_key = canonical
+                    else:
+                        primary_key = registered
+                    registered_domain = registered
+                    is_canonical = True
+
+                    logger.debug(
+                        f"canonical_key: domains[0]={raw_domain} -> "
+                        f"registered={registered} -> primary={primary_key}"
+                    )
+            elif idx == 0 and primary_key is None:
                 # Fallback: use raw domain if eTLD+1 extraction fails
-                collapsed_candidates.add(raw_domain)
+                primary_key = raw_domain
+                is_canonical = True
+                logger.debug(f"canonical_key: domains[0]={raw_domain} -> primary={primary_key} (no eTLD+1)")
 
-    # Step 3: Select canonical key via LEXICOGRAPHIC SORT (deterministic)
-    if collapsed_candidates:
-        sorted_candidates = sorted(collapsed_candidates)
-        primary_key = sorted_candidates[0]
-        
-        # Find the registered domain that produced this key
-        # (could be the key itself if not collapsed, or the original if collapsed)
-        registered_domain = None
-        for reg, raw in registered_to_raw.items():
-            collapsed = normalize_to_canonical_vendor_domain(reg)
-            if (collapsed and collapsed == primary_key) or (not collapsed and reg == primary_key):
-                registered_domain = reg
-                break
-        
-        if not registered_domain and primary_key in registered_to_raw:
-            registered_domain = primary_key
-
-        logger.debug(
-            f"canonical_key: candidates={sorted_candidates} -> "
-            f"primary={primary_key} (lexicographic selection)"
-        )
-
-        return CanonicalKeyResult(
-            primary_key=primary_key,
-            registered_domain=registered_domain,
-            is_canonical=True,
-            all_variants=sorted(all_variants_set)
-        )
+        if primary_key:
+            return CanonicalKeyResult(
+                primary_key=primary_key,
+                registered_domain=registered_domain,
+                is_canonical=is_canonical,
+                all_variants=sorted(all_variants_set)
+            )
 
     # Vendor fallback (ONLY if no domain evidence)
     if vendor and vendor.lower() not in ("unknown", "", "none"):

@@ -13,8 +13,9 @@ Both Farm and AOD MUST implement identical logic to achieve reconciliation align
 |------|------|
 | 1. Build candidate set | `observed_registered_domains = {eTLD+1(domain) for domain in discovery_observations}` |
 | 2. Apply policy exclusions | Remove domains in `BANNED_DOMAINS` → if empty, emit as rejected |
-| 3. Apply alias collapse | Only for domains in `ALIAS_DOMAINS_TO_COLLAPSE` |
-| 4. Select canonical key | **Lexicographic sort** on registered domain, pick first |
+| 3. Select canonical key | **Lexicographic sort** on registered domain, pick first |
+
+**IMPORTANT**: Alias collapse is NOT applied during key selection. It is only used for index lookup and matching. This preserves stable, predictable keys.
 
 ---
 
@@ -51,26 +52,7 @@ def apply_policy_exclusions(domains: set[str], banned_domains: set[str]) -> set[
 
 ---
 
-## 3. Apply Alias Collapse
-
-```python
-def apply_alias_collapse(domains: set[str]) -> set[str]:
-    """Collapse known aliases to canonical vendor domain."""
-    result = set()
-    for domain in domains:
-        if domain in ALIAS_DOMAINS_TO_COLLAPSE:
-            canonical = VENDOR_TO_DOMAIN[DOMAIN_TO_VENDOR[domain]]
-            result.add(canonical)
-        else:
-            result.add(domain)
-    return result
-```
-
-**Rule**: Only domains explicitly in `ALIAS_DOMAINS_TO_COLLAPSE` are collapsed.
-
----
-
-## 4. Select Canonical Key (Deterministic Tie-Breaker)
+## 3. Select Canonical Key (Deterministic Tie-Breaker)
 
 ```python
 def select_canonical_key(domains: set[str]) -> str:
@@ -87,7 +69,7 @@ def select_canonical_key(domains: set[str]) -> str:
 
 ---
 
-## 5. Full Algorithm
+## 4. Full Algorithm
 
 ```python
 def compute_canonical_key_v2(discovery_observations: list[Observation]) -> str | None:
@@ -99,14 +81,13 @@ def compute_canonical_key_v2(discovery_observations: list[Observation]) -> str |
     if after_exclusions is None:
         return None  # Entity rejected
     
-    # Step 3: Apply alias collapse
-    after_collapse = apply_alias_collapse(after_exclusions)
-    
-    # Step 4: Deterministic selection
-    canonical_key = select_canonical_key(after_collapse)
+    # Step 3: Deterministic selection (NO alias collapse)
+    canonical_key = select_canonical_key(after_exclusions)
     
     return canonical_key
 ```
+
+**NOTE**: Alias collapse is NOT applied for key selection. Keys are the eTLD+1 registered domains as observed.
 
 ---
 

@@ -2242,7 +2242,42 @@ def _build_admitted_asset(
             basis=entity.vendor_hypothesis.basis
         )
 
-    asset_key = registered_domain
+    # KEY SELECTION CONTRACT v2.0 (Jan 2026):
+    # 1. Collect discovery domains only (CMDB/IdP are reference/enrichment)
+    # 2. Extract eTLD+1 (registered domain)
+    # 3. Select via LEXICOGRAPHIC SORT (deterministic, order-independent)
+    # NOTE: Alias collapse is NOT applied during key selection to maintain 
+    # stable identity. Collapse only applies for index lookup/matching.
+    # See docs/contracts/KEY_SELECTION_CONTRACT.md for full specification
+    from .vendor_inference import extract_registered_domain
+    
+    # Build candidates from discovery domains only (contract requirement)
+    discovery_domains = [d for d in domain_list if domain_provenance.get(d) == "discovery"]
+    
+    # If no discovery domains, fall back to registered_domain (legacy behavior for edge cases)
+    if not discovery_domains:
+        asset_key = registered_domain
+    else:
+        # Apply eTLD+1 extraction only (NO alias collapse for key selection)
+        registered_candidates = set()
+        for domain in discovery_domains:
+            reg = extract_registered_domain(domain)
+            if reg:
+                registered_candidates.add(reg)
+            else:
+                registered_candidates.add(domain)
+        
+        # Lexicographic sort - deterministic tie-breaker (contract requirement)
+        if registered_candidates:
+            sorted_candidates = sorted(registered_candidates)
+            asset_key = sorted_candidates[0]
+            logger.debug(
+                f"KEY_SELECTION: entity={entity.original_name} "
+                f"discovery_domains={discovery_domains} candidates={sorted_candidates} "
+                f"selected={asset_key} (lexicographic, no collapse)"
+            )
+        else:
+            asset_key = registered_domain
 
     import os
     if os.environ.get("AOD_DEBUG_KEYS"):
@@ -2250,7 +2285,8 @@ def _build_admitted_asset(
             "entity_domain": entity.domain,
             "registered_domain": registered_domain,
             "asset_key": asset_key,
-            "from_correlation_recovery": recovered_from_correlation
+            "from_correlation_recovery": recovered_from_correlation,
+            "key_selection_contract": "v2.0"
         })
 
     asset = Asset(

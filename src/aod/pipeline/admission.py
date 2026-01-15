@@ -1999,14 +1999,19 @@ def _build_admitted_asset(
     # Discovery sources
     discovery_sources_list = sorted(evidence.footprint.discovery_sources)
 
-    # Lens coverage
+    # Lens coverage - DIRECT matches only, NOT from vendor propagation
+    # HAS_CMDB/HAS_IDP reason codes should mean actual record match, not inheritance
+    # Vendor propagation sets vendor_governed=True separately
     lens_coverage = LensCoverage(
-        idp=evidence.idp_admitted or propagated_idp,
-        cmdb=evidence.cmdb_admitted or propagated_cmdb,
+        idp=evidence.idp_admitted,  # Direct IdP match only
+        cmdb=evidence.cmdb_admitted,  # Direct CMDB match only
         cloud=evidence.cloud_admitted,
         finance=evidence.finance_admitted,
         discovery=bool(discovery_sources_list)
     )
+    
+    # Vendor governance propagation - separate from direct matches
+    is_vendor_governed = propagated_idp or propagated_cmdb
 
     # Build domain list (discovery domain ONLY - no CMDB external_ref injection)
     # Stage 1 Fix: identifiers.domains = observed-only (from discovery observations)
@@ -2087,7 +2092,8 @@ def _build_admitted_asset(
         tags=tags,
         admission_reason="; ".join(admission_reasons),
         provisioning_status=provisioning_status,
-        discovery_sources=discovery_sources_list
+        discovery_sources=discovery_sources_list,
+        vendor_governed=is_vendor_governed
     )
 
     _validate_discovery_invariants(asset, discovery_sources_list, asset_key)

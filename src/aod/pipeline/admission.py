@@ -187,13 +187,13 @@ def _clean_url_to_domain(value: Optional[str]) -> Optional[str]:
 def _resolve_effective_domain_from_record(record) -> Optional[str]:
     """
     Resolve effective domain from a plane record using same fallback chain as indexing.
-    
-    Jan 2026 Fix: This mirrors the fallback logic in build_plane_indexes.build_idp_index()
-    and build_cmdb_index() to ensure domain extraction is consistent with what was indexed.
-    
-    Priority: domain > raw_data['domain'] > raw_data['external_ref'] > 
+
+    Mirrors the fallback logic in build_plane_indexes.build_idp_index() and
+    build_cmdb_index() to ensure domain extraction is consistent with what was indexed.
+
+    Priority: domain > raw_data['domain'] > raw_data['external_ref'] >
               raw_data['url'] > raw_data['application_url'] > raw_data['service_url']
-    
+
     Returns the cleaned domain (after URL parsing) or None if no valid domain found.
     """
     if record is None:
@@ -234,15 +234,15 @@ def _is_sso_or_infrastructure_domain(domain: str) -> bool:
 def _extract_all_domains_from_correlation(correlation: CorrelationResult) -> list[str]:
     """
     Extract ALL domains from correlation matched records.
-    
-    Dec 2025 Fix for KEY_NORMALIZATION_MISMATCH: When entities are admitted,
-    we should include ALL domains found in correlated plane records (IdP, CMDB, etc.)
-    in the asset's identifiers.domains. This allows reconciliation to match
-    against ANY domain variant, not just the entity's original domain.
-    
-    Jan 2026 Fix: Now uses same fallback field chain as indexing (external_ref, url,
-    application_url, service_url) and includes raw, registered, AND canonical alias
-    forms for maximum alias matching coverage. EXACTLY mirrors build_plane_indexes.
+
+    KEY_NORMALIZATION_MISMATCH fix: When entities are admitted, include ALL domains
+    found in correlated plane records (IdP, CMDB, etc.) in the asset's identifiers.domains.
+    This allows reconciliation to match against ANY domain variant, not just the
+    entity's original domain.
+
+    Uses same fallback field chain as indexing (external_ref, url, application_url,
+    service_url) and includes raw, registered, AND canonical alias forms for maximum
+    alias matching coverage. EXACTLY mirrors build_plane_indexes.
     
     This is critical for zombie detection where:
     - Discovery observation has domain "flowbase-internal.com"
@@ -527,7 +527,7 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     - SSO/SCIM provides stronger confidence but STILL requires domain alignment
     NOTE: Both MATCHED and AMBIGUOUS count as having IdP evidence.
 
-    Jan 2026 Fix: Farm requires domain-aligned IdP for admission, NOT cross-domain matches.
+    Farm requires domain-aligned IdP for admission, NOT cross-domain matches.
     SSO/SCIM does NOT override domain alignment - it's a stronger signal FOR domain-aligned matches.
 
     Cross-domain IdP matches (e.g., fastbox.cloud matched to fastbox.ai IdP) do NOT
@@ -952,11 +952,11 @@ def build_discovery_footprint(
 ) -> DiscoveryFootprint:
     """
     Build an evidence footprint for a CandidateEntity's discovery observations.
-    
-    Jan 2026 Fix: Count sources with RECENT activity relative to SNAPSHOT timestamp.
-    Farm uses the snapshot generation timestamp as the reference point for the 90-day
-    activity window, not the current time. This ensures consistent results across runs.
-    
+
+    Counts sources with RECENT activity relative to SNAPSHOT timestamp. Farm uses
+    the snapshot generation timestamp as the reference point for the 90-day activity
+    window, not the current time. This ensures consistent results across runs.
+
     Returns:
         DiscoveryFootprint with:
         - discovery_sources: set of distinct source names WITH RECENT ACTIVITY
@@ -1311,7 +1311,7 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Jan 2026 Fix: Multi-domain vendor governance alignment and name-based fallback.
+    Multi-domain vendor governance alignment with name-based fallback.
 
     Domains match if:
     1. Exact domain match (e.g., salesforce.com == salesforce.com)
@@ -1342,7 +1342,7 @@ def _idp_domain_matches_entity(
             # Extract base token from entity domain (e.g., "coreio.ai" → "coreio")
             entity_base = entity_registered_domain.split('.')[0].lower()
             
-            # Jan 2026 Fix: Apply the same suffix check as cross-TLD matching
+            # Apply the same suffix check as cross-TLD matching
             # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
             # applications, so they should NOT provide governance or activity inheritance
             normalized_idp_name = idp_name.lower()
@@ -1367,7 +1367,7 @@ def _idp_domain_matches_entity(
     if idp_registered_domain == entity_registered_domain:
         return True
 
-    # Jan 2026 Fix: Check if both domains belong to the same vendor
+    # Check if both domains belong to the same vendor
     # This enables multi-TLD vendor governance (teamsuite.cloud inherits from teamsuite.org)
     from .vendor_inference import infer_vendor_from_domain
 
@@ -1379,7 +1379,7 @@ def _idp_domain_matches_entity(
         if idp_vendor_result.value.lower() == entity_vendor_result.value.lower():
             return True
 
-    # Jan 2026 Fix: Same base token with different TLD counts as a match, BUT
+    # Same base token with different TLD counts as a match, BUT
     # Farm requires the IdP name to be a CLEAN match (no suffixes like "(Legacy)" or "-prod")
     # 
     # Farm's idp_present_direct=True for cases like:
@@ -1429,16 +1429,16 @@ def extract_activity_timestamps(
 ) -> ActivityEvidence:
     """
     Extract activity timestamps from correlation evidence and observations.
-    
-    Jan 2026 Enhancement: Cross-IdP activity aggregation. If the entity's matched IdP
-    record has no last_login_at, we look up the IdP name in idp_activity_map to get
-    the aggregated max login timestamp from ALL IdP records with the same name.
-    
-    Jan 2026 Fix: Domain-scoped IdP activity. Only count IdP activity if the IdP
-    record's domain matches the entity's primary registered domain. This prevents
-    cross-domain IdP inheritance (e.g., easydesk.app IdP activity being counted
-    for easydesk.dev entities) which causes false RECENT activity status.
-    
+
+    Cross-IdP activity aggregation: If the entity's matched IdP record has no
+    last_login_at, we look up the IdP name in idp_activity_map to get the aggregated
+    max login timestamp from ALL IdP records with the same name.
+
+    Domain-scoped IdP activity: Only count IdP activity if the IdP record's domain
+    matches the entity's primary registered domain. This prevents cross-domain IdP
+    inheritance (e.g., easydesk.app IdP activity being counted for easydesk.dev
+    entities) which causes false RECENT activity status.
+
     Args:
         correlation: Correlation result with matched records from various planes
         entity: The candidate entity being processed
@@ -1486,10 +1486,10 @@ def extract_activity_timestamps(
                     if reg:
                         entity_discovery_domains.add(reg)
     
-    # Dec 2025: Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
-    # Jan 2026 Fix: Also check raw_data for login timestamps with various field names
-    # 
-    # Jan 2026: REVISED IdP strategy based on Farm behavior analysis:
+    # Also extract timestamps from AMBIGUOUS status (multiple matches still have valid timestamps)
+    # Also check raw_data for login timestamps with various field names
+    #
+    # REVISED IdP strategy based on Farm behavior analysis:
     # 
     # IdP governance and activity are BOTH inherited from ALL matched IdP records.
     # However, for certain TLD combinations (same base name, different TLD),
@@ -1506,13 +1506,13 @@ def extract_activity_timestamps(
     # Other TLD combinations like .co/.cloud are treated as the same product.
     
     # Extract IdP activity and governance with TLD-aware domain matching
-    # Jan 2026: Use TLD-family matching for BOTH governance and activity
+    # Use TLD-family matching for BOTH governance and activity
     # - .dev vs non-.dev = different products (no match)
     # - Other TLD combinations = same product family (match)
     if correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         for record in correlation.idp.matched_records:
             if isinstance(record, IdPObject):
-                # Jan 2026 Fix: Check for non-canonical IdP name suffixes
+                # Check for non-canonical IdP name suffixes
                 # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
                 # applications that should NOT provide activity inheritance for cross-domain entities
                 is_canonical_idp = True
@@ -1575,7 +1575,7 @@ def extract_activity_timestamps(
                 # CRITICAL FIX: Always check the aggregated map for the MAX login timestamp,
                 # even if the matched record has its own timestamp. Use whichever is newer.
                 # Example: maxflow.ai matches to stale record (Feb 2025), but maxflow.org
-                # sibling has recent login (Dec 2025) - we should use the Dec 2025 date.
+                # sibling has recent login - we should use that more recent date.
                 # NOTE: This aggregation only applies if domain gating passed above.
                 if idp_activity_map and record.name:
                     normalized_name = record.name.lower().strip()
@@ -1622,12 +1622,12 @@ def extract_activity_timestamps(
             if isinstance(record, Transaction) and record.date:
                 if finance_last_transaction_at is None or record.date > finance_last_transaction_at:
                     finance_last_transaction_at = record.date
-        # Jan 2026: Do NOT add finance_last_transaction_at to timestamps!
+        # Do NOT add finance_last_transaction_at to timestamps!
         # Finance is metadata for ongoing_finance flag, NOT activity evidence.
     
     latest_activity_at = max(timestamps) if timestamps else None
 
-    # Jan 2026 Fix: Vendor-propagated IdP governance counts as domain-aligned
+    # Vendor-propagated IdP governance counts as domain-aligned
     # Vendor family relationships (e.g., googleapis.com inheriting from google.com)
     # are strong governance signals and should be treated as aligned for shadow detection
     if propagated_idp and not idp_governance_aligned:
@@ -1667,10 +1667,10 @@ def apply_admission_criteria(
     - Finance plane: finance match AND (contract exists OR transaction evidence indicates recurring vendor/product spend)
     - Discovery plane: ≥2 distinct SOURCES AND recent activity ≤90 days (allows shadow IT admission)
     
-    NOTE (Dec 2025 fix): Discovery admission gates on distinct SOURCES (browser, proxy, dns = 3),
+    NOTE: Discovery admission gates on distinct SOURCES (browser, proxy, dns = 3),
     NOT distinct planes. Plane diversity is an annotation/confidence signal only.
 
-    VENDOR GOVERNANCE PROPAGATION (Jan 2026 fix):
+    VENDOR GOVERNANCE PROPAGATION:
     Propagated IdP/CMDB from vendor siblings CAN cause admission, matching Farm's policy.
     Example: googleapis.com inherits HAS_IDP from "Google+" IdP record via vendor propagation.
 
@@ -1775,8 +1775,8 @@ def apply_admission_criteria(
     )
 
     # GATE 2: Reject infrastructure/tooling domains ONLY if they lack governance
-    # Jan 2026 Fix: Farm admits infrastructure domains (postgresql.org, mongodb.com, etc.)
-    # if they have IdP or CMDB governance. Only reject ungoverned infrastructure.
+    # Farm admits infrastructure domains (postgresql.org, mongodb.com, etc.) if they
+    # have IdP or CMDB governance. Only reject ungoverned infrastructure.
     # Check against REGISTERED domain, not raw FQDN
     if is_infrastructure_domain(registered_domain):
         if not (idp_admitted or cmdb_admitted):
@@ -1795,7 +1795,7 @@ def apply_admission_criteria(
     )
 
     # =========================================================================
-    # FARM ADMISSION POLICY (Jan 2026 Fix) - Now policy-driven
+    # FARM ADMISSION POLICY - Policy-driven
     # =========================================================================
     # policy_config already loaded above (before CMDB gates)
     
@@ -1890,7 +1890,7 @@ def apply_admission_criteria(
             is_stale_activity = latest_activity < cutoff
     
     # Determine provisioning status based on Traffic Light rules
-    # Jan 2026 Fix: Farm catalogs discovery-only assets (>= 2 sources), not shadow
+    # Farm catalogs discovery-only assets (>= 2 sources), not shadow
     # Only stale CMDB-only assets go to REVIEW (zombie candidates)
     if has_governance:
         if cmdb_can_admit and is_stale_activity and not idp_can_admit:
@@ -1923,11 +1923,11 @@ def apply_admission_criteria(
         admission_reasons.append(finance_reason)
     if discovery_admitted:
         admission_reasons.append(discovery_reason)
-    # Jan 2026 Fix: Add vendor propagation reason if that's what caused admission
+    # Add vendor propagation reason if that's what caused admission
     if propagation_reason and (propagated_idp or propagated_cmdb):
         admission_reasons.append(f"Vendor governance: {propagation_reason}")
 
-    # Jan 2026 Fix: Include propagated governance in lens_status for classification
+    # Include propagated governance in lens_status for classification
     # When vendor governance is propagated, set lens_status to MATCHED so classification
     # logic recognizes the asset as governed (not shadow IT).
     idp_status = correlation.idp.status.value
@@ -1949,7 +1949,7 @@ def apply_admission_criteria(
     # lens_coverage.discovery is DERIVED from discovery_sources (not independent)
     discovery_sources_list = sorted(footprint.discovery_sources)
 
-    # Jan 2026 Fix: Include propagated governance in lens_coverage
+    # Include propagated governance in lens_coverage
     # lens_coverage indicates whether asset has governance "coverage" (direct or propagated)
     lens_coverage = LensCoverage(
         idp=idp_admitted or propagated_idp,
@@ -1959,7 +1959,7 @@ def apply_admission_criteria(
         discovery=bool(discovery_sources_list)  # Derived from discovery_sources
     )
     
-    # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
+    # KEY_NORMALIZATION_MISMATCH fix:
     # Include ALL domains from correlated plane records (IdP, CMDB, etc.)
     # This allows reconciliation to match against ANY domain variant.
     # 

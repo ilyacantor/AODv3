@@ -140,7 +140,7 @@ class IdentityNormalizer:
             })
             return canonical
 
-        # Jan 2026 Fix: Check if domain ends with PaaS root BEFORE tldextract
+        # Check if domain ends with PaaS root BEFORE tldextract
         # This handles cases like mybucket.s3.amazonaws.com where tldextract
         # sees amazonaws.com as registered domain but s3.amazonaws.com is the PaaS root
         for paas_root in self.paas_roots:

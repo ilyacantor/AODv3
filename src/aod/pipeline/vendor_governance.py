@@ -22,7 +22,7 @@ from .vendor_inference import infer_vendor_from_domain, DOMAIN_TO_VENDOR
 class PropagatedGovernance:
     """Governance signals propagated from vendor siblings.
 
-    Jan 2026 Fix: Include metadata fields so policy engine can evaluate strict requirements.
+    Includes metadata fields so policy engine can evaluate strict requirements.
     """
     idp_present: bool = False
     cmdb_present: bool = False

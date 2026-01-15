@@ -203,29 +203,20 @@ def build_admitted_asset(entity, evidence, status) -> Asset
 
 ---
 
-### 3. Excessive Date-Tagged Comments
+### 3. ~~Excessive Date-Tagged Comments~~ FIXED
 
-Throughout the codebase, there are **60+ comments** referencing specific fix dates:
-- "Jan 2026 Fix:"
-- "Dec 2025 Fix:"
-- "Jan 2026 Enhancement:"
+**Status:** Removed 54+ date prefixes from comments across 9 files.
 
-**Examples:**
-```python
-# Jan 2026 Fix: Include vendor-propagated governance AND metadata in policy evaluation.
-# Jan 2026 Fix: Governance principle - only AUTHORITATIVE matches can assert governance.
-# Dec 2025 Fix: Also check record.domain for domain-based matches
-```
+**Files updated:**
+- `admission.py` - 18+ occurrences
+- `aod_agent_reconcile.py` - 12 occurrences
+- `pipeline_executor.py` - 8 occurrences
+- `build_plane_indexes.py` - 6 occurrences
+- `correlate_entities.py` - 4 occurrences
+- `farm_adapter.py` - 3 occurrences
+- `decision_trace.py`, `vendor_governance.py`, `identity_normalizer.py` - 1 each
 
-**Impact:**
-- Code becomes archaeological - readers must understand fix history to understand logic
-- Comments explain *when* something was fixed, not *why* the fix was needed
-- Makes the code feel patchy rather than coherent
-
-**Recommendation:**
-- Remove date prefixes
-- Keep only the *why* explanation
-- Use git history for *when*
+Comments now explain *why* without the "Jan 2026 Fix:" prefix.
 
 ---
 
@@ -487,8 +478,8 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 | ~~Database duplication~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
 | ~~Silent exceptions~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
 | Monolithic `apply_admission_criteria` | High | High | P1 | Open |
-| Date-tagged comments | Low | Medium | P3 | Open |
-| Magic numbers | Low | Low | P3 | Open |
+| ~~Date-tagged comments~~ | ~~Low~~ | ~~Medium~~ | ~~P3~~ | ✅ FIXED |
+| ~~Magic numbers~~ | ~~Low~~ | ~~Low~~ | ~~P3~~ | ✅ FIXED (partial) |
 | Route file size | Low | Medium | P3 | Open |
 
 ---

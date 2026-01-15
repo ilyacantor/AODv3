@@ -18,6 +18,21 @@ from ..models.input_contracts import PlaneRecord
 from ..utils.normalization import get_normalization_token
 
 
+# =============================================================================
+# CORRELATION MATCHING CONSTANTS
+# =============================================================================
+# Thresholds for contains-match validation
+CONTAINS_MATCH_MIN_LENGTH = 8  # Minimum length for ratio-based contains matching
+CONTAINS_MATCH_RATIO_THRESHOLD = 0.7  # shorter/longer ratio for valid contains match
+
+# Token length thresholds for matching
+MIN_TOKEN_LENGTH_FOR_MATCH = 4  # Minimum token length for domain/name matching (allows zoom, slack)
+MIN_DOMAIN_TOKEN_LENGTH_FOR_FINANCE = 6  # Minimum domain token length for finance plane matching
+
+# Cache sizes
+LRU_CACHE_SIZE = 10000  # Standard LRU cache size for memoized functions
+
+
 class MatchStatus(str, Enum):
     """Match status for correlation"""
     MATCHED = "matched"
@@ -63,7 +78,7 @@ def _levenshtein_distance(s1: str, s2: str) -> int:
     return _levenshtein_distance_cached(s1, s2)
 
 
-@functools.lru_cache(maxsize=10000)
+@functools.lru_cache(maxsize=LRU_CACHE_SIZE)
 def _levenshtein_distance_cached(s1: str, s2: str) -> int:
     """Internal cached implementation of Levenshtein distance."""
     # Ensure s1 is the longer string for algorithm efficiency
@@ -266,8 +281,8 @@ def _is_legacy_name(name: str) -> bool:
 
 def _get_record_name(record: PlaneRecord) -> str:
     """Extract name from a record (handles dict or object).
-    
-    Dec 2025 Fix: Also check vendor_name for finance Transaction records.
+
+    Also checks vendor_name for finance Transaction records.
     """
     if record is None:
         return ""
@@ -400,7 +415,7 @@ def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:
             if prefix_lower == env_prefix or prefix_lower.endswith(env_prefix):
                 return True
     
-    if len(shorter) >= 8 and len(shorter) / len(longer) >= 0.7:
+    if len(shorter) >= CONTAINS_MATCH_MIN_LENGTH and len(shorter) / len(longer) >= CONTAINS_MATCH_RATIO_THRESHOLD:
         return True
     
     return False
@@ -796,7 +811,7 @@ def correlate_to_plane(
             record = plane_index.records.get(candidate_id)
             if record:
                 record_name = normalize_string(_get_record_name(record))
-                # Dec 2025 Fix: Also check record.domain for domain-based matches
+                # Also check record.domain for domain-based matches
                 # This allows entity "FlexPoint" to match IdP with domain "flexpoint.cloud"
                 # even when the record's name is generic like "Corporate SSO"
                 # Check both the domain attribute AND raw_data['domain'] as fallback
@@ -840,7 +855,7 @@ def correlate_to_plane(
                         if first_match or collapsed_match:
                             domain_base_match = True
                 
-                # Dec 2025 Fix: For finance transactions, match via domain base token alignment
+                # For finance transactions, match via domain base token alignment
                 # Requirements: ≥6 chars + domain base must match FIRST token of vendor name
                 # This allows legitimate brands (netflix, github) while preventing false positives
                 # where the brand word appears later in unrelated vendor names (e.g., "Horizon Payroll")
@@ -851,7 +866,7 @@ def correlate_to_plane(
                     'consulting', 'analytics', 'media', 'network', 'security', 'storage',
                     'hosting', 'managed', 'professional', 'integration', 'connect'
                 })
-                MIN_TOKEN_LENGTH = 4  # Allow zoom (4), slack (5), asana (5), etc.
+                # Use module-level MIN_TOKEN_LENGTH_FOR_MATCH constant
                 # Common vendor name prefixes to skip when finding primary brand
                 VENDOR_PREFIXES = frozenset({'the', 'a', 'an', 'team', 'inc', 'corp', 'llc', 'ltd', 'co', 'by'})
                 token_match = False
@@ -866,7 +881,7 @@ def correlate_to_plane(
                             if len(domain_parts) >= 2:
                                 # Normalize: "service-now" → "servicenow"
                                 domain_base_token = re.sub(r'[\-_]', '', domain_parts[0])
-                                if domain_base_token in GENERIC_TOKENS or len(domain_base_token) < MIN_TOKEN_LENGTH:
+                                if domain_base_token in GENERIC_TOKENS or len(domain_base_token) < MIN_TOKEN_LENGTH_FOR_MATCH:
                                     domain_base_token = None
                         
                         if domain_base_token:
@@ -1128,7 +1143,7 @@ def correlate_to_plane(
                 disambiguation_detail=f"Vendor-only match: {entity.vendor}"
             )
     
-    # Dec 2025 Fix: For finance plane, skip normalization_token matching for generic/short tokens
+    # For finance plane, skip normalization_token matching for generic/short tokens
     # to prevent false positives like "cloud.io" matching "Cloud Services Inc"
     GENERIC_TOKENS_FOR_FINANCE = frozenset({
         'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
@@ -1137,7 +1152,7 @@ def correlate_to_plane(
         'consulting', 'analytics', 'media', 'network', 'security', 'storage',
         'hosting', 'managed', 'professional', 'integration', 'connect'
     })
-    MIN_TOKEN_LENGTH_FOR_FINANCE = 4  # Allow zoom (4), slack (5), asana (5), etc.
+    # Use module-level MIN_TOKEN_LENGTH_FOR_MATCH constant
     
     entity_token = precomputed.normalization_token if precomputed else ""
     if not entity_token:
@@ -1147,7 +1162,7 @@ def correlate_to_plane(
     
     # Skip normalization_token matching for finance plane with generic/short tokens
     is_finance_plane = hasattr(plane_index, 'by_name_words')  # Finance plane has this attribute
-    skip_token_match = is_finance_plane and (entity_token in GENERIC_TOKENS_FOR_FINANCE or len(entity_token) < MIN_TOKEN_LENGTH_FOR_FINANCE)
+    skip_token_match = is_finance_plane and (entity_token in GENERIC_TOKENS_FOR_FINANCE or len(entity_token) < MIN_TOKEN_LENGTH_FOR_MATCH)
     
     if entity_token and len(entity_token) >= 3 and not skip_token_match:
         token_matches: list[str] = []

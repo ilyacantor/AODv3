@@ -9,6 +9,10 @@ from ..build_plane_indexes import PlaneIndexes
 from ..deterministic_ids import deterministic_uuid
 from .base import get_category, compute_triage_priority, get_finance_gap_monthly_threshold
 
+# Finance gap materiality thresholds (monthly spend)
+FINANCE_HIGH_MATERIALITY_THRESHOLD = 1000  # ≥$1000/mo → HIGH confidence + HIGH materiality
+FINANCE_MED_MATERIALITY_THRESHOLD = 500    # ≥$500/mo → HIGH confidence + MED materiality
+
 
 def generate_finance_gap_findings(
     indexes: PlaneIndexes,
@@ -87,10 +91,10 @@ def generate_finance_gap_findings(
         record_count = agg['record_count']
 
         # Determine confidence/materiality based on spend level
-        if total_monthly >= 1000:
+        if total_monthly >= FINANCE_HIGH_MATERIALITY_THRESHOLD:
             confidence = Confidence.HIGH
             materiality = Materiality.HIGH
-        elif total_monthly >= 500:
+        elif total_monthly >= FINANCE_MED_MATERIALITY_THRESHOLD:
             confidence = Confidence.HIGH
             materiality = Materiality.MED
         else:

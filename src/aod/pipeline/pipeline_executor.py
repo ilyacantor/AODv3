@@ -93,13 +93,13 @@ def _build_policy_asset_data(
 
     Translates correlation results into the flat structure expected by PolicyEngine.
 
-    Jan 2026 Fix: Include vendor-propagated governance AND metadata in policy evaluation.
-    
-    Jan 2026 Fix: Governance principle - only AUTHORITATIVE matches can assert governance.
+    Includes vendor-propagated governance AND metadata in policy evaluation.
+
+    Governance principle: only AUTHORITATIVE matches can assert governance.
     Heuristic matches (fuzzy, vendor, contains) provide enrichment but not governance.
     in_idp/in_cmdb now require both match existence AND authoritative match method.
     """
-    # Jan 2026 Fix: Governance requires AUTHORITATIVE match, not just any match
+    # Governance requires AUTHORITATIVE match, not just any match
     # Heuristic matches (fuzzy, vendor, contains) are enrichment-only, cannot grant governance
     direct_idp = (
         correlation.idp.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS)
@@ -160,9 +160,9 @@ def _build_policy_asset_data(
     
     from .admission import source_to_plane, DISCOVERY_CORROBORATION_PLANES
 
-    # Jan 2026 Fix: Count SOURCES not PLANES for discovery admission
+    # Count SOURCES not PLANES for discovery admission
     # Farm's policy: dns + proxy = 2 sources (both network plane, but distinct sources)
-    # This matches the admission.py fix that gates on source count, not plane diversity
+    # This matches the admission.py logic that gates on source count, not plane diversity
     discovery_sources = set()
     discovery_planes = set()
     latest_observed_at: datetime | None = None
@@ -205,7 +205,7 @@ def _build_policy_asset_data(
         "ci_type": ci_type,
         "lifecycle": lifecycle,
         "monthly_spend": monthly_spend,
-        # Jan 2026 Fix: Pass SOURCE count, not plane count
+        # Pass SOURCE count, not plane count
         # This ensures policy engine uses same metric as admission.py
         "discovery_source_count": len(discovery_sources),
         "is_active": is_active,
@@ -324,7 +324,7 @@ def run_pipeline_ephemeral(
                 snapshot_timestamp=snapshot_as_of
             )
 
-            # Jan 2026 Fix: Pass propagated governance with metadata to policy engine
+            # Pass propagated governance with metadata to policy engine
             policy_asset_data = _build_policy_asset_data(
                 candidate, correlation, entity_observations,
                 propagated_gov=prop_gov
@@ -628,7 +628,7 @@ async def execute_pipeline(
                 snapshot_timestamp=snapshot_as_of
             )
 
-            # Jan 2026 Fix: Pass propagated governance with metadata to policy engine
+            # Pass propagated governance with metadata to policy engine
             policy_asset_data = _build_policy_asset_data(
                 candidate, correlation, entity_observations,
                 propagated_gov=prop_gov
@@ -653,7 +653,7 @@ async def execute_pipeline(
                 assets.append(admission_result.asset)
             else:
                 rejection_id = str(deterministic_uuid(snapshot_id, run_id, "rejection", candidate.entity_id))
-                # Jan 2026 Fix: Include plane-extracted domains in rejection evidence
+                # Include plane-extracted domains in rejection evidence
                 # This enables alias_keys building for rejected assets so Farm can match them
                 plane_domains = _extract_all_domains_from_correlation(correlation)
                 # Compute proper registered domain (eTLD+1), not raw FQDN

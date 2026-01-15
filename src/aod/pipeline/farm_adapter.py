@@ -44,7 +44,7 @@ IDP_OBJECT_MAPPING = {
     "has_sso": {"sources": ["has_sso"], "default": False},
     "has_scim": {"sources": ["has_scim"], "default": False},
     "owner": {"sources": ["owner"], "default": None},
-    # Jan 2026 Fix: Expand sources to capture all possible login timestamp field names from Farm
+    # Expand sources to capture all possible login timestamp field names from Farm
     # Farm may send login activity as: last_login_at, lastLoginAt, lastLogin, last_activity, lastActivity
     "last_login_at": {"sources": ["last_login_at", "lastLoginAt", "lastLogin", "last_activity", "lastActivity"], "default": None},
 }
@@ -333,7 +333,7 @@ def _normalize_idp_objects(raw_list: list) -> list[dict]:
             continue
         try:
             normalized = _apply_mapping(raw, IDP_OBJECT_MAPPING, "IdPObject")
-            # Jan 2026 Fix: Extract domain from URL (external_ref may be a full URL)
+            # Extract domain from URL (external_ref may be a full URL)
             if normalized.get("domain"):
                 normalized["domain"] = _extract_domain_from_url(normalized["domain"])
             result.append(normalized)
@@ -350,7 +350,7 @@ def _normalize_cmdb_cis(raw_list: list) -> list[dict]:
             continue
         try:
             normalized = _apply_mapping(raw, CMDB_CI_MAPPING, "CMDBConfigItem")
-            # Jan 2026 Fix: Extract domain from URL (external_ref may be a full URL)
+            # Extract domain from URL (external_ref may be a full URL)
             if normalized.get("domain"):
                 normalized["domain"] = _extract_domain_from_url(normalized["domain"])
             result.append(normalized)

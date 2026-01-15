@@ -257,7 +257,7 @@ def compute_asset_reasons(
     reasons = []
     evidence = {}
     
-    # Jan 2026 Fix: Use lens_coverage (governance granted) not lens_status (match exists)
+    # Use lens_coverage (governance granted) not lens_status (match exists)
     # HAS_CMDB/HAS_IDP mean "passes gates + authoritative match", not "any correlation"
     has_idp = asset.lens_coverage.idp
     has_cmdb = asset.lens_coverage.cmdb
@@ -503,7 +503,7 @@ def classify_actual(
     # Cloud presence for anchoring (not used in governance/classification)
     has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
     
-    # Jan 2026 Fix: Domain-aligned IdP governance for zombie classification
+    # Domain-aligned IdP governance for zombie classification
     # IdP match counts as governance ONLY if domain-aligned.
     # Use explicit idp_governance_aligned flag set during admission.
     # Cross-domain IdP matches (name-based without domain alignment) don't count as governance.
@@ -513,7 +513,7 @@ def classify_actual(
         asset.activity_evidence.idp_governance_aligned
     )
     
-    # Jan 2026 Fix: Track BOTH broad and strict governance for different classification needs
+    # Track BOTH broad and strict governance for different classification needs
     # - Shadows: Use strict (domain-aligned IdP only) - cross-domain matches don't count
     # - Zombies: Use broad (any IdP match) - cross-domain matches DO count as governance
     #
@@ -562,7 +562,7 @@ def classify_actual(
         # "Paying for something you don't use" - requires ongoing spend
         # Without ongoing finance, stale governed assets are just inactive (not wasting money)
         #
-        # Jan 2026 Fix: Use has_governance_broad for zombie classification.
+        # Use has_governance_broad for zombie classification.
         # Farm treats cross-domain IdP matches (e.g., flowapp.app entity matched to flowapp.co IdP)
         # as governance for zombies. This differs from shadows which require exact domain matches.
         if has_stale_activity:
@@ -666,12 +666,11 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
     
     Derives reason codes from rejection metadata to explain
     why the candidate was not admitted.
-    
-    Jan 2026 Fix: Governance semantics - rejected candidates by definition
-    do NOT have governance. HAS_IDP/HAS_CMDB require admission (authoritative
-    match + passes gates). Raw correlation presence in rejected candidates
-    is just enrichment, not governance.
-    
+
+    Governance semantics: rejected candidates by definition do NOT have governance.
+    HAS_IDP/HAS_CMDB require admission (authoritative match + passes gates).
+    Raw correlation presence in rejected candidates is just enrichment, not governance.
+
     INVARIANT: Rejected candidates always emit NO_IDP, NO_CMDB.
     This prevents zombie classification on rejected candidates.
     """
@@ -687,7 +686,7 @@ def _compute_rejection_reasons(rejection: dict) -> list[str]:
     if "no_gate" in reason_code or "gate" in reason_code:
         reasons.append("REJECTED_NO_GATE")
     
-    # Jan 2026 Fix: Rejected candidates NEVER have governance.
+    # Rejected candidates NEVER have governance.
     # HAS_IDP/HAS_CMDB mean "governance granted" (authoritative match + passes gates).
     # Since this candidate was rejected, it definitionally lacks governance.
     # Use lens_coverage from evidence if available, otherwise assume no governance.
@@ -790,7 +789,7 @@ def emit_actual_results(
         has_governance_broad_flag = result.evidence_summary.get("has_governance_broad", False)  # Broad (for zombies)
         has_ongoing_finance = result.evidence_summary.get("financially_anchored", False)
         
-        # Jan 2026 Fix: Track domain-aligned governance for zombie classification
+        # Track domain-aligned governance for zombie classification
         # Use explicit idp_governance_aligned flag from admission
         has_cmdb_governance = ReasonCode.HAS_CMDB.value in [r.value for r in result.reasons]
         has_idp = ReasonCode.HAS_IDP.value in [r.value for r in result.reasons]
@@ -863,7 +862,7 @@ def emit_actual_results(
         # Shadow: ungoverned AND recent activity (uses broad governance)
         agg["is_shadow"] = shadow_candidate and not has_gov
         
-        # Jan 2026 Fix: DISABLED cross-domain zombie suppression
+        # DISABLED cross-domain zombie suppression
         # The previous logic incorrectly suppressed legitimate zombies when SEPARATE
         # entities happened to share a domain. Example: Linkforce (Legacy) with only
         # linkforce.io was suppressed because other distinct Linkforce products
@@ -879,13 +878,13 @@ def emit_actual_results(
         cross_domain_is_recent = False  # Disabled
 
         # Zombie: governed AND stale (aggregated) AND ongoing finance
-        # Jan 2026 Fix: Use broad governance (any IdP or CMDB) for zombie classification
+        # Use broad governance (any IdP or CMDB) for zombie classification
         # Farm treats cross-domain IdP matches as governance for zombies (e.g., flowapp.app
         # matched to flowapp.co IdP is governed), unlike shadows which require exact matches.
         agg["is_zombie"] = has_gov_broad and aggregated_is_stale and has_ongoing_finance
         
         # Parked: ungoverned (broad) AND stale (aggregated) AND NOT zombie
-        # Jan 2026 Fix: Use has_gov_broad for parked to be consistent with zombie logic
+        # Use has_gov_broad for parked to be consistent with zombie logic
         # Assets are only parked if they're ungoverned (no IdP/CMDB at all) OR lack ongoing finance
         if not has_gov_broad and aggregated_is_stale:
             agg["is_parked"] = True
@@ -1016,7 +1015,7 @@ def emit_actual_results(
             
             reasons = _compute_rejection_reasons(rej)
             
-            # Jan 2026 Fix: REJECTED assets should NOT be classified as shadows
+            # REJECTED assets should NOT be classified as shadows
             # Rejected assets failed admission criteria - they're not in the asset catalog
             # Farm expects "not-admitted" assets to not appear as shadows
             # Only ADMITTED assets can be shadows/zombies/parked
@@ -1025,7 +1024,7 @@ def emit_actual_results(
             admission_actual[entity_key] = "rejected"
             actual_reasons[entity_key] = reasons
             
-            # Jan 2026 Fix: Build alias_keys for rejected assets too
+            # Build alias_keys for rejected assets too
             # Extract domain variants from evidence to enable Farm lookup
             rej_alias_keys = set()
             # Check for domains in evidence (clone to avoid mutation)

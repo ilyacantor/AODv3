@@ -101,12 +101,12 @@ def _get_raw_domain(domain: str) -> str:
 
 def _extract_tenant_token(domain: str) -> str:
     """Extract tenant token from subdomain-based tenant identifiers.
-    
-    Dec 2025 Fix: For domains like flowsoft.okta.com, extract 'flowsoft'
-    as a searchable token. This enables cross-matching where:
+
+    For domains like flowsoft.okta.com, extract 'flowsoft' as a searchable token.
+    This enables cross-matching where:
     - Discovery has domain flowsoft.org → token 'flowsoft'
     - IdP has domain flowsoft.okta.com → tenant token 'flowsoft'
-    
+
     Examples:
         flowsoft.okta.com → flowsoft
         acme-corp.servicenow.com → acmecorp
@@ -136,13 +136,13 @@ def _extract_tenant_token(domain: str) -> str:
 
 def _extract_domain_base_name(domain: str) -> str:
     """Extract base name from registered domain for cross-matching.
-    
-    Dec 2025 Fix: For simple domains like flexpoint.cloud, extract 'flexpoint'
-    as a searchable token. This enables cross-matching where entity name
-    "FlexPoint" can match IdP domain "flexpoint.cloud" through by_name_words.
-    
+
+    For simple domains like flexpoint.cloud, extract 'flexpoint' as a searchable
+    token. This enables cross-matching where entity name "FlexPoint" can match
+    IdP domain "flexpoint.cloud" through by_name_words.
+
     This complements _extract_tenant_token which handles subdomain patterns.
-    
+
     Examples:
         flexpoint.cloud → flexpoint
         microsoft.com → microsoft
@@ -172,8 +172,8 @@ def _extract_domain_base_name(domain: str) -> str:
 
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
     """Build IdP index: by domain, by canonical name, by vendor (if present).
-    
-    Dec 2025 Fix: Index BOTH registered domain AND raw domain to support:
+
+    Indexes BOTH registered domain AND raw domain to support:
     - Registered domain: vendor matching (okta.com, servicenow.com)
     - Raw domain: tenant-specific matching (flowsoft.okta.com)
     - Tenant token: cross-matching (flowsoft.okta.com → 'flowsoft' in by_name_words)
@@ -187,7 +187,7 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Dec 2025 Fix: Check obj.domain AND raw_data fields as fallback
+        # Check obj.domain AND raw_data fields as fallback
         # Priority: domain > external_ref > url > application_url > service_url
         effective_domain = obj.domain
         if not effective_domain and obj.raw_data and isinstance(obj.raw_data, dict):
@@ -232,8 +232,8 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
 
 def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
     """Build CMDB index: by canonical name, by domain (external_ref), by vendor.
-    
-    Dec 2025 Fix: Index BOTH registered domain AND raw domain to support:
+
+    Indexes BOTH registered domain AND raw domain to support:
     - Registered domain: vendor matching
     - Raw domain: tenant-specific matching (company.servicenow.com)
     - Tenant token: cross-matching (company.servicenow.com → 'company' in by_name_words)
@@ -247,7 +247,7 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Dec 2025 Fix: Check ci.domain AND raw_data fields as fallback
+        # Check ci.domain AND raw_data fields as fallback
         # Priority: domain > external_ref > url > application_url > service_url
         effective_domain = ci.domain
         if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):

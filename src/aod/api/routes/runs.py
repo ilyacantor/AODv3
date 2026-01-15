@@ -685,12 +685,19 @@ async def get_run_policy(run_id: str):
     the pipeline executed for this run. This enables reproducible
     grading - Farm can fetch this endpoint to grade with identical policy.
     
+    Contract:
+        200 OK: { run_id, policy_hash, captured_at, policy }
+        404: Run not found
+        410: Policy snapshot expired/garbage collected (future)
+    
     Args:
         run_id: The run to get the policy snapshot for
     
     Returns:
-        The policy configuration used for this run, or 404 if not found
+        The policy configuration used for this run
     """
+    import hashlib
+    
     db = await get_db_direct()
     
     run = await db.get_run(run_id)
@@ -698,16 +705,20 @@ async def get_run_policy(run_id: str):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     if not run.policy_snapshot:
-        return {
-            "run_id": run_id,
-            "status": "no_snapshot",
-            "message": "Policy snapshot not available for this run. Runs before Jan 2026 may not have snapshots.",
-            "current_policy": get_current_config().to_dict()
-        }
+        raise HTTPException(
+            status_code=410, 
+            detail="Policy snapshot not available for this run. Runs before Jan 2026 may not have snapshots."
+        )
+    
+    policy_json = json.dumps(run.policy_snapshot, sort_keys=True)
+    policy_hash = f"sha256:{hashlib.sha256(policy_json.encode()).hexdigest()}"
+    
+    captured_at = run.started_at.isoformat() if run.started_at else None
     
     return {
         "run_id": run_id,
-        "status": "ok",
+        "policy_hash": policy_hash,
+        "captured_at": captured_at,
         "policy": run.policy_snapshot
     }
 

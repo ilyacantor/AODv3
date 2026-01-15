@@ -54,6 +54,10 @@ def late_bind_and_merge_assets(
     """
     Apply late-binding domain naming and merge assets by registered domain.
     
+    Stage 2 Enhancement: Uses union-find to merge ALL assets that share ANY
+    registered domain (not just primary merge key). This ensures each registered
+    domain appears in exactly one final asset.
+    
     Args:
         assets: List of admitted assets
         feature_enabled: Whether late_binding_domain_merge flag is on
@@ -70,10 +74,15 @@ def late_bind_and_merge_assets(
     
     log = run_logger or logger
     
+    # Stage 2: Use enhanced consolidation that checks ALL registered domains
+    # This ensures one asset per registered domain invariant
+    consolidated = _consolidate_by_all_registered_domains(assets, log)
+    
+    # Now apply normal merge logic to consolidated groups
     groups: dict[str, list[Asset]] = defaultdict(list)
     standalone: list[Asset] = []
     
-    for asset in assets:
+    for asset in consolidated:
         merge_key = _compute_merge_key(asset)
         if merge_key:
             groups[merge_key].append(asset)
@@ -115,6 +124,112 @@ def late_bind_and_merge_assets(
         })
     
     return merged
+
+
+def _consolidate_by_all_registered_domains(
+    assets: list[Asset],
+    log: logging.Logger
+) -> list[Asset]:
+    """
+    Stage 2: Consolidate assets that share ANY registered domain.
+    
+    Uses union-find to identify connected components where assets sharing
+    any domain are merged together. Ensures each registered domain appears
+    in exactly one final asset.
+    
+    Algorithm:
+    1. Build mapping: registered_domain -> list of asset indices
+    2. Use union-find to group assets sharing any domain
+    3. Merge each connected component into one asset
+    
+    Returns:
+        List of consolidated assets (may be smaller than input)
+    """
+    if len(assets) <= 1:
+        return assets
+    
+    # Build domain -> asset indices mapping
+    domain_to_assets: dict[str, list[int]] = defaultdict(list)
+    
+    for idx, asset in enumerate(assets):
+        if not asset.identifiers or not asset.identifiers.domains:
+            continue
+        for domain in asset.identifiers.domains:
+            if domain:
+                registered = extract_registered_domain(domain)
+                if registered:
+                    domain_to_assets[registered].append(idx)
+    
+    # Union-find implementation
+    parent = list(range(len(assets)))
+    
+    def find(x: int) -> int:
+        if parent[x] != x:
+            parent[x] = find(parent[x])  # Path compression
+        return parent[x]
+    
+    def union(x: int, y: int) -> None:
+        px, py = find(x), find(y)
+        if px != py:
+            parent[px] = py
+    
+    # Union assets that share any registered domain
+    for domain, asset_indices in domain_to_assets.items():
+        if len(asset_indices) > 1:
+            first = asset_indices[0]
+            for other in asset_indices[1:]:
+                union(first, other)
+    
+    # Group assets by their root parent
+    components: dict[int, list[Asset]] = defaultdict(list)
+    for idx, asset in enumerate(assets):
+        root = find(idx)
+        components[root].append(asset)
+    
+    # Merge each component
+    consolidated: list[Asset] = []
+    multi_asset_merges = 0
+    
+    for root, component_assets in components.items():
+        if len(component_assets) == 1:
+            consolidated.append(component_assets[0])
+        else:
+            # Determine merge key for the component
+            merge_key = _compute_merge_key(component_assets[0])
+            for a in component_assets[1:]:
+                alt_key = _compute_merge_key(a)
+                if alt_key and (not merge_key or alt_key < merge_key):
+                    merge_key = alt_key
+            
+            if not merge_key:
+                # Fallback: use first domain from first asset
+                for a in component_assets:
+                    if a.identifiers and a.identifiers.domains:
+                        merge_key = extract_registered_domain(a.identifiers.domains[0])
+                        if merge_key:
+                            break
+            
+            if merge_key:
+                merged_asset = _merge_assets(component_assets, merge_key, log)
+                consolidated.append(merged_asset)
+                multi_asset_merges += 1
+                log.info("asset_identity.consolidate_shared_domain", extra={
+                    "merge_key": merge_key,
+                    "component_size": len(component_assets),
+                    "merged_asset_ids": [str(a.asset_id) for a in component_assets]
+                })
+            else:
+                # No valid merge key - keep assets separate
+                consolidated.extend(component_assets)
+    
+    if multi_asset_merges > 0:
+        log.info("asset_identity.consolidation_summary", extra={
+            "input_assets": len(assets),
+            "output_assets": len(consolidated),
+            "multi_asset_merges": multi_asset_merges
+        })
+    
+    return consolidated
 
 
 def _compute_merge_key(asset: Asset) -> Optional[str]:
@@ -339,6 +454,15 @@ def _merge_assets(assets: list[Asset], merge_key: str, log: logging.Logger) -> A
             uris_ordered.extend(asset.identifiers.uris or [])
     deduped_uris = _dedupe_preserve_order(uris_ordered)
     
+    # Merge reference_domains (Stage 1 enrichment field)
+    ref_domains_ordered: list[str] = []
+    if winner.identifiers:
+        ref_domains_ordered.extend(winner.identifiers.reference_domains or [])
+    for asset in other_assets:
+        if asset.identifiers:
+            ref_domains_ordered.extend(asset.identifiers.reference_domains or [])
+    deduped_ref_domains = _dedupe_preserve_order(ref_domains_ordered)
+    
     refs_ordered: list[str] = []
     refs_ordered.extend(winner.evidence_refs or [])
     for asset in other_assets:
@@ -365,7 +489,8 @@ def _merge_assets(assets: list[Asset], merge_key: str, log: logging.Logger) -> A
         identifiers=AssetIdentifiers(
             domains=ordered_domains,
             hostnames=deduped_hostnames if deduped_hostnames else [],
-            uris=deduped_uris if deduped_uris else []
+            uris=deduped_uris if deduped_uris else [],
+            reference_domains=deduped_ref_domains if deduped_ref_domains else []
         ),
         lens_coverage=merged_coverage,
         lens_status=merged_status,

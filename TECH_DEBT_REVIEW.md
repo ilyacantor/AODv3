@@ -480,7 +480,7 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 | Monolithic `apply_admission_criteria` | High | High | P1 | ✅ Partial - extracted `_compute_provisioning_status()` |
 | ~~Date-tagged comments~~ | ~~Low~~ | ~~Medium~~ | ~~P3~~ | ✅ FIXED |
 | ~~Magic numbers~~ | ~~Low~~ | ~~Low~~ | ~~P3~~ | ✅ FIXED (partial) |
-| Route file size | Low | Medium | P3 | Open |
+| Route file size | Low | Medium | P3 | ✅ Partial - extracted utils.py (808→670 lines) |
 
 ---
 

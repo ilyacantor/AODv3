@@ -17,9 +17,11 @@ This codebase implements a sophisticated asset discovery and governance platform
 
 ---
 
-## CRITICAL: Policy Switchboard Violations
+## ~~CRITICAL: Policy Switchboard Violations~~ ✅ FIXED
 
-The codebase has a centralized policy switchboard (`config/policy_master.json`) loaded via `get_current_config()`. However, **multiple modules bypass the switchboard** with hardcoded values that should come from policy configuration.
+**Status: RESOLVED** - All policy values now flow from `config/policy_master.json` via `get_current_config()`.
+
+The following violations were fixed in commit `5434998`:
 
 ### Violation Summary
 
@@ -518,18 +520,18 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 
 ## Priority Matrix
 
-| Issue | Severity | Effort | Priority |
-|-------|----------|--------|----------|
-| **Policy switchboard bypasses** | **Critical** | Medium | **P0** |
-| **Duplicate INFRASTRUCTURE_DOMAINS (3 copies)** | **Critical** | Low | **P0** |
-| **BANNED_DOMAINS ignores policy file** | **Critical** | Low | **P0** |
-| Monolithic `apply_admission_criteria` | High | High | P1 |
-| Misnomer field name | High | Low | P1 |
-| Database duplication | Medium | Low | P2 |
-| Silent exceptions | Medium | Low | P2 |
-| Date-tagged comments | Low | Medium | P3 |
-| Magic numbers | Low | Low | P3 |
-| Route file size | Low | Medium | P3 |
+| Issue | Severity | Effort | Priority | Status |
+|-------|----------|--------|----------|--------|
+| ~~Policy switchboard bypasses~~ | ~~Critical~~ | ~~Medium~~ | ~~P0~~ | ✅ FIXED |
+| ~~Duplicate INFRASTRUCTURE_DOMAINS~~ | ~~Critical~~ | ~~Low~~ | ~~P0~~ | ✅ FIXED |
+| ~~BANNED_DOMAINS ignores policy file~~ | ~~Critical~~ | ~~Low~~ | ~~P0~~ | ✅ FIXED |
+| Monolithic `apply_admission_criteria` | High | High | P1 | Open |
+| Misnomer field name | High | Low | P1 | Open |
+| Database duplication | Medium | Low | P2 | Open |
+| Silent exceptions | Medium | Low | P2 | Open |
+| Date-tagged comments | Low | Medium | P3 | Open |
+| Magic numbers | Low | Low | P3 | Open |
+| Route file size | Low | Medium | P3 | Open |
 
 ---
 

@@ -17,6 +17,137 @@ This codebase implements a sophisticated asset discovery and governance platform
 
 ---
 
+## CRITICAL: Policy Switchboard Violations
+
+The codebase has a centralized policy switchboard (`config/policy_master.json`) loaded via `get_current_config()`. However, **multiple modules bypass the switchboard** with hardcoded values that should come from policy configuration.
+
+### Violation Summary
+
+| Module | Hardcoded Value | Should Use |
+|--------|-----------------|------------|
+| `admission.py:711` | `DISCOVERY_ACTIVITY_WINDOW_DAYS = 90` | `policy_config.activity_windows.discovery_activity_window_days` |
+| `admission.py:890` | `MIN_DISCOVERY_SOURCES = 2` | `policy_config.admission_gates.noise_floor` |
+| `pipeline_executor.py:35` | `MAX_OBSERVATION_SAMPLES = 2000` | `policy_config.query_limits.max_observation_samples` |
+| `pipeline_executor.py:186` | `activity_window_days = 90` | `policy_config.activity_windows.default_activity_window_days` |
+| `decision_trace.py:32-43` | `INFRASTRUCTURE_DOMAINS = {...}` | `policy_config.infrastructure_domains` |
+| `decision_trace.py:151,188,256` | `window_days: int = 90` | Load from policy |
+| `aod_agent_reconcile.py:227,444,717` | `activity_window_days: int = 90` | Load from policy |
+| `derived_classifications.py:480` | `window_days: int = 90` | Load from policy |
+
+### Duplicate Domain Lists (3 Copies!)
+
+**INFRASTRUCTURE_DOMAINS is defined in 3 different places:**
+
+1. **`src/aod/constants.py:9-57`** - 57 domains
+2. **`src/aod/pipeline/decision_trace.py:32-43`** - 43 domains (DIFFERENT LIST!)
+3. **`config/policy_master.json` exclusion_lists.infrastructure_domains** - 19 domains
+
+These lists are **NOT synchronized** and will diverge over time, causing inconsistent behavior.
+
+### Banned/Corporate Domains Bypass Policy
+
+**`admission.py:439-476`** defines local constants that bypass the policy switchboard:
+
+```python
+# admission.py - BYPASSES POLICY
+BANNED_DOMAINS = {
+    "kaspersky.com",
+}
+
+CORPORATE_ROOT_DOMAINS = {
+    # Placeholder - populated dynamically per tenant if available
+}
+```
+
+But `policy_master.json` has its own `banned_domains` list with 16 entries including googleapis.com, microsoft.com, etc. **The code ignores the policy file's banned_domains**.
+
+### Deprecated Config Module Still In Use
+
+**`src/aod/config.py`** is marked DEPRECATED but still defines values:
+
+```python
+class PolicyConfig:
+    """DEPRECATED: Use get_current_config() from aod.core.policy instead."""
+
+    DISCOVERY_ACTIVITY_WINDOW_DAYS: int = 90  # Still used?
+    MIN_DISCOVERY_SOURCES_FOR_SHADOW: int = 2  # Conflicts with policy!
+    MAX_OBSERVATION_SAMPLES: int = 2000
+```
+
+The `policy_master.json` sets `min_discovery_sources_for_shadow: 1` but this deprecated file says `2`.
+
+### Files That Correctly Use Policy
+
+Only **5 out of 29 pipeline files** properly use `get_current_config()`:
+- `admission.py` (partial - loads config but also has local constants)
+- `correlate_entities.py`
+- `derived_classifications.py` (partial)
+- `pipeline_executor.py` (partial)
+- `api/routes/runs.py`
+
+### Specific Violations
+
+#### 1. `admission.py` - Mixed Usage
+```python
+# Line 711 - HARDCODED (should come from policy)
+DISCOVERY_ACTIVITY_WINDOW_DAYS = 90
+
+# Line 890 - HARDCODED (should come from policy)
+MIN_DISCOVERY_SOURCES = 2
+
+# Line 1751 - CORRECTLY loads policy
+from aod.core.policy.loader import get_current_config
+policy_config = get_current_config()
+
+# But then Line 983 uses the HARDCODED constant, not policy!
+cutoff = reference_time - timedelta(days=DISCOVERY_ACTIVITY_WINDOW_DAYS)
+```
+
+#### 2. `decision_trace.py` - Completely Ignores Policy
+```python
+# Line 32-43 - Own copy of INFRASTRUCTURE_DOMAINS (different from constants.py!)
+INFRASTRUCTURE_DOMAINS = {
+    "redis.io", "redis.com", ...  # 43 domains, not 57
+}
+
+# Line 151, 188, 256 - Hardcoded defaults, never loads policy
+def _get_activity_info(asset: Asset, window_days: int = 90):
+def compute_decision_trace(asset: Asset, activity_window_days: int = 90):
+def compute_all_decision_traces(assets: list[Asset], activity_window_days: int = 90):
+```
+
+#### 3. `aod_agent_reconcile.py` - Hardcoded Defaults
+```python
+# Lines 227, 444, 717 - All use hardcoded 90
+def emit_actual_results(..., activity_window_days: int = 90, ...):
+def build_asset_details(..., activity_window_days: int = 90, ...):
+def build_reconciliation_report(..., activity_window_days: int = 90, ...):
+```
+
+### Recommended Fix
+
+1. **Remove all module-level policy constants** - Delete `DISCOVERY_ACTIVITY_WINDOW_DAYS`, `MIN_DISCOVERY_SOURCES`, `MAX_OBSERVATION_SAMPLES` from individual files
+
+2. **Single source for domain lists** - Move `INFRASTRUCTURE_DOMAINS` entirely to `policy_master.json` and delete from `constants.py` and `decision_trace.py`
+
+3. **Load policy at function entry** - Replace hardcoded defaults with policy lookups:
+```python
+# Before (BAD)
+def compute_decision_trace(asset: Asset, activity_window_days: int = 90):
+
+# After (GOOD)
+def compute_decision_trace(asset: Asset, activity_window_days: int = None):
+    if activity_window_days is None:
+        policy_config = get_current_config()
+        activity_window_days = policy_config.activity_windows.default_activity_window_days
+```
+
+4. **Delete deprecated `config.py`** - It's creating confusion with conflicting values
+
+5. **Audit `BANNED_DOMAINS`** - Reconcile the `admission.py` local set with `policy_master.json.exclusion_lists.banned_domains`
+
+---
+
 ## Critical Issues (High Priority)
 
 ### 1. Monolithic Functions - `admission.py`
@@ -389,6 +520,9 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 
 | Issue | Severity | Effort | Priority |
 |-------|----------|--------|----------|
+| **Policy switchboard bypasses** | **Critical** | Medium | **P0** |
+| **Duplicate INFRASTRUCTURE_DOMAINS (3 copies)** | **Critical** | Low | **P0** |
+| **BANNED_DOMAINS ignores policy file** | **Critical** | Low | **P0** |
 | Monolithic `apply_admission_criteria` | High | High | P1 |
 | Misnomer field name | High | Low | P1 |
 | Database duplication | Medium | Low | P2 |

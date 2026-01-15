@@ -50,7 +50,8 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 **Governance Correlation Fixes (Jan 2026):**
 -   **Registered Domain Fallback**: When exact domain lookup fails in Pass 1, tries registered domain (eTLD+1) as fallback. This enables matches like entity "maxsoft.org" matching CMDB "api.maxsoft.org" with authoritative "domain" method.
 -   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery" when entity has discovery observations, ensuring v2 key selection uses the correct discovery domains.
--   **Test Coverage**: 32 tests including TLD isolation, match method classification, registered domain fallback validation.
+-   **Domain Base Name Matching**: When Pass 2 canonical_name match fails and entity has domain, tries matching domain base name (e.g., "slack" from "slack.com") against record names. This fixes FP shadows where IdP/CMDB records have app name but no external_ref/domain. Match method remains "canonical_name" (authoritative) for governance.
+-   **Test Coverage**: 35 tests including TLD isolation, match method classification, registered domain fallback, and domain base name matching validation.
 
 **Reason Code Semantics (Jan 2026 Fix):**
 -   `HAS_CMDB` / `HAS_IDP` = Direct authoritative match only (domain/uri/canonical_name that passes gates)

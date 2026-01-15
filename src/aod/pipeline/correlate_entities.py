@@ -734,6 +734,25 @@ def correlate_to_plane(
     canonical = entity.canonical_name
     name_matches = plane_index.by_canonical_name.get(canonical, [])
     
+    # Jan 2026 FIX: If no canonical_name match and entity has domain, try domain base name
+    # Entity canonical_name is often the full domain (e.g., "slack.com") but IdP/CMDB records
+    # are indexed by app name (e.g., "slack"). This enables matching when record has name
+    # but no external_ref/domain field.
+    # Example: entity.domain="slack.com", record.name="Slack" → record indexed as "slack"
+    #          canonical="slack.com" fails, but domain_base="slack" matches
+    domain_base_used = False
+    domain_base = None  # Initialize to avoid UnboundLocalError
+    if not name_matches and entity.domain:
+        domain_base = entity.domain.split('.')[0].lower().strip() if '.' in entity.domain else None
+        if domain_base and len(domain_base) >= 3:
+            name_matches = plane_index.by_canonical_name.get(domain_base, [])
+            if name_matches:
+                domain_base_used = True
+                logger.debug(
+                    f"DOMAIN_BASE_NAME_MATCH entity={entity.canonical_name} "
+                    f"domain_base={domain_base} matches={len(name_matches)}"
+                )
+    
     if name_matches and use_vendor:
         expected_vendor = None
         if precomputed and precomputed.canonical_vendor:
@@ -756,13 +775,16 @@ def correlate_to_plane(
                         validated_matches.append(mid)
             name_matches = validated_matches
     
+    # Determine effective match key (domain_base or canonical name)
+    effective_match_key = domain_base if domain_base_used else canonical
+    
     if len(name_matches) == 1:
         return PlaneMatch(
             status=MatchStatus.MATCHED,
             matched_ids=name_matches,
             matched_records=[plane_index.records.get(mid) for mid in name_matches],
             match_method="canonical_name",
-            match_key=canonical,
+            match_key=effective_match_key,
             ambiguity_code=AmbiguityCode.NONE
         )
     elif len(name_matches) > 1:
@@ -775,7 +797,7 @@ def correlate_to_plane(
                 matched_ids=resolved,
                 matched_records=[plane_index.records.get(resolved[0])],
                 match_method="canonical_name",
-                match_key=canonical,
+                match_key=effective_match_key,
                 ambiguity_code=code,
                 disambiguation_detail=detail
             )
@@ -785,7 +807,7 @@ def correlate_to_plane(
             matched_ids=name_matches,
             matched_records=records,
             match_method="canonical_name",
-            match_key=canonical,
+            match_key=effective_match_key,
             ambiguity_code=code,
             disambiguation_detail=detail
         )

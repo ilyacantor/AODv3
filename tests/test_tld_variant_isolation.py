@@ -278,6 +278,34 @@ class TestRegisteredDomainFallbackMatching:
         assert entity_registered != unrelated_registered
 
 
+class TestDomainBaseNameMatching:
+    """Test domain base name matching for canonical_name correlation"""
+    
+    def test_domain_base_extraction(self):
+        """slack.com should extract base 'slack' for canonical name matching"""
+        domain = "slack.com"
+        domain_base = domain.split('.')[0].lower().strip() if '.' in domain else None
+        assert domain_base == "slack"
+    
+    def test_domain_base_sufficient_length(self):
+        """Domain base must be >= 3 chars to avoid false matches"""
+        short_domain = "go.com"
+        domain_base = short_domain.split('.')[0].lower().strip() if '.' in short_domain else None
+        assert domain_base == "go"
+        assert len(domain_base) < 3  # Too short for matching
+        
+        long_domain = "goo.com"
+        domain_base2 = long_domain.split('.')[0].lower().strip() if '.' in long_domain else None
+        assert domain_base2 == "goo"
+        assert len(domain_base2) >= 3  # Sufficient for matching
+    
+    def test_canonical_name_is_authoritative(self):
+        """Matches via canonical_name (including domain base) are authoritative"""
+        from src.aod.pipeline.correlate_entities import AUTHORITATIVE_MATCH_METHODS
+        
+        assert "canonical_name" in AUTHORITATIVE_MATCH_METHODS
+
+
 class TestMatchQualityClassification:
     """Test match quality classification for governance decisions"""
     

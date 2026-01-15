@@ -81,7 +81,7 @@ def main():
             print(f"  - is_service_principal: {policy_asset_data.get('is_service_principal')}")
             print(f"  - ci_type: {policy_asset_data.get('ci_type')}")
             print(f"  - lifecycle: {policy_asset_data.get('lifecycle')}")
-            print(f"  - discovery_planes_count: {policy_asset_data.get('discovery_planes_count')}")
+            print(f"  - discovery_source_count: {policy_asset_data.get('discovery_source_count')}")
             print(f"  - is_active: {policy_asset_data.get('is_active')}")
 
             # Call policy engine

@@ -56,7 +56,7 @@ class PolicyEngine:
                 - in_cmdb: bool
                 - in_cloud: bool
                 - in_directory: bool (optional)
-                - discovery_planes_count: int (distinct corroborating planes, NOT raw sources)
+                - discovery_source_count: int (distinct corroborating discovery sources)
                 - is_active: bool
                 - has_sso: bool (optional)
                 - has_scim: bool (optional)
@@ -209,9 +209,8 @@ class PolicyEngine:
         Finance and CMDB do NOT count as discovery corroboration.
         Only: network, endpoint, idp, cloud, discovery sources
 
-        NOTE: Field name is "discovery_planes_count" but actually contains source count (misnomer)
         """
-        source_count = data.get("discovery_planes_count", 0) or 0  # Misnomer - actually source count
+        source_count = data.get("discovery_source_count", 0) or 0
         if source_count >= self.config.admission.noise_floor:
             return True, ["HAS_DISCOVERY", f"SOURCE_COUNT_{source_count}"]
         return False, []
@@ -262,8 +261,8 @@ class PolicyEngine:
         if spend < self.config.admission.minimum_spend:
             codes.append("NO_FINANCE")
         
-        plane_count = data.get("discovery_planes_count", 0) or 0
-        if plane_count < self.config.admission.noise_floor:
-            codes.append("DISCOVERY_PLANE_COUNT_LT_2")
+        source_count = data.get("discovery_source_count", 0) or 0
+        if source_count < self.config.admission.noise_floor:
+            codes.append("DISCOVERY_SOURCE_COUNT_LT_2")
         
         return codes

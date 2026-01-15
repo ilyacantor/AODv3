@@ -2,16 +2,20 @@
 
 import asyncpg
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Optional, AsyncGenerator
 from uuid import UUID
 
+logger = logging.getLogger(__name__)
+
 from ..models.output_contracts import (
     Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, SyncStatus,
     AssetType, Environment, LensStatus, LensStatuses, LensCoverage, LensMatchDebug,
     AssetIdentifiers, ActivityEvidence, FindingType, FindingCategory, Severity, ArtifactType,
-    VendorHypothesis, Confidence, Materiality, TriagePriority, PipelineStageTimings
+    VendorHypothesis, Confidence, Materiality, TriagePriority, PipelineStageTimings,
+    ProvisioningStatus
 )
 
 
@@ -43,6 +47,52 @@ def get_active_db_source() -> str:
         return "DATABASE_URL"
     else:
         return "NONE"
+
+
+def _deserialize_asset_row(row: asyncpg.Record) -> Asset:
+    """Deserialize a database row into an Asset object.
+
+    Centralized helper to avoid duplication between get_assets_by_run and get_asset_by_id.
+    """
+    activity_evidence_data = row.get("activity_evidence", "{}")
+    vendor_hypothesis_data = row.get("vendor_hypothesis")
+    lens_match_debug_data = row.get("lens_match_debug")
+
+    vendor_hypothesis = None
+    lens_match_debug = None
+    if vendor_hypothesis_data:
+        vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
+    if lens_match_debug_data:
+        lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
+
+    prov_status_raw = row.get("provisioning_status", "quarantine")
+    try:
+        prov_status = ProvisioningStatus(prov_status_raw)
+    except ValueError:
+        prov_status = ProvisioningStatus.QUARANTINE
+
+    return Asset(
+        asset_id=UUID(row["asset_id"]),
+        tenant_id=row["tenant_id"],
+        run_id=row["run_id"],
+        name=row["name"],
+        asset_type=AssetType(row["asset_type"]),
+        identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
+        vendor=row["vendor"],
+        vendor_hypothesis=vendor_hypothesis,
+        environment=Environment(row["environment"]),
+        evidence_refs=json.loads(row["evidence_refs"]),
+        lens_status=LensStatuses.model_validate_json(row["lens_status"]),
+        lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
+        lens_match_debug=lens_match_debug,
+        activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
+        tags=json.loads(row["tags"]),
+        admission_reason=row["admission_reason"],
+        provisioning_status=prov_status,
+        has_critical_gap=row.get("has_critical_gap", False),
+        owner=row.get("owner"),
+        created_at=datetime.fromisoformat(row["created_at"])
+    )
 
 
 _db_instance: Optional["Database"] = None
@@ -145,48 +195,49 @@ class Database:
                 )
             """)
             
+            # Schema migrations - log failures instead of silently ignoring
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration assets.vendor_hypothesis: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS provisioning_status TEXT NOT NULL DEFAULT 'quarantine'")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration assets.provisioning_status: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration findings.category: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'med'")
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS materiality TEXT NOT NULL DEFAULT 'med'")
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS triage_priority TEXT NOT NULL DEFAULT 'p2'")
                 await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS conflict_field TEXT")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration findings.(confidence|materiality|triage_priority|conflict_field): %s", e)
+
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS has_critical_gap BOOLEAN NOT NULL DEFAULT FALSE")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration assets.has_critical_gap: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner TEXT")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration assets.owner: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lens_match_debug TEXT")
-            except Exception:
-                pass
-            
+            except Exception as e:
+                logger.debug("Migration assets.lens_match_debug: %s", e)
+
             try:
                 await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Migration runs.stage_timings: %s", e)
             
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
@@ -505,48 +556,7 @@ class Database:
                 run_id
             )
         
-        assets = []
-        for row in rows:
-            activity_evidence_data = row.get("activity_evidence", "{}")
-            vendor_hypothesis_data = row.get("vendor_hypothesis")
-            lens_match_debug_data = row.get("lens_match_debug")
-            vendor_hypothesis = None
-            lens_match_debug = None
-            if vendor_hypothesis_data:
-                vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
-            if lens_match_debug_data:
-                lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
-            
-            from aod.models.output_contracts import ProvisioningStatus
-            prov_status_raw = row.get("provisioning_status", "quarantine")
-            try:
-                prov_status = ProvisioningStatus(prov_status_raw)
-            except ValueError:
-                prov_status = ProvisioningStatus.QUARANTINE
-            
-            assets.append(Asset(
-                asset_id=UUID(row["asset_id"]),
-                tenant_id=row["tenant_id"],
-                run_id=row["run_id"],
-                name=row["name"],
-                asset_type=AssetType(row["asset_type"]),
-                identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
-                vendor=row["vendor"],
-                vendor_hypothesis=vendor_hypothesis,
-                environment=Environment(row["environment"]),
-                evidence_refs=json.loads(row["evidence_refs"]),
-                lens_status=LensStatuses.model_validate_json(row["lens_status"]),
-                lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
-                lens_match_debug=lens_match_debug,
-                activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
-                tags=json.loads(row["tags"]),
-                admission_reason=row["admission_reason"],
-                provisioning_status=prov_status,
-                has_critical_gap=row.get("has_critical_gap", False),
-                owner=row.get("owner"),
-                created_at=datetime.fromisoformat(row["created_at"])
-            ))
-        return assets
+        return [_deserialize_asset_row(row) for row in rows]
     
     async def get_asset_by_id(self, asset_id: str) -> Optional[Asset]:
         """Get a single asset by ID"""
@@ -560,46 +570,8 @@ class Database:
         
         if not row:
             return None
-        
-        activity_evidence_data = row.get("activity_evidence", "{}")
-        vendor_hypothesis_data = row.get("vendor_hypothesis")
-        lens_match_debug_data = row.get("lens_match_debug")
-        vendor_hypothesis = None
-        lens_match_debug = None
-        if vendor_hypothesis_data:
-            vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
-        if lens_match_debug_data:
-            lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
-        
-        from aod.models.output_contracts import ProvisioningStatus
-        prov_status_raw = row.get("provisioning_status", "quarantine")
-        try:
-            prov_status = ProvisioningStatus(prov_status_raw)
-        except ValueError:
-            prov_status = ProvisioningStatus.QUARANTINE
-        
-        return Asset(
-            asset_id=UUID(row["asset_id"]),
-            tenant_id=row["tenant_id"],
-            run_id=row["run_id"],
-            name=row["name"],
-            asset_type=AssetType(row["asset_type"]),
-            identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
-            vendor=row["vendor"],
-            vendor_hypothesis=vendor_hypothesis,
-            environment=Environment(row["environment"]),
-            evidence_refs=json.loads(row["evidence_refs"]),
-            lens_status=LensStatuses.model_validate_json(row["lens_status"]),
-            lens_coverage=LensCoverage.model_validate_json(row["lens_coverage"]),
-            lens_match_debug=lens_match_debug,
-            activity_evidence=ActivityEvidence.model_validate_json(activity_evidence_data) if activity_evidence_data else ActivityEvidence(),
-            tags=json.loads(row["tags"]),
-            admission_reason=row["admission_reason"],
-            provisioning_status=prov_status,
-            has_critical_gap=row.get("has_critical_gap", False),
-            owner=row.get("owner"),
-            created_at=datetime.fromisoformat(row["created_at"])
-        )
+
+        return _deserialize_asset_row(row)
     
     async def update_asset_owner(self, asset_id: str, owner: str) -> bool:
         """Update an asset's owner field"""

@@ -162,7 +162,7 @@ def analyze_snapshot(snapshot_path: str):
             print(f"      - has_scim: {policy_asset_data.get('has_scim')}")
             print(f"      - ci_type: {policy_asset_data.get('ci_type')}")
             print(f"      - lifecycle: {policy_asset_data.get('lifecycle')}")
-            print(f"      - discovery_planes_count: {policy_asset_data.get('discovery_planes_count')}")
+            print(f"      - discovery_source_count: {policy_asset_data.get('discovery_source_count')}")
             print(f"      - is_active: {policy_asset_data.get('is_active')}")
 
             policy_decision = policy_engine.evaluate(policy_asset_data)

@@ -207,7 +207,7 @@ def _build_policy_asset_data(
         "monthly_spend": monthly_spend,
         # Jan 2026 Fix: Pass SOURCE count, not plane count
         # This ensures policy engine uses same metric as admission.py
-        "discovery_planes_count": len(discovery_sources),  # NOTE: Misnomer - actually source count now
+        "discovery_source_count": len(discovery_sources),
         "is_active": is_active,
     }
 

@@ -191,25 +191,15 @@ def build_admitted_asset(entity, evidence, status) -> Asset
 
 ---
 
-### 2. Misnomer Field Name - Source vs Plane Count
+### 2. ~~Misnomer Field Name - Source vs Plane Count~~ FIXED
 
-**Location:** `src/aod/pipeline/pipeline_executor.py:210`
+**Status:** Renamed `discovery_planes_count` → `discovery_source_count` in all files.
 
-```python
-"discovery_planes_count": len(discovery_sources),  # NOTE: Misnomer - actually source count now
-```
-
-**Also at:** `src/aod/core/policy/engine.py:214`
-```python
-source_count = data.get("discovery_planes_count", 0)  # Misnomer - actually source count
-```
-
-**Impact:**
-- Future developers will misunderstand the data model
-- Policy engine and pipeline use the same misnomer
-- Comments explaining the misnomer are scattered across files
-
-**Recommendation:** Rename to `discovery_source_count` with a migration or alias for backward compatibility.
+**Files updated:**
+- `src/aod/pipeline/pipeline_executor.py:210` - key renamed
+- `src/aod/core/policy/engine.py:59,212,265` - docstring and usages updated
+- `debug_policy_engine.py:84` - debug output updated
+- `debug_production_googleapis_office.py:165` - debug output updated
 
 ---
 
@@ -239,58 +229,26 @@ Throughout the codebase, there are **60+ comments** referencing specific fix dat
 
 ---
 
-### 4. Database Layer Duplication
+### 4. ~~Database Layer Duplication~~ FIXED
 
-**Location:** `src/aod/db/database.py`
+**Status:** Extracted `_deserialize_asset_row(row)` helper function.
 
-The `get_assets_by_run()` and `get_asset_by_id()` methods contain **nearly identical** 50-line blocks for deserializing assets:
-
-```python
-# Lines 508-549 (get_assets_by_run)
-activity_evidence_data = row.get("activity_evidence", "{}")
-vendor_hypothesis_data = row.get("vendor_hypothesis")
-# ... 40+ lines of deserialization ...
-
-# Lines 564-602 (get_asset_by_id)
-activity_evidence_data = row.get("activity_evidence", "{}")
-vendor_hypothesis_data = row.get("vendor_hypothesis")
-# ... same 40+ lines of deserialization ...
-```
-
-**Impact:**
-- Any bug fix must be applied twice
-- Easy to introduce inconsistencies
-- Increases maintenance burden
-
-**Recommendation:** Extract to a `_deserialize_asset_row(row) -> Asset` helper method.
+**Changes:**
+- Added `ProvisioningStatus` to top-level imports
+- Created `_deserialize_asset_row()` module-level helper
+- `get_assets_by_run()` now uses list comprehension with helper
+- `get_asset_by_id()` now uses helper directly
 
 ---
 
-### 5. Silent Exception Swallowing
+### 5. ~~Silent Exception Swallowing~~ FIXED
 
-**Location:** `src/aod/db/database.py`
+**Status:** Added `logger.debug()` calls for all schema migration exceptions.
 
-Multiple places silently catch and ignore exceptions:
-
-```python
-# Lines 148-190
-try:
-    await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT")
-except Exception:
-    pass  # Silent swallow
-
-try:
-    await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS provisioning_status TEXT...")
-except Exception:
-    pass  # Silent swallow
-```
-
-**Impact:**
-- Schema migration failures are invisible
-- Debugging production issues becomes impossible
-- Database could be in inconsistent state
-
-**Recommendation:** At minimum, log the exceptions. Better: use proper migration tooling.
+**Changes:**
+- Added `logging` import and module-level logger
+- All 7 schema migration try/except blocks now log exception details at DEBUG level
+- Migrations will be visible when DEBUG logging is enabled
 
 ---
 

@@ -650,6 +650,11 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
 
     summary = compute_derived_classifications(assets, activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
+    # Stage 1 Metrics: Check for CMDB external_ref domain leakage
+    # After Stage 1, reference_domains should contain CMDB external_ref domains
+    # and identifiers.domains should NOT contain them
+    stage1_metrics = _compute_stage1_asset_metrics(assets)
+
     return {
         "run_id": run_id,
         "activity_window_days": activity_window_days,
@@ -666,5 +671,61 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
             "indeterminate_count": summary.distribution.indeterminate_count
         },
         "shadow_assets": summary.shadow_assets,
-        "zombie_assets": summary.zombie_assets
+        "zombie_assets": summary.zombie_assets,
+        "stage1_metrics": stage1_metrics
+    }
+
+
+def _compute_stage1_asset_metrics(assets: list) -> dict:
+    """
+    Compute Stage 1 metrics from persisted assets.
+    
+    Stage 1 Fix: CMDB external_ref domains should be in reference_domains (enrichment),
+    NOT in identifiers.domains (identity/admission).
+    
+    This checks for domain overlap as a proxy for Stage 1 effectiveness:
+    - reference_domains_total: Total domains stored as reference (enrichment)
+    - domains_in_both_identity_and_reference: Should be 0 (overlap indicates leakage)
+    - stage1_effective: True if no overlap detected
+    
+    Note: This is a heuristic check since we don't have correlation data at query time.
+    The definitive Stage 1 metrics are logged during pipeline execution.
+    """
+    reference_domains_total = 0
+    domains_in_both = 0
+    assets_with_reference_domains = 0
+    
+    for asset in assets:
+        identifiers = asset.identifiers if hasattr(asset, 'identifiers') else asset.get("identifiers", {})
+        if not identifiers:
+            continue
+        
+        # Get domains from identifiers
+        identity_domains = set()
+        if hasattr(identifiers, 'domains'):
+            identity_domains = set(d.lower() for d in (identifiers.domains or []))
+        elif isinstance(identifiers, dict):
+            identity_domains = set(d.lower() for d in (identifiers.get("domains") or []))
+        
+        # Get reference domains (CMDB external_ref domains after Stage 1)
+        reference_domains = set()
+        if hasattr(identifiers, 'reference_domains'):
+            reference_domains = set(d.lower() for d in (identifiers.reference_domains or []))
+        elif isinstance(identifiers, dict):
+            reference_domains = set(d.lower() for d in (identifiers.get("reference_domains") or []))
+        
+        reference_domains_total += len(reference_domains)
+        if reference_domains:
+            assets_with_reference_domains += 1
+        
+        # Check overlap - domains that are in BOTH identity and reference
+        overlap = identity_domains & reference_domains
+        domains_in_both += len(overlap)
+    
+    return {
+        "reference_domains_total": reference_domains_total,
+        "assets_with_reference_domains": assets_with_reference_domains,
+        "domains_in_both_identity_and_reference": domains_in_both,
+        "stage1_effective": domains_in_both == 0,
+        "note": "Definitive metrics logged during pipeline execution with key 'stage1.cmdb_external_ref_metrics'"
     }

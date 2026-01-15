@@ -465,12 +465,12 @@ export default function Overview() {
               className="bg-white text-blue-600 hover:bg-slate-100 border-none font-bold text-base px-8 h-14 rounded-full shadow-lg hover:translate-y-[-2px] transition-transform"
               onClick={() => {
                 if (window.parent && window.parent !== window) {
-                  window.parent.postMessage({ action: "startGuidedTour" }, "*");
+                  window.parent.postMessage({ action: "startSimulation" }, "*");
                 }
               }}
             >
               <Play className="w-4 h-4 mr-2 fill-current" />
-              Run Guided Validation
+              Run Simulation
             </Button>
 
             <Button

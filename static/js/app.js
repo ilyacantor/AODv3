@@ -2528,6 +2528,17 @@
                     if (typeof TourManager !== 'undefined') {
                         TourManager.start();
                     }
+                } else if (event.data.action === 'startSimulation') {
+                    // Navigate to Farm tab and start the simulation tour
+                    const farmTab = document.querySelector('.header-nav-tab[data-tab="farm"]');
+                    if (farmTab) {
+                        farmTab.click();
+                        setTimeout(() => {
+                            if (typeof TourManager !== 'undefined') {
+                                TourManager.startSimulation();
+                            }
+                        }, 300);
+                    }
                 } else if (event.data.action === 'skipToSimulation') {
                     if (typeof TourManager !== 'undefined') {
                         TourManager.startSimulation();

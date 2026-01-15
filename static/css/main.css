@@ -674,9 +674,10 @@ main { padding: 2rem; }
 /* Tour Small Overlay */
 .tour-overlay-small {
     width: 300px;
-    top: auto;
-    left: 20px;
-    bottom: 20px;
+    top: 80px;
+    right: 20px;
+    left: auto;
+    bottom: auto;
     transform: none;
 }
 .tour-overlay-small .tour-header { padding: 0.5rem 0.75rem; }

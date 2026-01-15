@@ -259,6 +259,9 @@ VENDOR_TO_DOMAIN.update({
     "aws": "amazon.com",
     "amazon web services": "amazon.com",
     "cloudflare workers": "workers.dev",
+    # Jan 2026: Explicit canonical domain overrides per Farm contract
+    "zoom": "zoom.com",  # Farm uses zoom.com as canonical (not zoom.us)
+    "atlassian": "atlassian.com",  # Ensure atlassian.com is canonical
 })
 
 

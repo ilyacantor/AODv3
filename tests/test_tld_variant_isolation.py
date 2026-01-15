@@ -345,6 +345,36 @@ class TestDomainBaseNameMatching:
         assert "canonical_name" in AUTHORITATIVE_MATCH_METHODS
 
 
+class TestAliasCollapsing:
+    """Test alias collapsing aligns with Farm contract"""
+    
+    def test_zoom_collapses_to_zoom_com(self):
+        """zoom.us should collapse to zoom.com (Farm contract)"""
+        from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE, normalize_to_canonical_vendor_domain
+        from src.aod.pipeline.vendor_inference import VENDOR_TO_DOMAIN
+        
+        # zoom.us should be in alias set (collapses to zoom.com)
+        assert "zoom.us" in ALIAS_DOMAINS_TO_COLLAPSE
+        # zoom.com should NOT be in alias set (it's the canonical)
+        assert "zoom.com" not in ALIAS_DOMAINS_TO_COLLAPSE
+        # VENDOR_TO_DOMAIN should map zoom to zoom.com
+        assert VENDOR_TO_DOMAIN.get("zoom") == "zoom.com"
+    
+    def test_atlassian_aliases_collapse(self):
+        """atlassian.net, trello.com, bitbucket.org should collapse to atlassian.com"""
+        from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+        from src.aod.pipeline.vendor_inference import VENDOR_TO_DOMAIN
+        
+        # All Atlassian aliases should be in alias set
+        assert "atlassian.net" in ALIAS_DOMAINS_TO_COLLAPSE
+        assert "trello.com" in ALIAS_DOMAINS_TO_COLLAPSE
+        assert "bitbucket.org" in ALIAS_DOMAINS_TO_COLLAPSE
+        # atlassian.com is canonical - should NOT be in alias set
+        assert "atlassian.com" not in ALIAS_DOMAINS_TO_COLLAPSE
+        # VENDOR_TO_DOMAIN should map atlassian to atlassian.com
+        assert VENDOR_TO_DOMAIN.get("atlassian") == "atlassian.com"
+
+
 class TestMatchQualityClassification:
     """Test match quality classification for governance decisions"""
     

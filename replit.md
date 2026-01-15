@@ -17,7 +17,13 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 
 **TLD Variant Identity Fix:** Entity identity is strictly defined by the registered domain (eTLD+1). Cross-TLD matches are treated as `RelatedDomainVariant` metadata, not identity merges, preventing false positives from TLD variant merging. Domain promotion is blocked for heuristic match methods.
 
-**Governance Correlation Fixes:** Enhancements include registered domain fallback for matches, preservation of discovery provenance, domain base name matching for IdP/CMDB records lacking domains, and canonical domain indexing for correlation.
+**Governance Correlation Fixes (Jan 2026):** Enhancements include:
+-   **Registered Domain Fallback**: When exact domain lookup fails, tries eTLD+1 fallback for authoritative matching.
+-   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery".
+-   **Domain Base Name Matching**: Matches entity domain base (e.g., "slack" from "slack.com") against record names when canonical_name match fails.
+-   **Canonical Domain Indexing**: Farm's `canonical_domain` field is now indexed for CMDB/IdP correlation.
+-   **Alias Collapsing Alignment**: Fixed direction (zoom.us → zoom.com). Added atlassian.net, trello.com, bitbucket.org → atlassian.com.
+-   **Test Coverage**: 38 tests validating TLD isolation, match methods, correlation fixes, and alias collapsing.
 
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 

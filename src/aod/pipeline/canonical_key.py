@@ -84,13 +84,16 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     # Stage 4: gstatic.com is a distinct CDN service - NOT collapsed (produces stable key)
     # "gstatic.com",  # REMOVED - produces stable standalone key
     # NOTE: googleusercontent.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
-    # Zoom family - collapse to zoom.us
-    "zoom.com",
+    # Zoom family - collapse to zoom.com (Farm contract: zoom.com is canonical)
+    "zoom.us",  # Jan 2026: Fixed direction - zoom.us collapses TO zoom.com
     "zoom-video.com",
     "zoom-meetings.net",
     "zoomapp.io",
     # Atlassian aliases - collapse to atlassian.com
-    # Note: atlassian.net is a legitimate primary domain (Jira Cloud), NOT collapsed
+    # Jan 2026: Added missing aliases per Farm contract
+    "atlassian.net",  # Jira Cloud - Farm collapses to atlassian.com
+    "trello.com",     # Farm collapses to atlassian.com
+    "bitbucket.org",  # Farm collapses to atlassian.com
     "jira.com",
     "confluence.com",
     "opsgenie.com",

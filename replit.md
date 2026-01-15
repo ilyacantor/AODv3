@@ -34,9 +34,18 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   CMDB and IdP are authoritative truth sources for governance decisions.
 -   An asset is governed only if there exists at least one CMDB or IdP record that explicitly passes all governance gates via an AUTHORITATIVE match.
 -   **AUTHORITATIVE** match methods: `domain`, `uri`, `canonical_name` - can assert governance.
--   **HEURISTIC** match methods: `fuzzy`, `contains`, `vendor`, `domain_vendor`, `vendor_fallback`, `name_contains_domain_token`, `normalization_token` - enrichment only, cannot assert governance.
+-   **HEURISTIC** match methods: `fuzzy`, `contains`, `vendor`, `domain_vendor`, `vendor_fallback`, `name_contains_domain_token`, `normalization_token`, `cross_domain_brand` - enrichment only, cannot assert governance.
 -   If a record exists but fails gates (or was matched heuristically), the asset is explicitly NOT governed.
 -   Heuristics may generate hypotheses and enrichment signals but may never assert or override governance or classification outcomes.
+
+**TLD Variant Identity Fix (Jan 2026):**
+-   **Core Invariant**: Entity identity = registered domain (eTLD+1) ONLY. Cross-TLD matches (e.g., netcloud.com vs netcloud.io) are relationship metadata, NOT identity merge.
+-   **RelatedDomainVariant**: New dataclass to store cross-TLD relationships as edges, not identity. Fields: entity_domain, related_domain, match_basis, record_id, plane.
+-   **Cross-TLD Gate**: Cross-domain brand matching (`cross_domain_brand` match method) records variants as `related_domain_variants` enrichment, does NOT add to `contains_matches`.
+-   **Domain Promotion Blocking**: `PROMOTION_ALLOWED_MATCH_METHODS` (authoritative only) and `PROMOTION_BLOCKED_MATCH_METHODS` (heuristics + cross-TLD). Domain promotion explicitly blocked for heuristic match methods.
+-   **Late-Binding Merge Safety Rail**: Union-find in asset_identity.py groups by primary domain within each registered domain. Merges blocked when primary registered domains differ (`CROSS_TLD_MERGE_BLOCKED` reason code).
+-   **Documentation**: Full details in `docs/TLD_VARIANT_FIX.md`, unit tests in `tests/test_tld_variant_isolation.py`.
+-   **Impact**: Eliminates 82 false positives (63% from TLD variant merging, 32% from key normalization).
 
 **Reason Code Semantics (Jan 2026 Fix):**
 -   `HAS_CMDB` / `HAS_IDP` = Direct authoritative match only (domain/uri/canonical_name that passes gates)

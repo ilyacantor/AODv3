@@ -9,11 +9,24 @@ from ..models.output_contracts import (
     ActivityEvidence, ProvisioningStatus, MatchDebugInfo, LensMatchDebug
 )
 from ..models.input_contracts import IdPObject, CMDBConfigItem, CloudResource, Contract, Transaction, Observation
-from .correlate_entities import CorrelationResult, MatchStatus
+from .correlate_entities import (
+    CorrelationResult, MatchStatus, 
+    AUTHORITATIVE_MATCH_METHODS, HEURISTIC_MATCH_METHODS, CROSS_TLD_MATCH_METHODS
+)
 from .deterministic_ids import deterministic_uuid
 from .normalize_observations import CandidateEntity, normalize_domain
 from .vendor_inference import DOMAIN_TO_VENDOR, extract_registered_domain
 from .domain_cache import extract_domain
+
+# Match methods that allow domain promotion into primary identity (Jan 2026)
+# Only authoritative matches from correlated planes can add domains to identifiers
+PROMOTION_ALLOWED_MATCH_METHODS = {
+    "domain", "uri", "canonical_name",  # Authoritative from correlate_entities
+    "IDP_APP_MATCH", "CMDB_CI_MATCH", "FINANCE_CONTRACT_MATCH", "EXPLICIT_ALIAS_MAP"
+}
+
+# Match methods that BLOCK domain promotion (enrichment only)
+PROMOTION_BLOCKED_MATCH_METHODS = HEURISTIC_MATCH_METHODS | CROSS_TLD_MATCH_METHODS
 
 
 def build_idp_activity_map(idp_records: dict) -> dict[str, datetime]:
@@ -2186,10 +2199,26 @@ def _build_admitted_asset(
     # This is record.domain (primary field), NOT external_ref URLs
     # Only promotes if entity has CMDB match and record.domain passes validation
     # evidence.cmdb_admitted = True means CMDB match passed all governance gates
+    # TLD VARIANT FIX: Also require AUTHORITATIVE match_method (not heuristic)
+    cmdb_match_method = correlation.cmdb.match_method if correlation.cmdb else None
+    cmdb_is_authoritative = cmdb_match_method in PROMOTION_ALLOWED_MATCH_METHODS
+    cmdb_is_heuristic = cmdb_match_method in PROMOTION_BLOCKED_MATCH_METHODS
+    
     cmdb_primary, cmdb_valid = extract_cmdb_primary_domain(
         correlation, 
-        is_authoritative_match=evidence.cmdb_admitted
+        is_authoritative_match=evidence.cmdb_admitted and cmdb_is_authoritative
     )
+    
+    # CRITICAL: Block domain promotion for heuristic match methods
+    # This prevents cross-TLD brand matches from adding wrong domains to identity
+    if cmdb_primary and cmdb_is_heuristic:
+        logger.info(
+            f"DOMAIN_PROMOTION_BLOCKED entity={entity.original_name} "
+            f"blocked_domain={cmdb_primary} match_method={cmdb_match_method} "
+            f"reason=HEURISTIC_MATCH_NOT_AUTHORITATIVE"
+        )
+        cmdb_primary = None  # Block the promotion
+    
     if cmdb_primary and cmdb_valid and cmdb_primary not in seen_domains:
         domain_list.append(cmdb_primary)
         seen_domains.add(cmdb_primary)
@@ -2197,7 +2226,7 @@ def _build_admitted_asset(
         logger.debug(
             f"CMDB_DOMAIN_PROMOTED entity={entity.original_name} "
             f"cmdb_domain={cmdb_primary} discovery_domain={effective_domain} "
-            f"authoritative={evidence.cmdb_admitted}"
+            f"authoritative={evidence.cmdb_admitted} match_method={cmdb_match_method}"
         )
     
     # Extract plane domains for reference/enrichment only (NOT for identifiers.domains)

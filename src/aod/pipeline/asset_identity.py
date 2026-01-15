@@ -7,10 +7,17 @@ without mutating entity_id mid-pipeline.
 INVARIANT: Entity IDs remain stable throughout the pipeline.
 Transformation is applied only at the persistence layer (late-binding).
 
+TLD VARIANT FIX (Jan 2026):
+Identity is based on registered domain (eTLD+1) ONLY. Cross-TLD brand relationships
+(e.g., netcloud.com vs netcloud.io) are stored as metadata edges, NOT identity merge.
+Late-binding merge is BLOCKED when primary registered domains differ unless explicit
+override flag is present.
+
 Design:
 1. Group assets by registered domain (merge_key)
 2. Merge assets with same merge_key using field-by-field rules
 3. Preserve winner-first ordering for determinism
+4. BLOCK cross-TLD merges (different registered domains)
 """
 
 import logging
@@ -30,6 +37,9 @@ from ..constants import INFRASTRUCTURE_DOMAINS
 from .vendor_inference import extract_registered_domain
 
 logger = logging.getLogger(__name__)
+
+# Reason code for blocked cross-TLD merges
+CROSS_TLD_MERGE_BLOCKED = "CROSS_TLD_MERGE_BLOCKED"
 
 
 SSO_PROVIDER_DOMAINS: set[str] = {
@@ -126,6 +136,23 @@ def late_bind_and_merge_assets(
     return merged
 
 
+def _get_primary_registered_domain(asset: Asset) -> Optional[str]:
+    """
+    Get the PRIMARY registered domain for an asset (first domain in identifiers.domains).
+    
+    This is the asset's identity anchor. Cross-TLD merges between assets with
+    different primary registered domains are BLOCKED to prevent TLD variant collapse.
+    """
+    if not asset.identifiers or not asset.identifiers.domains:
+        return None
+    for domain in asset.identifiers.domains:
+        if domain:
+            registered = extract_registered_domain(domain)
+            if registered:
+                return registered
+    return None
+
+
 def _consolidate_by_all_registered_domains(
     assets: list[Asset],
     log: logging.Logger
@@ -137,9 +164,14 @@ def _consolidate_by_all_registered_domains(
     any domain are merged together. Ensures each registered domain appears
     in exactly one final asset.
     
+    TLD VARIANT FIX (Jan 2026):
+    BLOCK merges when PRIMARY registered domains differ across assets.
+    This prevents TLD variant collapse (e.g., netcloud.com + netcloud.io).
+    
     Algorithm:
     1. Build mapping: registered_domain -> list of asset indices
     2. Use union-find to group assets sharing any domain
+       EXCEPT: Block union if primary registered domains differ
     3. Merge each connected component into one asset
     
     Returns:
@@ -150,6 +182,9 @@ def _consolidate_by_all_registered_domains(
     
     # Build domain -> asset indices mapping
     domain_to_assets: dict[str, list[int]] = defaultdict(list)
+    
+    # Pre-compute primary registered domain for each asset (for cross-TLD check)
+    primary_domains: list[Optional[str]] = [_get_primary_registered_domain(a) for a in assets]
     
     for idx, asset in enumerate(assets):
         if not asset.identifiers or not asset.identifiers.domains:
@@ -173,12 +208,43 @@ def _consolidate_by_all_registered_domains(
         if px != py:
             parent[px] = py
     
+    # Track blocked merges for logging
+    blocked_merges: list[tuple[str, str, str]] = []  # (primary1, primary2, shared_domain)
+    
     # Union assets that share any registered domain
+    # EXCEPT: Block if PRIMARY registered domains differ (cross-TLD safety)
+    # FIX: Group by primary domain within each registered domain, then union within each subgroup
     for domain, asset_indices in domain_to_assets.items():
         if len(asset_indices) > 1:
-            first = asset_indices[0]
-            for other in asset_indices[1:]:
-                union(first, other)
+            # Group assets by their primary domain
+            primary_groups: dict[Optional[str], list[int]] = defaultdict(list)
+            for idx in asset_indices:
+                primary_groups[primary_domains[idx]].append(idx)
+            
+            # Union assets within each primary-domain subgroup only
+            for primary, indices_with_same_primary in primary_groups.items():
+                if len(indices_with_same_primary) > 1:
+                    first = indices_with_same_primary[0]
+                    for other in indices_with_same_primary[1:]:
+                        union(first, other)
+            
+            # Log blocked cross-TLD merges (different primaries that share this domain)
+            primary_list = [p for p in primary_groups.keys() if p is not None]
+            if len(primary_list) > 1:
+                for i, p1 in enumerate(primary_list):
+                    for p2 in primary_list[i+1:]:
+                        blocked_merges.append((p1, p2, domain))
+                        log.info(
+                            f"{CROSS_TLD_MERGE_BLOCKED} primary1={p1} "
+                            f"primary2={p2} shared_secondary={domain} "
+                            f"reason=PRIMARY_DOMAIN_MISMATCH"
+                        )
+    
+    if blocked_merges:
+        log.info("asset_identity.cross_tld_merges_blocked", extra={
+            "blocked_count": len(blocked_merges),
+            "examples": blocked_merges[:5]
+        })
     
     # Group assets by their root parent
     components: dict[int, list[Asset]] = defaultdict(list)

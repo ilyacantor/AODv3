@@ -173,8 +173,27 @@ AUTHORITATIVE_MATCH_METHODS = {"domain", "uri", "canonical_name"}
 # Match methods that are heuristic (cannot assert governance)
 HEURISTIC_MATCH_METHODS = {
     "fuzzy", "contains", "vendor", "domain_vendor", "vendor_fallback",
-    "name_contains_domain_token", "normalization_token"
+    "name_contains_domain_token", "normalization_token", "cross_domain_brand"
 }
+
+# Match methods that indicate cross-TLD correlation (must not trigger identity merge)
+CROSS_TLD_MATCH_METHODS = {"cross_domain_brand"}
+
+
+@dataclass
+class RelatedDomainVariant:
+    """
+    Relationship metadata for cross-TLD domain variants.
+    
+    When brand-token matching finds a related domain (e.g., netcloud.com matches
+    record with netcloud.io), this stores the relationship WITHOUT triggering
+    identity merge. This is enrichment metadata only.
+    """
+    entity_domain: str  # The entity's registered domain (e.g., netcloud.com)
+    related_domain: str  # The related domain from the record (e.g., netcloud.io)
+    match_basis: str  # How they matched: "first_token", "collapsed_brand"
+    record_id: str  # The matched record ID
+    plane: str  # Which plane: "idp", "cmdb", "cloud", "finance"
 
 
 @dataclass
@@ -187,6 +206,8 @@ class PlaneMatch:
     match_key: Optional[str] = None
     ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
     disambiguation_detail: Optional[str] = None
+    # Cross-TLD relationships (enrichment only, never identity merge)
+    related_domain_variants: list[RelatedDomainVariant] = field(default_factory=list)
     
     @property
     def match_quality(self) -> MatchQuality:
@@ -590,7 +611,8 @@ def correlate_to_plane(
     use_domain: bool = True,
     use_uri: bool = False,
     use_vendor: bool = False,
-    precomputed: Optional[PrecomputedEntityData] = None
+    precomputed: Optional[PrecomputedEntityData] = None,
+    plane_name: str = "unknown"
 ) -> PlaneMatch:
     """
     Correlate an entity to a plane using multi-pass matching with disambiguation.
@@ -611,6 +633,7 @@ def correlate_to_plane(
         entity: The candidate entity to correlate
         plane_index: The index to search
         use_domain: Enable domain-based matching
+        plane_name: Name of the plane being correlated (idp, cmdb, cloud, finance)
         use_uri: Enable URI-based matching
         use_vendor: Enable domain-to-vendor lookup for matching (useful for CMDB)
         precomputed: Pre-computed entity data to avoid repeated calculations
@@ -802,6 +825,9 @@ def correlate_to_plane(
         )
     
     contains_matches: list[str] = []
+    # Track cross-TLD domain variants as relationship metadata ONLY (never identity merge)
+    cross_tld_variants: list[RelatedDomainVariant] = []
+    
     if hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
         canonical_words = {w for w in re.split(r'[\s\-_./]+', canonical) if len(w) >= 4}
         candidate_ids = set()
@@ -811,10 +837,6 @@ def correlate_to_plane(
             record = plane_index.records.get(candidate_id)
             if record:
                 record_name = normalize_string(_get_record_name(record))
-                # Also check record.domain for domain-based matches
-                # This allows entity "FlexPoint" to match IdP with domain "flexpoint.cloud"
-                # even when the record's name is generic like "Corporate SSO"
-                # Check both the domain attribute AND raw_data['domain'] as fallback
                 record_domain = getattr(record, 'domain', None)
                 if not record_domain:
                     raw_data = getattr(record, 'raw_data', None)
@@ -825,40 +847,55 @@ def correlate_to_plane(
                 name_match = _is_valid_contains_match(canonical, record_name)
                 domain_match = record_domain_normalized and canonical in record_domain_normalized
                 
-                # Jan 2026 Fix for KEY_NORMALIZATION_MISMATCH:
-                # When entity has a domain and record has a different domain, check if they share the same brand.
-                # Two matching strategies to cover different cases:
-                # 1. First-token match: "flowbase-internal.com" vs "flowbase.ai" (first token = "flowbase")
-                # 2. Collapsed match: "service-now.com" vs "servicenow.com" (collapse hyphens = "servicenow")
-                domain_base_match = False
+                # TLD VARIANT FIX (Jan 2026):
+                # Cross-domain brand matching (e.g., netcloud.com vs netcloud.io) must NOT
+                # trigger identity merge. Record as relationship metadata only.
+                # This prevents KEY_NORMALIZATION_MISMATCH from entity collapse.
+                cross_tld_match_basis = None
                 if not name_match and not domain_match and record_domain:
                     entity_domain = getattr(entity, 'domain', None) or ""
                     if entity_domain and '.' in entity_domain and '.' in record_domain:
-                        # Extract first label (before first dot)
-                        entity_label = entity_domain.lower().split('.')[0]
-                        record_label = record_domain.lower().split('.')[0]
+                        from .vendor_inference import extract_registered_domain
+                        entity_registered = extract_registered_domain(entity_domain)
+                        record_registered = extract_registered_domain(record_domain)
                         
-                        # Strategy 1: First token match (handles env suffixes like "-internal", "-prod")
-                        # "flowbase-internal" → "flowbase", "flowbase" → "flowbase"
-                        entity_first = re.split(r'[\-_]+', entity_label)[0]
-                        record_first = re.split(r'[\-_]+', record_label)[0]
-                        
-                        # Strategy 2: Collapsed match (handles hyphenated brands like "service-now")
-                        # "service-now" → "servicenow", "servicenow" → "servicenow"
-                        entity_collapsed = re.sub(r'[\-_]', '', entity_label)
-                        record_collapsed = re.sub(r'[\-_]', '', record_label)
-                        
-                        # Match if either strategy succeeds (with 4-char minimum)
-                        first_match = len(entity_first) >= 4 and entity_first == record_first
-                        collapsed_match = len(entity_collapsed) >= 4 and entity_collapsed == record_collapsed
-                        
-                        if first_match or collapsed_match:
-                            domain_base_match = True
+                        # CRITICAL: If registered domains differ, this is a cross-TLD match
+                        # Store as relationship metadata, NOT as identity match
+                        if entity_registered and record_registered and entity_registered != record_registered:
+                            entity_label = entity_domain.lower().split('.')[0]
+                            record_label = record_domain.lower().split('.')[0]
+                            
+                            entity_first = re.split(r'[\-_]+', entity_label)[0]
+                            record_first = re.split(r'[\-_]+', record_label)[0]
+                            entity_collapsed = re.sub(r'[\-_]', '', entity_label)
+                            record_collapsed = re.sub(r'[\-_]', '', record_label)
+                            
+                            first_match = len(entity_first) >= 4 and entity_first == record_first
+                            collapsed_match = len(entity_collapsed) >= 4 and entity_collapsed == record_collapsed
+                            
+                            if first_match:
+                                cross_tld_match_basis = "first_token"
+                            elif collapsed_match:
+                                cross_tld_match_basis = "collapsed_brand"
+                            
+                            if cross_tld_match_basis:
+                                # Record as relationship, NOT as identity match
+                                cross_tld_variants.append(RelatedDomainVariant(
+                                    entity_domain=entity_registered,
+                                    related_domain=record_registered,
+                                    match_basis=cross_tld_match_basis,
+                                    record_id=candidate_id,
+                                    plane=plane_name
+                                ))
+                                logger.debug(
+                                    f"CROSS_TLD_VARIANT_RECORDED entity={entity_registered} "
+                                    f"related={record_registered} basis={cross_tld_match_basis} "
+                                    f"record_id={candidate_id} (NOT identity merge)"
+                                )
+                                # DO NOT add to contains_matches - prevents identity merge
+                                continue
                 
                 # For finance transactions, match via domain base token alignment
-                # Requirements: ≥6 chars + domain base must match FIRST token of vendor name
-                # This allows legitimate brands (netflix, github) while preventing false positives
-                # where the brand word appears later in unrelated vendor names (e.g., "Horizon Payroll")
                 GENERIC_TOKENS = frozenset({
                     'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
                     'solutions', 'platform', 'systems', 'tech', 'technology', 'global',
@@ -866,37 +903,32 @@ def correlate_to_plane(
                     'consulting', 'analytics', 'media', 'network', 'security', 'storage',
                     'hosting', 'managed', 'professional', 'integration', 'connect'
                 })
-                # Use module-level MIN_TOKEN_LENGTH_FOR_MATCH constant
-                # Common vendor name prefixes to skip when finding primary brand
                 VENDOR_PREFIXES = frozenset({'the', 'a', 'an', 'team', 'inc', 'corp', 'llc', 'ltd', 'co', 'by'})
                 token_match = False
                 if not name_match and not domain_match:
                     from ..models.input_contracts import Transaction, Contract
                     if isinstance(record, (Transaction, Contract)):
-                        # Extract and normalize domain base token (collapse hyphens/underscores)
                         entity_domain = getattr(entity, 'domain', None) or ""
                         domain_base_token = None
                         if entity_domain and '.' in entity_domain:
                             domain_parts = entity_domain.lower().split('.')
                             if len(domain_parts) >= 2:
-                                # Normalize: "service-now" → "servicenow"
                                 domain_base_token = re.sub(r'[\-_]', '', domain_parts[0])
                                 if domain_base_token in GENERIC_TOKENS or len(domain_base_token) < MIN_TOKEN_LENGTH_FOR_MATCH:
                                     domain_base_token = None
                         
                         if domain_base_token:
-                            # Get vendor tokens (normalized)
                             vendor_tokens = [re.sub(r'[\-_]', '', w.lower()) for w in re.split(r'[\s\-_./]+', record_name) if len(w) >= 2]
-                            # Find primary brand token (first non-prefix token)
                             primary_brand_token = None
                             for vt in vendor_tokens:
                                 if vt not in VENDOR_PREFIXES and len(vt) >= 3:
                                     primary_brand_token = vt
                                     break
-                            # Match if domain base equals the primary brand token
                             token_match = primary_brand_token and domain_base_token == primary_brand_token
                 
-                if name_match or domain_match or domain_base_match or token_match:
+                # Only add to contains_matches for SAME-DOMAIN matches (name or domain match)
+                # NOT for cross-TLD brand matches (those are relationship metadata only)
+                if name_match or domain_match or token_match:
                     if candidate_id not in contains_matches:
                         contains_matches.append(candidate_id)
     else:
@@ -913,7 +945,8 @@ def correlate_to_plane(
             matched_records=[plane_index.records.get(mid) for mid in contains_matches],
             match_method="contains",
             match_key=canonical,
-            ambiguity_code=AmbiguityCode.NONE
+            ambiguity_code=AmbiguityCode.NONE,
+            related_domain_variants=cross_tld_variants
         )
     elif len(contains_matches) > 1:
         records = [plane_index.records.get(mid) for mid in contains_matches]
@@ -927,7 +960,8 @@ def correlate_to_plane(
                 match_method="contains",
                 match_key=canonical,
                 ambiguity_code=code,
-                disambiguation_detail=detail
+                disambiguation_detail=detail,
+                related_domain_variants=cross_tld_variants
             )
         
         return PlaneMatch(
@@ -937,7 +971,15 @@ def correlate_to_plane(
             match_method="contains",
             match_key=canonical,
             ambiguity_code=code,
-            disambiguation_detail=detail
+            disambiguation_detail=detail,
+            related_domain_variants=cross_tld_variants
+        )
+    
+    # If only cross-TLD variants found (no same-domain matches), return UNMATCHED with variants
+    if cross_tld_variants:
+        return PlaneMatch(
+            status=MatchStatus.UNMATCHED,
+            related_domain_variants=cross_tld_variants
         )
     
     if entity.domain and plane_index.by_canonical_name:
@@ -1377,19 +1419,19 @@ def correlate_entities_to_planes(
         entity_precomputed = precomputed[entity.entity_id]
         
         t_start = time.perf_counter()
-        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True, precomputed=entity_precomputed)
+        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True, precomputed=entity_precomputed, plane_name="idp")
         t_idp += time.perf_counter() - t_start
         
         t_start = time.perf_counter()
-        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True, precomputed=entity_precomputed)
+        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True, precomputed=entity_precomputed, plane_name="cmdb")
         t_cmdb += time.perf_counter() - t_start
         
         t_start = time.perf_counter()
-        result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True, precomputed=entity_precomputed)
+        result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True, precomputed=entity_precomputed, plane_name="cloud")
         t_cloud += time.perf_counter() - t_start
         
         t_start = time.perf_counter()
-        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False, precomputed=entity_precomputed)
+        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False, precomputed=entity_precomputed, plane_name="finance")
         result.finance = _expand_finance_to_include_all_vendor_records(result.finance, indexes.finance)
         t_finance += time.perf_counter() - t_start
         

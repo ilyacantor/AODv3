@@ -469,10 +469,15 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
 # are now loaded from policy config via get_current_config()
 
 
-def _get_banned_domains() -> set[str]:
-    """Get banned domains from policy config."""
+def _get_excluded_domains() -> set[str]:
+    """Get all excluded domains from policy config (infrastructure + custom + corporate)."""
     from ..core.policy import get_current_config
-    return set(get_current_config().exclusion_lists.banned_domains)
+    return get_current_config().get_all_excluded_domains()
+
+
+def _get_banned_domains() -> set[str]:
+    """Get banned domains from policy config (legacy - now uses get_all_excluded_domains)."""
+    return _get_excluded_domains()
 
 
 def _get_corporate_root_domains() -> set[str]:

@@ -62,7 +62,13 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** All admission and classification policy logic is externalized to `config/policy_master.json`. Operators can control policy switches and thresholds via the web UI at `/switchboard`. Changes automatically notify Farm via webhook when `auto_notify_on_change` is enabled.
--   **Policy Impact Panel (Jan 2026):** The Policy Switchboard now displays a Policy Impact panel showing which domains are blocked by each policy rule and their counts. Categories include: Banned Domains, Infrastructure, Corporate, Custom Exclusions, Admission Gates, and Other. Operators can click categories to see detailed lists. API: `GET /api/v1/policy/impact?run_id=optional`.
+-   **Policy Impact Panel (Jan 2026):** The Policy Switchboard now displays a Policy Impact panel showing which domains are blocked by each policy rule and their counts. Categories include: CDN/Static Hosts, Vendor Portals, Dev/Build Infra, Custom, Admission Gates, and Other. Operators can click categories to see detailed lists. API: `GET /api/v1/policy/impact?run_id=optional`.
+-   **Semantic Infrastructure Domain Handling (Jan 2026):**
+    - `shared_infrastructure_domains`: CDNs, static hosts, internet plumbing (cloudfront.net, gstatic.com, akamai.net) - observe only
+    - `vendor_root_portals`: Vendor landing pages (office.com, microsoft.com, google.com) - policy choice to exclude
+    - `dev_build_infrastructure`: Build/dev tools (npm, github, docker) - typically excluded
+    - Business SaaS (TikTok, Slack, Zoom, ServiceNow) NOT excluded by default - can be legitimate shadow IT
+    - Mode options: "exclude" (default), "observe_only", "include"
 -   **Policy Categories:**
     - Activity Windows (discovery, zombie detection, default)
     - Finance Thresholds (minimum spend, gap thresholds)
@@ -71,7 +77,9 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
     - Fuzzy Matching (edit distance, ratio, name length)
     - Vendor Inference (max confidence)
     - Query Limits (samples, rejection, query limits)
-    - Exclusion Lists (custom, banned, infrastructure, corporate domains)
+    - Infrastructure Domain Handling (shared infra, vendor portals, dev/build infra)
+    - Custom Exclusions (operator-defined exclusion list)
+    - Corporate Root Domains (organization's own domains)
     - Farm Sync (webhook URL, auto-notify, sync interval)
 -   **Admission Gates:** Finance alone is insufficient for asset admission; it requires corroboration with governance or sufficient discovery.
 -   **Domain Normalization:** Standardizes domain names to eTLD+1 and collapses alias domains, including robust extraction from URLs.

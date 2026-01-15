@@ -1,0 +1,160 @@
+This is worth re-anchoring, because it’s **foundational**, not a cleanup detail.
+
+---
+
+## Why infrastructure domains are excluded (the *real* reason)
+
+Infrastructure domains are excluded **not because they’re unimportant**, but because **they are not enterprise-owned assets** in the sense AOD is trying to model.
+
+There are three concrete reasons:
+
+### 1. Shared multi-tenant infrastructure ≠ enterprise asset
+
+Domains like:
+
+* `cloudfront.net`
+* `gstatic.com`
+* `awsstatic.com`
+
+are **shared delivery planes** used by *thousands of unrelated applications*.
+
+If you see traffic to `cloudfront.net`, that does **not** mean:
+
+> “The enterprise uses CloudFront as an application.”
+
+It means:
+
+> “Some application loaded a static file.”
+
+Treating these as assets causes:
+
+* massive catalog explosion
+* meaningless shadow/zombie classifications
+* governance signals that are impossible to interpret
+
+So exclusion is a **modeling choice**, not a shortcut.
+
+---
+
+### 2. Corporate roots and portals are not deployable assets
+
+Domains like:
+
+* `microsoft.com`
+* `office.com`
+
+are:
+
+* vendor homepages
+* generic login portals
+* not tenant-specific
+* not deployable, owned, or configurable by the enterprise
+
+They act as **front doors**, not systems.
+
+Cataloging them produces:
+
+* false governance certainty
+* shadow noise
+* broken asset counts
+
+---
+
+### 3. These domains destroy determinism if included
+
+If infrastructure domains are allowed to behave like assets:
+
+* They appear everywhere
+* They always look “active”
+* They always look “governed” via vendor propagation
+* They swamp meaningful signals
+
+Your invariant:
+
+> **Classification must be deterministic**
+
+is violated if these are included without special handling.
+
+---
+
+## Should this be policy-driven?
+
+**Yes. Unequivocally.**
+
+Excluding infrastructure is not a technical rule — it is **product intent**.
+
+Therefore:
+
+* ❌ Hard-coded bans are wrong
+
+* ❌ Silent drops are wrong
+
+* ❌ “Magic lists” are wrong
+
+* ✅ Explicit policy
+
+* ✅ Explainable behavior
+
+* ✅ Assessable alignment with Farm
+
+---
+
+## How it should exist in policy (semantically correct)
+
+Not “banned domains.”
+
+Instead:
+
+### Policy concept: *Infrastructure Domain Handling*
+
+```json
+"infrastructure_domain_handling": {
+  "mode": "exclude", 
+  "shared_infrastructure_domains": [
+    "cloudfront.net",
+    "gstatic.com",
+    "awsstatic.com"
+  ],
+  "vendor_root_domains": [
+    "microsoft.com",
+    "office.com"
+  ],
+  "classification_behavior": "exclude"
+}
+```
+
+Possible modes:
+
+* `exclude` → never catalog, never classify
+* `observe_only` → visible but never governed, never zombie/shadow
+* `shadow` → allowed but always shadow
+
+This makes the intent explicit.
+
+---
+
+## Why this matters for Farm reconciliation
+
+Right now:
+
+* Farm expects these as shadows
+* AOD excludes them silently
+* Assessment flags “missed shadow”
+
+That’s not a bug — it’s **misaligned policy**.
+
+Once this is in the switchboard:
+
+* Farm must read the same policy
+* Expected blocks must exclude or reclassify them
+* The mismatch disappears honestly
+
+---
+
+## The clean mental model
+
+* **Infrastructure exclusion is a modeling choice**
+* Modeling choices are policy
+* Policy must be explicit, visible, and shared by Farm + AOD
+
+You were right to push this into the switchboard.

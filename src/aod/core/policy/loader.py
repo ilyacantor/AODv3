@@ -23,6 +23,9 @@ from .schema import (
     QueryLimitsConfig,
     ExclusionListsConfig,
     FarmSyncConfig,
+    InfrastructureDomainHandlingConfig,
+    CustomExclusionsConfig,
+    CorporateRootDomainsConfig,
 )
 
 
@@ -115,6 +118,28 @@ def _load_from_master(data: dict) -> PolicyConfig:
         default_query_limit=_extract_value(ql_section, "default_query_limit", 1000),
     )
     
+    # New infrastructure domain handling (Jan 2026)
+    idh_section = data.get("infrastructure_domain_handling", {})
+    infrastructure_domain_handling = InfrastructureDomainHandlingConfig(
+        mode=_extract_value(idh_section, "mode", "exclude"),
+        shared_infrastructure_domains=_extract_value(idh_section, "shared_infrastructure_domains", []),
+        vendor_root_portals=_extract_value(idh_section, "vendor_root_portals", []),
+        dev_build_infrastructure=_extract_value(idh_section, "dev_build_infrastructure", []),
+    )
+    
+    # New custom exclusions (Jan 2026)
+    ce_section = data.get("custom_exclusions", {})
+    custom_exclusions_config = CustomExclusionsConfig(
+        domains=_extract_value(ce_section, "domains", []),
+    )
+    
+    # New corporate root domains (Jan 2026)
+    crd_section = data.get("corporate_root_domains", {})
+    corporate_root_domains_config = CorporateRootDomainsConfig(
+        domains=_extract_value(crd_section, "domains", []),
+    )
+    
+    # Legacy exclusion_lists for backward compatibility
     el_section = data.get("exclusion_lists", {})
     exclusion_lists = ExclusionListsConfig(
         custom_exclusions=_extract_value(el_section, "custom_exclusions", []),
@@ -146,10 +171,24 @@ def _load_from_master(data: dict) -> PolicyConfig:
         late_binding_domain_merge=scope_toggles.late_binding_domain_merge,
     )
     
-    exclusions = exclusion_lists.custom_exclusions.copy()
+    # Combine all exclusions for legacy compatibility
+    exclusions = custom_exclusions_config.domains.copy() if custom_exclusions_config.domains else exclusion_lists.custom_exclusions.copy()
     
-    infra_domains = set(exclusion_lists.infrastructure_domains) if exclusion_lists.infrastructure_domains else _get_infrastructure_domains()
-    corp_domains = set(exclusion_lists.corporate_root_domains) if exclusion_lists.corporate_root_domains else CORPORATE_ROOT_DOMAINS.copy()
+    # Build infrastructure_domains set from new structure or legacy
+    if infrastructure_domain_handling.dev_build_infrastructure:
+        infra_domains = set(infrastructure_domain_handling.dev_build_infrastructure)
+    elif exclusion_lists.infrastructure_domains:
+        infra_domains = set(exclusion_lists.infrastructure_domains)
+    else:
+        infra_domains = _get_infrastructure_domains()
+    
+    # Build corporate_root_domains set from new structure or legacy
+    if corporate_root_domains_config.domains:
+        corp_domains = set(corporate_root_domains_config.domains)
+    elif exclusion_lists.corporate_root_domains:
+        corp_domains = set(exclusion_lists.corporate_root_domains)
+    else:
+        corp_domains = CORPORATE_ROOT_DOMAINS.copy()
     
     return PolicyConfig(
         activity_windows=activity_windows,
@@ -161,6 +200,9 @@ def _load_from_master(data: dict) -> PolicyConfig:
         query_limits=query_limits,
         exclusion_lists=exclusion_lists,
         farm_sync=farm_sync,
+        infrastructure_domain_handling=infrastructure_domain_handling,
+        custom_exclusions_config=custom_exclusions_config,
+        corporate_root_domains_config=corporate_root_domains_config,
         admission=admission,
         scope=scope,
         exclusions=exclusions,

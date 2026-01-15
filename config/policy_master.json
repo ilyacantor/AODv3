@@ -217,9 +217,76 @@
       "ui_label": "Default Query Limit"
     }
   },
-  "exclusion_lists": {
-    "description": "Domain exclusion lists for admission filtering",
-    "custom_exclusions": {
+  "infrastructure_domain_handling": {
+    "description": "Policy for handling infrastructure and vendor root domains. Infrastructure domains are shared multi-tenant services that are NOT enterprise-owned assets. Excluding them is a modeling choice, not a shortcut.",
+    "mode": {
+      "value": "exclude",
+      "type": "enum",
+      "options": ["exclude", "observe_only"],
+      "description": "How to handle infrastructure domains: 'exclude' = never catalog or classify, 'observe_only' = visible in catalog but never classified as shadow/zombie",
+      "ui_label": "Infrastructure Handling Mode"
+    },
+    "shared_infrastructure_domains": {
+      "value": [
+        "cloudfront.net",
+        "gstatic.com",
+        "awsstatic.com",
+        "akamai.net",
+        "akamaized.net",
+        "googleapis.com",
+        "googleusercontent.com",
+        "amazonaws.com",
+        "windows.net"
+      ],
+      "type": "string_array",
+      "description": "CDNs, static asset hosts, and internet plumbing. Shared delivery planes used by thousands of applications - traffic to these does NOT mean the enterprise uses them as an application.",
+      "ui_label": "Shared Infrastructure (CDNs/Static Hosts)"
+    },
+    "vendor_root_portals": {
+      "value": [
+        "microsoft.com",
+        "office.com",
+        "office365.com",
+        "microsoftonline.com",
+        "azure.com",
+        "apple.com",
+        "icloud.com",
+        "google.com"
+      ],
+      "type": "string_array",
+      "description": "Vendor homepages and generic login portals. Not tenant-specific, not deployable by the enterprise. These are front doors, not systems.",
+      "ui_label": "Vendor Root Portals"
+    },
+    "dev_build_infrastructure": {
+      "value": [
+        "redis.io",
+        "redis.com",
+        "postgresql.org",
+        "mysql.com",
+        "docker.com",
+        "kubernetes.io",
+        "nginx.org",
+        "apache.org",
+        "golang.org",
+        "python.org",
+        "nodejs.org",
+        "npmjs.com",
+        "jenkins.io",
+        "terraform.io",
+        "hashicorp.com",
+        "grafana.com",
+        "prometheus.io",
+        "elastic.co",
+        "mongodb.org"
+      ],
+      "type": "string_array",
+      "description": "Developer and build infrastructure. Open source project sites, package managers, and dev tools - not SaaS applications.",
+      "ui_label": "Dev/Build Infrastructure"
+    }
+  },
+  "custom_exclusions": {
+    "description": "Operator-managed domain exclusions for tenant-specific noise filtering",
+    "domains": {
       "value": [
         "platform.io",
         "hub.io",
@@ -243,62 +310,16 @@
         "world.net"
       ],
       "type": "string_array",
-      "description": "Custom domains to exclude from discovery (operator-managed)",
+      "description": "Custom domains to exclude from discovery. Operator-managed for tenant-specific noise reduction.",
       "ui_label": "Custom Exclusions"
-    },
-    "banned_domains": {
-      "value": [
-        "googleapis.com",
-        "gstatic.com",
-        "googleusercontent.com",
-        "microsoft.com",
-        "microsoftonline.com",
-        "windows.net",
-        "azure.com",
-        "office.com",
-        "office365.com",
-        "apple.com",
-        "icloud.com",
-        "akamai.net",
-        "akamaized.net",
-        "cloudfront.net",
-        "amazonaws.com",
-        "awsstatic.com"
-      ],
-      "type": "string_array",
-      "description": "System banned domains (tech infrastructure)",
-      "ui_label": "Banned Domains"
-    },
-    "infrastructure_domains": {
-      "value": [
-        "redis.io",
-        "redis.com",
-        "postgresql.org",
-        "mysql.com",
-        "docker.com",
-        "kubernetes.io",
-        "nginx.org",
-        "apache.org",
-        "golang.org",
-        "python.org",
-        "nodejs.org",
-        "npmjs.com",
-        "jenkins.io",
-        "terraform.io",
-        "hashicorp.com",
-        "grafana.com",
-        "prometheus.io",
-        "elastic.co",
-        "mongodb.org"
-      ],
-      "type": "string_array",
-      "description": "Infrastructure technology domains",
-      "ui_label": "Infrastructure Domains"
-    },
-    "corporate_root_domains": {
+    }
+  },
+  "corporate_root_domains": {
+    "description": "Customer corporate domains to exclude from shadow classification",
+    "domains": {
       "value": [],
       "type": "string_array",
-      "description": "Customer corporate marketing domains to exclude",
+      "description": "Customer's own corporate marketing and root domains. These should not appear as shadow IT.",
       "ui_label": "Corporate Root Domains"
     }
   },

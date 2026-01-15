@@ -104,17 +104,17 @@
             </div>
             <div id="impact-content" class="hidden">
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="banned_domains">
-                        <div class="text-2xl font-bold text-red-400" id="impact-banned">0</div>
-                        <div class="text-xs text-gray-500">Banned Domains</div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="shared_infrastructure">
+                        <div class="text-2xl font-bold text-red-400" id="impact-shared-infra">0</div>
+                        <div class="text-xs text-gray-500">CDN/Static Hosts</div>
                     </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="infrastructure_domains">
-                        <div class="text-2xl font-bold text-orange-400" id="impact-infra">0</div>
-                        <div class="text-xs text-gray-500">Infrastructure</div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="vendor_root_portals">
+                        <div class="text-2xl font-bold text-orange-400" id="impact-vendor-portals">0</div>
+                        <div class="text-xs text-gray-500">Vendor Portals</div>
                     </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="corporate_domains">
-                        <div class="text-2xl font-bold text-yellow-400" id="impact-corporate">0</div>
-                        <div class="text-xs text-gray-500">Corporate</div>
+                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="dev_build_infrastructure">
+                        <div class="text-2xl font-bold text-yellow-400" id="impact-dev-infra">0</div>
+                        <div class="text-xs text-gray-500">Dev/Build Infra</div>
                     </div>
                     <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="custom_exclusions">
                         <div class="text-2xl font-bold text-purple-400" id="impact-custom">0</div>
@@ -167,7 +167,9 @@
             'fuzzy_matching',
             'vendor_inference',
             'query_limits',
-            'exclusion_lists',
+            'infrastructure_domain_handling',
+            'custom_exclusions',
+            'corporate_root_domains',
             'farm_sync'
         ];
 
@@ -179,6 +181,9 @@
             fuzzy_matching: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>',
             vendor_inference: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>',
             query_limits: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>',
+            infrastructure_domain_handling: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>',
+            custom_exclusions: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>',
+            corporate_root_domains: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>',
             exclusion_lists: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>',
             farm_sync: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>'
         };
@@ -283,6 +288,25 @@
             `;
         }
 
+        function createEnumSelect(sectionKey, settingKey, setting) {
+            const id = `${sectionKey}_${settingKey}`;
+            const options = setting.options || [];
+            const optionsHtml = options.map(opt => 
+                `<option value="${opt}" ${setting.value === opt ? 'selected' : ''}>${opt}</option>`
+            ).join('');
+            return `
+                <div class="py-3 border-b border-slate-700/50 last:border-0">
+                    <label for="${id}" class="block text-gray-200 font-medium mb-1">${setting.ui_label || settingKey}</label>
+                    <p class="text-sm text-gray-500 mb-2">${setting.description || ''}</p>
+                    <select id="${id}" name="${id}"
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                        data-section="${sectionKey}" data-setting="${settingKey}" data-type="enum">
+                        ${optionsHtml}
+                    </select>
+                </div>
+            `;
+        }
+
         function createInputForSetting(sectionKey, settingKey, setting) {
             if (!setting || typeof setting !== 'object' || !('type' in setting)) return '';
             
@@ -296,6 +320,8 @@
                     return createTextInput(sectionKey, settingKey, setting);
                 case 'string_array':
                     return createTextArea(sectionKey, settingKey, setting);
+                case 'enum':
+                    return createEnumSelect(sectionKey, settingKey, setting);
                 default:
                     return '';
             }
@@ -314,7 +340,7 @@
                 const section = config[sectionKey];
                 if (!section || typeof section !== 'object') continue;
 
-                const isWideSection = sectionKey === 'exclusion_lists';
+                const isWideSection = sectionKey === 'exclusion_lists' || sectionKey === 'infrastructure_domain_handling';
                 const card = document.createElement('div');
                 card.className = `bg-slate-900 border border-slate-800 rounded-xl p-6 ${isWideSection ? 'md:col-span-2' : ''}`;
                 
@@ -373,6 +399,9 @@
                         break;
                     case 'string_array':
                         value = input.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                        break;
+                    case 'enum':
+                        value = input.value;
                         break;
                     default:
                         value = input.value;
@@ -506,14 +535,21 @@
                 
                 currentImpactData = data;
                 
-                // Update counts
+                // Update counts - use new semantic categories or fallback to legacy
                 const impact = data.policy_impact;
-                document.getElementById('impact-banned').textContent = impact.banned_domains.count;
-                document.getElementById('impact-infra').textContent = impact.infrastructure_domains.count;
-                document.getElementById('impact-corporate').textContent = impact.corporate_domains.count;
-                document.getElementById('impact-custom').textContent = impact.custom_exclusions.count;
-                document.getElementById('impact-gates').textContent = impact.admission_gates.count;
-                document.getElementById('impact-other').textContent = impact.other.count;
+                const sharedInfra = impact.shared_infrastructure || impact.banned_domains || {count: 0};
+                const vendorPortals = impact.vendor_root_portals || {count: 0};
+                const devInfra = impact.dev_build_infrastructure || impact.infrastructure_domains || {count: 0};
+                const customExcl = impact.custom_exclusions || {count: 0};
+                const gates = impact.admission_gates || {count: 0};
+                const other = impact.other || {count: 0};
+                
+                document.getElementById('impact-shared-infra').textContent = sharedInfra.count;
+                document.getElementById('impact-vendor-portals').textContent = vendorPortals.count;
+                document.getElementById('impact-dev-infra').textContent = devInfra.count;
+                document.getElementById('impact-custom').textContent = customExcl.count;
+                document.getElementById('impact-gates').textContent = gates.count;
+                document.getElementById('impact-other').textContent = other.count;
                 
                 // Update run info
                 document.getElementById('impact-run-info').textContent = 
@@ -538,6 +574,9 @@
             if (!categoryData || categoryData.domains.length === 0) return;
             
             const titles = {
+                shared_infrastructure: 'CDN/Static Hosts (Shared Infrastructure)',
+                vendor_root_portals: 'Vendor Root Portals',
+                dev_build_infrastructure: 'Dev/Build Infrastructure',
                 banned_domains: 'Banned Domains',
                 infrastructure_domains: 'Infrastructure Domains',
                 corporate_domains: 'Corporate Domains',

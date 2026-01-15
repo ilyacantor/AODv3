@@ -72,8 +72,48 @@ class QueryLimitsConfig:
 
 
 @dataclass
+class InfrastructureDomainHandlingConfig:
+    """
+    Policy for handling infrastructure and vendor root domains.
+    
+    Infrastructure domains are shared multi-tenant services that are NOT
+    enterprise-owned assets. Excluding them is a modeling choice, not a shortcut.
+    """
+    mode: str = "exclude"  # "exclude" or "observe_only"
+    shared_infrastructure_domains: list[str] = field(default_factory=list)
+    vendor_root_portals: list[str] = field(default_factory=list)
+    dev_build_infrastructure: list[str] = field(default_factory=list)
+    
+    def get_all_excluded_domains(self) -> set[str]:
+        """Get all domains that should be excluded based on current mode."""
+        if self.mode == "exclude":
+            return set(self.shared_infrastructure_domains + 
+                      self.vendor_root_portals + 
+                      self.dev_build_infrastructure)
+        return set()
+    
+    def get_all_infrastructure_domains(self) -> set[str]:
+        """Get all infrastructure domains regardless of mode."""
+        return set(self.shared_infrastructure_domains + 
+                  self.vendor_root_portals + 
+                  self.dev_build_infrastructure)
+
+
+@dataclass
+class CustomExclusionsConfig:
+    """Operator-managed domain exclusions."""
+    domains: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CorporateRootDomainsConfig:
+    """Customer corporate domains to exclude from shadow classification."""
+    domains: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ExclusionListsConfig:
-    """Domain exclusion lists for admission filtering."""
+    """Domain exclusion lists for admission filtering (legacy compatibility)."""
     custom_exclusions: list[str] = field(default_factory=list)
     banned_domains: list[str] = field(default_factory=list)
     infrastructure_domains: list[str] = field(default_factory=list)
@@ -134,11 +174,34 @@ class PolicyConfig:
     exclusion_lists: ExclusionListsConfig = field(default_factory=ExclusionListsConfig)
     farm_sync: FarmSyncConfig = field(default_factory=FarmSyncConfig)
     
+    # New semantic infrastructure domain handling (Jan 2026)
+    infrastructure_domain_handling: InfrastructureDomainHandlingConfig = field(
+        default_factory=InfrastructureDomainHandlingConfig
+    )
+    custom_exclusions_config: CustomExclusionsConfig = field(default_factory=CustomExclusionsConfig)
+    corporate_root_domains_config: CorporateRootDomainsConfig = field(default_factory=CorporateRootDomainsConfig)
+    
+    # Legacy fields for backward compatibility
     admission: AdmissionConfig = field(default_factory=AdmissionConfig)
     scope: ScopeConfig = field(default_factory=ScopeConfig)
     exclusions: list[str] = field(default_factory=list)
     corporate_root_domains: set[str] = field(default_factory=set)
     infrastructure_domains: set[str] = field(default_factory=set)
+    
+    def get_all_excluded_domains(self) -> set[str]:
+        """Get all domains that should be excluded from admission."""
+        excluded = set()
+        # Add infrastructure domains based on handling mode
+        excluded.update(self.infrastructure_domain_handling.get_all_excluded_domains())
+        # Add custom exclusions
+        excluded.update(self.custom_exclusions_config.domains)
+        # Add corporate root domains
+        excluded.update(self.corporate_root_domains_config.domains)
+        # Add legacy exclusions for backward compatibility
+        excluded.update(self.exclusions)
+        excluded.update(self.exclusion_lists.custom_exclusions)
+        excluded.update(self.exclusion_lists.banned_domains)
+        return excluded
     
     def to_dict(self) -> dict:
         """Serialize to dictionary for API response."""
@@ -184,6 +247,18 @@ class PolicyConfig:
                 "default_rejection_limit": self.query_limits.default_rejection_limit,
                 "default_query_limit": self.query_limits.default_query_limit,
             },
+            "infrastructure_domain_handling": {
+                "mode": self.infrastructure_domain_handling.mode,
+                "shared_infrastructure_domains": self.infrastructure_domain_handling.shared_infrastructure_domains,
+                "vendor_root_portals": self.infrastructure_domain_handling.vendor_root_portals,
+                "dev_build_infrastructure": self.infrastructure_domain_handling.dev_build_infrastructure,
+            },
+            "custom_exclusions": {
+                "domains": self.custom_exclusions_config.domains,
+            },
+            "corporate_root_domains_config": {
+                "domains": self.corporate_root_domains_config.domains,
+            },
             "exclusion_lists": {
                 "custom_exclusions": self.exclusion_lists.custom_exclusions,
                 "banned_domains": self.exclusion_lists.banned_domains,
@@ -210,6 +285,7 @@ class PolicyConfig:
                 "late_binding_domain_merge": self.scope.late_binding_domain_merge,
             },
             "exclusions": self.exclusions,
+            "all_excluded_domains": sorted(list(self.get_all_excluded_domains())),
             "seed_exclusions": {
                 "corporate_root_domains": sorted(list(self.corporate_root_domains)),
                 "infrastructure_domains": sorted(list(self.infrastructure_domains)),

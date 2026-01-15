@@ -557,10 +557,11 @@ const TourManager = (function() {
         overlay.className = 'tour-overlay tour-overlay-small';
         overlay.id = 'tour-dialog';
         
-        // Position in top left
+        // Position in top right
         overlay.style.position = 'fixed';
         overlay.style.top = '80px';
-        overlay.style.left = '20px';
+        overlay.style.right = '20px';
+        overlay.style.left = 'auto';
         overlay.style.bottom = 'auto';
         overlay.style.transform = 'none';
         

@@ -1977,23 +1977,25 @@ def _build_admitted_asset(
         discovery=bool(discovery_sources_list)
     )
 
-    # Build domain list (discovery domain first)
+    # Build domain list (discovery domain ONLY - no CMDB external_ref injection)
+    # Stage 1 Fix: identifiers.domains = observed-only (from discovery observations)
+    # CMDB URL domains = reference-only (enrichment, never identity/admission)
     domain_list = []
     seen_domains = set()
     if effective_domain:
         normalized = effective_domain.lower().strip()
         domain_list.append(normalized)
         seen_domains.add(normalized)
+    
+    # Extract plane domains for reference/enrichment only (NOT for identifiers.domains)
     plane_domains = _extract_all_domains_from_correlation(correlation)
-    for pd in plane_domains:
-        if pd not in seen_domains:
-            domain_list.append(pd)
-            seen_domains.add(pd)
+    reference_domains = [pd for pd in plane_domains if pd not in seen_domains]
 
     identifiers = AssetIdentifiers(
         domains=domain_list,
         hostnames=[entity.hostname] if entity.hostname else [],
-        uris=[entity.uri] if entity.uri else []
+        uris=[entity.uri] if entity.uri else [],
+        reference_domains=reference_domains
     )
 
     # Build tags

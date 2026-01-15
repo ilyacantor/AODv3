@@ -101,6 +101,8 @@ class AssetIdentifiers(BaseModel):
     domains: list[str] = Field(default_factory=list)
     hostnames: list[str] = Field(default_factory=list)
     uris: list[str] = Field(default_factory=list)
+    # Reference domains from CMDB external_ref/URLs - enrichment only, not for identity/admission
+    reference_domains: list[str] = Field(default_factory=list)
 
 
 class ActivityEvidence(BaseModel):

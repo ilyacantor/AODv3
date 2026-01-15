@@ -745,7 +745,11 @@ def correlate_to_plane(
     if not name_matches and entity.domain:
         domain_base = entity.domain.split('.')[0].lower().strip() if '.' in entity.domain else None
         if domain_base and len(domain_base) >= 3:
+            # First try by_canonical_name (exact match on normalized record name)
             name_matches = plane_index.by_canonical_name.get(domain_base, [])
+            # Also try by_name_words (domain bases are indexed there from canonical_domain field)
+            if not name_matches and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+                name_matches = list(plane_index.by_name_words.get(domain_base, []))
             if name_matches:
                 domain_base_used = True
                 logger.debug(

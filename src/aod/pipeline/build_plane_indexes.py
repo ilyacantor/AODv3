@@ -166,8 +166,8 @@ def _extract_domain_base_name(domain: str) -> str:
     # Clean up: remove hyphens/underscores for matching
     base = base.replace("-", "").replace("_", "")
     
-    # Only return if substantial (4+ chars)
-    return base if len(base) >= 4 else ""
+    # Only return if substantial (3+ chars to match correlate_entities.py)
+    return base if len(base) >= 3 else ""
 
 
 def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:

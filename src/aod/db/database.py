@@ -168,7 +168,8 @@ class Database:
                     counts TEXT NOT NULL DEFAULT '{}',
                     failure_reasons TEXT NOT NULL DEFAULT '[]',
                     sync_status TEXT NOT NULL DEFAULT 'not_applicable',
-                    sync_error TEXT
+                    sync_error TEXT,
+                    policy_snapshot TEXT
                 )
             """)
             
@@ -238,6 +239,11 @@ class Database:
                 await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT")
             except Exception as e:
                 logger.debug("Migration runs.stage_timings: %s", e)
+
+            try:
+                await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT")
+            except Exception as e:
+                logger.debug("Migration runs.policy_snapshot: %s", e)
             
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
@@ -373,8 +379,8 @@ class Database:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 """,
                 run.run_id,
                 run.tenant_id,
@@ -386,7 +392,8 @@ class Database:
                 json.dumps(run.failure_reasons),
                 run.sync_status.value,
                 run.sync_error,
-                run.stage_timings.model_dump_json() if run.stage_timings else None
+                run.stage_timings.model_dump_json() if run.stage_timings else None,
+                json.dumps(run.policy_snapshot) if run.policy_snapshot else None
             )
         return run
     
@@ -404,8 +411,9 @@ class Database:
                     failure_reasons = $4,
                     sync_status = $5,
                     sync_error = $6,
-                    stage_timings = $7
-                WHERE run_id = $8
+                    stage_timings = $7,
+                    policy_snapshot = $8
+                WHERE run_id = $9
                 """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -414,6 +422,7 @@ class Database:
                 run.sync_status.value,
                 run.sync_error,
                 run.stage_timings.model_dump_json() if run.stage_timings else None,
+                json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
                 run.run_id
             )
         return run
@@ -434,6 +443,7 @@ class Database:
         sync_status_val = row.get("sync_status", "not_applicable")
         sync_error_val = row.get("sync_error")
         stage_timings_data = row.get("stage_timings")
+        policy_snapshot_data = row.get("policy_snapshot")
         
         return RunLog(
             run_id=row["run_id"],
@@ -446,7 +456,8 @@ class Database:
             stage_timings=PipelineStageTimings.model_validate_json(stage_timings_data) if stage_timings_data else None,
             failure_reasons=json.loads(row["failure_reasons"]),
             sync_status=SyncStatus(sync_status_val),
-            sync_error=sync_error_val
+            sync_error=sync_error_val,
+            policy_snapshot=json.loads(policy_snapshot_data) if policy_snapshot_data else None
         )
     
     async def get_all_runs(self) -> list[RunLog]:
@@ -463,6 +474,7 @@ class Database:
             sync_status_val = row.get("sync_status", "not_applicable")
             sync_error_val = row.get("sync_error")
             stage_timings_data = row.get("stage_timings")
+            policy_snapshot_data = row.get("policy_snapshot")
             runs.append(RunLog(
                 run_id=row["run_id"],
                 tenant_id=row["tenant_id"],
@@ -474,7 +486,8 @@ class Database:
                 stage_timings=PipelineStageTimings.model_validate_json(stage_timings_data) if stage_timings_data else None,
                 failure_reasons=json.loads(row["failure_reasons"]),
                 sync_status=SyncStatus(sync_status_val),
-                sync_error=sync_error_val
+                sync_error=sync_error_val,
+                policy_snapshot=json.loads(policy_snapshot_data) if policy_snapshot_data else None
             ))
         return runs
     

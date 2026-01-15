@@ -372,5 +372,6 @@ class RunLog(BaseModel):
     failure_reasons: list[str] = Field(default_factory=list)
     sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
     sync_error: Optional[str] = None
+    policy_snapshot: Optional[dict] = Field(default=None, description="Policy configuration snapshot used for this run")
 
 

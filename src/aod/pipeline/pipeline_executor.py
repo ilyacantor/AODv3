@@ -676,6 +676,8 @@ async def execute_pipeline(
         use_policy_engine = policy_config.scope.use_policy_engine
         policy_mismatches = []
         
+        run_log.policy_snapshot = policy_config.to_dict()
+        
         if use_policy_engine:
             logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
         

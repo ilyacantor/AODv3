@@ -188,11 +188,13 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
         # Check obj.domain AND raw_data fields as fallback
-        # Priority: domain > external_ref > url > application_url > service_url
+        # Priority: domain > canonical_domain > external_ref > url > application_url > service_url
+        # Jan 2026: Farm generates canonical_domain field to link IdP entries to discovery domains
         effective_domain = obj.domain
         if not effective_domain and obj.raw_data and isinstance(obj.raw_data, dict):
             effective_domain = (
                 obj.raw_data.get('domain') or
+                obj.raw_data.get('canonical_domain') or  # Farm's correlation field
                 obj.raw_data.get('external_ref') or
                 obj.raw_data.get('url') or
                 obj.raw_data.get('application_url') or
@@ -248,11 +250,13 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
         # Check ci.domain AND raw_data fields as fallback
-        # Priority: domain > external_ref > url > application_url > service_url
+        # Priority: domain > canonical_domain > external_ref > url > application_url > service_url
+        # Jan 2026: Farm generates canonical_domain field to link CMDB entries to discovery domains
         effective_domain = ci.domain
         if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):
             effective_domain = (
                 ci.raw_data.get('domain') or
+                ci.raw_data.get('canonical_domain') or  # Farm's correlation field
                 ci.raw_data.get('external_ref') or
                 ci.raw_data.get('url') or
                 ci.raw_data.get('application_url') or

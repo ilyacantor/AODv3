@@ -1,0 +1,36 @@
+Analysis: 41 False Positive Shadows
+Summary Breakdown
+Category	Count	Pattern
+CMDB correlation mismatch	~26	Farm: HAS_CMDB, GOVERNED → AOD: NO_CMDB, SHADOW
+IdP correlation mismatch	~13	Farm: HAS_IDP, GOVERNED → AOD: NO_IDP, SHADOW
+Both CMDB+IdP mismatch	1	infocorp-bfom.com (tenant root domain!)
+Unexpected discovery	1	sentry.io (Farm didn't generate it)
+The Single Root Cause: CMDB/IdP Correlation Contract Mismatch
+What Farm does:
+
+Generates CMDB entries with canonical_domain field linking to discovery domain
+Generates IdP entries with canonical_domain field linking to discovery domain
+Expected block uses canonical_domain for correlation → marks asset as HAS_CMDB/HAS_IDP → GOVERNED
+What AOD apparently does:
+
+Uses different correlation logic (name matching? external_ref parsing? unknown)
+Does NOT find the same CMDB/IdP correlations
+Marks asset as NO_CMDB/NO_IDP → SHADOW_CLASSIFICATION
+Notable Real Vendor Cases
+Domain	Farm Says	AOD Says	Issue
+slack.com	HAS_IDP, GOVERNED	NO_IDP, SHADOW	IdP correlation failure
+monday.com	HAS_IDP, GOVERNED	NO_IDP, SHADOW	IdP correlation failure
+infocorp-bfom.com	HAS_CMDB + HAS_IDP, GOVERNED	NO_CMDB, NO_IDP, SHADOW	Both failed! Tenant's own domain!
+sentry.io	(not generated)	SHADOW	Not a bug - unexpected discovery
+Evidence of Contract Mismatch (Consistent Pattern)
+All 40 "clean" FPs show identical delta:
+
+In Farm only: GOVERNED, HAS_CMDB or GOVERNED, HAS_IDP
+In AOD only: NO_CMDB, SHADOW_CLASSIFICATION or NO_IDP, SHADOW_CLASSIFICATION
+This is 100% consistent - it's not random mismatches, it's a systematic correlation algorithm difference.
+
+Next Steps (Not Code Changes)
+Understand AOD's correlation algorithm - How does AOD link CMDB/IdP entries to discovered domains?
+Align Farm's correlation contract - Farm needs to generate entries in the format AOD expects
+sentry.io is fine - It's an unexpected discovery, not a Farm bug
+Key Question for AOD team: What field(s) does AOD use to correlate CMDB/IdP entries with discovery observations?

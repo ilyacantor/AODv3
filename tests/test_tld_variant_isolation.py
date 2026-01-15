@@ -278,6 +278,45 @@ class TestRegisteredDomainFallbackMatching:
         assert entity_registered != unrelated_registered
 
 
+class TestCanonicalDomainIndexing:
+    """Test that canonical_domain field from Farm is indexed for correlation"""
+    
+    def test_canonical_domain_in_raw_data_fallback_chain(self):
+        """canonical_domain field should be checked after domain but before external_ref"""
+        # This tests that the fallback chain includes canonical_domain
+        # Farm generates CMDB/IdP entries with canonical_domain linking to discovery domain
+        from src.aod.pipeline.build_plane_indexes import build_idp_index, build_cmdb_index
+        from src.aod.models.input_contracts import IdPPlane, IdPObject, CMDBPlane, CMDBConfigItem
+        
+        # Test IdP with canonical_domain in raw_data
+        idp_obj = IdPObject(
+            idp_id="idp-slack-1",
+            name="Slack",
+            domain=None,  # No domain field
+            raw_data={"canonical_domain": "slack.com"}  # Farm's correlation field
+        )
+        idp_plane = IdPPlane(objects=[idp_obj])
+        idp_index = build_idp_index(idp_plane)
+        
+        # Should be indexed by slack.com (from canonical_domain)
+        assert "slack.com" in idp_index.by_domain
+        assert "idp-slack-1" in idp_index.by_domain["slack.com"]
+        
+        # Test CMDB with canonical_domain in raw_data
+        cmdb_ci = CMDBConfigItem(
+            ci_id="cmdb-monday-1",
+            name="Monday.com",
+            domain=None,  # No domain field
+            raw_data={"canonical_domain": "monday.com"}  # Farm's correlation field
+        )
+        cmdb_plane = CMDBPlane(cis=[cmdb_ci])
+        cmdb_index = build_cmdb_index(cmdb_plane)
+        
+        # Should be indexed by monday.com (from canonical_domain)
+        assert "monday.com" in cmdb_index.by_domain
+        assert "cmdb-monday-1" in cmdb_index.by_domain["monday.com"]
+
+
 class TestDomainBaseNameMatching:
     """Test domain base name matching for canonical_name correlation"""
     

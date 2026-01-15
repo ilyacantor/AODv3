@@ -483,10 +483,10 @@ Given the complexity of the 2000+ line `admission.py`, test coverage appears ins
 | ~~Policy switchboard bypasses~~ | ~~Critical~~ | ~~Medium~~ | ~~P0~~ | ✅ FIXED |
 | ~~Duplicate INFRASTRUCTURE_DOMAINS~~ | ~~Critical~~ | ~~Low~~ | ~~P0~~ | ✅ FIXED |
 | ~~BANNED_DOMAINS ignores policy file~~ | ~~Critical~~ | ~~Low~~ | ~~P0~~ | ✅ FIXED |
+| ~~Misnomer field name~~ | ~~High~~ | ~~Low~~ | ~~P1~~ | ✅ FIXED |
+| ~~Database duplication~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
+| ~~Silent exceptions~~ | ~~Medium~~ | ~~Low~~ | ~~P2~~ | ✅ FIXED |
 | Monolithic `apply_admission_criteria` | High | High | P1 | Open |
-| Misnomer field name | High | Low | P1 | Open |
-| Database duplication | Medium | Low | P2 | Open |
-| Silent exceptions | Medium | Low | P2 | Open |
 | Date-tagged comments | Low | Medium | P3 | Open |
 | Magic numbers | Low | Low | P3 | Open |
 | Route file size | Low | Medium | P3 | Open |

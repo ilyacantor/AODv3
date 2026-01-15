@@ -54,6 +54,15 @@ The system processes data through a 7-stage sequential pipeline: Validation, Nor
 -   Each domain produces its own canonical key for accurate Farm reconciliation
 -   Fixes KEY_NORMALIZATION_MISMATCH errors for these infrastructure domains
 
+**Key Selection Contract (Jan 2026):**
+-   **Formal contract**: `docs/contracts/KEY_SELECTION_CONTRACT.md` - defines deterministic rules for Farm alignment
+-   **Domain Priority**: Discovery domain → CMDB primary domain → reference domains (enrichment only)
+-   **Canonical Key**: Computed from `identifiers.domains[0]` via eTLD+1 extraction + alias collapse
+-   **Alias Collapse**: Only domains in `ALIAS_DOMAINS_TO_COLLAPSE` collapse to vendor domain
+-   **Standalone Domains**: outlook.com, gstatic.com, office.com, cloudfront.net produce their own keys
+-   **Policy Exclusions**: Rejected entities appear in `expected.rejected`, no key generated
+-   **V2 Strategy**: Uses domain provenance priority (discovery → cmdb → idp) instead of position
+
 **Identity Model & Key Strategy (Jan 2026 CTO Guidance):**
 -   **Domain Provenance Tracking**: `identifiers.domain_provenance` maps each domain to its source: `discovery`, `cmdb`, `idp`, `vendor_map`, or `inferred`
 -   **CMDB Domain Promotion**: Authoritative CMDB domains (from `record.domain` field) can be added to `identifiers.domains` if they pass validation gates. external_ref URLs remain in `reference_domains` only (Stage 1 fix preserved)

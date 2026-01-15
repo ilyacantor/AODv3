@@ -75,6 +75,7 @@ class IdPObject(BaseModel):
     name: str
     idp_type: str = "app"
     domain: Optional[str] = None
+    canonical_domain: Optional[str] = None  # Jan 2026: Farm's correlation field linking to discovery domain
     has_sso: bool = False
     has_scim: bool = False
     owner: Optional[str] = None
@@ -97,6 +98,7 @@ class CMDBConfigItem(BaseModel):
     owner: Optional[str] = None
     vendor: Optional[str] = None
     domain: Optional[str] = None
+    canonical_domain: Optional[str] = None  # Jan 2026: Farm's correlation field linking to discovery domain
     raw_data: Optional[dict[str, Any]] = None
 
 

@@ -187,10 +187,10 @@ def build_idp_index(idp_plane: IdPPlane) -> PlaneIndex:
         canonical_name = normalize_string(obj.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Check obj.domain AND raw_data fields as fallback
+        # Check obj.domain AND other fields as fallback
         # Priority: domain > canonical_domain > external_ref > url > application_url > service_url
         # Jan 2026: Farm generates canonical_domain field to link IdP entries to discovery domains
-        effective_domain = obj.domain
+        effective_domain = obj.domain or obj.canonical_domain
         if not effective_domain and obj.raw_data and isinstance(obj.raw_data, dict):
             effective_domain = (
                 obj.raw_data.get('domain') or
@@ -249,10 +249,10 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Check ci.domain AND raw_data fields as fallback
+        # Check ci.domain AND other fields as fallback
         # Priority: domain > canonical_domain > external_ref > url > application_url > service_url
         # Jan 2026: Farm generates canonical_domain field to link CMDB entries to discovery domains
-        effective_domain = ci.domain
+        effective_domain = ci.domain or ci.canonical_domain
         if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):
             effective_domain = (
                 ci.raw_data.get('domain') or

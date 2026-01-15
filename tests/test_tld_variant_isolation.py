@@ -288,12 +288,12 @@ class TestCanonicalDomainIndexing:
         from src.aod.pipeline.build_plane_indexes import build_idp_index, build_cmdb_index
         from src.aod.models.input_contracts import IdPPlane, IdPObject, CMDBPlane, CMDBConfigItem
         
-        # Test IdP with canonical_domain in raw_data
+        # Test IdP with canonical_domain as direct field (Farm's primary method)
         idp_obj = IdPObject(
             idp_id="idp-slack-1",
             name="Slack",
             domain=None,  # No domain field
-            raw_data={"canonical_domain": "slack.com"}  # Farm's correlation field
+            canonical_domain="slack.com"  # Farm's correlation field
         )
         idp_plane = IdPPlane(objects=[idp_obj])
         idp_index = build_idp_index(idp_plane)
@@ -302,12 +302,12 @@ class TestCanonicalDomainIndexing:
         assert "slack.com" in idp_index.by_domain
         assert "idp-slack-1" in idp_index.by_domain["slack.com"]
         
-        # Test CMDB with canonical_domain in raw_data
+        # Test CMDB with canonical_domain as direct field (Farm's primary method)
         cmdb_ci = CMDBConfigItem(
             ci_id="cmdb-monday-1",
             name="Monday.com",
             domain=None,  # No domain field
-            raw_data={"canonical_domain": "monday.com"}  # Farm's correlation field
+            canonical_domain="monday.com"  # Farm's correlation field
         )
         cmdb_plane = CMDBPlane(cis=[cmdb_ci])
         cmdb_index = build_cmdb_index(cmdb_plane)

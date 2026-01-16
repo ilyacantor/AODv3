@@ -416,7 +416,7 @@
                     const item = { 
                         ...a, 
                         itemType: 'shadow',
-                        sectionType: 'firewall',
+                        sectionType: 'risk',
                         provisioning_status: provStatus,
                         hasFinanceGap: hasFinanceGap,
                         findings: assetFindings,
@@ -428,7 +428,7 @@
                     };
                     
                     if (provStatus === 'QUARANTINE' || provStatus === 'BLOCKED') {
-                        firewallItems.push(item);
+                        riskItems.push(item);
                         processedAssetIds.add(assetId);
                     }
                 });

@@ -75,7 +75,7 @@
                 } else if (action === 'assign') {
                     showAssignModal(runId, itemId, itemType);
                 } else if (action === 'resolve_blocking') {
-                    await submitProvisioningAction(itemId, 'SANCTION');
+                    await submitProvisioningAction(itemId, 'RESOLVE');
                 } else if (action === 'override_blocking') {
                     await submitTriageAction(runId, itemId, itemType, 'override', { override_reason: 'Manual override - warn only' });
                 } else if (['sanction', 'ban', 'deprovision', 'dismiss_risk', 'resolve'].includes(action)) {
@@ -181,7 +181,7 @@
                 const result = await response.json();
                 console.log('Provisioning action result:', result);
                 
-                const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'ACKNOWLEDGE': 'acknowledged' };
+                const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'ACKNOWLEDGE': 'acknowledged', 'RESOLVE': 'approved' };
                 const newState = stateMap[action] || action.toLowerCase();
                 
                 for (const section of ['firewall', 'risk', 'hygiene']) {

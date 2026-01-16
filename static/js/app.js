@@ -707,7 +707,6 @@
                         ${checkboxHeader}
                         <th data-sort="name" data-section="${sectionType}" class="${currentSort === 'name' ? 'sorted' : ''}">Asset <span class="sort-arrow">&#8597;</span></th>
                         <th data-sort="type" data-section="${sectionType}" class="${currentSort === 'type' ? 'sorted' : ''}">Issue <span class="sort-arrow">&#8597;</span></th>
-                        <th data-sort="category" data-section="${sectionType}" class="${currentSort === 'category' ? 'sorted' : ''}">Category <span class="sort-arrow">&#8597;</span></th>
                         <th style="width: 180px;">Actions</th>
                     </tr>
                 </thead>
@@ -722,34 +721,29 @@
                 const isTriaged = triageState !== 'pending';
                 const rowStateClass = isTriaged ? `triaged triaged-${triageState}` : '';
                 
-                let assetName, issue, category, categoryClass;
+                let assetName, issue, categoryClass;
                 const isFirewallSection = sectionType === 'firewall';
                 const financeBadge = (isFirewallSection && item.hasFinanceGap) ? ' <span class="finance-badge" title="Spend detected">($)</span>' : '';
                 
                 if (itemType === 'finding') {
                     assetName = item.asset_name || 'Unknown Asset';
                     issue = (item.finding_type || 'unknown').replace(/_/g, ' ');
-                    category = getCategoryLabel(item.category);
                     categoryClass = item.category || 'governance';
                 } else if (itemType === 'hygiene') {
                     assetName = item.name || item.asset_key || 'Unknown';
                     issue = item.issueLabels || 'Data Quality Issue';
-                    category = 'Data Governance';
                     categoryClass = 'hygiene';
                 } else if (itemType === 'toxic') {
                     assetName = item.name || item.asset_key || 'Unknown';
                     issue = item.issueLabels || 'Risk Review';
-                    category = 'Risk';
                     categoryClass = 'risk';
                 } else if (itemType === 'blocked') {
                     assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
                     issue = 'Policy Violation';
-                    category = 'Blocked';
                     categoryClass = 'firewall';
                 } else {
                     assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
                     issue = itemType === 'shadow' ? 'Shadow IT' : 'Zombie Asset';
-                    category = itemType === 'shadow' ? 'Quarantine' : 'Review';
                     categoryClass = itemType;
                 }
                 
@@ -818,14 +812,13 @@
                     </div>`;
                 
                 const detailHtml = buildDetailHtml(item, itemType);
-                const colSpan = showCheckbox ? 5 : 4;
+                const colSpan = showCheckbox ? 4 : 3;
                 
                 tableHtml += `
                     <tr class="triage-row ${rowStateClass}" data-item-idx="${idx}" data-section="${sectionType}">
                         ${checkboxCell}
                         <td class="triage-cell-asset">${assetName}</td>
                         <td class="triage-cell-issue"><span class="triage-tag ${categoryClass}">${issue}</span></td>
-                        <td class="triage-cell-category">${category}</td>
                         <td class="triage-cell-actions">${actionBtns}</td>
                     </tr>
                     <tr class="triage-detail-row" data-detail-for="${idx}">

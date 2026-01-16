@@ -7,6 +7,20 @@
         let decisionTraceFilter = 'all';
         let decisionMismatches = {};
         
+        function showToast(message, type = 'error') {
+            const existing = document.getElementById('app-toast');
+            if (existing) existing.remove();
+            
+            const toast = document.createElement('div');
+            toast.id = 'app-toast';
+            toast.className = `app-toast ${type}`;
+            toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('visible'), 10);
+            setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+        
         function initMainTabs() {
             document.querySelectorAll('.header-nav-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -160,7 +174,7 @@
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
                     console.error('Provisioning action failed:', response.status, errorData.detail || response.statusText);
-                    alert(`Action failed: ${errorData.detail || 'Unknown error'}`);
+                    showToast(`Action failed: ${errorData.detail || 'Unknown error'}`, 'error');
                     return;
                 }
                 
@@ -193,7 +207,7 @@
                 
             } catch (err) {
                 console.error('Provisioning action failed:', err);
-                alert('Action failed: ' + err.message);
+                showToast('Action failed: ' + err.message, 'error');
             }
         }
         
@@ -1166,13 +1180,13 @@
             
             function exportMismatches() {
                 if (!decisionTracesCache) {
-                    alert('Load traces first');
+                    showToast('Load traces first', 'error');
                     return;
                 }
                 
                 const mismatchKeys = Object.keys(decisionMismatches).filter(k => decisionMismatches[k]);
                 if (mismatchKeys.length === 0) {
-                    alert('No mismatches tracked. Compare assets with Farm traces first.');
+                    showToast('No mismatches tracked. Compare assets with Farm traces first.', 'error');
                     return;
                 }
                 

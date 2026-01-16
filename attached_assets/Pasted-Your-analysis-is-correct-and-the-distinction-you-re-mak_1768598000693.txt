@@ -1,0 +1,140 @@
+Your analysis is **correct**, and the distinction you’re making is the right one. Let me lock this down cleanly and give you a crisp recommendation so this doesn’t turn into churn.
+
+---
+
+## What Is Actually True (Grounded Conclusion)
+
+### 1. The original **HAS_IDP false-positive bug is fixed**
+
+✅ Assets like `profy.io`, `cloudsync.io`, `primeway.tech`, `bignest.org`
+are **no longer receiving HAS_IDP**.
+
+That confirms:
+
+* Non-canonical IdP blocking works
+* Suffix / legacy handling is behaving correctly
+* No regression on *semantic governance*
+
+This is a real win. 🟢
+
+---
+
+### 2. The remaining 6 “IdP Correlation Bugs” are **NOT semantic bugs**
+
+They are **format parity issues** only.
+
+**Farm**
+
+* Explicitly emits `NO_IDP`
+
+**AOD**
+
+* Emits `ANCHORED`, `HAS_DISCOVERY`
+* Omits `NO_IDP`
+* Does **not** claim `HAS_IDP`
+
+👉 Both systems agree: **there is no IdP governance**
+👉 Classification outcome is correct
+👉 Only the *absence of an explicit negative reason code* differs
+
+This is important:
+**No incorrect admission, no incorrect governance, no incorrect classification.**
+
+---
+
+### 3. Root cause you identified is very likely correct
+
+Your aggregation theory is sound:
+
+* Assets are merged under a shared domain key
+* Reason codes are unioned
+* `NO_IDP` is dropped during deduplication if any peer asset once had `HAS_IDP`
+* After non-canonical blocking, `HAS_IDP` is gone — but `NO_IDP` is not re-asserted
+
+This creates a **silent negative**, which is why:
+
+* Shadows show `NO_IDP`
+* These 6 assets do not
+
+This is **trace hygiene**, not logic failure.
+
+---
+
+## What Is *Not* Happening (Important)
+
+❌ AOD is **not** asserting IdP governance incorrectly
+❌ AOD is **not** admitting assets incorrectly
+❌ Farm and AOD are **not** semantically divergent
+❌ Accuracy metrics remain valid
+
+Your reported numbers (≈97% combined) are **real**, not inflated.
+
+---
+
+## Recommendation (Strong Opinion)
+
+### ✅ Do **both**, but in this order:
+
+### **1. Fix format parity (low risk, high clarity) — DO THIS NOW**
+
+Make AOD **always emit explicit negative codes**:
+
+* `NO_IDP`
+* `NO_CMDB`
+* `NO_FINANCE`
+
+…after aggregation, based on **final merged state**, not pre-merge artifacts.
+
+Why this matters:
+
+* Eliminates confusion in assessment reports
+* Prevents future “ghost regressions”
+* Makes Farm ↔ AOD diffing mechanically clean
+* Improves explainability for customers
+
+This is a **presentation-layer correctness fix**, not a logic change.
+
+---
+
+### **2. Track Key Normalization bugs separately**
+
+Those 6 assets (`yammer.com`, `gettech.io`, etc.) are:
+
+* Known
+* Pre-existing
+* Orthogonal to IdP logic
+
+They should be:
+
+* Logged as a **separate defect class**
+* Not conflated with IdP correlation
+* Not blocking release confidence
+
+---
+
+## How I’d Label This in the Report (Suggested Language)
+
+> **IdP Correlation: PASS (Semantic)**
+>
+> AOD and Farm agree on IdP governance for all evaluated assets.
+> Remaining discrepancies reflect missing explicit negative reason codes (`NO_IDP`) after asset aggregation and do not affect classification or admission outcomes.
+
+This avoids self-inflicted doubt.
+
+---
+
+## Bottom Line
+
+You’re right to pause and explain this — but you **do not** have a regression.
+
+* ✅ Real bug fixed
+* ⚠️ Cosmetic parity issue remains
+* 📌 Clear, contained follow-up action
+
+If you want, next I can:
+
+* Specify *exactly* where to re-emit `NO_IDP` post-merge
+* Draft the changelog / PR description so this doesn’t get misread
+* Help you decide whether to **ship now** or batch with key-normalization fixes
+
+But architecturally: you’re in a good place.

@@ -998,6 +998,27 @@ def emit_actual_results(
             reasons.discard(ReasonCode.ZOMBIE_CLASSIFICATION.value)
         
         reasons = _deduplicate_reason_codes(reasons)
+        
+        # FORMAT PARITY FIX (Jan 2026):
+        # After aggregation and deduplication, re-assert explicit negative codes based on
+        # FINAL merged state. This prevents "silent negatives" when:
+        # - Asset A had HAS_IDP (from non-canonical app, now blocked)
+        # - Asset B had NO_IDP
+        # - Union created {HAS_IDP, NO_IDP}, dedup removed NO_IDP
+        # - After blocking, HAS_IDP is gone but NO_IDP was never re-asserted
+        #
+        # The fix: Check final governance flags and ensure explicit negative codes exist.
+        final_has_idp = ReasonCode.HAS_IDP.value in reasons
+        final_has_cmdb = ReasonCode.HAS_CMDB.value in reasons
+        final_has_finance = ReasonCode.HAS_FINANCE.value in reasons
+        
+        if not final_has_idp and ReasonCode.NO_IDP.value not in reasons:
+            reasons.add(ReasonCode.NO_IDP.value)
+        if not final_has_cmdb and ReasonCode.NO_CMDB.value not in reasons:
+            reasons.add(ReasonCode.NO_CMDB.value)
+        if not final_has_finance and ReasonCode.NO_FINANCE.value not in reasons:
+            reasons.add(ReasonCode.NO_FINANCE.value)
+        
         agg["reasons"] = reasons
     
     shadow_actual = []

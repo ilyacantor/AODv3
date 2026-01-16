@@ -20,6 +20,9 @@ class PlaneIndex:
     by_name_prefix: dict[str, list[str]] = field(default_factory=dict)
     by_name_bigrams: dict[str, list[str]] = field(default_factory=dict)
     by_name_words: dict[str, list[str]] = field(default_factory=dict)
+    # Jan 2026 Phase B: Separate authoritative domain indexes for CMDB recovery
+    by_canonical_domain: dict[str, list[str]] = field(default_factory=dict)  # Farm's canonical_domain field
+    by_domains_array: dict[str, list[str]] = field(default_factory=dict)  # Farm's domains[] array members
 
 
 @dataclass
@@ -249,14 +252,42 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         canonical_name = normalize_string(ci.name)
         add_to_index(index.by_canonical_name, canonical_name, record_id)
         
-        # Check ci.domain AND other fields as fallback
-        # Priority: domain > canonical_domain > external_ref > url > application_url > service_url
-        # Jan 2026: Farm generates canonical_domain field to link CMDB entries to discovery domains
-        effective_domain = ci.domain or ci.canonical_domain
+        # ============================================================
+        # Jan 2026 Phase B: CMDB Authoritative Recovery
+        # Index authoritative fields SEPARATELY for deterministic lookup
+        # ============================================================
+        
+        # 1. Index canonical_domain SEPARATELY (authoritative field from Farm)
+        cmdb_canonical_domain = ci.canonical_domain
+        if not cmdb_canonical_domain and ci.raw_data and isinstance(ci.raw_data, dict):
+            cmdb_canonical_domain = ci.raw_data.get('canonical_domain')
+        
+        if cmdb_canonical_domain:
+            normalized_canonical = normalize_domain(cmdb_canonical_domain)
+            add_to_index(index.by_canonical_domain, normalized_canonical, record_id)
+            # Also add to general by_domain for backward compatibility
+            add_to_index(index.by_domain, normalized_canonical, record_id)
+        
+        # 2. Index domains[] array SEPARATELY (all authoritative domains from Farm)
+        cmdb_domains = list(ci.domains) if ci.domains else []
+        if ci.raw_data and isinstance(ci.raw_data, dict):
+            raw_domains = ci.raw_data.get('domains', [])
+            if isinstance(raw_domains, list):
+                cmdb_domains.extend(raw_domains)
+        
+        for domain_entry in cmdb_domains:
+            if domain_entry and isinstance(domain_entry, str):
+                normalized_entry = normalize_domain(domain_entry)
+                add_to_index(index.by_domains_array, normalized_entry, record_id)
+                # Also add to general by_domain for backward compatibility
+                add_to_index(index.by_domain, normalized_entry, record_id)
+        
+        # 3. Legacy: Index primary domain field (backward compatibility)
+        # Priority: domain > external_ref > url > application_url > service_url
+        effective_domain = ci.domain
         if not effective_domain and ci.raw_data and isinstance(ci.raw_data, dict):
             effective_domain = (
                 ci.raw_data.get('domain') or
-                ci.raw_data.get('canonical_domain') or  # Farm's correlation field
                 ci.raw_data.get('external_ref') or
                 ci.raw_data.get('url') or
                 ci.raw_data.get('application_url') or

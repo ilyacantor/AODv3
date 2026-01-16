@@ -99,6 +99,7 @@ class CMDBConfigItem(BaseModel):
     vendor: Optional[str] = None
     domain: Optional[str] = None
     canonical_domain: Optional[str] = None  # Jan 2026: Farm's correlation field linking to discovery domain
+    domains: list[str] = Field(default_factory=list)  # Jan 2026 Phase B: All authoritative domains from Farm
     raw_data: Optional[dict[str, Any]] = None
 
 

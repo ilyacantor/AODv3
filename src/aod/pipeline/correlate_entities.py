@@ -717,8 +717,103 @@ def correlate_to_plane(
                 disambiguation_detail=detail
             )
     
-    # Jan 2026 FIX: Additional domain fallback paths to reduce missed correlations
+    # ============================================================
+    # Jan 2026 Phase B: CMDB Authoritative Recovery Paths
+    # These lookups use CMDB-specific indexes that are AUTHORITATIVE
+    # Lookup order: canonical_domain → domains[] → verified_alias
+    # ============================================================
+    if use_domain and entity.domain and plane_name == "cmdb":
+        from .vendor_inference import extract_registered_domain
+        from .canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Authoritative path 1: canonical_domain == D
+        if hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
+            canonical_matches = plane_index.by_canonical_domain.get(entity.domain, [])
+            if not canonical_matches:
+                # Try registered domain version
+                entity_registered = extract_registered_domain(entity.domain)
+                if entity_registered and entity_registered != entity.domain:
+                    canonical_matches = plane_index.by_canonical_domain.get(entity_registered, [])
+            
+            if len(canonical_matches) == 1:
+                _log_match_debug(plane_name, "cmdb_canonical_domain", entity.canonical_name, canonical_matches[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=canonical_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in canonical_matches],
+                    match_method="cmdb_canonical_domain",
+                    match_key=entity.domain,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(canonical_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in canonical_matches]
+                code, detail, resolved = disambiguate_matches(entity, canonical_matches, records, "cmdb_canonical_domain")
+                if resolved and len(resolved) == 1:
+                    _log_match_debug(plane_name, "cmdb_canonical_domain", entity.canonical_name, resolved[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="cmdb_canonical_domain",
+                        match_key=entity.domain,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+        
+        # Authoritative path 2: D ∈ domains[]
+        if hasattr(plane_index, 'by_domains_array') and plane_index.by_domains_array:
+            array_matches = plane_index.by_domains_array.get(entity.domain, [])
+            if not array_matches:
+                entity_registered = extract_registered_domain(entity.domain)
+                if entity_registered and entity_registered != entity.domain:
+                    array_matches = plane_index.by_domains_array.get(entity_registered, [])
+            
+            if len(array_matches) == 1:
+                _log_match_debug(plane_name, "cmdb_domains_array", entity.canonical_name, array_matches[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=array_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in array_matches],
+                    match_method="cmdb_domains_array",
+                    match_key=entity.domain,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(array_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in array_matches]
+                code, detail, resolved = disambiguate_matches(entity, array_matches, records, "cmdb_domains_array")
+                if resolved and len(resolved) == 1:
+                    _log_match_debug(plane_name, "cmdb_domains_array", entity.canonical_name, resolved[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="cmdb_domains_array",
+                        match_key=entity.domain,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+        
+        # Authoritative path 3: verified_alias_domain(D) == canonical_domain
+        # If entity.domain has a known alias, try the canonical version
+        if entity.domain in ALIAS_DOMAINS_TO_COLLAPSE:
+            alias_canonical = ALIAS_DOMAINS_TO_COLLAPSE[entity.domain]
+            if hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
+                alias_matches = plane_index.by_canonical_domain.get(alias_canonical, [])
+                if len(alias_matches) == 1:
+                    _log_match_debug(plane_name, "verified_alias_domain", entity.canonical_name, alias_matches[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=alias_matches,
+                        matched_records=[plane_index.records.get(mid) for mid in alias_matches],
+                        match_method="verified_alias_domain",
+                        match_key=f"{entity.domain}→{alias_canonical}",
+                        ambiguity_code=AmbiguityCode.NONE
+                    )
+    
+    # ============================================================
+    # Jan 2026 FIX: Additional domain fallback paths (HEURISTIC)
     # These address cases where entity.domain and record.domain differ but share identity
+    # ============================================================
     if use_domain and plane_index.by_domain:
         from .vendor_inference import extract_registered_domain
         domain_matches = []

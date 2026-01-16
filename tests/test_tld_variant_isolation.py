@@ -821,3 +821,115 @@ class TestGovernanceGateInvariants:
         # Should default to heuristic (fail-safe)
         assert unknown_match.match_quality == MatchQuality.HEURISTIC
         assert unknown_match.is_authoritative == False
+
+
+class TestCMDBAuthoritativeRecovery:
+    """
+    Phase B tests: CMDB Authoritative Recovery
+    
+    Validates that new CMDB lookup paths are authoritative:
+    1. canonical_domain == D
+    2. D ∈ domains[]
+    3. verified_alias_domain(D) == canonical_domain
+    """
+    
+    def test_cmdb_index_has_separate_authoritative_indexes(self):
+        """PlaneIndex must have by_canonical_domain and by_domains_array indexes"""
+        from src.aod.pipeline.build_plane_indexes import PlaneIndex
+        
+        index = PlaneIndex()
+        assert hasattr(index, 'by_canonical_domain')
+        assert hasattr(index, 'by_domains_array')
+        assert isinstance(index.by_canonical_domain, dict)
+        assert isinstance(index.by_domains_array, dict)
+    
+    def test_cmdb_model_has_domains_array_field(self):
+        """CMDBConfigItem must have domains[] array field"""
+        from src.aod.models.input_contracts import CMDBConfigItem
+        
+        ci = CMDBConfigItem(ci_id="test", name="Test App")
+        assert hasattr(ci, 'domains')
+        assert ci.domains == []  # Default is empty list
+        
+        # Can be set to a list of domains
+        ci2 = CMDBConfigItem(ci_id="test2", name="Test App 2", domains=["app.com", "api.app.com"])
+        assert ci2.domains == ["app.com", "api.app.com"]
+    
+    def test_cmdb_canonical_domain_indexing(self):
+        """CMDB canonical_domain must be indexed in by_canonical_domain"""
+        from src.aod.models.input_contracts import CMDBPlane, CMDBConfigItem
+        from src.aod.pipeline.build_plane_indexes import build_cmdb_index
+        
+        cmdb_plane = CMDBPlane(cis=[
+            CMDBConfigItem(
+                ci_id="ci-123",
+                name="BluEdge App",
+                canonical_domain="bluedge.com"
+            )
+        ])
+        
+        index = build_cmdb_index(cmdb_plane)
+        
+        # canonical_domain should be in by_canonical_domain index
+        assert "bluedge.com" in index.by_canonical_domain
+        assert "ci-123" in index.by_canonical_domain["bluedge.com"]
+        
+        # Also in general by_domain for backward compatibility
+        assert "bluedge.com" in index.by_domain
+    
+    def test_cmdb_domains_array_indexing(self):
+        """CMDB domains[] array members must be indexed in by_domains_array"""
+        from src.aod.models.input_contracts import CMDBPlane, CMDBConfigItem
+        from src.aod.pipeline.build_plane_indexes import build_cmdb_index
+        
+        cmdb_plane = CMDBPlane(cis=[
+            CMDBConfigItem(
+                ci_id="ci-456",
+                name="SmartPad",
+                domains=["smartpad.io", "api.smartpad.io", "app.smartpad.io"]
+            )
+        ])
+        
+        index = build_cmdb_index(cmdb_plane)
+        
+        # All domain array members should be in by_domains_array
+        assert "smartpad.io" in index.by_domains_array
+        assert "ci-456" in index.by_domains_array["smartpad.io"]
+        
+        # Subdomains normalized to registered domain
+        # api.smartpad.io → smartpad.io in by_domains_array
+        assert "smartpad.io" in index.by_domains_array
+    
+    def test_cmdb_authoritative_methods_can_assert_governance(self):
+        """CMDB authoritative match methods must be able to assert HAS_CMDB"""
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, AUTHORITATIVE_MATCH_METHODS
+        
+        # cmdb_canonical_domain is authoritative
+        match1 = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["ci-123"],
+            match_method="cmdb_canonical_domain"
+        )
+        assert match1.is_authoritative == True
+        assert "cmdb_canonical_domain" in AUTHORITATIVE_MATCH_METHODS
+        
+        # cmdb_domains_array is authoritative
+        match2 = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["ci-456"],
+            match_method="cmdb_domains_array"
+        )
+        assert match2.is_authoritative == True
+        assert "cmdb_domains_array" in AUTHORITATIVE_MATCH_METHODS
+    
+    def test_verified_alias_is_authoritative(self):
+        """verified_alias_domain match method is authoritative"""
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, AUTHORITATIVE_MATCH_METHODS
+        
+        match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["ci-789"],
+            match_method="verified_alias_domain"
+        )
+        assert match.is_authoritative == True
+        assert "verified_alias_domain" in AUTHORITATIVE_MATCH_METHODS

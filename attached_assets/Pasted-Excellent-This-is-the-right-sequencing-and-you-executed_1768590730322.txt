@@ -1,0 +1,142 @@
+Excellent. This is the **right sequencing** and you executed Phase A exactly as it needed to be done. No changes required to what you shipped.
+
+Let me be very explicit about where you are and what Phase B should (and should not) do.
+
+---
+
+## Status Assessment (Post-Phase A)
+
+### ✅ Governance invariant is now **provably enforced**
+
+You’ve closed the critical class of bugs:
+
+* Heuristics **cannot** assert `HAS_IDP` / `HAS_CMDB`
+* Unknown match methods fail safe → heuristic
+* Alias collapse is explicit and test-covered
+* CMDB authoritative paths are now *allowed* (but not yet sufficient)
+
+This means:
+
+> **Classification errors are now due to missing authoritative correlation, not leakage.**
+
+That’s exactly where you want to be before touching Farm or CMDB logic.
+
+---
+
+## What Phase B Is — and Is Not
+
+### Phase B **IS**
+
+> Expanding **authoritative CMDB recovery paths** so AOD can find the CMDB records Farm already generated.
+
+### Phase B **IS NOT**
+
+* Adding heuristics
+* Relaxing governance
+* Matching on names, tokens, vendors, or fuzzy logic
+* “Fixing” by changing Farm semantics
+
+---
+
+## Phase B: CMDB Authoritative Recovery (Precise Scope)
+
+You already added the **right authoritative methods**:
+
+* `cmdb_domains_array`
+* `cmdb_canonical_domain`
+
+Now Phase B is about **ensuring those are actually reachable** in practice.
+
+### The real question Phase B must answer:
+
+> *Given a discovery domain D, what exact CMDB fields does Farm populate that are authoritative and should match D?*
+
+From Farm’s analysis, the misses suggest one (or more) of these is true:
+
+1. `canonical_domain` exists but is **not indexed**
+2. `domains[]` exists but is **not indexed**
+3. AOD normalizes the discovery key **before** CMDB lookup, breaking equality
+4. CMDB ingestion drops or transforms domains inconsistently
+
+---
+
+## Phase B – Exact Work Plan (Recommended)
+
+### Step 1: CMDB Index Audit (no code changes yet)
+
+Inspect CMDB plane ingestion and indexing:
+
+* What fields are indexed today?
+
+  * `primary_domain`?
+  * `canonical_domain`?
+  * `domains[]`?
+* Are array fields indexed for exact membership lookups?
+* Are values normalized (lowercase, punycode, strip www)?
+
+You’re looking for **index asymmetry**, not logic bugs.
+
+---
+
+### Step 2: Deterministic Lookup Order (authoritative only)
+
+For a discovery domain `D`, CMDB correlation should attempt **in this order**:
+
+1. `canonical_domain == D`
+2. `D ∈ domains[]`
+3. `verified_alias_domain(D) == canonical_domain`
+4. explicit foreign key (if present)
+
+Each successful path maps to:
+
+* `cmdb_canonical_domain`
+* `cmdb_domains_array`
+* `verified_alias_domain`
+* `foreign_key`
+
+No other paths exist. No fallthrough to heuristics.
+
+---
+
+### Step 3: Add One Focused Trace Test
+
+Pick **one** previously failing asset (e.g. `blueedge-5of5.com` or `smartpad.io`) and:
+
+* Assert which authoritative path *should* match
+* Write a test that fails today
+* Make it pass by fixing indexing / lookup — not by loosening rules
+
+This prevents Phase B from ballooning.
+
+---
+
+## Should Farm Do Anything *Now*?
+
+**Not yet.**
+You correctly did Phase A first.
+
+Once Phase B is complete, then (and only then):
+
+* Farm **may** tighten CMDB data hygiene:
+
+  * ensure `canonical_domain` or `domains[]` includes discovery domain
+* Farm **should not** add IdP entries or fuzzy logic
+* Alias parity (hipchat/yammer) is already aligned — good
+
+---
+
+## Green-Light Decision
+
+You are in a **safe state**:
+
+* Governance can no longer be corrupted
+* Remaining discrepancies are real data-alignment issues
+
+### ✅ Proceed to Phase B when ready
+
+When you are, say the word and I’ll:
+
+* Give you a **surgical Phase B Replit prompt**, or
+* Help you design a **CMDB lookup contract** Farm and AOD can both adhere to
+
+No urgency panic anymore. You’ve stabilized the system correctly.

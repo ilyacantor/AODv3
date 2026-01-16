@@ -1,0 +1,39 @@
+Agree on not dragging this out. Looking at the report, there are really **two systemic buckets** worth fixing; everything else is noise until these are clean.
+
+## Systemic fix #1 (do this): **IdP false correlation → “HAS_IDP” when there is no IdP**
+
+This is the big one: the 13 “IdP correlation bugs” are not just missing `NO_IDP/NO_CMDB` flags. AOD is **actually asserting HAS_IDP / ANCHORED / FINANCIALLY_ANCHORED** for assets Farm considers ungoverned. You can see it in the per-asset detail where AOD emits `HAS_IDP` for profy.io and others. 
+
+**Systemic root cause to target:** AOD’s IdP correlation is too permissive (or using a fallback that “creates” governance from weak evidence).
+
+**One fix that pays off:**
+
+* Make IdP correlation **hard-gated** by *strong IdP evidence* (e.g., SSO/SCIM/service principal) and **not** by soft signals (domain similarity, finance, generic vendor mapping).
+* Add a **confidence threshold**: low-confidence matches should not set `HAS_IDP` at all (they can emit a `WEAK_IDP_MATCH` diagnostic if you want, but must not flip governance/classification).
+
+**This will reduce mismatches materially** because it fixes 13 FNs in one stroke and likely collapses related “finance gap” artifacts too. 
+
+> NOTE: Emitting `NO_IDP/NO_CMDB` reason codes is fine for transparency, but it won’t fix the mismatch if AOD is wrongly emitting `HAS_IDP`. Treat “absence flag emission” as optional polish, not the fix.
+
+## Systemic fix #2 (do this): **Key normalization / alias collapse policy**
+
+You currently have at least one clear instance: **hipchat.com collapsing to atlassian.com**. That’s “one asset,” but it’s a symptom of a systemic rule: “collapse product domains to vendor roots unless told otherwise.” 
+
+**The systemic fix:**
+
+* Change normalization so that **vendor-root collapse only happens when there is an explicit alias mapping** (policy-driven), not by heuristics.
+* Default should be: **registered domain is the key**, unless policy explicitly says “these keys merge.”
+
+This prevents future “legacy product becomes vendor root” churn across many domains, not just hipchat. 
+
+## What I would explicitly ignore for now
+
+* Single-domain “special cases” beyond the normalization policy change (don’t maintain growing allowlists).
+* The recommendation in the report about “treat ongoing finance as governance” — that’s a policy debate, not a bug fix. 
+
+## The minimal work order (2 PRs, both high ROI)
+
+1. **Tighten IdP correlation** (strong-evidence gate + confidence threshold) so `HAS_IDP` cannot be asserted without real IdP evidence.
+2. **Normalize keys policy-first** (no heuristic vendor-root collapse; only explicit alias mappings).
+
+If you do only those two, you’re addressing the only **systemic** drivers in this assessment. Everything else can wait.

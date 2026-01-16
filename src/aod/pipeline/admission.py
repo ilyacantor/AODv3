@@ -133,18 +133,24 @@ def build_match_debug_info(plane_match) -> Optional[MatchDebugInfo]:
     
     matched_record_id = plane_match.matched_ids[0] if plane_match.matched_ids else None
     matched_record_name = None
+    matched_record_domain = None
     if plane_match.matched_records:
         first_record = plane_match.matched_records[0]
         if first_record:
             matched_record_name = _get_record_name(first_record)
+            # Extract domain from record if available
+            if hasattr(first_record, 'domain') and first_record.domain:
+                matched_record_domain = first_record.domain
     
     return MatchDebugInfo(
         match_method=plane_match.match_method,
         match_key=plane_match.match_key,
         matched_record_id=matched_record_id,
         matched_record_name=matched_record_name,
+        matched_record_domain=matched_record_domain,
         ambiguity_code=plane_match.ambiguity_code.value if plane_match.ambiguity_code else None,
-        disambiguation_detail=plane_match.disambiguation_detail
+        disambiguation_detail=plane_match.disambiguation_detail,
+        is_authoritative=plane_match.is_authoritative
     )
 
 
@@ -734,13 +740,44 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
     - fastbox.cloud entity + fastbox.cloud IdP with SSO → admitted (domain-aligned + SSO)
     - easyworks.ai entity + easyworks.ai IdP → admitted (exact match)
     """
+    import os
+    import logging
+    
+    debug_match = os.environ.get("AOD_DEBUG_MATCH", "").lower() in ("1", "true", "yes")
+    
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
     
     # Governance principle: Only authoritative matches can assert governance.
     # Heuristic matches (fuzzy, vendor, contains) are enrichment-only.
-    if not correlation.idp.is_authoritative:
+    idp_match_method = correlation.idp.match_method
+    is_authoritative = correlation.idp.is_authoritative
+    
+    # GOVERNANCE INVARIANT ASSERTION (Jan 2026 - Phase B)
+    # If match method is heuristic, IdP governance MUST NOT be granted.
+    # This is a defensive check - the gate below should already block heuristics.
+    if idp_match_method and idp_match_method in HEURISTIC_MATCH_METHODS:
+        if debug_match:
+            logging.warning(
+                f"[GOVERNANCE_GATE] IdP heuristic match blocked: domain={entity_registered_domain} "
+                f"method={idp_match_method} is_authoritative={is_authoritative}"
+            )
+        # INVARIANT: Heuristic matches NEVER assert HAS_IDP
         return False, ""
+    
+    if not is_authoritative:
+        if debug_match:
+            logging.info(
+                f"[GOVERNANCE_GATE] IdP match NOT authoritative: domain={entity_registered_domain} "
+                f"method={idp_match_method} is_authoritative={is_authoritative}"
+            )
+        return False, ""
+    
+    if debug_match:
+        logging.info(
+            f"[GOVERNANCE_GATE] IdP authoritative match: domain={entity_registered_domain} "
+            f"method={idp_match_method} is_authoritative={is_authoritative}"
+        )
 
     for record in correlation.idp.matched_records:
         if isinstance(record, IdPObject):

@@ -1,0 +1,78 @@
+Yes — proceed with **both**, but with one constraint:
+
+### ✅ 1) Fix key normalization now (safe)
+
+Remove **hipchat.com** and **yammer.com** from the **alias collapse list**. Keep them as standalone keys.
+This directly addresses the 3-key drift set (hipchat, yammer, zoom-legacy) and matches the reconciliation finding. 
+
+**Do it.**
+
+---
+
+### ✅ 2) Investigate the IdP bug — but don’t guess
+
+Given you Phase-A hardened the governance gate, **AOD should not be able to assert `HAS_IDP` via heuristics anymore**.
+
+So if the API is still returning `HAS_IDP` for `teamspot.net`, one of these must be true:
+
+1. **The run you queried is still on old code** (most common)
+2. `HAS_IDP` is being asserted via an **authoritative match method** you allowed (domain / verified_alias / foreign_key / explicit_id), but Farm doesn’t have the corresponding IdP entry
+3. There is a **code path that sets HAS_IDP outside the gate** (real bug)
+
+### What to do next (tight)
+
+For each of the 7 assets:
+
+* log/return: `idp_match_method`, `matched_idp_record_id`, and `is_authoritative`
+* verify that `idp_match_method ∈ AUTHORITATIVE_MATCH_METHODS`
+
+**If match_method is heuristic and HAS_IDP is still true → invariant breach → fix immediately.**
+**If match_method is authoritative → it’s a Farm/AOD data mismatch, not a gate bug.**
+
+Do not “fix” by adding Farm IdP entries until you prove it’s authoritative.
+
+---
+
+## Replit prompt (surgical, updated)
+
+```text
+You are the senior developer. Implement two fixes:
+
+FIX 1 — Remove legacy product alias collapses (key normalization parity)
+- Remove hipchat.com -> atlassian.com from alias collapse mapping.
+- Remove yammer.com -> microsoft.com from alias collapse mapping.
+- Keep zoom-legacy.com standalone (no collapse).
+- Update/adjust unit tests accordingly:
+  - canonical_key("hipchat.com") == "hipchat.com"
+  - canonical_key("yammer.com") == "yammer.com"
+
+Rationale: Reconciliation shows KEY_NORMALIZATION_MISMATCH for hipchat/yammer because Farm expects standalone keys. :contentReference[oaicite:1]{index=1}
+
+FIX 2 — Prove/diagnose IdP correlation for 7 mismatch assets (teamspot.net etc.)
+Goal: Determine whether AOD’s HAS_IDP is coming from:
+  (a) heuristic method (BUG/invariant breach), or
+  (b) authoritative method (data mismatch vs Farm), or
+  (c) a bypass path setting HAS_IDP outside the governance gate.
+
+Implementation:
+- Add/ensure lens_match_debug (and/or API debug surface) includes for IDP plane:
+  - match_method
+  - is_authoritative
+  - matched_record_id
+  - matched_record_domain (if any)
+  - matched_record_name (if any)
+
+- Add an invariant assertion in code (runtime safe):
+  If HAS_IDP == True, then idp_match_method must be in AUTHORITATIVE_MATCH_METHODS.
+  If violated, log ERROR with full context and force HAS_IDP=False.
+
+- Add a unit test that would have caught the reported behavior:
+  - Create an entity whose domain token matches an IdP record name (heuristic),
+    ensure the pipeline produces IDP_CANDIDATE but NOT HAS_IDP.
+
+Deliver:
+- One PR with Fix 1 + tests.
+- Fix 2 instrumentation + invariant enforcement + tests.
+```
+
+Proceed now.

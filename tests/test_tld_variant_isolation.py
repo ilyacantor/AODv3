@@ -365,11 +365,12 @@ class TestAliasCollapsing:
         from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
         from src.aod.pipeline.vendor_inference import VENDOR_TO_DOMAIN
         
-        # All Atlassian aliases should be in alias set
+        # Atlassian TECHNICAL aliases should be in alias set
         assert "atlassian.net" in ALIAS_DOMAINS_TO_COLLAPSE
         assert "trello.com" in ALIAS_DOMAINS_TO_COLLAPSE
         assert "bitbucket.org" in ALIAS_DOMAINS_TO_COLLAPSE
-        assert "hipchat.com" in ALIAS_DOMAINS_TO_COLLAPSE  # Jan 2026: HipChat was Atlassian product
+        # NOTE: hipchat.com is LEGACY PRODUCT, not technical alias - keep standalone for zombie detection
+        assert "hipchat.com" not in ALIAS_DOMAINS_TO_COLLAPSE
         # atlassian.com is canonical - should NOT be in alias set
         assert "atlassian.com" not in ALIAS_DOMAINS_TO_COLLAPSE
         # VENDOR_TO_DOMAIN should map atlassian to atlassian.com
@@ -772,33 +773,33 @@ class TestGovernanceGateInvariants:
         )
         assert cmdb_canonical_match.is_authoritative == True
     
-    def test_yammer_alias_collapses_to_microsoft(self):
-        """Test D: yammer.com must collapse to microsoft.com"""
+    def test_yammer_remains_standalone_legacy_product(self):
+        """Test D: yammer.com must remain standalone (legacy product, not technical alias)."""
         from src.aod.pipeline.canonical_key import (
             ALIAS_DOMAINS_TO_COLLAPSE, 
             normalize_to_canonical_vendor_domain
         )
         
-        # yammer.com is in alias collapse set
-        assert "yammer.com" in ALIAS_DOMAINS_TO_COLLAPSE
+        # yammer.com is a LEGACY PRODUCT, not a technical alias - keep standalone for zombie detection
+        assert "yammer.com" not in ALIAS_DOMAINS_TO_COLLAPSE
         
-        # Verify collapse target is microsoft.com
+        # Verify no collapse occurs (returns None)
         result = normalize_to_canonical_vendor_domain("yammer.com")
-        assert result == "microsoft.com", f"yammer.com should collapse to microsoft.com, got {result}"
+        assert result is None, f"yammer.com should remain standalone (None), got {result}"
     
-    def test_hipchat_alias_collapses_to_atlassian(self):
-        """Test D: hipchat.com must collapse to atlassian.com"""
+    def test_hipchat_remains_standalone_legacy_product(self):
+        """Test D: hipchat.com must remain standalone (legacy product, not technical alias)."""
         from src.aod.pipeline.canonical_key import (
             ALIAS_DOMAINS_TO_COLLAPSE,
             normalize_to_canonical_vendor_domain
         )
         
-        # hipchat.com is in alias collapse set
-        assert "hipchat.com" in ALIAS_DOMAINS_TO_COLLAPSE
+        # hipchat.com is a LEGACY PRODUCT, not a technical alias - keep standalone for zombie detection
+        assert "hipchat.com" not in ALIAS_DOMAINS_TO_COLLAPSE
         
-        # Verify collapse target is atlassian.com
+        # Verify no collapse occurs (returns None)
         result = normalize_to_canonical_vendor_domain("hipchat.com")
-        assert result == "atlassian.com", f"hipchat.com should collapse to atlassian.com, got {result}"
+        assert result is None, f"hipchat.com should remain standalone (None), got {result}"
     
     def test_basecamp_remains_standalone(self):
         """Test D: basecamp.com must remain standalone (no collapse entry)."""
@@ -933,3 +934,152 @@ class TestCMDBAuthoritativeRecovery:
         )
         assert match.is_authoritative == True
         assert "verified_alias_domain" in AUTHORITATIVE_MATCH_METHODS
+
+
+class TestGovernanceInvariantEnforcement:
+    """
+    Phase B tests: Governance Invariant Enforcement
+    
+    Validates that heuristic matches NEVER assert governance (HAS_IDP/HAS_CMDB).
+    Tests the runtime invariant that blocks heuristic methods from granting governance.
+    """
+    
+    def test_heuristic_idp_match_blocked_from_admission(self):
+        """
+        Test that heuristic IdP matches are blocked from asserting HAS_IDP.
+        
+        This is the key invariant: an entity with domain token matching an IdP record
+        by name (heuristic) should produce IDP_CANDIDATE but NOT HAS_IDP.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            CorrelationResult, PlaneMatch, MatchStatus, HEURISTIC_MATCH_METHODS
+        )
+        from src.aod.pipeline.normalize_observations import CandidateEntity
+        from src.aod.pipeline.admission import check_idp_admission
+        from src.aod.models.input_contracts import IdPObject
+        
+        # Create a mock entity
+        mock_entity = CandidateEntity(
+            entity_id="entity-123",
+            canonical_name="TeamSpot",
+            original_name="TeamSpot",
+            domain="teamspot.com"
+        )
+        
+        # Create an IdP record
+        idp_record = IdPObject(
+            idp_id="idp-123",
+            name="TeamSpot",  # Name matches but domain doesn't
+            domain="teamspot.net",  # Different TLD
+            has_sso=True
+        )
+        
+        # Create a correlation with HEURISTIC match method
+        for heuristic_method in ["fuzzy", "contains", "vendor", "domain_token_to_name"]:
+            assert heuristic_method in HEURISTIC_MATCH_METHODS, f"{heuristic_method} must be heuristic"
+            
+            correlation = CorrelationResult(
+                entity=mock_entity,
+                idp=PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=["idp-123"],
+                    matched_records=[idp_record],
+                    match_method=heuristic_method
+                )
+            )
+            
+            # INVARIANT: Heuristic match must NOT grant HAS_IDP
+            admitted, reason = check_idp_admission(correlation, entity_registered_domain="teamspot.com")
+            assert admitted == False, f"Heuristic method '{heuristic_method}' must NOT grant HAS_IDP"
+    
+    def test_authoritative_idp_match_can_assert_governance(self):
+        """
+        Test that authoritative IdP matches CAN assert HAS_IDP when domain-aligned.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            CorrelationResult, PlaneMatch, MatchStatus, AUTHORITATIVE_MATCH_METHODS
+        )
+        from src.aod.pipeline.normalize_observations import CandidateEntity
+        from src.aod.pipeline.admission import check_idp_admission
+        from src.aod.models.input_contracts import IdPObject
+        
+        # Create a mock entity
+        mock_entity = CandidateEntity(
+            entity_id="entity-456",
+            canonical_name="TeamSpot",
+            original_name="TeamSpot",
+            domain="teamspot.com"
+        )
+        
+        # Create an IdP record with domain-aligned match
+        idp_record = IdPObject(
+            idp_id="idp-456",
+            name="TeamSpot",
+            domain="teamspot.com",  # Same domain as entity
+            has_sso=True
+        )
+        
+        # Create a correlation with AUTHORITATIVE match method
+        correlation = CorrelationResult(
+            entity=mock_entity,
+            idp=PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=["idp-456"],
+                matched_records=[idp_record],
+                match_method="domain"  # Authoritative method
+            )
+        )
+        
+        assert "domain" in AUTHORITATIVE_MATCH_METHODS
+        
+        # Authoritative + domain-aligned = HAS_IDP granted
+        admitted, reason = check_idp_admission(correlation, entity_registered_domain="teamspot.com")
+        assert admitted == True, "Authoritative domain-aligned match must grant HAS_IDP"
+        assert "domain-aligned" in reason.lower()
+    
+    def test_authoritative_unrelated_domain_blocked(self):
+        """
+        Test that authoritative matches with unrelated domains are blocked.
+        Even if authoritative, unrelated domains should not grant HAS_IDP.
+        
+        NOTE: Cross-TLD matches with same base token (teamspot.com vs teamspot.io)
+        ARE allowed by design for multi-TLD vendor governance.
+        This test uses genuinely different domains to verify the block.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            CorrelationResult, PlaneMatch, MatchStatus
+        )
+        from src.aod.pipeline.normalize_observations import CandidateEntity
+        from src.aod.pipeline.admission import check_idp_admission
+        from src.aod.models.input_contracts import IdPObject
+        
+        # Create a mock entity
+        mock_entity = CandidateEntity(
+            entity_id="entity-789",
+            canonical_name="TeamSpot",
+            original_name="TeamSpot",
+            domain="teamspot.com"
+        )
+        
+        # Create an IdP record with DIFFERENT base domain (not just different TLD)
+        idp_record = IdPObject(
+            idp_id="idp-789",
+            name="OtherApp",
+            domain="otherapp.io",  # Completely different domain - should not match
+            has_sso=True
+        )
+        
+        # Create a correlation with AUTHORITATIVE match method but unrelated domain
+        correlation = CorrelationResult(
+            entity=mock_entity,
+            idp=PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=["idp-789"],
+                matched_records=[idp_record],
+                match_method="domain"
+            )
+        )
+        
+        # Authoritative but unrelated domain = NO HAS_IDP (domain alignment required)
+        admitted, reason = check_idp_admission(correlation, entity_registered_domain="teamspot.com")
+        assert admitted == False, "Unrelated domain IdP match must NOT grant HAS_IDP even if authoritative"

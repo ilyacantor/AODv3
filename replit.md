@@ -37,7 +37,9 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **PlaneIndex Authoritative Indexes**: Added `by_canonical_domain` and `by_domains_array` separate indexes for authoritative CMDB correlation.
 -   **CMDB Indexing Expansion**: `canonical_domain` and `domains[]` are now indexed SEPARATELY (not as fallback), while still mirrored to `by_domain` for backward compatibility.
 -   **Deterministic Lookup Order**: CMDB correlation uses authoritative-only paths in order: (1) canonical_domain == D, (2) D ∈ domains[], (3) verified_alias_domain(D) == canonical_domain.
--   **Test Coverage**: 73 tests validating TLD isolation, governance invariants, and CMDB authoritative recovery.
+-   **Runtime Governance Assertion**: `check_idp_admission` blocks heuristic match methods from asserting HAS_IDP. Fail-safe defaults unknown methods to heuristic.
+-   **Legacy Product Standalone**: hipchat.com and yammer.com treated as standalone domains (legacy products, not technical aliases) for proper zombie detection.
+-   **Test Coverage**: 76 tests validating TLD isolation, governance invariants, heuristic blocking, and CMDB authoritative recovery.
 
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 

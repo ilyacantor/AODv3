@@ -1012,12 +1012,27 @@ def emit_actual_results(
         final_has_cmdb = ReasonCode.HAS_CMDB.value in reasons
         final_has_finance = ReasonCode.HAS_FINANCE.value in reasons
         
+        # DEBUG: Track format parity fix execution
+        debug_domains = {"primesoft.org", "topnest.org", "syncify.io", "primehub.com", "linkdesk.dev", "easyforce.io"}
+        if key in debug_domains:
+            print(f"[FORMAT_PARITY_DEBUG] key={key} before_fix: reasons={sorted(reasons)}")
+            print(f"[FORMAT_PARITY_DEBUG] key={key} final_has_idp={final_has_idp}, final_has_cmdb={final_has_cmdb}, final_has_finance={final_has_finance}")
+        
         if not final_has_idp and ReasonCode.NO_IDP.value not in reasons:
             reasons.add(ReasonCode.NO_IDP.value)
+            if key in debug_domains:
+                print(f"[FORMAT_PARITY_DEBUG] key={key} ADDED NO_IDP")
         if not final_has_cmdb and ReasonCode.NO_CMDB.value not in reasons:
             reasons.add(ReasonCode.NO_CMDB.value)
+            if key in debug_domains:
+                print(f"[FORMAT_PARITY_DEBUG] key={key} ADDED NO_CMDB")
         if not final_has_finance and ReasonCode.NO_FINANCE.value not in reasons:
             reasons.add(ReasonCode.NO_FINANCE.value)
+            if key in debug_domains:
+                print(f"[FORMAT_PARITY_DEBUG] key={key} ADDED NO_FINANCE")
+        
+        if key in debug_domains:
+            print(f"[FORMAT_PARITY_DEBUG] key={key} after_fix: reasons={sorted(reasons)}")
         
         agg["reasons"] = reasons
     

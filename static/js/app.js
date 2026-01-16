@@ -795,31 +795,10 @@
                 const isTriaged = triageState !== 'pending';
                 const rowStateClass = isTriaged ? `triaged triaged-${triageState}` : '';
                 
-                let assetName, issue, categoryClass;
-                const isFirewallSection = sectionType === 'firewall';
-                const financeBadge = (isFirewallSection && item.hasFinanceGap) ? ' <span class="finance-badge" title="Spend detected">($)</span>' : '';
-                
-                if (itemType === 'finding') {
-                    assetName = item.asset_name || 'Unknown Asset';
-                    issue = (item.finding_type || 'unknown').replace(/_/g, ' ');
-                    categoryClass = item.category || 'governance';
-                } else if (itemType === 'hygiene') {
-                    assetName = item.name || item.asset_key || 'Unknown';
-                    issue = item.issueLabels || 'Data Quality Issue';
-                    categoryClass = 'hygiene';
-                } else if (itemType === 'toxic') {
-                    assetName = item.name || item.asset_key || 'Unknown';
-                    issue = item.issueLabels || 'Risk Review';
-                    categoryClass = 'risk';
-                } else if (itemType === 'blocked') {
-                    assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
-                    issue = 'Policy Violation';
-                    categoryClass = 'firewall';
-                } else {
-                    assetName = (item.name || item.asset_key || 'Unknown') + financeBadge;
-                    issue = itemType === 'shadow' ? 'Shadow IT' : 'Zombie Asset';
-                    categoryClass = itemType;
-                }
+                const { headline } = generateTriageHeadline(item, itemType);
+                const assetName = item.name || item.asset_key || item.asset_name || 'Unknown';
+                const issue = headline;
+                let categoryClass = itemType || 'governance';
                 
                 const dataAttrs = `data-item-id="${itemId}" data-item-type="${itemType}"`;
                 let primaryBtn, secondaryBtn = '', moreOptions, statusBadge = '';

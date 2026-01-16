@@ -174,7 +174,7 @@ AUTHORITATIVE_MATCH_METHODS = {"domain", "uri", "canonical_name"}
 HEURISTIC_MATCH_METHODS = {
     "fuzzy", "contains", "vendor", "domain_vendor", "vendor_fallback",
     "name_contains_domain_token", "normalization_token", "cross_domain_brand",
-    "domain_token_to_name", "registered_domain_token"
+    "domain_token_to_name", "registered_domain_token", "canonical_name_as_domain"
 }
 
 # Match methods that indicate cross-TLD correlation (must not trigger identity merge)
@@ -706,6 +706,8 @@ def correlate_to_plane(
         
         # Fallback 1: If entity has no domain but canonical_name looks like a domain, try that
         # Example: entity.canonical_name="slack.com" should match IdP record with domain="slack.com"
+        # CRITICAL: This is HEURISTIC - canonical_name is not authoritative domain evidence
+        # Jan 2026: Fixed to use canonical_name_as_domain (heuristic) not "domain" (authoritative)
         if not entity.domain and entity.canonical_name and '.' in entity.canonical_name:
             canonical_as_domain = entity.canonical_name.lower().strip()
             # Must look like a valid domain (not "Microsoft 365.com" etc)
@@ -720,6 +722,13 @@ def correlate_to_plane(
                         match_key_used = canonical_as_domain
                 else:
                     match_key_used = canonical_as_domain
+                # Mark as heuristic - inferring domain from canonical_name is NOT authoritative
+                if domain_matches:
+                    match_method_used = "canonical_name_as_domain"
+                    logger.debug(
+                        f"CANONICAL_NAME_AS_DOMAIN entity={entity.canonical_name} "
+                        f"inferred_domain={canonical_as_domain} matches={len(domain_matches)}"
+                    )
         
         # Fallback 2: Look up entity's domain token in by_name_words (catches record.canonical_domain indexed as token)
         # Example: entity.domain="flexpoint.cloud" → token "flexpoint" → matches IdP record indexed with "flexpoint"

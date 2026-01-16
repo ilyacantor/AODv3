@@ -97,6 +97,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "jira.com",
     "confluence.com",
     "opsgenie.com",
+    "hipchat.com",    # Jan 2026: HipChat was Atlassian product (deprecated)
     # GitHub aliases
     "github.io",
     "githubusercontent.com",

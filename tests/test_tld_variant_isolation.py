@@ -361,7 +361,7 @@ class TestAliasCollapsing:
         assert VENDOR_TO_DOMAIN.get("zoom") == "zoom.com"
     
     def test_atlassian_aliases_collapse(self):
-        """atlassian.net, trello.com, bitbucket.org should collapse to atlassian.com"""
+        """atlassian.net, trello.com, bitbucket.org, hipchat.com should collapse to atlassian.com"""
         from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
         from src.aod.pipeline.vendor_inference import VENDOR_TO_DOMAIN
         
@@ -369,10 +369,18 @@ class TestAliasCollapsing:
         assert "atlassian.net" in ALIAS_DOMAINS_TO_COLLAPSE
         assert "trello.com" in ALIAS_DOMAINS_TO_COLLAPSE
         assert "bitbucket.org" in ALIAS_DOMAINS_TO_COLLAPSE
+        assert "hipchat.com" in ALIAS_DOMAINS_TO_COLLAPSE  # Jan 2026: HipChat was Atlassian product
         # atlassian.com is canonical - should NOT be in alias set
         assert "atlassian.com" not in ALIAS_DOMAINS_TO_COLLAPSE
         # VENDOR_TO_DOMAIN should map atlassian to atlassian.com
         assert VENDOR_TO_DOMAIN.get("atlassian") == "atlassian.com"
+    
+    def test_basecamp_not_collapsed(self):
+        """basecamp.com should be standalone, not collapsed to another vendor"""
+        from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Basecamp is its own product, NOT an alias
+        assert "basecamp.com" not in ALIAS_DOMAINS_TO_COLLAPSE
 
 
 class TestMatchQualityClassification:
@@ -578,6 +586,7 @@ class TestDomainCorrelationFallbacks:
         
         assert "domain_token_to_name" in HEURISTIC_MATCH_METHODS
         assert "registered_domain_token" in HEURISTIC_MATCH_METHODS
+        assert "canonical_name_as_domain" in HEURISTIC_MATCH_METHODS
     
     def test_new_methods_blocked_from_promotion(self):
         """New match methods should be blocked from domain promotion"""
@@ -585,6 +594,18 @@ class TestDomainCorrelationFallbacks:
         
         assert "domain_token_to_name" in PROMOTION_BLOCKED_MATCH_METHODS
         assert "registered_domain_token" in PROMOTION_BLOCKED_MATCH_METHODS
+        assert "canonical_name_as_domain" in PROMOTION_BLOCKED_MATCH_METHODS
+    
+    def test_canonical_name_as_domain_is_not_authoritative(self):
+        """canonical_name_as_domain must NOT be in AUTHORITATIVE_MATCH_METHODS
+        
+        This is the critical governance gate fix. Using canonical_name as a domain
+        source is HEURISTIC - it's inferring domain from an unreliable field.
+        It must NOT assert governance (HAS_IDP, HAS_CMDB).
+        """
+        from src.aod.pipeline.correlate_entities import AUTHORITATIVE_MATCH_METHODS
+        
+        assert "canonical_name_as_domain" not in AUTHORITATIVE_MATCH_METHODS
     
     def test_canonical_name_as_domain_regex_validation(self):
         """Test regex for canonical_name-as-domain validation"""

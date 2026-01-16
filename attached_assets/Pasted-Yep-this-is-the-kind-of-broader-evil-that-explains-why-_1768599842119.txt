@@ -1,0 +1,95 @@
+Yep — **this is the kind of “broader + evil” that explains why fixes feel like they don’t land.** And based on what you just found, there are **two separate evils**:
+
+## Evil #1: Ghost assets (catalog contains things that shouldn’t exist)
+
+If your invariant check found **17 cataloged assets with no valid admission basis**, that’s not a “bug in one gate.” That’s a **pipeline integrity breach**: somewhere you’re allowing assets to end up in `cataloged` even when *no gate is true*.
+
+This is usually caused by one (or more) of:
+
+* **Run-scope leakage**: assets from prior runs/snapshots still in the working set and getting re-cataloged without fresh evidence.
+* **Merge contamination**: asset aggregation unions “something” (refs, lens flags, anchors) even when the admitting evidence doesn’t survive.
+* **Cataloging step not re-checking admission**: i.e., catalog stage trusts “admitted earlier” or “has refs” instead of recomputing “passes a gate.”
+
+**Non-negotiable invariant (make it fatal):**
+
+> `cataloged_asset => admitted_asset => (idp_gate OR cmdb_gate OR cloud_gate OR finance_gate OR discovery_gate)`
+
+Not “has evidence_refs”, not “has anchors”, not “has lens coverage”, not “has name”.
+
+If that invariant fails, you don’t have a “classification bug.” You have a **system-of-record bug**.
+
+## Evil #2: The 6 IdP assets are *actually* HAS_IDP in AOD
+
+This is the opposite of what we thought earlier, and it’s the real blocker:
+
+* AOD reconciliation API returns **HAS_IDP**
+* Stored `lens_coverage.idp = True`
+* Farm expects **NO_IDP**
+
+That means the disagreement is **semantic**, not formatting.
+
+### The key fork in the road
+
+Only two possibilities exist:
+
+### A) **Farm snapshot truly has NO IdP record for those domains**
+
+Then AOD is pulling IdP correlation from somewhere else:
+
+* stale cached IdP plane
+* cross-run / cross-snapshot pollution
+* wrong tenant/snapshot binding
+* “policy center” points to one snapshot, but correlation uses another
+
+That’s *evil* and aligns with your ghost-assets finding.
+
+### B) **Farm snapshot *does* have IdP records for those domains**
+
+Then Farm’s “NO_IDP expected” is wrong — meaning:
+
+* Farm’s reason-code generator applies **extra suppression rules** (e.g., “if asset name has (Legacy)/-prod then treat as NO_IDP even if domain matches”)
+* Or Farm is correlating differently than policy implies
+
+Either way: **Farm/AOD are not using the same correlation rules or the same data.**
+
+## The fastest way to settle it (no more guessing)
+
+Do these three checks and you’ll know exactly which evil you’re facing:
+
+### 1) Snapshot binding check (this catches cross-run pollution)
+
+For each of the 6 domains, print:
+
+* `snapshot_id` used by AOD for IdP correlation
+* the IdP record ID + domain that matched
+* the source table / collection / plane version
+  If that snapshot_id differs from the Farm snapshot for the assessment, you’ve found the root cause.
+
+### 2) Farm IdP plane existence check (single truth test)
+
+In Farm snapshot: does an IdP record exist with `domain == easyforce.io` (etc.)?
+
+* **If NO** → AOD is correlating against the wrong dataset (leakage).
+* **If YES** → Farm’s NO_IDP expectation is wrong or has extra suppression logic.
+
+### 3) Merge contamination check (lens_coverage correctness)
+
+For a merged asset:
+
+* ensure `lens_coverage.idp == True` **iff** there exists at least one **surviving** `idp_match_ref` after non-canonical filtering.
+  If lens stays `True` when the only matches were filtered out or belonged to a merged sibling that shouldn’t confer governance → that’s a merge bug.
+
+## What to implement first
+
+Given you found **ghost assets + IdP mismatch**, do this order:
+
+1. **Make the invariant fatal** (catalog cannot contain non-admitted)
+2. **Hard bind all correlation lookups to the run’s snapshot_id** (no global cache)
+3. Then fix the **IdP suppression / merge contamination** rule (depending on what check #2 reveals)
+
+If you paste just one thing — the debug trace for `easyforce.io` showing:
+
+* snapshot_id used
+* matched IdP record (id + domain)
+* where `lens_coverage.idp` got set
+  —I can tell you in one pass whether you’re in fork (A) leakage, fork (B) Farm expectation/suppression, or merge contamination.

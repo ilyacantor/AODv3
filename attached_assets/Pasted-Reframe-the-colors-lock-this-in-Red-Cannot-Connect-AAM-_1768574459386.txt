@@ -1,0 +1,116 @@
+Reframe the colors (lock this in)
+🔴 Red — Cannot Connect
+
+AAM must not connect
+
+Unsafe or undefined to proceed
+
+Objective prerequisites missing
+
+Examples:
+
+Identity gap (no SSO)
+
+Finance gap (unowned spend)
+
+Data conflict (conflicting ownership / env)
+
+These are hard gates.
+
+🟡 Yellow — Judgment Required
+
+AAM could connect
+
+But the system cannot decide confidently
+
+Requires human context or prioritization
+
+Yellow answers:
+
+“Is this worth acting on, and how?”
+
+🟢 Green — Informational
+
+Hygiene only
+
+No impact on connection
+
+Safe to ignore or batch later
+
+So what belongs in Yellow?
+✅ Zombies — Yes
+
+Zombies are the canonical yellow case:
+
+Registered
+
+No recent activity
+
+Might be waste, might be seasonal
+
+Pure human judgment.
+
+✅ Duplication Risk — Yes
+
+Potential overlap
+
+Often benign
+
+Needs confirmation, not enforcement
+
+✅ Ambiguous Classification (subset of data_conflict)
+
+This is important:
+
+If data_conflict is:
+
+Hard contradiction → 🔴 Red
+(e.g. prod vs dev, different owners)
+
+Soft ambiguity → 🟡 Yellow
+(e.g. SaaS vs internal tool, vendor vs product)
+
+So data_conflict splits.
+
+❌ CMDB Gap — No (Green)
+
+Known hygiene issue
+
+Not a decision blocker
+
+Everyone has this problem
+
+❌ Governance Gap — No (Green by default)
+
+Unless customer explicitly elevates it.
+
+Canonical mapping (recommended)
+Finding Type	Default Color	Notes
+identity_gap	🔴 Red	Unsafe to connect
+finance_gap	🔴 Red	Unowned dependency
+data_conflict (hard)	🔴 Red	Unsafe ambiguity
+zombie_asset	🟡 Yellow	Value judgment
+duplication_risk	🟡 Yellow	Confirmation needed
+data_conflict (soft)	🟡 Yellow	Classification judgment
+cmdb_gap	🟢 Green	Hygiene
+governance_gap	🟢 Green	Hygiene
+The test (use this every time)
+
+Ask one question:
+
+“Would a reasonable engineer feel unsafe wiring this into production?”
+
+Yes → 🔴
+
+No, but unsure → 🟡
+
+No, and who cares → 🟢
+
+That’s the rule. No exceptions.
+
+Why this matters
+
+If Yellow becomes “everything that’s not green,” it loses meaning.
+If Yellow becomes “only zombies,” you underuse it.
+
+Yellow is human discernment, not decay.

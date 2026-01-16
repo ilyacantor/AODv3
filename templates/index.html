@@ -222,10 +222,10 @@
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon section-risk">⚠️</span>
-                            Review — Cost Optimization
+                            Judgment Required
                             <span class="triage-count risk-count" id="triageRiskCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Zombie assets: registered but inactive, may be wasting spend</div>
+                        <div class="triage-section-desc">Could connect, but needs human judgment: zombies, duplicates, ambiguous classification</div>
                     </div>
                     <div class="triage-section-content" id="triageRiskContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
@@ -440,107 +440,82 @@
                 <button class="modal-close" onclick="closeTriageModal('connectionPolicyModal')">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="triage-modal-subtitle" style="margin-bottom:1rem;">Configure which finding types block AAM (Asset & Access Management) connection.</p>
+                <p class="triage-modal-subtitle" style="margin-bottom:1rem;">Configure how each finding type routes assets in triage.</p>
                 
-                <div style="margin-bottom:1.5rem;">
-                    <h4 style="color:var(--red-400);margin-bottom:0.5rem;font-size:0.875rem;">⛔ Blocking Findings — AAM Connection Blocked</h4>
-                    <table class="policy-table" style="width:100%;border-collapse:collapse;">
-                        <thead>
-                            <tr style="border-bottom:1px solid var(--slate-600);">
-                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Finding Type</th>
-                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Rationale</th>
-                                <th style="text-align:center;padding:0.5rem;color:var(--slate-300);font-weight:500;">Block AAM?</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr style="border-bottom:1px solid var(--slate-700);">
-                                <td style="padding:0.5rem;color:var(--slate-200);">identity_gap</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">No access lifecycle control, no offboarding, no auditability</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_identity_gap" checked>
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                            <tr style="border-bottom:1px solid var(--slate-700);">
-                                <td style="padding:0.5rem;color:var(--slate-200);">finance_gap</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Active spend without accountable owner</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_finance_gap" checked>
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                            <tr style="border-bottom:1px solid var(--slate-700);">
-                                <td style="padding:0.5rem;color:var(--slate-200);">data_conflict</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Sources disagree on identity or ownership — unsafe to act</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_data_conflict" checked>
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table class="policy-table" style="width:100%;border-collapse:collapse;margin-bottom:1rem;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--slate-600);">
+                            <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Finding Type</th>
+                            <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Rationale</th>
+                            <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Route To</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">identity_gap</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">No SSO — unsafe to connect</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge red">🔴 Cannot Connect</span>
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">finance_gap</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Unowned spend — unsafe dependency</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge red">🔴 Cannot Connect</span>
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">data_conflict</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Conflicting ownership — unsafe ambiguity</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge red">🔴 Cannot Connect</span>
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">zombie_asset</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Registered but inactive — value judgment</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge yellow">🟡 Judgment Required</span>
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">duplication_risk</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Potential overlap — confirmation needed</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge yellow">🟡 Judgment Required</span>
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--slate-700);">
+                            <td style="padding:0.5rem;color:var(--slate-200);">cmdb_gap</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Hygiene only — everyone has this</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge green">🟢 Informational</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.5rem;color:var(--slate-200);">governance_gap</td>
+                            <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Often undefined — hygiene only</td>
+                            <td style="padding:0.5rem;">
+                                <span class="policy-badge green">🟢 Informational</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
                 
-                <div>
-                    <h4 style="color:var(--green-400);margin-bottom:0.5rem;font-size:0.875rem;">✓ Non-Blocking Findings — Informational Only</h4>
-                    <table class="policy-table" style="width:100%;border-collapse:collapse;">
-                        <thead>
-                            <tr style="border-bottom:1px solid var(--slate-600);">
-                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Finding Type</th>
-                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Rationale</th>
-                                <th style="text-align:center;padding:0.5rem;color:var(--slate-300);font-weight:500;">Block AAM?</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr style="border-bottom:1px solid var(--slate-700);">
-                                <td style="padding:0.5rem;color:var(--slate-200);">cmdb_gap</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Hygiene issue — CMDB data is often incomplete</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_cmdb_gap">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                            <tr style="border-bottom:1px solid var(--slate-700);">
-                                <td style="padding:0.5rem;color:var(--slate-200);">governance_gap</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Often undefined even in mature organizations</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_governance_gap">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding:0.5rem;color:var(--slate-200);">duplication_risk</td>
-                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Common and often benign — low immediate risk</td>
-                                <td style="text-align:center;padding:0.5rem;">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="policy_duplication_risk">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <p style="font-size:0.75rem;color:var(--slate-500);margin-top:1rem;">
+                    <strong>Test:</strong> "Would a reasonable engineer feel unsafe wiring this into production?"<br>
+                    Yes → 🔴 Red &nbsp;|&nbsp; No, but unsure → 🟡 Yellow &nbsp;|&nbsp; No, and who cares → 🟢 Green
+                </p>
                 
-                <div class="triage-modal-actions" style="margin-top:1.5rem;">
-                    <button class="triage-modal-btn cancel" onclick="closeTriageModal('connectionPolicyModal')">Cancel</button>
-                    <button class="triage-modal-btn primary" onclick="saveConnectionPolicy()">Save Policy</button>
+                <div class="triage-modal-actions" style="margin-top:1rem;">
+                    <button class="triage-modal-btn primary" onclick="closeTriageModal('connectionPolicyModal')">Close</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=10"></script>
+    <script src="/static/js/app.js?v=11"></script>
 </body>
 </html>

@@ -273,12 +273,12 @@
         }
         
         let connectionPolicy = {
-            identity_gap: true,
-            finance_gap: true,
-            data_conflict: true,
-            cmdb_gap: false,
-            governance_gap: false,
-            duplication_risk: false
+            identity_gap: 'red',
+            finance_gap: 'red',
+            data_conflict: 'red',
+            duplication_risk: 'yellow',
+            cmdb_gap: 'green',
+            governance_gap: 'green'
         };
         
         function openConnectionPolicyModal() {
@@ -454,11 +454,13 @@
                 const hygieneItems = [];
                 const processedAssetIds = new Set();
                 
-                const blockingTypes = Object.entries(connectionPolicy).filter(([k, v]) => v).map(([k]) => k);
-                const nonBlockingTypes = Object.entries(connectionPolicy).filter(([k, v]) => !v).map(([k]) => k);
+                const redTypes = Object.entries(connectionPolicy).filter(([k, v]) => v === 'red').map(([k]) => k);
+                const yellowTypes = Object.entries(connectionPolicy).filter(([k, v]) => v === 'yellow').map(([k]) => k);
+                const greenTypes = Object.entries(connectionPolicy).filter(([k, v]) => v === 'green').map(([k]) => k);
                 
-                const hasBlockingFinding = (findings) => findings.some(f => blockingTypes.includes(f.finding_type));
-                const hasOnlyNonBlockingFindings = (findings) => findings.length > 0 && findings.every(f => nonBlockingTypes.includes(f.finding_type));
+                const hasRedFinding = (findings) => findings.some(f => redTypes.includes(f.finding_type));
+                const hasYellowFinding = (findings) => findings.some(f => yellowTypes.includes(f.finding_type));
+                const hasOnlyGreenFindings = (findings) => findings.length > 0 && findings.every(f => greenTypes.includes(f.finding_type));
                 
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
@@ -516,7 +518,7 @@
                     const provStatus = (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
-                    if (hasBlockingFinding(assetFindings)) {
+                    if (hasRedFinding(assetFindings)) {
                         const savedAction = triageActionsMap[`blocking:${assetId}`];
                         const item = { 
                             ...a, 
@@ -556,7 +558,31 @@
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
                     
-                    if (provStatus === 'REVIEW') {
+                    riskItems.push(item);
+                    processedAssetIds.add(assetId);
+                });
+                
+                assets.forEach(a => {
+                    const assetId = a.asset_id || a.id;
+                    if (processedAssetIds.has(assetId)) return;
+                    
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
+                    
+                    if (hasYellowFinding(assetFindings) && !hasRedFinding(assetFindings)) {
+                        const savedAction = triageActionsMap[`judgment:${assetId}`];
+                        const item = { 
+                            ...a,
+                            itemType: 'judgment',
+                            sectionType: 'risk',
+                            provisioning_status: provStatus,
+                            findings: assetFindings,
+                            triageState: savedAction?.state || 'pending',
+                            triageAction: savedAction?.action || null,
+                            triageOwner: savedAction?.owner || null,
+                            triageDeferUntil: savedAction?.defer_until || null,
+                            triageIgnoreReason: savedAction?.ignore_reason || null
+                        };
                         riskItems.push(item);
                         processedAssetIds.add(assetId);
                     }
@@ -569,7 +595,7 @@
                     const provStatus = (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
-                    if (provStatus === 'ACTIVE' && hasOnlyNonBlockingFindings(assetFindings)) {
+                    if (provStatus === 'ACTIVE' && hasOnlyGreenFindings(assetFindings)) {
                         const savedAction = triageActionsMap[`hygiene:${assetId}`];
                         const item = { 
                             ...a,
@@ -707,11 +733,20 @@
                     cause = 'Missing required governance prerequisite';
                     consequence = 'Establish identity context before connecting';
                 }
-            } else if (itemType === 'zombie' || itemType === 'toxic') {
+            } else if (itemType === 'zombie' || itemType === 'toxic' || itemType === 'judgment') {
                 headline = `${name} has unresolved ambiguity that requires review before connecting`;
                 if (itemType === 'zombie') {
                     cause = 'No logins or usage detected in 90+ days';
                     consequence = monthlySpend ? `Review: $${monthlySpend.toLocaleString()}/mo may be recoverable` : 'Review stale access credentials';
+                } else if (itemType === 'judgment') {
+                    const hasDupe = findings.some(f => f.finding_type === 'duplication_risk');
+                    if (hasDupe) {
+                        cause = 'Potential overlap with existing assets';
+                        consequence = 'Confirm before connecting to avoid duplication';
+                    } else {
+                        cause = 'Classification requires human judgment';
+                        consequence = 'Review context before proceeding';
+                    }
                 } else {
                     cause = 'Ambiguous governance data detected';
                     consequence = 'Clarify before connecting';

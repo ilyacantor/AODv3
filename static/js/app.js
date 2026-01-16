@@ -651,11 +651,35 @@
                 headline = `${name} was blocked by policy`;
                 cause = 'Previously rejected or banned from catalog';
                 consequence = 'Cannot be used until approved';
-            } else if (itemType === 'toxic' || itemType === 'hygiene') {
-                const issues = item.issueLabels || 'data quality issues';
-                headline = `${name} has ${issues}`;
-                cause = item.findings?.length ? `${item.findings.length} finding(s) detected` : 'Data inconsistency detected';
-                consequence = 'May affect reporting accuracy or compliance';
+            } else if (itemType === 'toxic') {
+                if (!agg.has_idp) {
+                    headline = `${name} is active but not connected to SSO`;
+                    cause = 'No identity provider integration found';
+                    consequence = 'Users may have unmanaged access';
+                } else {
+                    headline = `${name} has conflicting governance data`;
+                    cause = 'Data mismatch between sources';
+                    consequence = 'Review needed to resolve discrepancies';
+                }
+            } else if (itemType === 'hygiene') {
+                const findingCount = item.findings?.length || 0;
+                if (!agg.has_cmdb) {
+                    headline = `${name} is not registered in the asset catalog`;
+                    cause = 'Missing from CMDB/configuration database';
+                    consequence = 'Asset may not be tracked for compliance';
+                } else if (!agg.has_idp) {
+                    headline = `${name} lacks identity integration`;
+                    cause = 'Not connected to SSO/IdP';
+                    consequence = 'Access management may be incomplete';
+                } else if (findingCount > 0) {
+                    headline = `${name} has ${findingCount} data quality issue${findingCount > 1 ? 's' : ''}`;
+                    cause = 'Inconsistencies detected across data sources';
+                    consequence = 'May affect reporting accuracy';
+                } else {
+                    headline = `${name} needs data review`;
+                    cause = 'Minor data issues detected';
+                    consequence = 'Recommend verification';
+                }
             } else {
                 headline = `${name} requires review`;
                 cause = 'Classification pending';

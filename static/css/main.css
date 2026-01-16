@@ -685,6 +685,31 @@ main { padding: 2rem; }
 .tour-overlay-small .tour-headline { font-size: 0.9rem; margin-bottom: 0.35rem; }
 .tour-overlay-small .tour-content { font-size: 0.8rem; line-height: 1.5; }
 .tour-overlay-small .tour-footer { padding: 0.5rem 0.75rem; }
+
+/* Mobile responsive tour styles */
+@media (max-width: 768px) {
+    .tour-overlay {
+        width: calc(100vw - 20px) !important;
+        max-width: 380px !important;
+        left: 50% !important;
+        right: auto !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%) !important;
+    }
+    .tour-overlay-small {
+        width: calc(100vw - 20px) !important;
+        max-width: 320px !important;
+        top: 70px !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+    }
+    .tour-overlay-header { padding: 0.75rem 1rem; }
+    .tour-overlay-content { padding: 0.75rem 1rem; font-size: 0.9rem; }
+    .tour-overlay-footer { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
+    .tour-btn { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+}
+
 .tour-drag-icon {
     color: rgba(255,255,255,0.3);
     font-size: 0.7rem;

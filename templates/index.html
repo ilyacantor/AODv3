@@ -191,7 +191,7 @@
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Gatekeeper Console</h2>
-                    <p class="config-note" style="margin:0;">Action-based asset triage. The Firewall for blocked items, the Warning Zone for risks, and Hygiene for data governance.</p>
+                    <p class="config-note" style="margin:0;">Action-based asset triage. Blocked items requiring action, items needing review, and informational findings.</p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -210,7 +210,7 @@
                             Blocked / Action Required
                             <span class="triage-count firewall-count" id="triageFirewallCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Shadow IT and policy violations — approve for AAM or ban forever</div>
+                        <div class="triage-section-desc">High risk / policy breach</div>
                     </div>
                     <div class="triage-section-content" id="triageFirewallContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
@@ -222,10 +222,10 @@
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon section-risk">⚠️</span>
-                            Risks / Review
+                            Needs Review
                             <span class="triage-count risk-count" id="triageRiskCount">0</span>
                         </div>
-                        <div class="triage-section-desc">Zombies and toxic assets (ACTIVE + missing IdP) — deprovision or dismiss risk</div>
+                        <div class="triage-section-desc">Ambiguous / Conflicting facts, including Shadow IT and Zombie assets</div>
                     </div>
                     <div class="triage-section-content" id="triageRiskContent">
                         <div class="triage-empty">Select a snapshot to load items</div>
@@ -237,7 +237,7 @@
                         <div class="triage-section-title">
                             <span class="triage-collapse-icon">▼</span>
                             <span class="triage-icon section-hygiene">🛠️</span>
-                            Data Governance
+                            Informational
                             <span class="triage-count hygiene-count" id="triageHygieneCount">0</span>
                         </div>
                         <div class="triage-section-desc">Active assets with minor data issues — resolve or acknowledge</div>

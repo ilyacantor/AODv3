@@ -2702,6 +2702,19 @@
         initMainTabs();
         initTriageTab();
         initTestTab();
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('from') === 'farm' || urlParams.get('source') === 'farm') {
+            const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
+            if (consoleTab) {
+                document.querySelectorAll('.header-nav-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+                consoleTab.classList.add('active');
+                document.getElementById('discoveryTabContent').classList.add('active');
+            }
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+        
         checkHealth(); 
         loadRuns(true);
         loadTenants();

@@ -276,33 +276,62 @@
             identity_gap: 'red',
             finance_gap: 'red',
             data_conflict: 'red',
+            zombie_asset: 'yellow',
             duplication_risk: 'yellow',
             cmdb_gap: 'green',
             governance_gap: 'green'
         };
         
+        async function loadConnectionPolicy() {
+            try {
+                const res = await fetch('/api/v1/policy/master');
+                if (res.ok) {
+                    const policy = await res.json();
+                    if (policy.connection_policy) {
+                        const cp = policy.connection_policy;
+                        Object.keys(connectionPolicy).forEach(key => {
+                            if (cp[key] && cp[key].value) {
+                                connectionPolicy[key] = cp[key].value;
+                            }
+                        });
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load connection policy:', err);
+            }
+        }
+        
+        loadConnectionPolicy();
+        
         function openConnectionPolicyModal() {
-            ['identity_gap', 'finance_gap', 'data_conflict', 'cmdb_gap', 'governance_gap', 'duplication_risk'].forEach(type => {
-                const checkbox = document.getElementById(`policy_${type}`);
-                if (checkbox) checkbox.checked = connectionPolicy[type];
+            const findingTypes = ['identity_gap', 'finance_gap', 'data_conflict', 'zombie_asset', 'duplication_risk', 'cmdb_gap', 'governance_gap'];
+            findingTypes.forEach(type => {
+                const select = document.getElementById(`policy_${type}`);
+                if (select) select.value = connectionPolicy[type] || 'green';
             });
             document.getElementById('connectionPolicyModal').classList.add('active');
         }
         
         async function saveConnectionPolicy() {
-            ['identity_gap', 'finance_gap', 'data_conflict', 'cmdb_gap', 'governance_gap', 'duplication_risk'].forEach(type => {
-                const checkbox = document.getElementById(`policy_${type}`);
-                if (checkbox) connectionPolicy[type] = checkbox.checked;
+            const findingTypes = ['identity_gap', 'finance_gap', 'data_conflict', 'zombie_asset', 'duplication_risk', 'cmdb_gap', 'governance_gap'];
+            const updates = {};
+            
+            findingTypes.forEach(type => {
+                const select = document.getElementById(`policy_${type}`);
+                if (select) {
+                    connectionPolicy[type] = select.value;
+                    updates[`connection_policy.${type}.value`] = select.value;
+                }
             });
             
             try {
-                await fetch('/api/policy/connection', {
-                    method: 'POST',
+                await fetch('/api/v1/policy/master', {
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ blocking_findings: connectionPolicy })
+                    body: JSON.stringify(updates)
                 });
             } catch (err) {
-                console.warn('Policy save failed (endpoint may not exist yet):', err);
+                console.warn('Policy save failed:', err);
             }
             
             closeTriageModal('connectionPolicyModal');

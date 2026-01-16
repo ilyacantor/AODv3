@@ -1007,3 +1007,32 @@ main { padding: 2rem; }
     color: var(--green-400);
     border: 1px solid rgba(34, 197, 94, 0.3);
 }
+
+/* Policy Tier Select */
+.policy-tier-select {
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: var(--slate-700);
+    color: var(--slate-200);
+    border: 1px solid var(--slate-600);
+    cursor: pointer;
+    min-width: 140px;
+}
+.policy-tier-select:focus {
+    outline: none;
+    border-color: var(--cyan-400);
+}
+.policy-tier-select option[value="red"] {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--red-400);
+}
+.policy-tier-select option[value="yellow"] {
+    background: rgba(234, 179, 8, 0.2);
+    color: var(--yellow-400);
+}
+.policy-tier-select option[value="green"] {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--green-400);
+}

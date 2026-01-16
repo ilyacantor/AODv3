@@ -353,6 +353,58 @@
       "ui_label": "Corporate Root Domains"
     }
   },
+  "connection_policy": {
+    "description": "AAM connection gating policy - determines which findings block asset connection",
+    "identity_gap": {
+      "value": "red",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "No SSO integration - no lifecycle control, no offboarding, no access auditability",
+      "ui_label": "Identity Gap (No SSO)"
+    },
+    "finance_gap": {
+      "value": "red",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Active spend without accountable owner - dangerous to enable integrations",
+      "ui_label": "Finance Gap (Unowned Spend)"
+    },
+    "data_conflict": {
+      "value": "red",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Sources disagree on identity/ownership - cannot safely act",
+      "ui_label": "Data Conflict (Disagreement)"
+    },
+    "zombie_asset": {
+      "value": "yellow",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Registered but inactive - requires human judgment on value",
+      "ui_label": "Zombie Asset (Inactive)"
+    },
+    "duplication_risk": {
+      "value": "yellow",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Potential overlap with another asset - confirmation needed",
+      "ui_label": "Duplication Risk (Overlap)"
+    },
+    "cmdb_gap": {
+      "value": "green",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Asset not in CMDB - hygiene issue only, everyone has this",
+      "ui_label": "CMDB Gap (Not Registered)"
+    },
+    "governance_gap": {
+      "value": "green",
+      "type": "enum",
+      "options": ["red", "yellow", "green"],
+      "description": "Governance undefined - hygiene issue only",
+      "ui_label": "Governance Gap (Undefined)"
+    }
+  },
   "farm_sync": {
     "description": "Farm synchronization settings",
     "webhook_url": {

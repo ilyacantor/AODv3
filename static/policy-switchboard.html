@@ -75,63 +75,54 @@
             </div>
         </div>
 
-        <!-- Policy Impact Panel -->
-        <div id="policy-impact" class="mb-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-cyan-400 border-t-transparent"></div>
+            <p class="mt-4 text-gray-400">Loading policy configuration...</p>
+        </div>
+
+        <div id="config-form" class="hidden grid gap-6 md:grid-cols-2">
+        </div>
+
+        <!-- Policy Impact - Blocked Domains Summary -->
+        <div id="policy-impact" class="mt-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-700">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                         </svg>
                     </div>
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-100">Policy Impact</h2>
-                        <p class="text-sm text-gray-500">Domains blocked by current policy in latest run</p>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-semibold text-gray-100">Blocked Domains Summary</h2>
+                        <div class="relative group/tip">
+                            <svg class="w-4 h-4 text-gray-500 cursor-help hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div class="absolute left-0 top-full mt-2 w-80 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm text-gray-300 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all duration-200 z-50 shadow-xl">
+                                Shows which domains were filtered out by each policy rule in the latest run. This is not a KPI - it's a breakdown of what your current settings are blocking. Click any category to see the specific domains.
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button onclick="loadImpact()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onclick="loadImpact()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                     </svg>
                     Refresh
                 </button>
             </div>
-            <div id="impact-loading" class="text-center py-8">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-400 border-t-transparent"></div>
-                <p class="mt-2 text-gray-500 text-sm">Loading impact data...</p>
+            <div id="impact-loading" class="text-center py-6">
+                <div class="inline-block animate-spin rounded-full h-6 w-6 border-2 border-cyan-400 border-t-transparent"></div>
+                <p class="mt-2 text-gray-500 text-sm">Loading...</p>
             </div>
             <div id="impact-content" class="hidden">
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="shared_infrastructure">
-                        <div class="text-2xl font-bold text-red-400" id="impact-shared-infra">0</div>
-                        <div class="text-xs text-gray-500">CDN/Static Hosts</div>
-                    </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="vendor_root_portals">
-                        <div class="text-2xl font-bold text-orange-400" id="impact-vendor-portals">0</div>
-                        <div class="text-xs text-gray-500">Vendor Portals</div>
-                    </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="dev_build_infrastructure">
-                        <div class="text-2xl font-bold text-yellow-400" id="impact-dev-infra">0</div>
-                        <div class="text-xs text-gray-500">Dev/Build Infra</div>
-                    </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="custom_exclusions">
-                        <div class="text-2xl font-bold text-purple-400" id="impact-custom">0</div>
-                        <div class="text-xs text-gray-500">Custom</div>
-                    </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="admission_gates">
-                        <div class="text-2xl font-bold text-blue-400" id="impact-gates">0</div>
-                        <div class="text-xs text-gray-500">Admission Gates</div>
-                    </div>
-                    <div class="bg-slate-800 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="other">
-                        <div class="text-2xl font-bold text-gray-400" id="impact-other">0</div>
-                        <div class="text-xs text-gray-500">Other</div>
-                    </div>
+                <div class="space-y-2" id="impact-list">
                 </div>
                 <div id="impact-details" class="hidden bg-slate-800 rounded-lg p-4 mt-4">
                     <div class="flex items-center justify-between mb-3">
-                        <h3 class="font-medium text-gray-200" id="impact-details-title">Blocked Domains</h3>
+                        <h3 class="font-medium text-gray-200 text-sm" id="impact-details-title">Blocked Domains</h3>
                         <button onclick="document.getElementById('impact-details').classList.add('hidden')" class="text-gray-500 hover:text-gray-300">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
@@ -140,17 +131,9 @@
                 </div>
                 <p class="text-xs text-gray-600 mt-3" id="impact-run-info">Run: -</p>
             </div>
-            <div id="impact-empty" class="hidden text-center py-6 text-gray-500">
-                No runs available to analyze policy impact
+            <div id="impact-empty" class="hidden text-center py-4 text-gray-500 text-sm">
+                No runs available to analyze
             </div>
-        </div>
-
-        <div id="loading" class="text-center py-12">
-            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-cyan-400 border-t-transparent"></div>
-            <p class="mt-4 text-gray-400">Loading policy configuration...</p>
-        </div>
-
-        <div id="config-form" class="hidden grid gap-6 md:grid-cols-2">
         </div>
     </div>
 
@@ -501,6 +484,39 @@
 
         let currentImpactData = null;
 
+        const impactCategoryMeta = {
+            shared_infrastructure: {
+                label: 'CDN/Static Hosts',
+                tooltip: 'Shared infrastructure like CDNs, static asset hosts, and analytics platforms. These are not enterprise SaaS - blocking them is correct.',
+                color: 'text-red-400'
+            },
+            vendor_root_portals: {
+                label: 'Vendor Root Portals',
+                tooltip: 'Generic vendor login portals (e.g., login.microsoft.com). These are auth infrastructure, not the actual SaaS product.',
+                color: 'text-orange-400'
+            },
+            dev_build_infrastructure: {
+                label: 'Dev/Build Infra',
+                tooltip: 'Developer tools, package registries, and build services. Typically noise unless you specifically track dev tooling.',
+                color: 'text-yellow-400'
+            },
+            custom_exclusions: {
+                label: 'Custom Exclusions',
+                tooltip: 'Domains you have manually added to the exclusion list above. These are operator-defined blocks.',
+                color: 'text-purple-400'
+            },
+            admission_gates: {
+                label: 'Admission Gates',
+                tooltip: 'Domains rejected because they did not meet admission requirements (e.g., no governance signal, insufficient evidence).',
+                color: 'text-blue-400'
+            },
+            other: {
+                label: 'Other',
+                tooltip: 'Miscellaneous rejections that do not fit the above categories.',
+                color: 'text-gray-400'
+            }
+        };
+
         async function loadImpact() {
             try {
                 document.getElementById('impact-loading').classList.remove('hidden');
@@ -520,26 +536,49 @@
                 }
                 
                 currentImpactData = data;
-                
-                // Update counts - use new semantic categories or fallback to legacy
                 const impact = data.policy_impact;
-                const sharedInfra = impact.shared_infrastructure || impact.banned_domains || {count: 0};
-                const vendorPortals = impact.vendor_root_portals || {count: 0};
-                const devInfra = impact.dev_build_infrastructure || impact.infrastructure_domains || {count: 0};
-                const customExcl = impact.custom_exclusions || {count: 0};
-                const gates = impact.admission_gates || {count: 0};
-                const other = impact.other || {count: 0};
                 
-                document.getElementById('impact-shared-infra').textContent = sharedInfra.count;
-                document.getElementById('impact-vendor-portals').textContent = vendorPortals.count;
-                document.getElementById('impact-dev-infra').textContent = devInfra.count;
-                document.getElementById('impact-custom').textContent = customExcl.count;
-                document.getElementById('impact-gates').textContent = gates.count;
-                document.getElementById('impact-other').textContent = other.count;
+                // Map to unified structure
+                const categories = {
+                    shared_infrastructure: impact.shared_infrastructure || impact.banned_domains || {count: 0, domains: []},
+                    vendor_root_portals: impact.vendor_root_portals || {count: 0, domains: []},
+                    dev_build_infrastructure: impact.dev_build_infrastructure || impact.infrastructure_domains || {count: 0, domains: []},
+                    custom_exclusions: impact.custom_exclusions || {count: 0, domains: []},
+                    admission_gates: impact.admission_gates || {count: 0, domains: []},
+                    other: impact.other || {count: 0, domains: []}
+                };
                 
-                // Update run info
+                // Render as simple list
+                const listContainer = document.getElementById('impact-list');
+                listContainer.innerHTML = Object.entries(categories)
+                    .filter(([key, val]) => val.count > 0)
+                    .map(([key, val]) => {
+                        const meta = impactCategoryMeta[key] || {label: key, tooltip: '', color: 'text-gray-400'};
+                        return `
+                            <div class="flex items-center justify-between py-2 px-3 bg-slate-800 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors impact-category" data-category="${key}">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm text-gray-200">${meta.label}</span>
+                                    <div class="relative group/tip">
+                                        <svg class="w-3.5 h-3.5 text-gray-500 cursor-help hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        <div class="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 border border-slate-600 rounded text-xs text-gray-300 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all duration-200 z-50 shadow-lg">
+                                            ${meta.tooltip}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="${meta.color} font-medium text-sm">${val.count} blocked</span>
+                            </div>
+                        `;
+                    }).join('') || '<div class="text-sm text-gray-500 text-center py-4">No domains blocked by current policy</div>';
+                
+                // Re-attach click handlers
+                listContainer.querySelectorAll('.impact-category').forEach(el => {
+                    el.addEventListener('click', () => showImpactDetails(el.dataset.category));
+                });
+                
                 document.getElementById('impact-run-info').textContent = 
-                    `Run: ${data.run_id} | Total rejections: ${data.total_rejections}`;
+                    `Run: ${data.run_id} | Total: ${data.total_rejections} domains blocked`;
                 
                 document.getElementById('impact-loading').classList.add('hidden');
                 document.getElementById('impact-content').classList.remove('hidden');
@@ -585,14 +624,7 @@
             document.getElementById('impact-details').classList.remove('hidden');
         }
 
-        // Add click handlers for impact categories
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.impact-category').forEach(el => {
-                el.addEventListener('click', () => {
-                    showImpactDetails(el.dataset.category);
-                });
-            });
-            
             loadConfig();
             loadImpact();
         });

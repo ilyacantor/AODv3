@@ -22,8 +22,15 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery".
 -   **Domain Base Name Matching**: Matches entity domain base (e.g., "slack" from "slack.com") against record names when canonical_name match fails.
 -   **Canonical Domain Indexing**: Farm's `canonical_domain` field is now indexed for CMDB/IdP correlation.
--   **Alias Collapsing Alignment**: Fixed direction (zoom.us → zoom.com). Added atlassian.net, trello.com, bitbucket.org → atlassian.com.
--   **Test Coverage**: 38 tests validating TLD isolation, match methods, correlation fixes, and alias collapsing.
+-   **Alias Collapsing Alignment**: Fixed direction (zoom.us → zoom.com). Added atlassian.net, trello.com, bitbucket.org → atlassian.com, hipchat.com → atlassian.com, yammer.com → microsoft.com.
+-   **Test Coverage**: 67 tests validating TLD isolation, match methods, correlation fixes, alias collapsing, and governance gate invariants.
+
+**Governance Gate Hardening (Jan 2026 - Phase A):**
+-   **Expanded AUTHORITATIVE_MATCH_METHODS**: Added 5 new authoritative methods: `verified_alias_domain`, `foreign_key`, `explicit_id`, `cmdb_domains_array`, `cmdb_canonical_domain`.
+-   **HEURISTIC_MATCH_METHODS Set**: Explicit set of heuristic-only methods (`fuzzy`, `contains`, `vendor`, `domain_token_to_name`, `registered_domain_token`, `canonical_name_as_domain`). No overlap with authoritative set.
+-   **Governance Invariant**: Unknown match methods default to heuristic (fail-safe). Heuristics produce candidates/enrichment only, NEVER HAS_IDP/HAS_CMDB.
+-   **Debug Instrumentation**: AOD_DEBUG_MATCH env var logs per-plane match method classification. LensMatchDebug includes IDP_CANDIDATE/CMDB_CANDIDATE flags.
+-   **PROMOTION_ALLOWED_MATCH_METHODS**: Updated to include all authoritative methods for domain promotion.
 
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 

@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -9,6 +10,16 @@ from enum import Enum
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+_DEBUG_MATCH = os.environ.get("AOD_DEBUG_MATCH", "0") == "1"
+
+
+def _log_match_debug(plane_name: str, match_method: str, entity_name: str, matched_id: str) -> None:
+    """Log match debug info when AOD_DEBUG_MATCH=1"""
+    if _DEBUG_MATCH:
+        log_type = "AUTH_MATCH" if match_method in AUTHORITATIVE_MATCH_METHODS else "HEURISTIC_MATCH"
+        logger.info(f"{log_type} plane={plane_name} method={match_method} entity={entity_name} matched={matched_id}")
+
 
 from .normalize_observations import CandidateEntity, normalize_string, normalize_domain
 from .build_plane_indexes import PlaneIndexes, PlaneIndex
@@ -168,7 +179,14 @@ class MatchQuality(Enum):
 
 
 # Match methods that are authoritative (exact matches)
-AUTHORITATIVE_MATCH_METHODS = {"domain", "uri", "canonical_name"}
+AUTHORITATIVE_MATCH_METHODS = {
+    "domain", "uri", "canonical_name",  # Existing
+    "verified_alias_domain",  # Explicit alias mapping (hipchat.com → atlassian.com)
+    "foreign_key",            # Explicit foreign key (idp_app_id, cmdb_ci_id)
+    "explicit_id",            # Explicit ID match
+    "cmdb_domains_array",     # CMDB record.domains[] exact match
+    "cmdb_canonical_domain",  # CMDB record.canonical_domain exact match
+}
 
 # Match methods that are heuristic (cannot assert governance)
 HEURISTIC_MATCH_METHODS = {
@@ -663,6 +681,7 @@ def correlate_to_plane(
                 match_key_used = entity_registered
         
         if len(domain_matches) == 1:
+            _log_match_debug(plane_name, "domain", entity.canonical_name, domain_matches[0])
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=domain_matches,
@@ -676,6 +695,7 @@ def correlate_to_plane(
             code, detail, resolved = disambiguate_matches(entity, domain_matches, records, "domain")
             
             if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, "domain", entity.canonical_name, resolved[0])
                 return PlaneMatch(
                     status=MatchStatus.MATCHED,
                     matched_ids=resolved,
@@ -686,6 +706,7 @@ def correlate_to_plane(
                     disambiguation_detail=detail
                 )
             
+            _log_match_debug(plane_name, "domain", entity.canonical_name, ",".join(domain_matches))
             return PlaneMatch(
                 status=MatchStatus.AMBIGUOUS,
                 matched_ids=domain_matches,
@@ -763,6 +784,7 @@ def correlate_to_plane(
                         )
         
         if len(domain_matches) == 1:
+            _log_match_debug(plane_name, match_method_used, entity.canonical_name, domain_matches[0])
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=domain_matches,
@@ -776,6 +798,7 @@ def correlate_to_plane(
             code, detail, resolved = disambiguate_matches(entity, domain_matches, records, match_method_used)
             
             if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, match_method_used, entity.canonical_name, resolved[0])
                 return PlaneMatch(
                     status=MatchStatus.MATCHED,
                     matched_ids=resolved,
@@ -786,6 +809,7 @@ def correlate_to_plane(
                     disambiguation_detail=detail
                 )
             
+            _log_match_debug(plane_name, match_method_used, entity.canonical_name, ",".join(domain_matches))
             return PlaneMatch(
                 status=MatchStatus.AMBIGUOUS,
                 matched_ids=domain_matches,
@@ -799,6 +823,7 @@ def correlate_to_plane(
     if use_uri and entity.uri and plane_index.by_uri:
         uri_matches = plane_index.by_uri.get(entity.uri.lower().strip(), [])
         if len(uri_matches) == 1:
+            _log_match_debug(plane_name, "uri", entity.canonical_name, uri_matches[0])
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=uri_matches,
@@ -812,6 +837,7 @@ def correlate_to_plane(
             code, detail, resolved = disambiguate_matches(entity, uri_matches, records, "uri")
             
             if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, "uri", entity.canonical_name, resolved[0])
                 return PlaneMatch(
                     status=MatchStatus.MATCHED,
                     matched_ids=resolved,
@@ -822,6 +848,7 @@ def correlate_to_plane(
                     disambiguation_detail=detail
                 )
             
+            _log_match_debug(plane_name, "uri", entity.canonical_name, ",".join(uri_matches))
             return PlaneMatch(
                 status=MatchStatus.AMBIGUOUS,
                 matched_ids=uri_matches,
@@ -884,6 +911,7 @@ def correlate_to_plane(
     effective_match_key = domain_base if domain_base_used else canonical
     
     if len(name_matches) == 1:
+        _log_match_debug(plane_name, "canonical_name", entity.canonical_name, name_matches[0])
         return PlaneMatch(
             status=MatchStatus.MATCHED,
             matched_ids=name_matches,
@@ -897,6 +925,7 @@ def correlate_to_plane(
         code, detail, resolved = disambiguate_matches(entity, name_matches, records, "canonical_name")
         
         if resolved and len(resolved) == 1:
+            _log_match_debug(plane_name, "canonical_name", entity.canonical_name, resolved[0])
             return PlaneMatch(
                 status=MatchStatus.MATCHED,
                 matched_ids=resolved,
@@ -907,6 +936,7 @@ def correlate_to_plane(
                 disambiguation_detail=detail
             )
         
+        _log_match_debug(plane_name, "canonical_name", entity.canonical_name, ",".join(name_matches))
         return PlaneMatch(
             status=MatchStatus.AMBIGUOUS,
             matched_ids=name_matches,

@@ -656,3 +656,168 @@ class TestDomainCorrelationFallbacks:
             registered = extract_registered_domain(entity_domain)
             reg_token = registered.split('.')[0].lower().strip() if registered and '.' in registered else None
             assert reg_token == expected_token, f"{entity_domain} registered token should be {expected_token}"
+
+
+class TestGovernanceGateInvariants:
+    """
+    Test governance gate invariants per Jan 2026 spec.
+    
+    NON-NEGOTIABLE INVARIANT:
+    Governance requires proof: exact domain match, verified alias, or explicit foreign key.
+    Heuristics may produce candidates/enrichment only, NEVER HAS_IDP/HAS_CMDB.
+    """
+    
+    def test_authoritative_methods_expanded(self):
+        """AUTHORITATIVE_MATCH_METHODS must include new authoritative methods"""
+        from src.aod.pipeline.correlate_entities import AUTHORITATIVE_MATCH_METHODS
+        
+        # Original authoritative methods
+        assert "domain" in AUTHORITATIVE_MATCH_METHODS
+        assert "uri" in AUTHORITATIVE_MATCH_METHODS
+        assert "canonical_name" in AUTHORITATIVE_MATCH_METHODS
+        
+        # New authoritative methods (Jan 2026)
+        assert "verified_alias_domain" in AUTHORITATIVE_MATCH_METHODS
+        assert "foreign_key" in AUTHORITATIVE_MATCH_METHODS
+        assert "explicit_id" in AUTHORITATIVE_MATCH_METHODS
+        assert "cmdb_domains_array" in AUTHORITATIVE_MATCH_METHODS
+        assert "cmdb_canonical_domain" in AUTHORITATIVE_MATCH_METHODS
+    
+    def test_heuristic_methods_cannot_assert_governance(self):
+        """Heuristic methods must NOT be in AUTHORITATIVE_MATCH_METHODS"""
+        from src.aod.pipeline.correlate_entities import (
+            AUTHORITATIVE_MATCH_METHODS, HEURISTIC_MATCH_METHODS
+        )
+        
+        # No overlap between authoritative and heuristic
+        overlap = AUTHORITATIVE_MATCH_METHODS & HEURISTIC_MATCH_METHODS
+        assert len(overlap) == 0, f"Methods in both sets: {overlap}"
+        
+        # All heuristic methods are explicitly NOT authoritative
+        for method in HEURISTIC_MATCH_METHODS:
+            assert method not in AUTHORITATIVE_MATCH_METHODS
+    
+    def test_canonical_name_as_domain_is_heuristic(self):
+        """
+        Test B: canonical_name_as_domain must be labeled HEURISTIC.
+        
+        When entity.domain is empty and entity.canonical_name looks like a domain,
+        this is a heuristic inference - NOT authoritative.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            AUTHORITATIVE_MATCH_METHODS, HEURISTIC_MATCH_METHODS
+        )
+        
+        # canonical_name_as_domain is EXPLICITLY in heuristic set
+        assert "canonical_name_as_domain" in HEURISTIC_MATCH_METHODS
+        # And NOT in authoritative set
+        assert "canonical_name_as_domain" not in AUTHORITATIVE_MATCH_METHODS
+    
+    def test_heuristic_idp_match_produces_candidate_not_governance(self):
+        """
+        Test A: Heuristic IdP match must NOT assert HAS_IDP.
+        
+        Scenario: entity domain "oneway.com", IdP record name contains "oneway" 
+        but IdP domain does not match.
+        
+        Expected: IDP_CANDIDATE=true (for debug), HAS_IDP=false (no governance)
+        """
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, HEURISTIC_MATCH_METHODS
+        
+        # Create a heuristic match (domain_token_to_name)
+        heuristic_match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["idp-123"],
+            match_method="domain_token_to_name"  # Heuristic
+        )
+        
+        # Verify match_method is in heuristic set
+        assert heuristic_match.match_method in HEURISTIC_MATCH_METHODS
+        # Verify is_authoritative is False
+        assert heuristic_match.is_authoritative == False
+    
+    def test_authoritative_match_can_assert_governance(self):
+        """Test C: Authoritative matches CAN assert governance."""
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, AUTHORITATIVE_MATCH_METHODS
+        
+        # Create an authoritative match (domain)
+        authoritative_match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["cmdb-456"],
+            match_method="domain"  # Authoritative
+        )
+        
+        # Verify match_method is in authoritative set
+        assert authoritative_match.match_method in AUTHORITATIVE_MATCH_METHODS
+        # Verify is_authoritative is True
+        assert authoritative_match.is_authoritative == True
+    
+    def test_cmdb_authoritative_methods(self):
+        """Test C: CMDB authoritative recovery via domains[]/canonical_domain."""
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, AUTHORITATIVE_MATCH_METHODS
+        
+        # cmdb_domains_array should allow governance assertion
+        cmdb_domains_match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["cmdb-789"],
+            match_method="cmdb_domains_array"
+        )
+        assert cmdb_domains_match.is_authoritative == True
+        
+        # cmdb_canonical_domain should allow governance assertion
+        cmdb_canonical_match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["cmdb-789"],
+            match_method="cmdb_canonical_domain"
+        )
+        assert cmdb_canonical_match.is_authoritative == True
+    
+    def test_yammer_alias_collapses_to_microsoft(self):
+        """Test D: yammer.com must collapse to microsoft.com"""
+        from src.aod.pipeline.canonical_key import (
+            ALIAS_DOMAINS_TO_COLLAPSE, 
+            normalize_to_canonical_vendor_domain
+        )
+        
+        # yammer.com is in alias collapse set
+        assert "yammer.com" in ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Verify collapse target is microsoft.com
+        result = normalize_to_canonical_vendor_domain("yammer.com")
+        assert result == "microsoft.com", f"yammer.com should collapse to microsoft.com, got {result}"
+    
+    def test_hipchat_alias_collapses_to_atlassian(self):
+        """Test D: hipchat.com must collapse to atlassian.com"""
+        from src.aod.pipeline.canonical_key import (
+            ALIAS_DOMAINS_TO_COLLAPSE,
+            normalize_to_canonical_vendor_domain
+        )
+        
+        # hipchat.com is in alias collapse set
+        assert "hipchat.com" in ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Verify collapse target is atlassian.com
+        result = normalize_to_canonical_vendor_domain("hipchat.com")
+        assert result == "atlassian.com", f"hipchat.com should collapse to atlassian.com, got {result}"
+    
+    def test_basecamp_remains_standalone(self):
+        """Test D: basecamp.com must remain standalone (no collapse entry)."""
+        from src.aod.pipeline.canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Basecamp is its own product, NOT an alias
+        assert "basecamp.com" not in ALIAS_DOMAINS_TO_COLLAPSE
+    
+    def test_unknown_match_method_defaults_to_heuristic(self):
+        """Unknown match methods should default to HEURISTIC for safety."""
+        from src.aod.pipeline.correlate_entities import PlaneMatch, MatchStatus, MatchQuality
+        
+        # Create a match with unknown method
+        unknown_match = PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=["test-123"],
+            match_method="some_new_untested_method"  # Not in either set
+        )
+        
+        # Should default to heuristic (fail-safe)
+        assert unknown_match.match_quality == MatchQuality.HEURISTIC
+        assert unknown_match.is_authoritative == False

@@ -89,6 +89,8 @@ class MatchDebugInfo(BaseModel):
     matched_record_name: Optional[str] = Field(default=None, description="The matched record name from the plane")
     ambiguity_code: Optional[str] = Field(default=None, description="Disambiguation code if multiple matches")
     disambiguation_detail: Optional[str] = Field(default=None, description="Detail about disambiguation resolution")
+    is_authoritative: bool = Field(default=False, description="True if match is authoritative (can assert governance)")
+    matched_record_domain: Optional[str] = Field(default=None, description="The matched record domain if any")
 
 
 class LensMatchDebug(BaseModel):
@@ -97,6 +99,8 @@ class LensMatchDebug(BaseModel):
     cmdb: Optional[MatchDebugInfo] = None
     cloud: Optional[MatchDebugInfo] = None
     finance: Optional[MatchDebugInfo] = None
+    idp_candidate: bool = Field(default=False, description="True if heuristic IdP match (no governance)")
+    cmdb_candidate: bool = Field(default=False, description="True if heuristic CMDB match (no governance)")
 
 
 class DomainSource(str, Enum):

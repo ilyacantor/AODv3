@@ -46,6 +46,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "trello.com": "Atlassian",
     "bitbucket.org": "Atlassian",
     "confluence.com": "Atlassian",
+    "hipchat.com": "Atlassian",  # Jan 2026: HipChat was Atlassian product (deprecated)
     "github.com": "GitHub",
     "github.io": "GitHub",
     "githubusercontent.com": "GitHub",
@@ -73,6 +74,7 @@ DOMAIN_TO_VENDOR: dict[str, str] = {
     "live.com": "Microsoft",
     "outlook.com": "Microsoft",
     "onedrive.com": "Microsoft",
+    "yammer.com": "Microsoft",  # Jan 2026: Yammer is Microsoft product
     "aws.amazon.com": "Amazon Web Services",
     "amazonaws.com": "Amazon Web Services",
     "cloudfront.net": "Amazon Web Services",

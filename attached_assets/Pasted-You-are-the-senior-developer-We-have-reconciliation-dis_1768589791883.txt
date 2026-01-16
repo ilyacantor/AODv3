@@ -1,0 +1,88 @@
+You are the senior developer. We have reconciliation discrepancies (BlueEdge-5OF5 style) showing:
+- IDP_CORRELATION_MISMATCH: AOD asserts HAS_IDP where Farm says NO_IDP (missed shadows)
+- CMDB_CORRELATION_MISMATCH: AOD misses CMDB/IdP where Farm has it (false positive shadows)
+- KEY_NORMALIZATION_MISMATCH: legacy alias collapse (hipchat/yammer)
+This must be fixed in AOD. We will NOT “fix” by changing Farm to match fuzzy governance inference. :contentReference[oaicite:1]{index=1}
+
+NON-NEGOTIABLE INVARIANT
+Governance requires proof:
+  - exact domain match, OR
+  - verified alias mapping, OR
+  - explicit foreign key (idp_app_id / cmdb_ci_id / etc.)
+Heuristics (token/name similarity, canonical-name-as-domain, etc.) may produce candidates/enrichment only.
+Heuristics MUST NOT set HAS_IDP/HAS_CMDB and MUST NOT flip Shadow → Clean/Governed.
+
+PHASE A — CONTAINMENT (STOP THE BLEEDING)
+1) Normalize match_method into two sets:
+   AUTHORITATIVE_MATCH_METHODS = {"domain", "verified_alias_domain", "foreign_key", "explicit_id", ...}
+   HEURISTIC_MATCH_METHODS = {"domain_token_to_name", "registered_domain_token", "canonical_name_as_domain", "name_similarity", ...}
+
+2) Fix match_method labeling in correlation code:
+   - Never default match_method_used to "domain".
+   - If using entity.domain directly -> "domain"
+   - If treating canonical_name as domain -> "canonical_name_as_domain" (HEURISTIC)
+   - If token/name lookup -> explicit heuristic label
+   - Ensure lens_match_debug captures: plane, match_method, matched_record_id, matched_record_domain(if any), matched_record_name(if any), is_authoritative boolean.
+
+3) Harden the governance gate (defense in depth):
+   In check_idp_admission and check_cmdb_admission (or equivalent):
+   - Assert HAS_IDP / HAS_CMDB ONLY if match_method ∈ AUTHORITATIVE_MATCH_METHODS.
+   - If match_method ∈ HEURISTIC_MATCH_METHODS:
+        - DO NOT set HAS_IDP/HAS_CMDB
+        - DO set IDP_CANDIDATE / CMDB_CANDIDATE (new non-governance flags) and keep refs for UI/debug.
+
+4) Minimal debug instrumentation (since some runs aren’t in DB):
+   When env AOD_DEBUG_MATCH=1:
+   - log every heuristic match:
+     "HEURISTIC_MATCH plane=IDP method=... entity=<asset_key> matched=<record_id>"
+   - log every authoritative match similarly:
+     "AUTH_MATCH plane=IDP method=... entity=<asset_key> matched=<record_id>"
+
+PHASE B — CMDB AUTHORITATIVE RECOVERY (NO HEURISTICS)
+Goal: reduce CMDB misses WITHOUT relaxing governance.
+Implement additional authoritative CMDB lookup keys so AOD can find the same CMDB records Farm finds, even when CMDB primary key doesn’t equal discovery domain.
+
+Do NOT use name/token heuristics for governance. Instead:
+- Ensure CMDB index supports authoritative lookups by:
+   a) canonical_domain (exact)
+   b) domains[] entries (exact)
+   c) known verified alias domains (exact)
+   d) explicit IDs if present
+If any of these matches, label match_method as an AUTHORITATIVE method (e.g., "cmdb_domains_array", "cmdb_canonical_domain") and allow HAS_CMDB.
+
+ALIAS / KEY NORMALIZATION
+- Add/verify alias collapse mappings as explicit policy:
+   hipchat.com -> atlassian.com
+   yammer.com -> microsoft.com
+- Ensure basecamp.com remains standalone (no collapse entry).
+
+TESTS (must add)
+A) Heuristic IdP match must NOT assert HAS_IDP:
+   - entity domain "oneway.com"
+   - IdP record name contains "oneway" but domain does not match
+   - Expect: IDP_CANDIDATE true, HAS_IDP false
+
+B) canonical_name_as_domain must be labeled heuristic:
+   - entity.domain empty, entity.canonical_name looks like a domain
+   - Expect: match_method == "canonical_name_as_domain" and NOT authoritative
+
+C) CMDB authoritative recovery:
+   - CMDB record has canonical_domain or domains[] that includes discovery domain
+   - Expect: HAS_CMDB true with match_method in AUTHORITATIVE set
+
+D) Alias collapse:
+   - canonical_key("hipchat.com") == "atlassian.com"
+   - canonical_key("yammer.com") == "microsoft.com"
+
+Acceptance Criteria
+- No heuristic path can produce HAS_IDP/HAS_CMDB.
+- Candidate flags exist for UI/debug without affecting classification.
+- CMDB misses reduce via authoritative key expansion, not heuristics.
+- Alias collapse tests pass.
+
+Deliver one PR with:
+- Phase A + tests (required)
+- Phase B + tests (required)
+- Short PR notes explaining the invariant and the defense-in-depth gate.
+
+Proceed now.

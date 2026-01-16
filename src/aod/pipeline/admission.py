@@ -21,7 +21,12 @@ from .domain_cache import extract_domain
 # Match methods that allow domain promotion into primary identity (Jan 2026)
 # Only authoritative matches from correlated planes can add domains to identifiers
 PROMOTION_ALLOWED_MATCH_METHODS = {
-    "domain", "uri", "canonical_name",  # Authoritative from correlate_entities
+    "domain", "uri", "canonical_name",  # Original authoritative from correlate_entities
+    "verified_alias_domain",   # Explicit alias mapping (hipchat.com → atlassian.com)
+    "foreign_key",             # Explicit foreign key (idp_app_id, cmdb_ci_id)
+    "explicit_id",             # Explicit ID match
+    "cmdb_domains_array",      # CMDB record.domains[] exact match
+    "cmdb_canonical_domain",   # CMDB record.canonical_domain exact match
     "IDP_APP_MATCH", "CMDB_CI_MATCH", "FINANCE_CONTRACT_MATCH", "EXPLICIT_ALIAS_MAP"
 }
 

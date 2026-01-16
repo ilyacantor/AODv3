@@ -75,6 +75,7 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "office365.com",
     # NOTE: sharepoint.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
     "live.com",
+    "yammer.com",  # Jan 2026: Yammer is Microsoft product - KEY_NORMALIZATION_MISMATCH fix
     # Stage 4: outlook.com is a distinct email service - NOT collapsed (produces stable key)
     # "outlook.com",  # REMOVED - produces stable standalone key
     "onedrive.com",

@@ -796,8 +796,9 @@ def correlate_to_plane(
         # Authoritative path 3: verified_alias_domain(D) == canonical_domain
         # If entity.domain has a known alias, try the canonical version
         if entity.domain in ALIAS_DOMAINS_TO_COLLAPSE:
-            alias_canonical = ALIAS_DOMAINS_TO_COLLAPSE[entity.domain]
-            if hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
+            from .canonical_key import normalize_to_canonical_vendor_domain
+            alias_canonical = normalize_to_canonical_vendor_domain(entity.domain)
+            if alias_canonical and hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
                 alias_matches = plane_index.by_canonical_domain.get(alias_canonical, [])
                 if len(alias_matches) == 1:
                     _log_match_debug(plane_name, "verified_alias_domain", entity.canonical_name, alias_matches[0])

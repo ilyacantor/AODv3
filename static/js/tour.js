@@ -237,7 +237,6 @@ const TourManager = (function() {
                 </button>
             </div>
             <div class="tour-overlay-content">
-                <div class="tour-step-counter">Step ${currentStep} of ${TOTAL_STEPS}</div>
                 <h3 class="tour-content-title">${title}</h3>
                 <div class="tour-content-body">
                     ${content.split('\n').map(line => `<p>${line}</p>`).join('')}
@@ -803,7 +802,6 @@ const TourManager = (function() {
                 </div>
             </div>
             <div class="tour-overlay-content">
-                <div class="tour-step-counter">Step 6 of ${TOTAL_STEPS}</div>
                 <h3 class="tour-content-title">Ingest & Resolve</h3>
                 <div class="tour-content-body">
                     <p>AOD is processing raw observations. It doesn't just list rows; it <strong>resolves identity</strong>.</p>

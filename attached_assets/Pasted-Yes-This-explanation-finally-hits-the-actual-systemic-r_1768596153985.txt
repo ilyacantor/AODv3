@@ -1,0 +1,91 @@
+Yes. This explanation finally hits the *actual* systemic root cause: **AOD is treating “any IdP match” as governance, and the “reject non-canonical IdP apps” filter is only applied in some match paths, not all.** That’s why it kept recurring.
+
+Here’s how to fix it without expanding scope into edge-case hell.
+
+## What happened (in one sentence)
+
+Your suffix-rejection guardrail is **not on the “domain-exact match” path**, so “Primeway-prod” with domain `primeway.tech` still grants `HAS_IDP`, even though it’s explicitly non-canonical by policy.
+
+## Fix 1 (systemic, high ROI): Apply suffix rejection to *every* IdP match path
+
+**Rule:** If the IdP app name indicates *non-canonical* (legacy/prod/dev/staging/deprecated), it **cannot** assert governance **even if the domain matches exactly**.
+
+### Implementation pattern
+
+Create a single function and call it everywhere you are about to set `has_idp = True` or emit `HAS_IDP`.
+
+**Pseudo:**
+
+```python
+NON_CANONICAL_TOKENS = [
+  "(legacy)", "legacy",
+  "-prod", " prod", "production",
+  "-dev", " dev",
+  "-staging", " staging",
+  "deprecated", "(deprecated)",
+]
+
+def is_non_canonical_idp_app(app_name: str) -> bool:
+    n = (app_name or "").strip().lower()
+    return any(tok in n for tok in NON_CANONICAL_TOKENS)
+
+def idp_match_can_grant_governance(match) -> bool:
+    # match should contain idp_app_name, idp_domain, plus any strength indicators
+    if is_non_canonical_idp_app(match.idp_app_name):
+        return False
+    return True
+```
+
+Then, in **every** match branch (exact-domain, cross-TLD, name-token fallback), do:
+
+* if `not idp_match_can_grant_governance(match)`: **do not set** `HAS_IDP`, do not treat as governed.
+
+Optionally still record diagnostics like `IDP_MATCH_REJECTED_NON_CANONICAL` for explainability.
+
+## Fix 2 (systemic, second-highest ROI): Tighten “IdP record has no domain” matching
+
+This is the other recurring source of “phantom governance.”
+
+**Policy-clean rule:** A no-domain IdP record can be *informational*, but **must not** grant governance unless there is *strong evidence*.
+
+Pick one of these (I recommend the first because it’s clean and stable):
+
+### Option A (recommended): No-domain IdP matches never grant governance
+
+* still show them as `POTENTIAL_IDP_MATCH_NAME_ONLY`
+* but `HAS_IDP` remains false
+
+### Option B: Allow only if strong IdP capabilities exist
+
+Only allow governance if the IdP record explicitly indicates something like:
+
+* SSO enabled, SCIM enabled, service principal present, etc.
+
+If that metadata doesn’t exist in your IdP plane, Option B collapses into “always false” anyway.
+
+## The 2 invariants you should add as tests (so this never comes back)
+
+1. **Non-canonical IdP app names never grant governance**
+
+* even if domain matches exactly
+
+2. **Name-only IdP matches never grant governance** (or require SSO/SCIM if you have it)
+
+These two tests will eliminate the entire “13 assets” class without chasing more cases.
+
+## About the `NO_IDP/NO_CMDB` flags
+
+That’s just explainability. Useful, but don’t confuse it with the fix:
+
+* The fix is preventing **false `HAS_IDP`**
+* Emitting `NO_IDP` is only making the trace clearer
+
+## Answer to your question (“implement these fixes?”)
+
+Yes — **these are exactly the kind of systemic fixes worth doing**:
+
+* single, centralized guardrail
+* applies across all match paths
+* prevents recurrence across snapshots
+
+If you want the fastest execution path: implement Fix 1 + Option A for Fix 2 + the two invariants. That’s it.

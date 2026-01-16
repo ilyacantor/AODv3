@@ -718,6 +718,39 @@ class AdmissionResult:
     admission_reason: Optional[str] = None
 
 
+NON_CANONICAL_IDP_TOKENS = [
+    "(legacy)", "legacy",
+    "(deprecated)", "deprecated",
+    "-prod", " prod", "production", "-production",
+    "-dev", " dev", "-development",
+    "-staging", " staging",
+    "-test", " test", "-qa",
+]
+
+
+def is_non_canonical_idp_app(app_name: Optional[str]) -> bool:
+    """
+    Check if IdP app name indicates a non-canonical application.
+    
+    Non-canonical apps (legacy, prod, dev, staging, deprecated) should NOT
+    grant governance even if the domain matches exactly. These suffixes
+    indicate the IdP record is not the primary/canonical application.
+    
+    Examples:
+    - "Primeway-prod" → non-canonical (production environment, not main app)
+    - "Bignest (Legacy)" → non-canonical (deprecated/old version)
+    - "Cloudsync" → canonical (clean name)
+    - "Zendesk" → canonical (clean name)
+    
+    Returns True if the app is non-canonical and should NOT grant governance.
+    """
+    if not app_name:
+        return False
+    
+    normalized = app_name.strip().lower()
+    return any(tok in normalized for tok in NON_CANONICAL_IDP_TOKENS)
+
+
 def check_idp_admission(correlation: CorrelationResult, entity_registered_domain: Optional[str] = None) -> tuple[bool, str]:
     """
     Check IdP plane admission criteria:
@@ -781,10 +814,30 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
 
     for record in correlation.idp.matched_records:
         if isinstance(record, IdPObject):
-            # Check for domain alignment FIRST (required for all IdP admission)
+            # INVARIANT 1: Non-canonical IdP apps NEVER grant governance
+            # Applies to ALL match paths - even exact domain matches
+            if is_non_canonical_idp_app(record.name):
+                if debug_match:
+                    logging.info(
+                        f"[GOVERNANCE_GATE] IdP non-canonical app blocked: domain={entity_registered_domain} "
+                        f"idp_name={record.name} (contains legacy/prod/dev/staging suffix)"
+                    )
+                continue  # Skip this record, try next
+            
+            # INVARIANT 2: No-domain IdP matches NEVER grant governance
+            # IdP record must have an explicit domain to assert governance
             idp_domain = None
             if record.domain:
                 idp_domain = extract_registered_domain(record.domain)
+            
+            if not idp_domain:
+                # IdP has no domain - cannot grant governance (name-only match)
+                if debug_match:
+                    logging.info(
+                        f"[GOVERNANCE_GATE] IdP no-domain match blocked: entity={entity_registered_domain} "
+                        f"idp_name={record.name} (no domain on IdP record)"
+                    )
+                continue  # Skip this record, try next
 
             if _idp_domain_matches_entity(idp_domain, entity_registered_domain, idp_name=record.name):
                 # Domain-aligned match - check for SSO/SCIM as stronger signal

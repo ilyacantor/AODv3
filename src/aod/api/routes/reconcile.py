@@ -351,3 +351,92 @@ async def explain_nonflag(request: ExplainNonflagRequest):
         ask=request.ask,
         explanations=explanations
     )
+
+
+@router.get("/debug/catalog-invariant-check")
+async def catalog_invariant_check(run_id: str):
+    """
+    Clean-room invariant check: Find assets in catalog that violate admission criteria.
+    
+    INVARIANT: Every cataloged asset MUST have at least one of:
+    - num_observations > 0 (discovery evidence)
+    - has_idp (IdP governance)
+    - has_cmdb (CMDB governance)  
+    - has_finance (finance evidence)
+    - has_cloud (cloud evidence)
+    
+    Assets violating this invariant are "ghost assets" that shouldn't be in the catalog.
+    """
+    db = await get_db_direct()
+    
+    runs = await db.get_all_runs()
+    run = None
+    for r in runs:
+        if (hasattr(r, 'run_id') and r.run_id == run_id) or r.get("run_id") == run_id:
+            run = r
+            break
+    
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    
+    assets = await db.get_assets_by_run(run_id)
+    if not assets:
+        return {"run_id": run_id, "status": "NO_ASSETS", "violations": []}
+    
+    violations = []
+    valid_count = 0
+    
+    for asset in assets:
+        # Count observations from evidence_refs
+        evidence_refs = asset.evidence_refs if asset.evidence_refs else []
+        num_observations = len([ref for ref in evidence_refs if isinstance(ref, str) and "observation" in ref.lower()])
+        
+        # Check governance gates
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+        has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+        has_discovery = bool(getattr(asset, "discovery_sources", None))
+        
+        # Check invariant
+        is_valid = has_discovery or has_idp or has_cmdb or has_finance or has_cloud or num_observations > 0
+        
+        if is_valid:
+            valid_count += 1
+        else:
+            # Get domain for identification
+            domain = None
+            if asset.identifiers and asset.identifiers.domains:
+                domain = asset.identifiers.domains[0] if asset.identifiers.domains else None
+            
+            violations.append({
+                "asset_id": asset.asset_id,
+                "name": asset.name,
+                "domain": domain,
+                "vendor": asset.vendor,
+                "num_observations": num_observations,
+                "evidence_refs_count": len(evidence_refs),
+                "has_idp": has_idp,
+                "has_cmdb": has_cmdb,
+                "has_finance": has_finance,
+                "has_cloud": has_cloud,
+                "has_discovery": has_discovery,
+                "lens_status": {
+                    "idp": asset.lens_status.idp.value if asset.lens_status else None,
+                    "cmdb": asset.lens_status.cmdb.value if asset.lens_status else None,
+                },
+                "discovery_sources": list(getattr(asset, "discovery_sources", []) or []),
+            })
+    
+    # Sort by name and take top 20
+    violations = sorted(violations, key=lambda x: x.get("name", ""))[:20]
+    
+    return {
+        "run_id": run_id,
+        "status": "VIOLATIONS_FOUND" if violations else "ALL_VALID",
+        "total_assets": len(assets),
+        "valid_count": valid_count,
+        "violation_count": len(violations),
+        "top_20_violations": violations,
+        "invariant": "Every cataloged asset MUST have: discovery OR idp OR cmdb OR finance OR cloud"
+    }

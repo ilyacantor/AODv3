@@ -970,7 +970,7 @@
                 if (isTriaged) {
                     const stateLabels = {
                         'approved': '✓ Approved for AAM',
-                        'banned': '⊘ Banned Forever',
+                        'banned': '⊘ Banned',
                         'deprovisioned': '✗ Deprovisioned',
                         'acknowledged': '✓ Acknowledged',
                         'assigned': '→ Assigned',

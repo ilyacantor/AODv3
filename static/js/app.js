@@ -679,78 +679,71 @@
             const monthlySpend = agg.monthly_spend || item.monthly_spend || null;
             
             let headline = '', cause = '', consequence = '';
+            const findings = item.findings || [];
             
-            if (itemType === 'shadow') {
-                const spendInfo = monthlySpend ? ` with $${monthlySpend.toLocaleString()}/mo spend` : '';
-                headline = `${name} cannot be connected without SSO${spendInfo}`;
-                cause = 'Not registered in IdP or CMDB — no identity governance';
-                consequence = 'AAM blocked — no access lifecycle control or auditability';
-            } else if (itemType === 'zombie') {
-                headline = `${name} is registered but has no recent activity`;
-                cause = 'No logins or usage detected in 90+ days';
-                consequence = monthlySpend ? `Wasting $${monthlySpend.toLocaleString()}/mo on unused licenses` : 'Stale access credentials may pose security risk';
-            } else if (itemType === 'blocked') {
-                headline = `${name} was blocked by policy`;
-                cause = 'Previously rejected or banned from catalog';
-                consequence = 'Cannot be used until approved';
-            } else if (itemType === 'blocking') {
-                const findings = item.findings || [];
-                const hasIdentity = findings.some(f => f.finding_type === 'identity_gap');
+            if (itemType === 'shadow' || itemType === 'blocking' || itemType === 'blocked') {
+                const hasIdentity = findings.some(f => f.finding_type === 'identity_gap') || itemType === 'shadow';
                 const hasFinance = findings.some(f => f.finding_type === 'finance_gap');
                 const hasConflict = findings.some(f => f.finding_type === 'data_conflict');
                 
-                if (hasConflict) {
-                    headline = `${name} has conflicting data - cannot safely connect`;
+                if (itemType === 'blocked') {
+                    headline = `${name} cannot be connected until policy block is resolved`;
+                    cause = 'Previously rejected or banned from catalog';
+                    consequence = 'Requires manual approval to unblock';
+                } else if (hasConflict) {
+                    headline = `${name} cannot be connected until ownership conflict is resolved`;
                     cause = 'Sources disagree on identity or ownership';
-                    consequence = 'AAM connection blocked until conflict is resolved';
-                } else if (hasIdentity && hasFinance) {
-                    headline = `${name} has spend but no identity governance`;
-                    cause = 'Active spend without SSO/IdP integration';
-                    consequence = 'Cannot connect - no access lifecycle control';
-                } else if (hasIdentity) {
-                    headline = `${name} cannot be connected without SSO`;
-                    cause = 'No identity provider integration';
-                    consequence = 'AAM blocked - no access auditability';
-                } else if (hasFinance) {
-                    headline = `${name} has unaccounted spend`;
+                    consequence = 'Resolve data conflict before connecting';
+                } else if (hasFinance && !hasIdentity) {
+                    headline = `${name} cannot be connected until cost ownership is resolved`;
                     cause = 'Active charges without accountable owner';
-                    consequence = 'AAM blocked - cost accountability required';
+                    consequence = 'Assign cost owner before connecting';
+                } else if (hasIdentity) {
+                    headline = `${name} cannot be connected until SSO is configured`;
+                    cause = hasFinance ? `Active spend ($${monthlySpend?.toLocaleString() || '?'}/mo) without identity governance` : 'No identity provider integration';
+                    consequence = 'Configure SSO to enable lifecycle control';
                 } else {
-                    headline = `${name} has a blocking issue`;
-                    cause = 'Critical finding detected';
-                    consequence = 'AAM connection paused';
+                    headline = `${name} cannot be connected until identity context is resolved`;
+                    cause = 'Missing required governance prerequisite';
+                    consequence = 'Establish identity context before connecting';
                 }
-            } else if (itemType === 'toxic') {
-                if (!agg.has_idp) {
-                    headline = `${name} is active but not connected to SSO`;
-                    cause = 'No identity provider integration found';
-                    consequence = 'Users may have unmanaged access';
+            } else if (itemType === 'zombie' || itemType === 'toxic') {
+                headline = `${name} has unresolved ambiguity that requires review before connecting`;
+                if (itemType === 'zombie') {
+                    cause = 'No logins or usage detected in 90+ days';
+                    consequence = monthlySpend ? `Review: $${monthlySpend.toLocaleString()}/mo may be recoverable` : 'Review stale access credentials';
                 } else {
-                    headline = `${name} has conflicting governance data`;
-                    cause = 'Data mismatch between sources';
-                    consequence = 'Review needed to resolve discrepancies';
+                    cause = 'Ambiguous governance data detected';
+                    consequence = 'Clarify before connecting';
                 }
             } else if (itemType === 'hygiene') {
-                const findingCount = item.findings?.length || 0;
-                if (!agg.has_cmdb) {
-                    headline = `${name} is not registered in the asset catalog`;
-                    cause = 'Missing from CMDB/configuration database';
-                    consequence = 'Asset may not be tracked for compliance';
-                } else if (!agg.has_idp) {
-                    headline = `${name} lacks identity integration`;
-                    cause = 'Not connected to SSO/IdP';
-                    consequence = 'Access management may be incomplete';
-                } else if (findingCount > 0) {
-                    headline = `${name} has ${findingCount} data quality issue${findingCount > 1 ? 's' : ''}`;
-                    cause = 'Inconsistencies detected across data sources';
-                    consequence = 'May affect reporting accuracy';
+                const hasCmdbGap = findings.some(f => f.finding_type === 'cmdb_gap');
+                const hasGovGap = findings.some(f => f.finding_type === 'governance_gap');
+                const hasDupe = findings.some(f => f.finding_type === 'duplication_risk');
+                
+                if (hasCmdbGap) {
+                    headline = `${name} is not registered in the CMDB, but connection is not affected`;
+                    cause = 'Missing from configuration management database';
+                    consequence = 'Recommend adding to CMDB for tracking';
+                } else if (hasGovGap) {
+                    headline = `${name} has no data classification defined, but connection is not affected`;
+                    cause = 'Governance metadata is incomplete';
+                    consequence = 'Consider defining data classification';
+                } else if (hasDupe) {
+                    headline = `${name} has possible duplicate entries, but connection is not affected`;
+                    cause = 'Similar assets detected in catalog';
+                    consequence = 'Review for consolidation';
+                } else if (!agg.has_cmdb) {
+                    headline = `${name} is missing CMDB registration, but connection is not affected`;
+                    cause = 'Not in configuration database';
+                    consequence = 'Add to CMDB when convenient';
                 } else {
-                    headline = `${name} needs data review`;
-                    cause = 'Minor data issues detected';
-                    consequence = 'Recommend verification';
+                    headline = `${name} has no recorded technical owner, but connection is not affected`;
+                    cause = 'Owner metadata is missing';
+                    consequence = 'Assign owner for accountability';
                 }
             } else {
-                headline = `${name} requires review`;
+                headline = `${name} has unresolved ambiguity that requires review before connecting`;
                 cause = 'Classification pending';
                 consequence = 'Manual review recommended';
             }

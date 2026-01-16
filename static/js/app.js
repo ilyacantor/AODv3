@@ -35,6 +35,11 @@
                 });
             });
             
+            document.getElementById('openConnectionPolicy')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                openConnectionPolicyModal();
+            });
+            
             document.getElementById('triageSections').addEventListener('click', async (e) => {
                 if (e.target.closest('.triage-collapsible')) return;
                 const btn = e.target.closest('[data-action]');
@@ -267,6 +272,45 @@
             document.getElementById(modalId).classList.remove('active');
         }
         
+        let connectionPolicy = {
+            identity_gap: true,
+            finance_gap: true,
+            data_conflict: true,
+            cmdb_gap: false,
+            governance_gap: false,
+            duplication_risk: false
+        };
+        
+        function openConnectionPolicyModal() {
+            ['identity_gap', 'finance_gap', 'data_conflict', 'cmdb_gap', 'governance_gap', 'duplication_risk'].forEach(type => {
+                const checkbox = document.getElementById(`policy_${type}`);
+                if (checkbox) checkbox.checked = connectionPolicy[type];
+            });
+            document.getElementById('connectionPolicyModal').classList.add('active');
+        }
+        
+        async function saveConnectionPolicy() {
+            ['identity_gap', 'finance_gap', 'data_conflict', 'cmdb_gap', 'governance_gap', 'duplication_risk'].forEach(type => {
+                const checkbox = document.getElementById(`policy_${type}`);
+                if (checkbox) connectionPolicy[type] = checkbox.checked;
+            });
+            
+            try {
+                await fetch('/api/policy/connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blocking_findings: connectionPolicy })
+                });
+            } catch (err) {
+                console.warn('Policy save failed (endpoint may not exist yet):', err);
+            }
+            
+            closeTriageModal('connectionPolicyModal');
+            
+            const runId = document.getElementById('triageRunSelect').value;
+            if (runId) loadTriageData();
+        }
+        
         function updateOwnerOptions() {
             const dept = document.getElementById('assignDepartment').value;
             const ownerSelect = document.getElementById('assignOwner');
@@ -410,11 +454,11 @@
                 const hygieneItems = [];
                 const processedAssetIds = new Set();
                 
-                const BLOCKING_FINDINGS = ['identity_gap', 'finance_gap', 'data_conflict'];
-                const NON_BLOCKING_FINDINGS = ['cmdb_gap', 'governance_gap', 'duplication_risk'];
+                const blockingTypes = Object.entries(connectionPolicy).filter(([k, v]) => v).map(([k]) => k);
+                const nonBlockingTypes = Object.entries(connectionPolicy).filter(([k, v]) => !v).map(([k]) => k);
                 
-                const hasBlockingFinding = (findings) => findings.some(f => BLOCKING_FINDINGS.includes(f.finding_type));
-                const hasOnlyNonBlockingFindings = (findings) => findings.length > 0 && findings.every(f => NON_BLOCKING_FINDINGS.includes(f.finding_type));
+                const hasBlockingFinding = (findings) => findings.some(f => blockingTypes.includes(f.finding_type));
+                const hasOnlyNonBlockingFindings = (findings) => findings.length > 0 && findings.every(f => nonBlockingTypes.includes(f.finding_type));
                 
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;

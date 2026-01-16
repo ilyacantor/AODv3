@@ -191,7 +191,7 @@
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Gatekeeper Console</h2>
-                    <p class="config-note" style="margin:0;">Action-based asset triage. Blocked items requiring action, items needing review, and informational findings.</p>
+                    <p class="config-note" style="margin:0;">Action-based asset triage. <a href="#" id="openConnectionPolicy" style="color:var(--cyan-400);text-decoration:underline;cursor:pointer;">AOD Connection Policy</a></p>
                 </div>
                 <div class="triage-run-select">
                     <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
@@ -433,7 +433,114 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="connectionPolicyModal">
+        <div class="modal triage-modal" style="max-width:700px;">
+            <div class="modal-header">
+                <span class="modal-title">AOD Connection Policy</span>
+                <button class="modal-close" onclick="closeTriageModal('connectionPolicyModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="triage-modal-subtitle" style="margin-bottom:1rem;">Configure which finding types block AAM (Asset & Access Management) connection.</p>
+                
+                <div style="margin-bottom:1.5rem;">
+                    <h4 style="color:var(--red-400);margin-bottom:0.5rem;font-size:0.875rem;">⛔ Blocking Findings — AAM Connection Blocked</h4>
+                    <table class="policy-table" style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--slate-600);">
+                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Finding Type</th>
+                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Rationale</th>
+                                <th style="text-align:center;padding:0.5rem;color:var(--slate-300);font-weight:500;">Block AAM?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom:1px solid var(--slate-700);">
+                                <td style="padding:0.5rem;color:var(--slate-200);">identity_gap</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">No access lifecycle control, no offboarding, no auditability</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_identity_gap" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom:1px solid var(--slate-700);">
+                                <td style="padding:0.5rem;color:var(--slate-200);">finance_gap</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Active spend without accountable owner</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_finance_gap" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom:1px solid var(--slate-700);">
+                                <td style="padding:0.5rem;color:var(--slate-200);">data_conflict</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Sources disagree on identity or ownership — unsafe to act</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_data_conflict" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div>
+                    <h4 style="color:var(--green-400);margin-bottom:0.5rem;font-size:0.875rem;">✓ Non-Blocking Findings — Informational Only</h4>
+                    <table class="policy-table" style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--slate-600);">
+                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Finding Type</th>
+                                <th style="text-align:left;padding:0.5rem;color:var(--slate-300);font-weight:500;">Rationale</th>
+                                <th style="text-align:center;padding:0.5rem;color:var(--slate-300);font-weight:500;">Block AAM?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom:1px solid var(--slate-700);">
+                                <td style="padding:0.5rem;color:var(--slate-200);">cmdb_gap</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Hygiene issue — CMDB data is often incomplete</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_cmdb_gap">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom:1px solid var(--slate-700);">
+                                <td style="padding:0.5rem;color:var(--slate-200);">governance_gap</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Often undefined even in mature organizations</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_governance_gap">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0.5rem;color:var(--slate-200);">duplication_risk</td>
+                                <td style="padding:0.5rem;color:var(--slate-400);font-size:0.8rem;">Common and often benign — low immediate risk</td>
+                                <td style="text-align:center;padding:0.5rem;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="policy_duplication_risk">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="triage-modal-actions" style="margin-top:1.5rem;">
+                    <button class="triage-modal-btn cancel" onclick="closeTriageModal('connectionPolicyModal')">Cancel</button>
+                    <button class="triage-modal-btn primary" onclick="saveConnectionPolicy()">Save Policy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=9"></script>
+    <script src="/static/js/app.js?v=10"></script>
 </body>
 </html>

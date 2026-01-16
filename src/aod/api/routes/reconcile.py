@@ -372,7 +372,8 @@ async def catalog_invariant_check(run_id: str):
     runs = await db.get_all_runs()
     run = None
     for r in runs:
-        if (hasattr(r, 'run_id') and r.run_id == run_id) or r.get("run_id") == run_id:
+        r_run_id = getattr(r, 'run_id', None) if hasattr(r, 'run_id') else (r.get("run_id") if isinstance(r, dict) else None)
+        if r_run_id == run_id:
             run = r
             break
     
@@ -391,12 +392,16 @@ async def catalog_invariant_check(run_id: str):
         evidence_refs = asset.evidence_refs if asset.evidence_refs else []
         num_observations = len([ref for ref in evidence_refs if isinstance(ref, str) and "observation" in ref.lower()])
         
-        # Check governance gates
+        # Check governance gates - use lens_coverage as source of truth
         has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
         has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
         has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
         has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
-        has_discovery = bool(getattr(asset, "discovery_sources", None))
+        # Use lens_coverage.discovery as the source of truth (not discovery_sources which may be None)
+        has_discovery = asset.lens_coverage.discovery if asset.lens_coverage else False
+        # Also check discovery_sources as a backup
+        has_discovery_sources = bool(getattr(asset, "discovery_sources", None))
+        has_discovery = has_discovery or has_discovery_sources
         
         # Check invariant
         is_valid = has_discovery or has_idp or has_cmdb or has_finance or has_cloud or num_observations > 0

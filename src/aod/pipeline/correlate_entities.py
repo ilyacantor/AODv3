@@ -173,7 +173,8 @@ AUTHORITATIVE_MATCH_METHODS = {"domain", "uri", "canonical_name"}
 # Match methods that are heuristic (cannot assert governance)
 HEURISTIC_MATCH_METHODS = {
     "fuzzy", "contains", "vendor", "domain_vendor", "vendor_fallback",
-    "name_contains_domain_token", "normalization_token", "cross_domain_brand"
+    "name_contains_domain_token", "normalization_token", "cross_domain_brand",
+    "domain_token_to_name", "registered_domain_token"
 }
 
 # Match methods that indicate cross-TLD correlation (must not trigger identity merge)
@@ -690,6 +691,97 @@ def correlate_to_plane(
                 matched_ids=domain_matches,
                 matched_records=records,
                 match_method="domain",
+                match_key=match_key_used,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
+    # Jan 2026 FIX: Additional domain fallback paths to reduce missed correlations
+    # These address cases where entity.domain and record.domain differ but share identity
+    if use_domain and plane_index.by_domain:
+        from .vendor_inference import extract_registered_domain
+        domain_matches = []
+        match_key_used = None
+        match_method_used = "domain"
+        
+        # Fallback 1: If entity has no domain but canonical_name looks like a domain, try that
+        # Example: entity.canonical_name="slack.com" should match IdP record with domain="slack.com"
+        if not entity.domain and entity.canonical_name and '.' in entity.canonical_name:
+            canonical_as_domain = entity.canonical_name.lower().strip()
+            # Must look like a valid domain (not "Microsoft 365.com" etc)
+            if re.match(r'^[a-z0-9][-a-z0-9]*(\.[a-z0-9][-a-z0-9]*)+$', canonical_as_domain):
+                domain_matches = plane_index.by_domain.get(canonical_as_domain, [])
+                if not domain_matches:
+                    registered = extract_registered_domain(canonical_as_domain)
+                    if registered and registered != canonical_as_domain:
+                        domain_matches = plane_index.by_domain.get(registered, [])
+                        match_key_used = registered
+                    else:
+                        match_key_used = canonical_as_domain
+                else:
+                    match_key_used = canonical_as_domain
+        
+        # Fallback 2: Look up entity's domain token in by_name_words (catches record.canonical_domain indexed as token)
+        # Example: entity.domain="flexpoint.cloud" → token "flexpoint" → matches IdP record indexed with "flexpoint"
+        if not domain_matches and entity.domain and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+            domain_token = entity.domain.split('.')[0].lower().strip() if '.' in entity.domain else None
+            if domain_token and len(domain_token) >= 4:
+                word_matches = plane_index.by_name_words.get(domain_token, [])
+                if word_matches:
+                    domain_matches = list(word_matches)
+                    match_key_used = domain_token
+                    match_method_used = "domain_token_to_name"
+                    logger.debug(
+                        f"DOMAIN_TOKEN_FALLBACK entity={entity.canonical_name} "
+                        f"domain_token={domain_token} matches={len(domain_matches)}"
+                    )
+        
+        # Fallback 3: Reverse lookup - entity's registered domain might match a record's tenant token
+        # Example: entity.domain="flowsoft.org" → record has domain="flowsoft.okta.com" → tenant token "flowsoft" indexed
+        if not domain_matches and entity.domain and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+            entity_registered = extract_registered_domain(entity.domain)
+            if entity_registered:
+                reg_token = entity_registered.split('.')[0].lower().strip() if '.' in entity_registered else None
+                if reg_token and len(reg_token) >= 4:
+                    word_matches = plane_index.by_name_words.get(reg_token, [])
+                    if word_matches:
+                        domain_matches = list(word_matches)
+                        match_key_used = reg_token
+                        match_method_used = "registered_domain_token"
+                        logger.debug(
+                            f"REGISTERED_TOKEN_FALLBACK entity={entity.canonical_name} "
+                            f"reg_token={reg_token} matches={len(domain_matches)}"
+                        )
+        
+        if len(domain_matches) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=domain_matches,
+                matched_records=[plane_index.records.get(mid) for mid in domain_matches],
+                match_method=match_method_used,
+                match_key=match_key_used,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(domain_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in domain_matches]
+            code, detail, resolved = disambiguate_matches(entity, domain_matches, records, match_method_used)
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method=match_method_used,
+                    match_key=match_key_used,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=domain_matches,
+                matched_records=records,
+                match_method=match_method_used,
                 match_key=match_key_used,
                 ambiguity_code=code,
                 disambiguation_detail=detail

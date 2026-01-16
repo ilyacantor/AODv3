@@ -567,3 +567,71 @@ class TestIdPDomainMatchingStrictness:
             entity_registered_domain="netcloud.io",
             idp_name="Net"
         ) == False
+
+
+class TestDomainCorrelationFallbacks:
+    """Test the new domain correlation fallback paths added in Jan 2026"""
+    
+    def test_new_heuristic_match_methods_registered(self):
+        """New fallback match methods should be in HEURISTIC_MATCH_METHODS"""
+        from src.aod.pipeline.correlate_entities import HEURISTIC_MATCH_METHODS
+        
+        assert "domain_token_to_name" in HEURISTIC_MATCH_METHODS
+        assert "registered_domain_token" in HEURISTIC_MATCH_METHODS
+    
+    def test_new_methods_blocked_from_promotion(self):
+        """New match methods should be blocked from domain promotion"""
+        from src.aod.pipeline.admission import PROMOTION_BLOCKED_MATCH_METHODS
+        
+        assert "domain_token_to_name" in PROMOTION_BLOCKED_MATCH_METHODS
+        assert "registered_domain_token" in PROMOTION_BLOCKED_MATCH_METHODS
+    
+    def test_canonical_name_as_domain_regex_validation(self):
+        """Test regex for canonical_name-as-domain validation"""
+        import re
+        
+        valid_domains = [
+            "slack.com", "microsoft.com", "api-gateway.io", "test-123.cloud",
+            "flowbase.ai", "netcloud.co"
+        ]
+        invalid_domains = [
+            "Microsoft 365.com", "Okta (Legacy)", "slack", "test",
+            ".com", "-.com", "test..com"
+        ]
+        
+        pattern = r'^[a-z0-9][-a-z0-9]*(\.[a-z0-9][-a-z0-9]*)+$'
+        
+        for domain in valid_domains:
+            assert re.match(pattern, domain.lower()), f"{domain} should be valid"
+        
+        for domain in invalid_domains:
+            assert not re.match(pattern, domain.lower()), f"{domain} should be invalid"
+    
+    def test_domain_token_extraction(self):
+        """Test domain token extraction for by_name_words lookup"""
+        test_cases = [
+            ("flexpoint.cloud", "flexpoint"),
+            ("flowsoft.okta.com", "flowsoft"),
+            ("api.maxsoft.org", "api"),
+            ("test.io", "test"),
+            ("abc.com", "abc"),
+        ]
+        
+        for domain, expected_token in test_cases:
+            token = domain.split('.')[0].lower().strip() if '.' in domain else None
+            assert token == expected_token, f"{domain} should extract token {expected_token}"
+    
+    def test_registered_token_for_reverse_lookup(self):
+        """Test registered domain token extraction for reverse lookup"""
+        from src.aod.pipeline.vendor_inference import extract_registered_domain
+        
+        test_cases = [
+            ("flowsoft.org", "flowsoft"),
+            ("api.maxsoft.org", "maxsoft"),
+            ("app.netcloud.com", "netcloud"),
+        ]
+        
+        for entity_domain, expected_token in test_cases:
+            registered = extract_registered_domain(entity_domain)
+            reg_token = registered.split('.')[0].lower().strip() if registered and '.' in registered else None
+            assert reg_token == expected_token, f"{entity_domain} registered token should be {expected_token}"

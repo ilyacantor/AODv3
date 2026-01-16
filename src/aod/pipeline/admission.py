@@ -826,16 +826,19 @@ def check_idp_admission(correlation: CorrelationResult, entity_registered_domain
             
             # INVARIANT 2: No-domain IdP matches NEVER grant governance
             # IdP record must have an explicit domain to assert governance
+            # Check both record.domain and record.canonical_domain (Farm's correlation field)
             idp_domain = None
             if record.domain:
                 idp_domain = extract_registered_domain(record.domain)
+            elif getattr(record, 'canonical_domain', None):
+                idp_domain = extract_registered_domain(record.canonical_domain)
             
             if not idp_domain:
                 # IdP has no domain - cannot grant governance (name-only match)
                 if debug_match:
                     logging.info(
                         f"[GOVERNANCE_GATE] IdP no-domain match blocked: entity={entity_registered_domain} "
-                        f"idp_name={record.name} (no domain on IdP record)"
+                        f"idp_name={record.name} (no domain or canonical_domain on IdP record)"
                     )
                 continue  # Skip this record, try next
 

@@ -1083,3 +1083,107 @@ class TestGovernanceInvariantEnforcement:
         # Authoritative but unrelated domain = NO HAS_IDP (domain alignment required)
         admitted, reason = check_idp_admission(correlation, entity_registered_domain="teamspot.com")
         assert admitted == False, "Unrelated domain IdP match must NOT grant HAS_IDP even if authoritative"
+
+    def test_non_canonical_idp_app_never_grants_governance(self):
+        """
+        INVARIANT 1: Non-canonical IdP app names never grant governance.
+        
+        Even if the domain matches exactly, IdP records with suffixes like
+        "(Legacy)", "-prod", "-dev", "-staging", "deprecated" should NOT
+        grant HAS_IDP because they indicate non-canonical applications.
+        
+        This prevents false positives from environment-specific or legacy
+        IdP applications that share the same domain as the canonical app.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            CorrelationResult, PlaneMatch, MatchStatus
+        )
+        from src.aod.pipeline.normalize_observations import CandidateEntity
+        from src.aod.pipeline.admission import check_idp_admission, is_non_canonical_idp_app
+        from src.aod.models.input_contracts import IdPObject
+        
+        # Test the is_non_canonical_idp_app function directly
+        assert is_non_canonical_idp_app("Primeway-prod") == True
+        assert is_non_canonical_idp_app("Bignest (Legacy)") == True
+        assert is_non_canonical_idp_app("Linknest (Legacy)") == True
+        assert is_non_canonical_idp_app("DataApp-dev") == True
+        assert is_non_canonical_idp_app("TestApp-staging") == True
+        assert is_non_canonical_idp_app("OldApp deprecated") == True
+        assert is_non_canonical_idp_app("Cloudsync") == False  # canonical
+        assert is_non_canonical_idp_app("Zendesk") == False  # canonical
+        assert is_non_canonical_idp_app("") == False
+        assert is_non_canonical_idp_app(None) == False
+        
+        # Create a mock entity
+        mock_entity = CandidateEntity(
+            entity_id="entity-legacy",
+            canonical_name="Primeway",
+            original_name="Primeway",
+            domain="primeway.tech"
+        )
+        
+        # Create an IdP record with non-canonical name but EXACT domain match
+        idp_record = IdPObject(
+            idp_id="idp-legacy",
+            name="Primeway-prod",  # Non-canonical suffix
+            domain="primeway.tech",  # Exact match!
+            has_sso=True
+        )
+        
+        correlation = CorrelationResult(
+            entity=mock_entity,
+            idp=PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=["idp-legacy"],
+                matched_records=[idp_record],
+                match_method="domain"  # Authoritative method
+            )
+        )
+        
+        # INVARIANT: Non-canonical apps NEVER grant governance, even with exact domain
+        admitted, reason = check_idp_admission(correlation, entity_registered_domain="primeway.tech")
+        assert admitted == False, "Non-canonical IdP app (-prod suffix) must NOT grant HAS_IDP even with exact domain match"
+
+    def test_no_domain_idp_match_never_grants_governance(self):
+        """
+        INVARIANT 2: Name-only IdP matches (no domain on IdP record) never grant governance.
+        
+        If the IdP record has no domain, it can only match by name. This is
+        informational but should NOT assert HAS_IDP governance.
+        """
+        from src.aod.pipeline.correlate_entities import (
+            CorrelationResult, PlaneMatch, MatchStatus
+        )
+        from src.aod.pipeline.normalize_observations import CandidateEntity
+        from src.aod.pipeline.admission import check_idp_admission
+        from src.aod.models.input_contracts import IdPObject
+        
+        # Create a mock entity
+        mock_entity = CandidateEntity(
+            entity_id="entity-nodomain",
+            canonical_name="Cloudsync",
+            original_name="Cloudsync",
+            domain="cloudsync.io"
+        )
+        
+        # Create an IdP record with NO domain (name-only match)
+        idp_record = IdPObject(
+            idp_id="idp-nodomain",
+            name="Cloudsync",  # Name matches entity base token
+            domain=None,  # No domain!
+            has_sso=True
+        )
+        
+        correlation = CorrelationResult(
+            entity=mock_entity,
+            idp=PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=["idp-nodomain"],
+                matched_records=[idp_record],
+                match_method="domain"  # Even if marked authoritative
+            )
+        )
+        
+        # INVARIANT: No-domain IdP matches NEVER grant governance
+        admitted, reason = check_idp_admission(correlation, entity_registered_domain="cloudsync.io")
+        assert admitted == False, "No-domain IdP match must NOT grant HAS_IDP (name-only is informational only)"

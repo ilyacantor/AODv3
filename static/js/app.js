@@ -630,50 +630,124 @@
             return labels[category] || category || '';
         }
         
-        function buildDetailHtml(item, itemType) {
-            let fields = [];
+        function generateTriageHeadline(item, itemType) {
+            const name = item.name || item.asset_key || item.asset_name || 'Unknown asset';
+            const agg = item.aggregated_evidence || {};
+            const userCount = agg.user_count || item.user_count || null;
+            const monthlySpend = agg.monthly_spend || item.monthly_spend || null;
             
-            if (itemType === 'finding') {
-                fields.push({ label: 'Finding Type', value: (item.finding_type || 'unknown').replace(/_/g, ' ') });
-                fields.push({ label: 'Category', value: getCategoryLabel(item.category) });
-                if (item.triage_priority) fields.push({ label: 'Priority', value: item.triage_priority.toUpperCase() });
-                if (item.confidence) fields.push({ label: 'Confidence', value: item.confidence });
-                if (item.materiality) fields.push({ label: 'Materiality', value: item.materiality });
-                fields.push({ label: 'Explanation', value: item.explanation || 'No explanation provided' });
+            let headline = '', cause = '', consequence = '';
+            
+            if (itemType === 'shadow') {
+                const spendInfo = monthlySpend ? `$${monthlySpend.toLocaleString()}/mo spend` : 'active usage';
+                headline = `${name} has ${spendInfo} but is not governed`;
+                cause = agg.has_idp === false ? 'Not connected to SSO/IdP' : 'Missing from CMDB and IdP';
+                consequence = 'Security risk: ungoverned access to corporate data';
+            } else if (itemType === 'zombie') {
+                headline = `${name} is registered but has no recent activity`;
+                cause = 'No logins or usage detected in 90+ days';
+                consequence = monthlySpend ? `Wasting $${monthlySpend.toLocaleString()}/mo on unused licenses` : 'Stale access credentials may pose security risk';
+            } else if (itemType === 'blocked') {
+                headline = `${name} was blocked by policy`;
+                cause = 'Previously rejected or banned from catalog';
+                consequence = 'Cannot be used until approved';
+            } else if (itemType === 'toxic' || itemType === 'hygiene') {
+                const issues = item.issueLabels || 'data quality issues';
+                headline = `${name} has ${issues}`;
+                cause = item.findings?.length ? `${item.findings.length} finding(s) detected` : 'Data inconsistency detected';
+                consequence = 'May affect reporting accuracy or compliance';
             } else {
-                const typeLabel = itemType === 'shadow' ? 'Shadow Asset' : 'Zombie Asset';
-                fields.push({ label: 'Classification', value: typeLabel });
-                if (item.vendor || item.vendor_hypothesis?.value) {
-                    fields.push({ label: 'Vendor', value: item.vendor || item.vendor_hypothesis?.value });
-                }
-                if (item.domain) fields.push({ label: 'Domain', value: item.domain });
-                fields.push({ label: 'Reason', value: item.reason || (itemType === 'zombie' ? 'Inactive 90+ days' : 'Ungoverned') });
-                
-                const agg = item.aggregated_evidence || {};
-                let sources = [];
-                if (agg.has_discovery) sources.push('Discovery');
-                if (agg.has_idp) sources.push('IdP');
-                if (agg.has_cmdb) sources.push('CMDB');
-                if (agg.has_cloud) sources.push('Cloud');
-                if (agg.has_finance) sources.push('Finance');
-                if (sources.length) fields.push({ label: 'Evidence Sources', value: sources.join(', ') });
+                headline = `${name} requires review`;
+                cause = 'Classification pending';
+                consequence = 'Manual review recommended';
             }
             
-            let gridHtml = fields.map(f => `
-                <div class="triage-detail-field">
-                    <div class="triage-detail-label">${f.label}</div>
-                    <div class="triage-detail-value">${f.value}</div>
+            return { headline, cause, consequence };
+        }
+        
+        function buildEvidenceBySource(item) {
+            const agg = item.aggregated_evidence || {};
+            const sources = [];
+            
+            sources.push({
+                name: 'IdP / SSO',
+                icon: agg.has_idp ? '✅' : '❌',
+                status: agg.has_idp ? 'Connected' : 'Not registered',
+                detail: agg.idp_app_name || (agg.has_idp ? 'App found in IdP' : 'No matching app in identity provider'),
+                hasData: agg.has_idp
+            });
+            
+            sources.push({
+                name: 'CMDB',
+                icon: agg.has_cmdb ? '✅' : '❌',
+                status: agg.has_cmdb ? 'Registered' : 'Not registered',
+                detail: agg.cmdb_record_name || (agg.has_cmdb ? 'Found in CMDB' : 'No matching record in configuration database'),
+                hasData: agg.has_cmdb
+            });
+            
+            sources.push({
+                name: 'Finance',
+                icon: agg.has_finance ? '✅' : '➖',
+                status: agg.has_finance ? `$${(agg.monthly_spend || 0).toLocaleString()}/mo` : 'No spend detected',
+                detail: agg.finance_vendor || (agg.has_finance ? 'Active subscription' : 'No financial transactions found'),
+                hasData: agg.has_finance
+            });
+            
+            sources.push({
+                name: 'Discovery',
+                icon: agg.has_discovery ? '✅' : '➖',
+                status: agg.has_discovery ? 'Active usage' : 'No usage detected',
+                detail: agg.discovery_sources ? `Sources: ${agg.discovery_sources.join(', ')}` : (agg.has_discovery ? 'DNS/Browser activity detected' : 'No network activity observed'),
+                hasData: agg.has_discovery
+            });
+            
+            sources.push({
+                name: 'Cloud',
+                icon: agg.has_cloud ? '✅' : '➖',
+                status: agg.has_cloud ? 'Cloud presence' : 'No cloud data',
+                detail: agg.cloud_provider || (agg.has_cloud ? 'Found in cloud inventory' : 'Not found in cloud providers'),
+                hasData: agg.has_cloud
+            });
+            
+            return sources;
+        }
+        
+        function buildDetailHtml(item, itemType) {
+            const { headline, cause, consequence } = generateTriageHeadline(item, itemType);
+            const evidenceSources = buildEvidenceBySource(item);
+            
+            const evidenceHtml = evidenceSources.map(s => `
+                <div class="evidence-row ${s.hasData ? 'has-data' : 'no-data'}">
+                    <span class="evidence-icon">${s.icon}</span>
+                    <span class="evidence-source">${s.name}</span>
+                    <span class="evidence-status">${s.status}</span>
+                    <span class="evidence-detail">${s.detail}</span>
                 </div>
             `).join('');
             
-            let evidenceHtml = '';
-            if (item.evidence) {
-                evidenceHtml = `<div class="triage-detail-evidence">${JSON.stringify(item.evidence, null, 2)}</div>`;
-            }
+            const techDetailsHtml = `
+                <div class="tech-details-toggle" onclick="this.parentElement.classList.toggle('show-tech')">
+                    <span class="toggle-icon">▶</span> Show technical details
+                </div>
+                <div class="tech-details-content">
+                    <pre>${JSON.stringify(item, null, 2)}</pre>
+                </div>
+            `;
             
-            return `<div class="triage-detail-content">
-                <div class="triage-detail-grid">${gridHtml}</div>
-                ${evidenceHtml}
+            return `<div class="triage-detail-content triage-detail-v2">
+                <div class="detail-block detail-summary">
+                    <div class="detail-block-title">What's Wrong</div>
+                    <div class="detail-headline">${headline}</div>
+                    <div class="detail-cause"><strong>Cause:</strong> ${cause}</div>
+                    <div class="detail-consequence"><strong>Impact:</strong> ${consequence}</div>
+                </div>
+                <div class="detail-block detail-evidence">
+                    <div class="detail-block-title">Evidence by Source</div>
+                    <div class="evidence-grid">${evidenceHtml}</div>
+                </div>
+                <div class="detail-block detail-tech">
+                    ${techDetailsHtml}
+                </div>
             </div>`;
         }
         
@@ -790,11 +864,19 @@
                             <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                     }
                 } else if (sectionType === 'risk') {
-                    primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
-                    secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="dismiss_risk">Dismiss Risk</button>`;
-                    moreOptions = `
-                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                    if (itemType === 'shadow') {
+                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve</button>`;
+                        secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban</button>`;
+                        moreOptions = `
+                            <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                            <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                    } else {
+                        primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
+                        secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="dismiss_risk">Dismiss Risk</button>`;
+                        moreOptions = `
+                            <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                            <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
+                    }
                 } else {
                     primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge Gap</button>`;
                     secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="assign">Assign Owner</button>`;

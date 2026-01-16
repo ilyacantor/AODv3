@@ -1,0 +1,108 @@
+Here is the **single, explicit prompt**.
+Copy-paste this **verbatim** to the dev / Replit agent.
+
+---
+
+### 🔧 **WORK ORDER: Stop Cross-Run Pollution (No DB Changes)**
+
+**Context (do not debate):**
+We confirmed **cross-run pollution**. AOD is matching **stale IdP plane rows from previous snapshots** because plane data persists in the DB and queries are not strictly snapshot-scoped. Dev and prod currently share the same DB. We cannot change DB topology right now.
+
+**Goal:**
+Make results **trustworthy immediately** by fencing state in code and blocking ghost assets.
+
+---
+
+## REQUIRED CHANGES (ALL MUST BE DONE)
+
+### 1️⃣ Hard snapshot fencing (CRITICAL)
+
+For **every plane correlation query** (IdP, CMDB, Finance, Cloud):
+
+* Queries **must include**:
+
+```sql
+WHERE tenant_id = :tenant_id
+  AND snapshot_id = :snapshot_id
+```
+
+* Remove / forbid:
+
+  * “latest snapshot”
+  * global plane caches
+  * queries without snapshot_id
+
+If any function cannot supply `snapshot_id`, **throw and fail**.
+
+---
+
+### 2️⃣ Kill ghost assets at catalog time
+
+Before persisting a cataloged asset, recompute admission **from scratch** using only current snapshot evidence.
+
+Invariant (fatal):
+
+```
+cataloged_asset ⇒ passes ≥1 admission gate
+```
+
+Admission gates must be derived **only from current snapshot data**, not stored flags.
+
+If invariant fails:
+
+* reject asset
+* log ERROR with asset_id + snapshot_id
+
+---
+
+### 3️⃣ Startup sanity check (cheap guardrail)
+
+On FastAPI startup (or before reconciliation):
+
+* Query IdP plane rows for `(tenant_id, snapshot_id)`
+* If Farm snapshot expects **0 IdP records** but DB returns >0 → **abort run loudly**
+
+This prevents silent re-corruption.
+
+---
+
+### 4️⃣ Surgical cleanup (SAFE)
+
+For the active tenant only:
+
+* Delete plane rows (`idp`, then others if needed) **where snapshot_id != current_snapshot_id**
+
+⚠️ Do NOT touch prod schema beyond this scoped delete.
+
+---
+
+## NON-GOALS (DO NOT DO)
+
+* No DB/schema/project changes
+* No format/reason-code refactors
+* No “temporary” latest-snapshot shortcuts
+
+---
+
+## ACCEPTANCE CRITERIA
+
+* The 6 former “IdP Correlation Bug” assets no longer show HAS_IDP when Farm snapshot has empty IdP plane
+* Clean-room invariant check reports **0 ghost assets**
+* Re-running assessment yields deterministic results
+
+---
+
+**Deliverables:**
+
+* List of functions modified (file + function name)
+* Before/after example of one IdP correlation query
+* Output of clean-room invariant check
+
+---
+
+End of prompt.
+
+If you want, next I can:
+
+* turn this into **checklist PR review criteria**
+* or help you verify the patch against one concrete asset (`easyforce.io`) step-by-step

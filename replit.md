@@ -33,6 +33,16 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 
 **Identity Model & Key Strategy:** The system tracks domain provenance (`identifiers.domain_provenance`), allows authoritative CMDB domains to be promoted to `identifiers.domains`, suppresses generic collision roots, and uses `key_strategy_version` (v1/v2) for canonical key generation. A reconciliation mapping layer (`anchor_type`, `absence_flags`, `entity_key_v2`) aligns with Farm's vocabulary.
 
+**AAM Blocking Logic (Jan 2026):** Finding types determine whether assets can connect to AAM (Asset & Access Management):
+-   **BLOCKING findings (Red section):** `identity_gap`, `finance_gap`, `data_conflict` - AAM connection blocked by default
+    - `identity_gap`: No IdP/SSO integration = no lifecycle control, no offboarding, no access auditability
+    - `finance_gap`: Active spend without accountable owner = dangerous to enable integrations
+    - `data_conflict`: Sources disagree on identity/ownership = cannot safely act
+-   **NON-BLOCKING findings (Green section):** `cmdb_gap`, `governance_gap`, `duplication_risk` - Informational only
+    - These are hygiene issues that don't prevent AAM connection
+-   **Triage Sections:** Red = "Blocking — Cannot Connect", Yellow = "Review — Cost Optimization" (zombies), Green = "Informational — Non-Blocking"
+-   **Override Support:** Blocking findings can be overridden with "warn only" mode per customer policy
+
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** Externalizes all admission and classification policy logic to `config/policy_master.json`, allowing operators to control policies via a web UI (`/switchboard`) with webhook notifications to Farm.
 -   **Policy Impact Panel:** Displays which domains are blocked by each policy rule and their counts, categorized by CDN/Static Hosts, Vendor Portals, Dev/Build Infra, Custom, Admission Gates, and Other.

@@ -55,6 +55,10 @@
                     showIgnoreModal(runId, itemId, itemType);
                 } else if (action === 'assign') {
                     showAssignModal(runId, itemId, itemType);
+                } else if (action === 'resolve_blocking') {
+                    await submitProvisioningAction(itemId, 'SANCTION');
+                } else if (action === 'override_blocking') {
+                    await submitTriageAction(runId, itemId, itemType, 'override', { override_reason: 'Manual override - warn only' });
                 } else if (['sanction', 'ban', 'deprovision', 'dismiss_risk', 'resolve'].includes(action)) {
                     await submitProvisioningAction(itemId, action.toUpperCase());
                 } else {
@@ -406,19 +410,23 @@
                 const hygieneItems = [];
                 const processedAssetIds = new Set();
                 
+                const BLOCKING_FINDINGS = ['identity_gap', 'finance_gap', 'data_conflict'];
+                const NON_BLOCKING_FINDINGS = ['cmdb_gap', 'governance_gap', 'duplication_risk'];
+                
+                const hasBlockingFinding = (findings) => findings.some(f => BLOCKING_FINDINGS.includes(f.finding_type));
+                const hasOnlyNonBlockingFindings = (findings) => findings.length > 0 && findings.every(f => NON_BLOCKING_FINDINGS.includes(f.finding_type));
+                
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     const savedAction = triageActionsMap[`shadow:${assetId}`];
                     const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
-                    const hasFinanceGap = assetFindings.some(f => f.finding_type === 'finance_gap');
                     
                     const item = { 
                         ...a, 
                         itemType: 'shadow',
-                        sectionType: 'risk',
+                        sectionType: 'firewall',
                         provisioning_status: provStatus,
-                        hasFinanceGap: hasFinanceGap,
                         findings: assetFindings,
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
@@ -427,26 +435,50 @@
                         triageIgnoreReason: savedAction?.ignore_reason || null
                     };
                     
+                    firewallItems.push(item);
+                    processedAssetIds.add(assetId);
+                });
+                
+                assets.forEach(a => {
+                    const assetId = a.asset_id || a.id;
+                    if (processedAssetIds.has(assetId)) return;
+                    
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
+                    
                     if (provStatus === 'QUARANTINE' || provStatus === 'BLOCKED') {
-                        riskItems.push(item);
+                        const savedAction = triageActionsMap[`blocked:${assetId}`];
+                        const item = { 
+                            ...a, 
+                            itemType: 'blocked',
+                            sectionType: 'firewall',
+                            provisioning_status: provStatus,
+                            findings: assetFindings,
+                            triageState: savedAction?.state || 'pending',
+                            triageAction: savedAction?.action || null,
+                            triageOwner: savedAction?.owner || null,
+                            triageDeferUntil: savedAction?.defer_until || null,
+                            triageIgnoreReason: savedAction?.ignore_reason || null
+                        };
+                        firewallItems.push(item);
                         processedAssetIds.add(assetId);
                     }
                 });
                 
                 assets.forEach(a => {
                     const assetId = a.asset_id || a.id;
-                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    if (processedAssetIds.has(assetId)) return;
                     
-                    if ((provStatus === 'QUARANTINE' || provStatus === 'BLOCKED') && !processedAssetIds.has(assetId)) {
-                        const savedAction = triageActionsMap[`blocked:${assetId}`];
-                        const assetFindings = assetFindingsMap[assetId] || [];
-                        const hasFinanceGap = assetFindings.some(f => f.finding_type === 'finance_gap');
+                    const provStatus = (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
+                    
+                    if (hasBlockingFinding(assetFindings)) {
+                        const savedAction = triageActionsMap[`blocking:${assetId}`];
                         const item = { 
                             ...a, 
-                            itemType: 'blocked',
+                            itemType: 'blocking',
                             sectionType: 'firewall',
                             provisioning_status: provStatus,
-                            hasFinanceGap: hasFinanceGap,
                             findings: assetFindings,
                             triageState: savedAction?.state || 'pending',
                             triageAction: savedAction?.action || null,
@@ -465,12 +497,14 @@
                     
                     const savedAction = triageActionsMap[`zombie:${assetId}`];
                     const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
+                    const assetFindings = assetFindingsMap[assetId] || [];
                     
                     const item = { 
                         ...a, 
                         itemType: 'zombie',
                         sectionType: 'risk',
                         provisioning_status: provStatus,
+                        findings: assetFindings,
                         triageState: savedAction?.state || 'pending',
                         triageAction: savedAction?.action || null,
                         triageOwner: savedAction?.owner || null,
@@ -490,50 +524,14 @@
                     
                     const provStatus = (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
-                    const hasIdentityGap = assetFindings.some(f => f.finding_type === 'identity_gap');
                     
-                    if (provStatus === 'REVIEW' || (provStatus === 'ACTIVE' && hasIdentityGap)) {
-                        const savedAction = triageActionsMap[`risk:${assetId}`];
-                        const findingTypes = assetFindings.map(f => f.finding_type || 'unknown');
-                        const issueLabels = findingTypes.map(t => t.replace(/_/g, ' ')).join(', ');
-                        
-                        const item = { 
-                            ...a,
-                            itemType: 'toxic',
-                            sectionType: 'risk',
-                            findings: assetFindings,
-                            findingTypes: findingTypes,
-                            issueLabels: issueLabels || 'Review Required',
-                            triageState: savedAction?.state || 'pending',
-                            triageAction: savedAction?.action || null,
-                            triageOwner: savedAction?.owner || null,
-                            triageDeferUntil: savedAction?.defer_until || null,
-                            triageIgnoreReason: savedAction?.ignore_reason || null
-                        };
-                        riskItems.push(item);
-                        processedAssetIds.add(assetId);
-                    }
-                });
-                
-                assets.forEach(a => {
-                    const assetId = a.asset_id || a.id;
-                    if (processedAssetIds.has(assetId)) return;
-                    
-                    const provStatus = (a.provisioning_status || '').toUpperCase();
-                    const assetFindings = assetFindingsMap[assetId] || [];
-                    
-                    if (provStatus === 'ACTIVE' && assetFindings.length > 0) {
+                    if (provStatus === 'ACTIVE' && hasOnlyNonBlockingFindings(assetFindings)) {
                         const savedAction = triageActionsMap[`hygiene:${assetId}`];
-                        const findingTypes = assetFindings.map(f => f.finding_type || 'unknown');
-                        const issueLabels = findingTypes.map(t => t.replace(/_/g, ' ')).join(', ');
-                        
                         const item = { 
                             ...a,
                             itemType: 'hygiene',
                             sectionType: 'hygiene',
                             findings: assetFindings,
-                            findingTypes: findingTypes,
-                            issueLabels: issueLabels,
                             triageState: savedAction?.state || 'pending',
                             triageAction: savedAction?.action || null,
                             triageOwner: savedAction?.owner || null,
@@ -639,10 +637,10 @@
             let headline = '', cause = '', consequence = '';
             
             if (itemType === 'shadow') {
-                const spendInfo = monthlySpend ? `$${monthlySpend.toLocaleString()}/mo spend` : 'active usage';
-                headline = `${name} has ${spendInfo} but is not governed`;
-                cause = agg.has_idp === false ? 'Not connected to SSO/IdP' : 'Missing from CMDB and IdP';
-                consequence = 'Security risk: ungoverned access to corporate data';
+                const spendInfo = monthlySpend ? ` with $${monthlySpend.toLocaleString()}/mo spend` : '';
+                headline = `${name} cannot be connected without SSO${spendInfo}`;
+                cause = 'Not registered in IdP or CMDB — no identity governance';
+                consequence = 'AAM blocked — no access lifecycle control or auditability';
             } else if (itemType === 'zombie') {
                 headline = `${name} is registered but has no recent activity`;
                 cause = 'No logins or usage detected in 90+ days';
@@ -651,6 +649,33 @@
                 headline = `${name} was blocked by policy`;
                 cause = 'Previously rejected or banned from catalog';
                 consequence = 'Cannot be used until approved';
+            } else if (itemType === 'blocking') {
+                const findings = item.findings || [];
+                const hasIdentity = findings.some(f => f.finding_type === 'identity_gap');
+                const hasFinance = findings.some(f => f.finding_type === 'finance_gap');
+                const hasConflict = findings.some(f => f.finding_type === 'data_conflict');
+                
+                if (hasConflict) {
+                    headline = `${name} has conflicting data - cannot safely connect`;
+                    cause = 'Sources disagree on identity or ownership';
+                    consequence = 'AAM connection blocked until conflict is resolved';
+                } else if (hasIdentity && hasFinance) {
+                    headline = `${name} has spend but no identity governance`;
+                    cause = 'Active spend without SSO/IdP integration';
+                    consequence = 'Cannot connect - no access lifecycle control';
+                } else if (hasIdentity) {
+                    headline = `${name} cannot be connected without SSO`;
+                    cause = 'No identity provider integration';
+                    consequence = 'AAM blocked - no access auditability';
+                } else if (hasFinance) {
+                    headline = `${name} has unaccounted spend`;
+                    cause = 'Active charges without accountable owner';
+                    consequence = 'AAM blocked - cost accountability required';
+                } else {
+                    headline = `${name} has a blocking issue`;
+                    cause = 'Critical finding detected';
+                    consequence = 'AAM connection paused';
+                }
             } else if (itemType === 'toxic') {
                 if (!agg.has_idp) {
                     headline = `${name} is active but not connected to SSO`;
@@ -853,33 +878,28 @@
                 } else if (sectionType === 'firewall') {
                     const provStatus = (item.provisioning_status || '').toUpperCase();
                     const isAlreadyBlocked = provStatus === 'BLOCKED';
+                    
                     if (isAlreadyBlocked) {
-                        statusBadge = `<span class="triage-status-badge banned">⊘ Blocked</span>`;
+                        statusBadge = `<span class="triage-status-badge banned">⊘ Banned</span>`;
                         primaryBtn = '';
                         secondaryBtn = '';
                         moreOptions = `
                             <button class="triage-more-item" ${dataAttrs} data-action="sanction">Unblock (Approve)</button>`;
                     } else {
-                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve</button>`;
+                        statusBadge = `<span class="triage-status-badge warning">⚠ AAM Blocked</span>`;
+                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="resolve_blocking">Resolve & Connect</button>`;
                         secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban</button>`;
                         moreOptions = `
+                            <button class="triage-more-item" ${dataAttrs} data-action="override_blocking">Override (Warn Only)</button>
                             <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
                             <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                     }
                 } else if (sectionType === 'risk') {
-                    if (itemType === 'shadow') {
-                        primaryBtn = `<button class="triage-btn success" ${dataAttrs} data-action="sanction">Approve</button>`;
-                        secondaryBtn = `<button class="triage-btn danger" ${dataAttrs} data-action="ban">Ban</button>`;
-                        moreOptions = `
-                            <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                            <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
-                    } else {
-                        primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
-                        secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="dismiss_risk">Dismiss Risk</button>`;
-                        moreOptions = `
-                            <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
-                            <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
-                    }
+                    primaryBtn = `<button class="triage-btn warning" ${dataAttrs} data-action="deprovision">Deprovision</button>`;
+                    secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="dismiss_risk">Dismiss Risk</button>`;
+                    moreOptions = `
+                        <button class="triage-more-item" ${dataAttrs} data-action="defer">Defer</button>
+                        <button class="triage-more-item" ${dataAttrs} data-action="assign">Assign</button>`;
                 } else {
                     primaryBtn = `<button class="triage-btn primary" ${dataAttrs} data-action="acknowledge">Acknowledge Gap</button>`;
                     secondaryBtn = `<button class="triage-btn secondary" ${dataAttrs} data-action="assign">Assign Owner</button>`;

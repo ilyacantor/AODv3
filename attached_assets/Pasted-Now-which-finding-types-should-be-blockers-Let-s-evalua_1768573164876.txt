@@ -1,0 +1,141 @@
+Now: which finding types should be blockers?
+
+Let’s evaluate each one strictly through the lens of “safe to connect?”
+
+1️⃣ identity_gap → BLOCKING (default)
+
+Why
+
+AAM will create credentials, tokens, or integrations
+
+Without IdP / SSO, you have:
+
+no lifecycle control
+
+no offboarding
+
+no access auditability
+
+This is non-negotiable in most enterprises.
+
+Decision
+
+✅ BLOCK AAM connection by default
+
+User-facing explanation
+
+“This system cannot be connected until identity governance is established.”
+
+Override allowed?
+
+Yes — customer can downgrade to “warn only”.
+
+2️⃣ finance_gap → BLOCKING (default)
+
+This is subtle but important.
+
+Why
+
+AAM creates operational dependency
+
+Connecting systems with unknown ownership or spend is dangerous
+
+Enterprises will require cost accountability before enabling integrations
+
+Decision
+
+✅ BLOCK AAM connection by default
+
+Human explanation
+
+“We detected active spend without an accountable owner.
+Connection is paused to prevent unmanaged dependencies.”
+
+Overrideable?
+Yes — some customers may allow “connect first, govern later”.
+
+3️⃣ cmdb_gap → NON-BLOCKING (default)
+
+Why
+
+CMDB hygiene is often poor
+
+Blocking on CMDB would stall adoption
+
+CMDB completeness is usually downstream of discovery
+
+Decision
+
+❌ Not blocking by default
+
+Still important, but informational / hygiene.
+
+4️⃣ governance_gap → NON-BLOCKING (default)
+
+Depends on what you mean by governance.
+
+Your example:
+
+“Notion lacks defined data classification”
+
+This is important, but:
+
+Often undefined even in mature orgs
+
+Hard to enforce automatically
+
+Blocking here would cause friction
+
+Decision
+
+❌ Not blocking by default
+(But can be upgraded to blocking in “High-control” preset)
+
+5️⃣ data_conflict → BLOCKING (default)
+
+This one is critical and easy to underestimate.
+
+Why
+
+Conflicting owners / environments / classifications means:
+
+wrong credentials
+
+wrong scopes
+
+wrong data exposure
+
+AAM must know which truth to act on
+
+Decision
+
+✅ BLOCK AAM connection by default
+
+Explanation
+
+“We cannot safely connect this system because sources disagree on its identity or ownership.”
+
+This is a safety block, not a policy block.
+
+6️⃣ duplication_risk → NON-BLOCKING (default)
+
+Why
+
+Dupes are common and often benign
+
+Blocking would cause unnecessary friction
+
+AAM can often still connect once one canonical asset is chosen
+
+Decision
+
+❌ Not blocking by default
+
+Updated table (authoritative recommendation)
+Finding Type	Default Block AAM?	Rationale
+identity_gap	✅ Yes	No access lifecycle control
+finance_gap	✅ Yes	No accountable ownership
+cmdb_gap	❌ No	Hygiene issue
+governance_gap	❌ No	Often undefined
+data_conflict	✅ Yes	Unsafe to act on ambiguity
+duplication_risk	❌ No	Low immediate risk

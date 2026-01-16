@@ -1,0 +1,161 @@
+This is a **good catch**, and it *does* change one thing: **you should pause before finalizing alias collapse policy**. Everything else stands.
+
+I’ll be very crisp and decisive.
+
+---
+
+## 1. Key Normalization (hipchat / yammer / zoom-legacy) — **this is the only real decision point**
+
+You’ve now surfaced the *real* question:
+
+> **Is an alias collapse a semantic truth or a presentation choice?**
+
+Right now:
+
+* **AOD treats these as semantic collapse** (same asset)
+* **Farm treats them as distinct historical assets** (separate CMDB rows, possibly zombie)
+
+These are *mutually incompatible* worldviews.
+
+### Evaluate the options you listed
+
+#### ❌ Option A: Farm collapses to parent vendor
+
+**Reject.**
+
+Why:
+
+* Farm is your **ground truth generator**
+* Collapsing destroys historical visibility (zombies, legacy apps)
+* You lose the ability to reason about deprecation timelines
+
+This would weaken Farm.
+
+---
+
+#### ❌ Option C: Farm emits CMDB only under canonical parent
+
+**Reject.**
+
+Why:
+
+* That rewrites reality
+* HipChat and Yammer were **real, separately operated services**
+* They often *do* have CMDB entries even after acquisition
+
+This erases useful signal.
+
+---
+
+#### ✅ Option B: **Remove these from AOD’s collapse list**
+
+**Correct choice.**
+
+**Key principle**
+
+> *Alias collapse should be used for technical aliases (zoom.us → zoom.com), not product lineage.*
+
+HipChat and Yammer are:
+
+* **legacy products**
+* **distinct operational entities**
+* **valid zombie candidates**
+
+Therefore:
+
+* They must remain **standalone asset keys**
+* Ownership / lineage belongs in **metadata**, not key normalization
+
+### Concrete rule (write this down)
+
+**Collapse only when**:
+
+* Domains are technical aliases of the *same service*
+* Both resolve to the same operational control plane
+
+**Do NOT collapse when**:
+
+* Domain represents a retired or acquired product
+* Domain has its own CMDB lifecycle history
+
+📌 **Action**:
+Remove `hipchat.com → atlassian.com`
+Remove `yammer.com → microsoft.com`
+Add *metadata* instead (e.g., `owned_by_vendor`, `product_status=retired`)
+
+This aligns AOD to Farm **without weakening either**.
+
+---
+
+## 2. zoom-legacy.com — same treatment
+
+If Farm expects it standalone, treat it as:
+
+* standalone key
+* possibly `STALE`, `ZOMBIE`, or `LEGACY`
+
+Do **not** collapse unless Farm explicitly marks it as a technical alias.
+
+---
+
+## 3. “IdP Correlation Bug” (7 assets) — **this is NOT a correlation bug**
+
+You diagnosed this correctly.
+
+### What’s actually happening
+
+* Farm emits explicit `NO_IDP`, `NO_CMDB`
+* AOD emits **absence**, not explicit negation
+* Reconciliation interprets absence as mismatch
+
+This is **reason-code parity**, not logic.
+
+### Correct fix
+
+AOD should **emit explicit negative reason codes** when governance is absent:
+
+* `NO_IDP`
+* `NO_CMDB`
+
+These do **not** affect classification (you already classify Shadow correctly)
+They exist to:
+
+* make reconciliation symmetric
+* improve explainability
+* avoid “phantom mismatches”
+
+📌 This is safe and low-risk.
+
+---
+
+## Final Recommendations (Authoritative)
+
+### Do **not** change Farm governance semantics.
+
+### Do **not** collapse legacy product domains in AOD.
+
+**Do this instead:**
+
+1. **Remove legacy product alias collapses from AOD**
+
+   * hipchat.com
+   * yammer.com
+   * zoom-legacy.com
+2. Represent lineage via metadata, not key collapse
+3. Add explicit `NO_IDP` / `NO_CMDB` reason codes in AOD output
+
+---
+
+## Net Effect
+
+* Key normalization mismatches → resolved
+* Zombie detection → preserved
+* Governance invariant → untouched
+* Reconciliation accuracy → increases without semantic drift
+
+If you want, next I can:
+
+* Draft the exact metadata fields to replace alias collapse, or
+* Provide a **one-paragraph policy spec** you can hand to both teams so this never re-debates again.
+
+You’re making the *right* distinctions now.

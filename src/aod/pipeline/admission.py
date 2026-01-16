@@ -1524,6 +1524,11 @@ def _idp_domain_matches_entity(
     """
     # If IdP has no domain, check if the IdP name matches entity's base domain token
     # This handles cases where the IdP record has no domain field but the name aligns
+    # 
+    # Jan 2026: Option B - Stricter matching when IdP has no domain:
+    # - IdP name must EXACTLY match entity base token (not just startswith)
+    # - Entity base token must be at least 5 characters (avoid short token collisions)
+    # This reduces false positives where unrelated apps with short names match
     if not idp_registered_domain:
         if idp_name and entity_registered_domain:
             # Extract base token from entity domain (e.g., "coreio.ai" → "coreio")
@@ -1540,9 +1545,11 @@ def _idp_domain_matches_entity(
             if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
                 return False
             
-            # Now check if IdP name starts with or equals entity base token
+            # Option B: Check if IdP name EXACTLY equals entity base token
+            # AND require entity_base to be at least 5 characters to avoid false matches
+            # (e.g., "db" or "api" would be too short and likely match unrelated apps)
             idp_name_normalized = normalized_idp_name.replace('-', '').replace('_', '').replace(' ', '')
-            if idp_name_normalized == entity_base or idp_name_normalized.startswith(entity_base):
+            if len(entity_base) >= 5 and idp_name_normalized == entity_base:
                 return True
         return False
 

@@ -413,3 +413,157 @@ class TestMatchQualityClassification:
             match_method="contains"
         )
         assert not match.is_authoritative
+
+
+class TestIdPDomainMatchingStrictness:
+    """
+    Test IdP domain matching when IdP record has no domain field.
+    
+    Jan 2026: Option B implementation - Stricter name-based fallback:
+    - IdP name must EXACTLY match entity base token (not just startswith)
+    - Entity base token must be at least 5 characters (avoid short token collisions)
+    
+    This eliminates false positives where unrelated apps with short names
+    incorrectly match (e.g., "api" IdP matching any "api.xxx" domain).
+    """
+    
+    def _import_function(self):
+        """Import the function under test"""
+        from src.aod.pipeline.admission import _idp_domain_matches_entity
+        return _idp_domain_matches_entity
+    
+    def test_exact_match_with_sufficient_length_allowed(self):
+        """IdP name exactly matching entity base token (>=5 chars) should match"""
+        func = self._import_function()
+        
+        # "coreio" is 6 characters, exact match with IdP name "Coreio"
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="coreio.ai",
+            idp_name="Coreio"
+        ) == True
+    
+    def test_startswith_match_now_rejected(self):
+        """IdP name starting with entity base token should NO LONGER match"""
+        func = self._import_function()
+        
+        # "coreio" IdP name should NOT match "coreioservice" entity base
+        # (previously would have matched with startswith logic)
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="coreioservice.ai",
+            idp_name="Coreio"
+        ) == False
+    
+    def test_short_entity_base_rejected(self):
+        """Entity base token less than 5 characters should be rejected"""
+        func = self._import_function()
+        
+        # "test" is 4 characters (< 5 minimum), should not match even with exact name
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="test.com",
+            idp_name="Test"
+        ) == False
+    
+    def test_exactly_5_chars_accepted(self):
+        """Entity base token of exactly 5 characters should be accepted"""
+        func = self._import_function()
+        
+        # "slack" is exactly 5 characters, exact match with IdP name
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="slack.com",
+            idp_name="Slack"
+        ) == True
+    
+    def test_normalized_name_matching(self):
+        """IdP name normalization (removing dashes, underscores, spaces) should work"""
+        func = self._import_function()
+        
+        # "slack-app" normalized to "slackapp" should NOT match "slack" base (5 chars)
+        # because "slackapp" != "slack"
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="slack.com",
+            idp_name="Slack-App"
+        ) == False
+    
+    def test_normalized_exact_match(self):
+        """Normalized name should match normalized base token"""
+        func = self._import_function()
+        
+        # "Team Suite" normalized to "teamsuite" (9 chars) matches "teamsuite" base
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="teamsuite.cloud",
+            idp_name="Team Suite"
+        ) == True
+    
+    def test_legacy_suffix_still_rejected(self):
+        """IdP names with legacy/deprecated suffixes should still be rejected"""
+        func = self._import_function()
+        
+        # Even with exact match and sufficient length, legacy suffix blocks match
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="coreio.ai",
+            idp_name="Coreio (Legacy)"
+        ) == False
+    
+    def test_prod_suffix_still_rejected(self):
+        """IdP names with -prod suffix should still be rejected"""
+        func = self._import_function()
+        
+        # Even with exact match and sufficient length, -prod suffix blocks match
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="fastbox.cloud",
+            idp_name="Fastbox-prod"
+        ) == False
+    
+    def test_with_explicit_domain_still_matches(self):
+        """IdP with explicit domain should still use domain-based matching"""
+        func = self._import_function()
+        
+        # Domain-based match should work regardless of name (this is not the fallback case)
+        assert func(
+            idp_registered_domain="flexflow.org",
+            entity_registered_domain="flexflow.org",
+            idp_name="Any Name"
+        ) == True
+    
+    def test_empty_entity_domain_allows_match(self):
+        """Entity with no domain should allow match (existing behavior)"""
+        func = self._import_function()
+        
+        # When entity has no domain, match is allowed (unchanged from original)
+        assert func(
+            idp_registered_domain="someidp.com",
+            entity_registered_domain=None,
+            idp_name="SomeIdP"
+        ) == True
+    
+    def test_false_positive_example_blocked(self):
+        """Real-world false positive case should be blocked by new rules"""
+        func = self._import_function()
+        
+        # Example: "api" IdP (4 chars, too short) should not match "api-gateway.cloud"
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="api-gateway.cloud",
+            idp_name="API"
+        ) == False
+    
+    def test_false_positive_startswith_blocked(self):
+        """False positive from startswith logic should now be blocked"""
+        func = self._import_function()
+        
+        # "net" IdP (3 chars, too short) should not match "netcloud.io"
+        # Even though "net" is < 5 chars AND "net".startswith("net") is true,
+        # the new rules block it
+        assert func(
+            idp_registered_domain=None,
+            entity_registered_domain="netcloud.io",
+            idp_name="Net"
+        ) == False

@@ -186,6 +186,20 @@
             farm_sync: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>'
         };
 
+        const sectionTooltips = {
+            activity_windows: 'Controls how long assets remain "active" before becoming stale or zombie. Shorter windows = more aggressive zombie detection.',
+            finance_thresholds: 'Minimum spend levels that trigger admission or findings. Higher thresholds = fewer low-spend assets admitted.',
+            admission_gates: 'Hard requirements for asset admission into the catalog. These are the "bouncers" that filter noise from signal.',
+            scope_toggles: 'Feature flags that change discovery behavior. Enable/disable major operational modes here.',
+            fuzzy_matching: 'Controls how aggressively names are matched. Lower thresholds = more matches but higher false positive risk.',
+            vendor_inference: 'How confidently AOD infers vendor relationships. Lower confidence = more conservative vendor attribution.',
+            query_limits: 'Database and storage limits to prevent runaway queries. Increase for larger datasets.',
+            infrastructure_domain_handling: 'How to treat CDNs, vendor portals, and dev tools. These are NOT enterprise assets - excluding them is correct modeling.',
+            custom_exclusions: 'Operator-managed domain blocklist. Add domains here that are unique noise for your environment.',
+            corporate_root_domains: 'Your organization\'s own domains. These should never appear as shadow IT.',
+            farm_sync: 'Configuration for synchronizing policy changes with Farm. AOD is the source of truth; Farm consumes snapshots.'
+        };
+
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -350,13 +364,24 @@
                     settingsHtml += createInputForSetting(sectionKey, settingKey, setting);
                 }
 
+                const tooltip = sectionTooltips[sectionKey] || '';
                 card.innerHTML = `
-                    <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-700">
+                    <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-700 relative group/header">
                         <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
                             <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>
                         </div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-gray-100">${formatSectionTitle(sectionKey)}</h2>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-lg font-semibold text-gray-100">${formatSectionTitle(sectionKey)}</h2>
+                                ${tooltip ? `<div class="relative group/tip">
+                                    <svg class="w-4 h-4 text-gray-500 cursor-help hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <div class="absolute left-0 top-full mt-2 w-72 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm text-gray-300 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all duration-200 z-50 shadow-xl">
+                                        ${tooltip}
+                                    </div>
+                                </div>` : ''}
+                            </div>
                             <p class="text-sm text-gray-500">${section.description || ''}</p>
                         </div>
                     </div>

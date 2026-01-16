@@ -32,6 +32,13 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Debug Instrumentation**: AOD_DEBUG_MATCH env var logs per-plane match method classification. LensMatchDebug includes IDP_CANDIDATE/CMDB_CANDIDATE flags.
 -   **PROMOTION_ALLOWED_MATCH_METHODS**: Updated to include all authoritative methods for domain promotion.
 
+**CMDB Authoritative Recovery (Jan 2026 - Phase B):**
+-   **CMDBConfigItem.domains[]**: New array field to hold all authoritative domains from Farm.
+-   **PlaneIndex Authoritative Indexes**: Added `by_canonical_domain` and `by_domains_array` separate indexes for authoritative CMDB correlation.
+-   **CMDB Indexing Expansion**: `canonical_domain` and `domains[]` are now indexed SEPARATELY (not as fallback), while still mirrored to `by_domain` for backward compatibility.
+-   **Deterministic Lookup Order**: CMDB correlation uses authoritative-only paths in order: (1) canonical_domain == D, (2) D ∈ domains[], (3) verified_alias_domain(D) == canonical_domain.
+-   **Test Coverage**: 73 tests validating TLD isolation, governance invariants, and CMDB authoritative recovery.
+
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 
 **Key Normalization:** Infrastructure/service domains (e.g., `outlook.com`, `gstatic.com`, `office.com`) produce stable, standalone asset keys rather than collapsing to vendor domains, ensuring accurate reconciliation.

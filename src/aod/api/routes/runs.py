@@ -151,13 +151,17 @@ async def create_run_from_farm(request: FarmRunRequest):
     
     snapshot_generated_at = _parse_snapshot_generated_at(snapshot_data)
     
+    # Extract snapshot fingerprint for drift detection (Jan 2026)
+    snapshot_fingerprint = snapshot_data.get("meta", {}).get("snapshot_fingerprint") or snapshot_data.get("snapshot_fingerprint")
+    
     provenance = {
         "source": "farm",
         "farm_url": farm_url,
         "snapshot_id": request.snapshot_id,
         "schema_version": schema_version,
         "fetch_duration_ms": fetch_duration_ms,
-        "snapshot_generated_at": snapshot_generated_at.isoformat() if snapshot_generated_at else None
+        "snapshot_generated_at": snapshot_generated_at.isoformat() if snapshot_generated_at else None,
+        "snapshot_fingerprint": snapshot_fingerprint  # For detecting snapshot regeneration
     }
     
     db = await get_db_direct()

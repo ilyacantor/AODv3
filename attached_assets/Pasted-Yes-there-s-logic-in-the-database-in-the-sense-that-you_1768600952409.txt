@@ -1,0 +1,107 @@
+Yes — **there’s “logic in the database” in the sense that you have *stateful planes* persisted across runs**, and your correlation logic is effectively querying “whatever is in the tables” unless it’s *strictly scoped* by `snapshot_id` (and/or `run_id`). When the new snapshot has an empty IdP plane, the old IdP rows remain and are still matchable → **cross-run pollution**.
+
+And the second thing you said (dev and prod share the same DB) is the accelerant. It turns a bug into a constant haunt: every experiment can contaminate production-like truth unless you hard-wall by tenant+snapshot+environment.
+
+Below is what I’d do, in the most direct, least-surprising way.
+
+---
+
+## 1) What’s happening (plain English)
+
+* Planes (IdP / CMDB / Finance / Cloud / etc.) are **written into DB tables** during ingestion.
+* A later run ingests a new snapshot that may have **0 IdP records**, but the old IdP records are **still in the table**.
+* Correlation queries don’t fully constrain on `snapshot_id`, so stale rows remain eligible matches.
+* Result: AOD “finds” IdP governance that Farm says doesn’t exist (because Farm snapshot plane is empty).
+
+That’s not “cache.” That’s **persistent state pollution**.
+
+---
+
+## 2) Required fixes (do all three)
+
+### Fix A — Hard-bind every plane lookup by `snapshot_id`
+
+**Rule:** *No plane row may ever be used unless `row.snapshot_id == asset.snapshot_id`.*
+
+Implementation pattern (non-negotiable):
+
+* All correlation queries must include `WHERE tenant_id = ? AND snapshot_id = ?`
+* If you have “latest” queries, delete them. “Latest” is how ghosts happen.
+
+Also: make the `snapshot_id` an explicit parameter passed into every correlation function so it can’t “forget”.
+
+### Fix B — Purge plane rows for the snapshot on ingestion
+
+When ingesting snapshot S:
+
+* Delete all plane rows for `(tenant_id, snapshot_id=S)` before insert (idempotent).
+* **Optionally** also purge older snapshots **for that tenant** if you keep only one active snapshot in dev.
+
+This prevents duplicates and partial plane updates.
+
+### Fix C — Make admission invariant fatal at catalog time
+
+Before something becomes `cataloged`, recompute/verify:
+
+* passes at least one admission gate *in this snapshot*
+* evidence refs (if required) point to observations from this snapshot
+* governance flags derived from matches in this snapshot
+
+If invariant fails: mark as rejected + emit a loud error.
+
+This prevents ghost assets even if a stray row slips through.
+
+---
+
+## 3) The “dev uses prod DB” situation (this is high risk)
+
+This is **not sustainable** if you’re running experiments, changing ingestion, and doing repeated reconciliations.
+
+You need **one** of these immediately:
+
+### Option 1 (best): Separate DBs
+
+* Prod DB for prod only
+* Dev DB for dev only
+
+### Option 2 (acceptable): Separate schemas (same Postgres instance)
+
+* `prod.*` schema
+* `dev.*` schema
+* Use different DB user / search_path so dev can’t touch prod accidentally
+
+### Option 3 (minimum viable): Environment namespace column + hard guard
+
+* Add `env` (dev/prod) to every table primary/unique key and every query filter
+* Refuse to run if env missing
+* Force all writes/reads to include env
+
+If you don’t do this, you will keep “fixing” logic while the DB keeps reintroducing stale truth.
+
+---
+
+## 4) Concrete DB constraints that stop this class of bug forever
+
+Add these (or equivalents):
+
+* Composite key/index on: `(tenant_id, snapshot_id, plane, external_id)`
+* Every plane table must have `snapshot_id NOT NULL`
+* Foreign keys from assets/evidence to `(tenant_id, snapshot_id)` scoped tables
+* Add a “snapshot registry” table and require `snapshot_id` exists + is active
+
+This turns “oops we forgot to filter” into “query can’t be written without doing the right thing”.
+
+---
+
+## 5) What to do *right now* (fastest unblock)
+
+1. **Patch correlation queries** to always filter by `(tenant_id, snapshot_id)`
+2. **Add purge-on-ingest** for each plane (IdP first)
+3. **Run the clean-room invariant check again** and verify:
+
+   * those 6 domains no longer match IdP
+   * ghost assets count drops
+
+---
+
+If you paste the names of the DB tables for IdP plane + the function(s) doing IdP correlation (file + function name), I’ll give you an exact “work order” patch plan (what to change where) without any exploratory thrash.

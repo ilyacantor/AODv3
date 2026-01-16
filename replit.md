@@ -59,6 +59,14 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Triage Sections:** Red = "Blocking — Cannot Connect", Yellow = "Review — Cost Optimization" (zombies), Green = "Informational — Non-Blocking"
 -   **Override Support:** Blocking findings can be overridden with "warn only" mode per customer policy
 
+**Snapshot Drift Detection (Jan 2026):**
+-   **Architecture**: Plane data (IdP/CMDB/Cloud/Finance) is built in-memory from `snapshot.planes` each run, NOT persisted in separate DB tables. Asset records persist with `lens_match_debug` containing matched record IDs.
+-   **Drift Risk**: If Farm regenerates a snapshot after a run was created, the asset's correlation data (IdP matches, etc.) becomes stale. The matched records may no longer exist.
+-   **Snapshot Fingerprint Tracking**: New runs store `provenance.snapshot_fingerprint` to detect when Farm regenerates snapshots.
+-   **Drift Check Endpoint**: `GET /api/debug/snapshot-drift-check?run_id=X` compares stored vs current fingerprint to detect snapshot changes.
+-   **Invariant Check Endpoint**: `GET /api/debug/catalog-invariant-check?run_id=X` validates all assets have valid admission basis (discovery OR idp OR cmdb OR finance OR cloud).
+-   **Detection Status Codes**: `OK` (no drift), `DRIFT_DETECTED` (snapshot changed), `NO_STORED_FINGERPRINT` (legacy run).
+
 **Key Technical Implementations & Features:**
 -   **Central Policy Switchboard:** Externalizes all admission and classification policy logic to `config/policy_master.json`, allowing operators to control policies via a web UI (`/switchboard`) with webhook notifications to Farm.
 -   **Policy Impact Panel:** Displays which domains are blocked by each policy rule and their counts, categorized by CDN/Static Hosts, Vendor Portals, Dev/Build Infra, Custom, Admission Gates, and Other.

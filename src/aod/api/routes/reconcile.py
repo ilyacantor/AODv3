@@ -445,3 +445,104 @@ async def catalog_invariant_check(run_id: str):
         "top_20_violations": violations,
         "invariant": "Every cataloged asset MUST have: discovery OR idp OR cmdb OR finance OR cloud"
     }
+
+
+@router.get("/debug/snapshot-drift-check")
+async def snapshot_drift_check(run_id: str):
+    """
+    Detect if a run's source snapshot has changed since ingestion.
+    
+    Compares stored snapshot fingerprint against current Farm snapshot fingerprint.
+    If they differ, the run's assets may be stale (based on old snapshot data).
+    
+    This is critical for detecting Farm snapshot regeneration which invalidates
+    correlated plane matches (IdP, CMDB, etc.) stored in asset records.
+    """
+    import os
+    import httpx
+    
+    db = await get_db_direct()
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    
+    input_meta = run.input_meta if hasattr(run, 'input_meta') else {}
+    snapshot_id = input_meta.get("snapshot_id")
+    stored_fingerprint = input_meta.get("provenance", {}).get("snapshot_fingerprint")
+    
+    if not snapshot_id:
+        return {
+            "run_id": run_id,
+            "status": "NO_SNAPSHOT_ID",
+            "detail": "Run has no snapshot_id in input_meta"
+        }
+    
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        return {
+            "run_id": run_id,
+            "status": "NO_FARM_URL",
+            "detail": "FARM_URL not configured"
+        }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{farm_url.rstrip('/')}/api/snapshots?snapshot_id={snapshot_id}")
+            if resp.status_code != 200:
+                return {
+                    "run_id": run_id,
+                    "status": "FARM_ERROR",
+                    "detail": f"Farm returned {resp.status_code}"
+                }
+            
+            snapshots = resp.json()
+            if isinstance(snapshots, dict):
+                snapshots = snapshots.get("snapshots", [])
+            
+            current_snapshot = None
+            for s in snapshots:
+                if s.get("snapshot_id") == snapshot_id:
+                    current_snapshot = s
+                    break
+            
+            if not current_snapshot:
+                return {
+                    "run_id": run_id,
+                    "status": "SNAPSHOT_NOT_FOUND",
+                    "detail": f"Snapshot {snapshot_id} not found in Farm"
+                }
+            
+            current_fingerprint = current_snapshot.get("snapshot_fingerprint")
+            
+            if not stored_fingerprint:
+                return {
+                    "run_id": run_id,
+                    "status": "NO_STORED_FINGERPRINT",
+                    "stored_fingerprint": None,
+                    "current_fingerprint": current_fingerprint,
+                    "detail": "Run was created before fingerprint tracking was added"
+                }
+            
+            if stored_fingerprint == current_fingerprint:
+                return {
+                    "run_id": run_id,
+                    "status": "OK",
+                    "stored_fingerprint": stored_fingerprint,
+                    "current_fingerprint": current_fingerprint,
+                    "detail": "Snapshot has not changed since ingestion"
+                }
+            else:
+                return {
+                    "run_id": run_id,
+                    "status": "DRIFT_DETECTED",
+                    "stored_fingerprint": stored_fingerprint,
+                    "current_fingerprint": current_fingerprint,
+                    "detail": "CRITICAL: Farm snapshot has been regenerated since this run was created. Assets may have stale correlation data (IdP/CMDB matches that no longer exist)."
+                }
+                
+    except Exception as e:
+        return {
+            "run_id": run_id,
+            "status": "ERROR",
+            "detail": f"Failed to check Farm: {str(e)}"
+        }

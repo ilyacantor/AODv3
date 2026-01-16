@@ -2717,7 +2717,10 @@
         
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => window.location.reload());
+            refreshBtn.addEventListener('click', () => {
+                loadTenants();
+                showToast('Tenants refreshed', 'success');
+            });
         }
         
         const helpBtn = document.getElementById('helpBtn');

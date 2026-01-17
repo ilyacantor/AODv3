@@ -20,7 +20,7 @@ def get_farm_url() -> str | None:
     FARM_URL_MODE controls which URL to use:
     - "prod": Use FARM_URL_PROD only
     - "dev": Use FARM_URL_DEV only  
-    - "auto" (default): Try FARM_URL_PROD, fall back to FARM_URL_DEV
+    - "auto" (default): Auto-detect based on REPLIT_DEPLOYMENT (prod if deployed, dev otherwise)
     
     Falls back to FARM_URL for backward compatibility.
     """
@@ -31,9 +31,12 @@ def get_farm_url() -> str | None:
     elif mode == "dev":
         return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL")
     else:
-        # Auto mode - prefer DEV since PROD (autonomos.farm) isn't deployed yet
-        # TODO: Switch to PROD-first when autonomos.farm is properly deployed
-        return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+        # Auto mode - detect if running in production deployment
+        is_production = os.environ.get("REPLIT_DEPLOYMENT") == "1"
+        if is_production:
+            return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL")
+        else:
+            return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
 
 
 def get_farm_client() -> FarmClient | None:

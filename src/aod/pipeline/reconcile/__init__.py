@@ -1,48 +1,58 @@
 """
-AOD Agent Reconcile - Asset classification and output emission.
+Reconciliation package - Asset classification and output emission.
 
-This module has been refactored into the `reconcile/` package.
-All imports are re-exported here for backwards compatibility.
+This package handles the reconciliation output stage of AOD, which
+classifies assets as shadow, zombie, parked, or active based on
+governance signals and activity evidence.
 
-New structure:
-    reconcile/
-    ├── __init__.py          # Public API (this shim)
-    ├── enums.py             # ReasonCode, AnchorType
-    ├── result_types.py      # AssetActualResult, ActualResultsOutput
-    ├── utils.py             # Time utilities, deduplication
-    ├── eligibility.py       # is_reconciliation_eligible
-    ├── reason_codes.py      # compute_asset_reasons
-    ├── domain_helpers.py    # Domain extraction functions
-    ├── classify.py          # classify_actual, merge_results
-    └── emitter.py           # emit_actual_results
+Public API:
+- emit_actual_results: Main entry point for reconciliation output
+- classify_actual: Classify a single asset
+- AssetActualResult, ActualResultsOutput: Result types
+- ReasonCode, AnchorType: Enums
+- is_reconciliation_eligible: Eligibility check
 
 Original file preserved as: aod_agent_reconcile_old.py
 """
 
-# Re-export everything from the reconcile package for backwards compatibility
-from .reconcile import (
-    # Enums
+# Enums
+from .enums import (
     ReasonCode,
     AnchorType,
-    # Result types
+)
+
+# Result types
+from .result_types import (
     AssetActualResult,
     RejectionResult,
     ActualResultsOutput,
-    # Utilities
+)
+
+# Utilities
+from .utils import (
     utc_now,
     ensure_utc_aware,
     deduplicate_reason_codes,
     _utc_now,
     _ensure_utc_aware,
     _deduplicate_reason_codes,
-    # Eligibility
+)
+
+# Eligibility
+from .eligibility import (
     is_infrastructure_domain,
     is_reconciliation_eligible,
     INFRASTRUCTURE_DOMAIN_PATTERNS,
     _is_infrastructure_domain,
-    # Reason codes
+)
+
+# Reason codes
+from .reason_codes import (
     compute_asset_reasons,
-    # Domain helpers
+)
+
+# Domain helpers
+from .domain_helpers import (
     extract_raw_domain,
     extract_registered_domain,
     resolve_domain_key,
@@ -50,10 +60,16 @@ from .reconcile import (
     _extract_raw_domain,
     _extract_registered_domain,
     _normalize_to_canonical_vendor_domain,
-    # Classification
+)
+
+# Classification
+from .classify import (
     classify_actual,
     merge_results,
-    # Emitter
+)
+
+# Emitter
+from .emitter import (
     emit_actual_results,
     compute_rejection_reasons,
     _compute_rejection_reasons,

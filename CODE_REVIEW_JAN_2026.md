@@ -11,7 +11,237 @@
 
 AODv3 is a well-architected, production-ready enterprise asset discovery platform with a 98.7% reconciliation accuracy rate. The codebase demonstrates strong engineering principles including deterministic processing, evidence-based decisions, and comprehensive testing (18 test files).
 
-This review identifies opportunities for improvement across architecture, performance, maintainability, and security - none of which are blockers for shipping.
+This review identifies opportunities for improvement across architecture, performance, maintainability, and security.
+
+---
+
+## CRITICAL: Shared Dev/Prod Database Safeguards
+
+**Concern Raised:** Dev and production share a single database.
+
+### Current State Analysis
+
+| Aspect | Status | Risk Level |
+|--------|--------|------------|
+| Database URL Configuration | Single env var (`SUPABASE_DB_URL` or `DATABASE_URL`) | **HIGH** |
+| Environment Detection | **None** - no `ENV`, `NODE_ENV`, or `APP_ENV` checking | **HIGH** |
+| Authentication | **None** - no API keys, tokens, or auth middleware | **CRITICAL** |
+| Destructive Endpoints | Unprotected `DELETE /api/runs` wipes ALL data | **CRITICAL** |
+| CORS Policy | Wildcard `allow_origins=["*"]` | **HIGH** |
+| Tenant Isolation | Data scoped by `tenant_id`, but no access control | **MEDIUM** |
+| Rate Limiting | **None** | **MEDIUM** |
+
+### Safeguards Currently in Place
+
+1. **Run Isolation**: All assets/findings/artifacts are scoped to `run_id` - queries always filter by run
+2. **Tenant ID Scoping**: Data includes `tenant_id` for logical separation
+3. **Foreign Key Constraints**: Assets reference runs, preventing orphaned data
+4. **No Cascade Deletes**: Deleting a run requires explicit deletion of child tables first
+
+### Safeguards MISSING (Proposals)
+
+#### C1: CRITICAL - Add Environment Guard for Destructive Operations
+
+**Location:** `api/routes/runs.py:350-360`
+
+**Current Code (DANGEROUS):**
+```python
+@router.delete("")
+async def delete_all_runs():
+    """Delete all discovery runs and associated data"""
+    db = await get_db_direct()
+    deleted = await db.delete_all_runs()
+    return {"message": f"Deleted {deleted} runs..."}
+```
+
+**Issue:** No confirmation, no environment check, no audit trail. One API call wipes everything.
+
+**Proposal:**
+```python
+import os
+
+@router.delete("")
+async def delete_all_runs(confirm: str = Query(..., description="Must be 'DELETE_ALL_CONFIRMED'")):
+    """Delete all discovery runs - REQUIRES confirmation"""
+    env = os.environ.get("AOD_ENVIRONMENT", "development")
+
+    # Block in production
+    if env == "production":
+        raise HTTPException(
+            status_code=403,
+            detail="DELETE ALL is disabled in production. Use run-specific deletion."
+        )
+
+    # Require explicit confirmation
+    if confirm != "DELETE_ALL_CONFIRMED":
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide confirm='DELETE_ALL_CONFIRMED' to proceed"
+        )
+
+    db = await get_db_direct()
+    deleted = await db.delete_all_runs()
+
+    # Log for audit
+    logger.warning("delete_all_runs.executed", extra={
+        "deleted_count": deleted,
+        "environment": env,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+    return {"message": f"Deleted {deleted} runs", "environment": env}
+```
+
+---
+
+#### C2: CRITICAL - Add API Authentication
+
+**Location:** `src/main.py`
+
+**Current State:** Zero authentication. Anyone with network access can:
+- Create runs (expensive compute)
+- Read all data
+- Delete all data
+- Modify asset provisioning status
+
+**Proposal:** Add API key middleware:
+```python
+from fastapi import Security, HTTPException
+from fastapi.security import APIKeyHeader
+
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+    expected_key = os.environ.get("AOD_API_KEY")
+    if not expected_key:
+        # No key configured = allow (dev mode)
+        return True
+    if api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return True
+
+# Apply to router
+app.include_router(router, dependencies=[Depends(verify_api_key)])
+```
+
+**Environment Variables to Add:**
+```
+AOD_API_KEY=<secret-key-for-production>
+AOD_ENVIRONMENT=production|staging|development
+```
+
+---
+
+#### C3: HIGH - Add Environment-Aware Database Selection
+
+**Location:** `db/database.py:22-39`
+
+**Current State:** Single database URL, no environment awareness.
+
+**Proposal:** Support environment-prefixed database URLs:
+```python
+def get_database_url() -> str:
+    """Get database URL with environment awareness."""
+    env = os.environ.get("AOD_ENVIRONMENT", "development")
+
+    # Try environment-specific URL first
+    env_specific_key = f"DATABASE_URL_{env.upper()}"
+    db_url = os.environ.get(env_specific_key)
+
+    # Fall back to generic
+    if not db_url:
+        db_url = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL")
+
+    if not db_url:
+        raise RuntimeError("No database configured.")
+
+    # Log which database is being used
+    logger.info("database.selected", extra={
+        "environment": env,
+        "source": env_specific_key if os.environ.get(env_specific_key) else "generic"
+    })
+
+    return db_url
+```
+
+**Recommended Environment Variables:**
+```
+# Production
+DATABASE_URL_PRODUCTION=postgresql://prod-host/aod_prod
+
+# Development
+DATABASE_URL_DEVELOPMENT=postgresql://dev-host/aod_dev
+
+# Staging
+DATABASE_URL_STAGING=postgresql://staging-host/aod_staging
+```
+
+---
+
+#### C4: HIGH - Add Run-Scoped Delete Instead of Global Delete
+
+**Proposal:** Replace `delete_all_runs` with safer alternatives:
+
+```python
+@router.delete("/{run_id}")
+async def delete_run(run_id: str, confirm: bool = Query(False)):
+    """Delete a specific run and its associated data"""
+    if not confirm:
+        raise HTTPException(400, "Add ?confirm=true to delete")
+
+    db = await get_db_direct()
+    # Delete in order: findings, artifacts, assets, then run
+    await db.delete_run_cascade(run_id)
+    return {"message": f"Deleted run {run_id}"}
+
+@router.delete("")
+async def delete_all_runs(...):
+    # Keep but add guards from C1
+    ...
+```
+
+---
+
+#### C5: MEDIUM - Restrict CORS in Production
+
+**Location:** `src/main.py:18-24`
+
+**Current:**
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # DANGEROUS
+    ...
+)
+```
+
+**Proposal:**
+```python
+env = os.environ.get("AOD_ENVIRONMENT", "development")
+allowed_origins = ["*"] if env == "development" else [
+    "https://aod.yourcompany.com",
+    "https://farm.yourcompany.com",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    ...
+)
+```
+
+---
+
+### Immediate Action Items (Priority Order)
+
+| Priority | Item | Risk if Unaddressed |
+|----------|------|---------------------|
+| **P0** | Add `AOD_ENVIRONMENT` env var and check in `delete_all_runs` | Accidental prod data wipe |
+| **P0** | Add `AOD_API_KEY` authentication | Unauthorized access/modification |
+| **P1** | Add confirmation param to destructive endpoints | Accidental deletion |
+| **P1** | Restrict CORS to known origins in production | CSRF attacks |
+| **P2** | Add audit logging for all write operations | No forensics capability |
+| **P2** | Add rate limiting | DoS risk |
 
 ---
 
@@ -525,18 +755,43 @@ def correlate_to_plane(...):
 
 ## 9. Summary
 
-**Ship Readiness:** READY
-**Critical Issues:** None
-**Blocking Issues:** None
+**Ship Readiness:** READY (with caveats)
+**Critical Issues:** 2 (Authentication, Destructive Endpoint Guards)
+**Blocking Issues:** None (if deploying to isolated environment)
 
-The codebase is production-ready with 98.7% accuracy. The proposals above are improvements for future iterations, not blockers.
+The codebase is production-ready with 98.7% accuracy. The pipeline and business logic are solid.
+
+**However, shared dev/prod database requires immediate safeguards before production traffic.**
 
 ### Priority Recommendations
 
-1. **P4.2 (HTML Escaping)** - Quick security fix
-2. **P1.1 (Matcher Extraction)** - Significant maintainability win
-3. **P5.1 (API Integration Tests)** - Confidence in deployments
-4. **P6.3 (Structured Logging)** - Operational visibility
+**CRITICAL (Before Prod Traffic):**
+1. **C1** - Add environment guard to `DELETE /api/runs`
+2. **C2** - Add API key authentication
+3. **C5** - Restrict CORS to known origins
+
+**HIGH (Soon After Launch):**
+4. **C3** - Environment-aware database selection
+5. **P4.2** - HTML escaping (XSS fix)
+
+**MEDIUM (Future Iterations):**
+6. **P1.1** - Matcher extraction for maintainability
+7. **P5.1** - API integration tests
+8. **P6.3** - Structured logging
+
+---
+
+### Quick Reference: Environment Variables to Add
+
+```bash
+# Required for production safety
+AOD_ENVIRONMENT=production      # or development, staging
+AOD_API_KEY=<your-secret-key>   # Required in production
+
+# Optional: Separate databases per environment
+DATABASE_URL_PRODUCTION=postgresql://prod-host/aod_prod
+DATABASE_URL_DEVELOPMENT=postgresql://dev-host/aod_dev
+```
 
 ---
 

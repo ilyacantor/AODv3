@@ -41,6 +41,15 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Legacy Product Standalone**: hipchat.com and yammer.com treated as standalone domains (legacy products, not technical aliases) for proper zombie detection.
 -   **Test Coverage**: 76 tests validating TLD isolation, governance invariants, heuristic blocking, and CMDB authoritative recovery.
 
+**Category 5 FP Fix - Entity Domain Evidence Requirement (Jan 2026):**
+-   **Problem**: Vendor name inference (e.g., "db-mongo" → mongodb.com) created false entities without actual discovery domain evidence.
+-   **Fix**: Removed vendor name → domain inference from `resolve_domain_from_observation()` for entity creation.
+-   **New Rule**: Observations must have domain/hostname/uri evidence to create entities.
+-   **Vendor Inference**: Still available via `_lookup_vendor_domain()` for enrichment/correlation, but NOT for entity creation.
+-   **Verification**: Old run had 720 assets; new run has 717 assets (3 FPs eliminated: mongodb.com, elasticsearch.com, sentry.io).
+-   **Iron Dome**: Observations without domain evidence now rejected at iron_dome stage (338 → 499 rejections).
+-   **Test Coverage**: 78 governance tests + updated tests ensure name-only observations are correctly rejected.
+
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 
 **Key Normalization:** Infrastructure/service domains (e.g., `outlook.com`, `gstatic.com`, `office.com`) produce stable, standalone asset keys rather than collapsing to vendor domains, ensuring accurate reconciliation.

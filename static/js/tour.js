@@ -45,8 +45,8 @@ const TourManager = (function() {
             step: 14
         },
         7: { 
-            title: "Trust, but Verify",
-            content: "In a demo, you trust the vendor. In AutonomOS, we let you audit the math.\n\nLet's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset catalog.",
+            title: "Verification",
+            content: "Let's go back to <strong>The Farm</strong> to compare AOD's findings against the Ground Truth we generated earlier—verifying AOD's ability to create a verified, accurate asset catalog.",
             step: 15
         }
     };

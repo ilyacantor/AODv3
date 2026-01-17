@@ -86,7 +86,7 @@ The story isn't "Look, our software works." The story is: *"Enterprise data is d
 
 | Step | Dialog Title | Dialog Text | Visual/Action |
 |------|--------------|-------------|---------------|
-| **11 of 13** | **Trust, but Verify** | In a demo, you trust the vendor. In AutonomOS, we let you audit the math.<br><br>Let's go back to **The Farm** to compare AOD's findings against the Ground Truth we generated earlier. We measure our own Precision and Recall. | Button: **"Verify in Farm"** |
+| **11 of 13** | **Verification** | Let's go back to **The Farm** to compare AOD's findings against the Ground Truth we generated earlier. We measure our own Precision and Recall. | Button: **"Verify in Farm"** |
 
 ---
 

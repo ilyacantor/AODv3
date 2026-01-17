@@ -1,63 +1,55 @@
 """
-AOD Agent Reconcile - Asset classification and output emission.
+AOD Agent Reconciliation - Actual Results Emitter
 
-This module has been refactored into the `reconcile/` package.
-All imports are re-exported here for backwards compatibility.
+REFACTORING NOTE: The reconcile/ package refactoring introduced logic changes.
+This shim now imports directly from the preserved original file to maintain
+correct behavior until the package modules are properly verified.
 
-New structure:
-    reconcile/
-    ├── __init__.py          # Public API (this shim)
-    ├── enums.py             # ReasonCode, AnchorType
-    ├── result_types.py      # AssetActualResult, ActualResultsOutput
-    ├── utils.py             # Time utilities, deduplication
-    ├── eligibility.py       # is_reconciliation_eligible
-    ├── reason_codes.py      # compute_asset_reasons
-    ├── domain_helpers.py    # Domain extraction functions
-    ├── classify.py          # classify_actual, merge_results
-    └── emitter.py           # emit_actual_results
+The reconcile/ package exists but should NOT be used until:
+1. All 38 ReasonCode enum values are restored
+2. AnchorType.DISCOVERY is added back
+3. AssetActualResult structure matches original
+4. Output format (string lists vs objects) is verified
+5. FORMAT_PARITY_FIX logic is restored
+6. Alias expansion is re-implemented
 
-Original file preserved as: aod_agent_reconcile_old.py
+Original file: aod_agent_reconcile_old.py (1,275 lines - authoritative)
 """
 
-# Re-export everything from the reconcile package for backwards compatibility
-from .reconcile import (
+# Import everything from the preserved original file
+from .aod_agent_reconcile_old import (
     # Enums
     ReasonCode,
     AnchorType,
     # Result types
     AssetActualResult,
-    RejectionResult,
     ActualResultsOutput,
-    # Utilities
-    utc_now,
-    ensure_utc_aware,
-    deduplicate_reason_codes,
+    # Utility functions
     _utc_now,
     _ensure_utc_aware,
     _deduplicate_reason_codes,
     # Eligibility
-    is_infrastructure_domain,
-    is_reconciliation_eligible,
-    INFRASTRUCTURE_DOMAIN_PATTERNS,
     _is_infrastructure_domain,
-    # Reason codes
+    is_reconciliation_eligible,
+    # Reason computation
     compute_asset_reasons,
     # Domain helpers
-    extract_raw_domain,
-    extract_registered_domain,
-    resolve_domain_key,
-    get_parent_domain,
     _extract_raw_domain,
     _extract_registered_domain,
     _normalize_to_canonical_vendor_domain,
     # Classification
     classify_actual,
-    merge_results,
-    # Emitter
+    # Main emitter
     emit_actual_results,
-    compute_rejection_reasons,
-    _compute_rejection_reasons,
 )
+
+# Provide aliases for any code expecting non-underscore names
+utc_now = _utc_now
+ensure_utc_aware = _ensure_utc_aware
+deduplicate_reason_codes = _deduplicate_reason_codes
+is_infrastructure_domain = _is_infrastructure_domain
+extract_raw_domain = _extract_raw_domain
+extract_registered_domain = _extract_registered_domain
 
 __all__ = [
     # Enums
@@ -65,35 +57,28 @@ __all__ = [
     "AnchorType",
     # Result types
     "AssetActualResult",
-    "RejectionResult",
     "ActualResultsOutput",
-    # Utilities
-    "utc_now",
-    "ensure_utc_aware",
-    "deduplicate_reason_codes",
+    # Utility functions
     "_utc_now",
     "_ensure_utc_aware",
     "_deduplicate_reason_codes",
+    "utc_now",
+    "ensure_utc_aware",
+    "deduplicate_reason_codes",
     # Eligibility
+    "_is_infrastructure_domain",
     "is_infrastructure_domain",
     "is_reconciliation_eligible",
-    "INFRASTRUCTURE_DOMAIN_PATTERNS",
-    "_is_infrastructure_domain",
-    # Reason codes
+    # Reason computation
     "compute_asset_reasons",
     # Domain helpers
-    "extract_raw_domain",
-    "extract_registered_domain",
-    "resolve_domain_key",
-    "get_parent_domain",
     "_extract_raw_domain",
     "_extract_registered_domain",
     "_normalize_to_canonical_vendor_domain",
+    "extract_raw_domain",
+    "extract_registered_domain",
     # Classification
     "classify_actual",
-    "merge_results",
-    # Emitter
+    # Main emitter
     "emit_actual_results",
-    "compute_rejection_reasons",
-    "_compute_rejection_reasons",
 ]

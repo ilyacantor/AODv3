@@ -3,6 +3,9 @@
 ## Overview
 AOS Discover is the discovery module of AutonomOS, an enterprise operating system designed to ingest raw enterprise evidence. Its primary function is to generate an Asset Catalog, a Run Log, and Explainable Findings by identifying and classifying enterprise assets without pre-adjudicated labels. The system aims to provide a clear, auditable, and deterministic view of an organization's digital footprint for robust asset management and risk mitigation, prioritizing evidence-only decisions and full explainability. The project's ambition is to provide a complete and accurate picture of an organization's digital assets, distinguishing between assets and artifacts to prevent asset count inflation.
 
+**Why You'll See "Farm":**
+Complex enterprise systems are easy to demo and hard to trust. AOS Farm is a large-scale intelligent synthetic data generator that produces realistic enterprise environments—including intentionally bad data, conflicts, and unmanaged systems. Reconciliation exists to prove accuracy, not to simulate it. The AOD architecture was subjected to boundary condition analysis. We utilized 17,000 synthetic asset instances to drive approximately 800,000 rule evaluations. This dataset was specifically targeted to cover 90 distinct decision boundaries, effectively securing the system against a combinatorial space of ~300,000 potential states. Testing prioritized the 37 identified high-risk edge cases, including Key Normalization conflicts, Multi-tenant Policy forks, and Activity/Zombie anomalies.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
@@ -49,9 +52,6 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Verification**: Old run had 720 assets; new run has 717 assets (3 FPs eliminated: mongodb.com, elasticsearch.com, sentry.io).
 -   **Iron Dome**: Observations without domain evidence now rejected at iron_dome stage (338 → 499 rejections).
 -   **Test Coverage**: 78 governance tests + updated tests ensure name-only observations are correctly rejected.
-
-**Stress Testing & Boundary Analysis (Jan 2026):**
-The AOD architecture was subjected to boundary condition analysis. We utilized 17,000 synthetic asset instances to drive approximately 800,000 rule evaluations. This dataset was specifically targeted to cover 90 distinct decision boundaries, effectively securing the system against a combinatorial space of ~300,000 potential states. Testing prioritized the 37 identified high-risk edge cases, including Key Normalization conflicts, Multi-tenant Policy forks, and Activity/Zombie anomalies.
 
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 

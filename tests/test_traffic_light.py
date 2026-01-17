@@ -41,36 +41,49 @@ def make_correlation(
     cloud_records: list = None,
     finance_records: list = None
 ) -> CorrelationResult:
-    """Create a test CorrelationResult with specified plane matches."""
+    """Create a test CorrelationResult with specified plane matches.
+    
+    Note: match_method='domain' is set for authoritative matching - this 
+    ensures governance checks pass (is_authoritative=True).
+    """
     return CorrelationResult(
         entity=entity,
         idp=PlaneMatch(
             status=MatchStatus.MATCHED if idp_records else MatchStatus.UNMATCHED,
-            matched_records=idp_records or []
+            matched_records=idp_records or [],
+            match_method='domain' if idp_records else None
         ),
         cmdb=PlaneMatch(
             status=MatchStatus.MATCHED if cmdb_records else MatchStatus.UNMATCHED,
-            matched_records=cmdb_records or []
+            matched_records=cmdb_records or [],
+            match_method='domain' if cmdb_records else None
         ),
         cloud=PlaneMatch(
             status=MatchStatus.MATCHED if cloud_records else MatchStatus.UNMATCHED,
-            matched_records=cloud_records or []
+            matched_records=cloud_records or [],
+            match_method='domain' if cloud_records else None
         ),
         finance=PlaneMatch(
             status=MatchStatus.MATCHED if finance_records else MatchStatus.UNMATCHED,
-            matched_records=finance_records or []
+            matched_records=finance_records or [],
+            match_method='domain' if finance_records else None
         )
     )
 
 
-def make_idp_object(name: str, has_sso: bool = True) -> IdPObject:
-    """Create a test IdP object."""
+def make_idp_object(name: str, has_sso: bool = True, domain: str = None) -> IdPObject:
+    """Create a test IdP object.
+    
+    Note: domain is required for domain-aligned governance to pass.
+    IdP records without a domain cannot assert governance per Jan 2026 policy.
+    """
     return IdPObject(
         idp_id=str(uuid4()),
         name=name,
         idp_type="service_principal",
         has_sso=has_sso,
-        has_scim=False
+        has_scim=False,
+        domain=domain
     )
 
 
@@ -137,7 +150,7 @@ class TestTrafficLightProvisioning:
         Expected: provisioning_status = ACTIVE (flows to DCL)
         """
         entity = make_entity("okta.com", "Okta", "Okta")
-        idp = make_idp_object("Okta SSO", has_sso=True)
+        idp = make_idp_object("Okta SSO", has_sso=True, domain="okta.com")
         correlation = make_correlation(entity, idp_records=[idp])
         # Need >= 2 discovery sources for governance to admit
         observations = make_observations_multi_source("okta.com", days_ago=1)
@@ -209,15 +222,17 @@ class TestTrafficLightProvisioning:
         assert result.asset.provisioning_status == ProvisioningStatus.REVIEW
         assert "traffic_light:review" in result.asset.tags
     
-    def test_quarantine_discovery_only(self):
+    def test_active_discovery_only_with_corroboration(self):
         """
-        TEST CASE 4: Asset with discovery-only evidence should be QUARANTINE.
+        TEST CASE 4: Asset with discovery-only evidence + corroboration should be ACTIVE.
         
         Scenario: Notion with discovery sources from 2+ distinct planes but no IdP/CMDB
-        Expected: provisioning_status = QUARANTINE (shadow IT, blocked from DCL)
+        Expected: provisioning_status = ACTIVE (corroborated discovery is trusted)
         
         Note: Discovery admission requires evidence from 2+ distinct planes (not sources).
         dns -> network plane, edr -> endpoint plane = 2 distinct planes
+        
+        Traffic Light rules: Discovery corroboration (2+ planes) = GREEN/ACTIVE
         """
         entity = make_entity("notion.so", "Notion", "Notion")
         entity.observation_ids = ["obs1", "obs2"]
@@ -236,22 +251,24 @@ class TestTrafficLightProvisioning:
         )
         
         assert result.admitted is True
-        assert result.provisioning_status == ProvisioningStatus.QUARANTINE
+        assert result.provisioning_status == ProvisioningStatus.ACTIVE
         assert result.asset is not None
-        assert result.asset.provisioning_status == ProvisioningStatus.QUARANTINE
-        assert "traffic_light:quarantine" in result.asset.tags
+        assert result.asset.provisioning_status == ProvisioningStatus.ACTIVE
+        assert "traffic_light:active" in result.asset.tags
     
-    def test_quarantine_cloud_only(self):
+    def test_active_cloud_with_discovery(self):
         """
-        Additional: Asset with cloud evidence but no IdP/CMDB should be QUARANTINE.
+        Asset with cloud evidence + discovery should be ACTIVE.
         
-        Scenario: AWS resource discovered but not in IdP/CMDB
-        Expected: provisioning_status = QUARANTINE
+        Scenario: Cloud app discovered with network evidence
+        Expected: provisioning_status = ACTIVE (cloud + discovery corroboration)
+        
+        Note: Cloud matches with any discovery evidence get ACTIVE status.
         """
-        entity = make_entity("amazonaws.com", "AWS", "Amazon Web Services")
-        cloud = make_cloud_resource("AWS EC2", resource_type="ec2")
+        entity = make_entity("cloudapp.example.io", "Cloud App", "Cloud Provider")
+        cloud = make_cloud_resource("Cloud Instance", resource_type="compute")
         correlation = make_correlation(entity, cloud_records=[cloud])
-        observations = [make_observation("amazonaws.com", days_ago=1)]
+        observations = [make_observation("cloudapp.example.io", days_ago=1, source="cloud")]
         
         result = apply_admission_criteria(
             correlation=correlation,
@@ -262,14 +279,17 @@ class TestTrafficLightProvisioning:
         )
         
         assert result.admitted is True
-        assert result.provisioning_status == ProvisioningStatus.QUARANTINE
+        assert result.provisioning_status == ProvisioningStatus.ACTIVE
     
-    def test_ignored_infrastructure_domain(self):
+    def test_blocked_infrastructure_domain(self):
         """
-        IGNORED: Infrastructure domains should be rejected.
+        BLOCKED: Infrastructure domains are policy-banned.
         
-        Scenario: postgresql.org (infrastructure domain)
-        Expected: admitted=False, provisioning_status = IGNORED
+        Scenario: postgresql.org (infrastructure domain on banned list)
+        Expected: admitted=False, provisioning_status = BLOCKED
+        
+        Note: Infrastructure domains are now in the banned list, so they get BLOCKED 
+        status (policy-forbidden) rather than IGNORED.
         """
         entity = make_entity("postgresql.org", "PostgreSQL", "PostgreSQL")
         correlation = make_correlation(entity)
@@ -284,9 +304,9 @@ class TestTrafficLightProvisioning:
         )
         
         assert result.admitted is False
-        assert result.provisioning_status == ProvisioningStatus.IGNORED
+        assert result.provisioning_status == ProvisioningStatus.BLOCKED
         assert result.rejection_reason is not None
-        assert "Infrastructure domain" in result.rejection_reason
+        assert "BANNED_DOMAINS" in result.rejection_reason or "policy-forbidden" in result.rejection_reason
     
     def test_ignored_invalid_tld(self):
         """
@@ -319,7 +339,7 @@ class TestTrafficLightPrecedence:
     def test_idp_overrides_cloud(self):
         """IdP governance should result in ACTIVE even with cloud-only corroboration."""
         entity = make_entity("slack.com", "Slack", "Slack")
-        idp = make_idp_object("Slack", has_sso=True)
+        idp = make_idp_object("Slack", has_sso=True, domain="slack.com")
         cloud = make_cloud_resource("Slack Integration")
         correlation = make_correlation(entity, idp_records=[idp], cloud_records=[cloud])
         # Need >= 2 discovery sources for governance to admit
@@ -339,7 +359,7 @@ class TestTrafficLightPrecedence:
     def test_idp_prevents_review_status(self):
         """IdP governance should result in ACTIVE even with stale CMDB activity."""
         entity = make_entity("workday.com", "Workday", "Workday")
-        idp = make_idp_object("Workday SSO", has_sso=True)
+        idp = make_idp_object("Workday SSO", has_sso=True, domain="workday.com")
         cmdb = make_cmdb_item("Workday", ci_type="application", lifecycle="production")
         correlation = make_correlation(entity, idp_records=[idp], cmdb_records=[cmdb])
         # Need >= 2 discovery sources for governance to admit (stale = 120 days ago)

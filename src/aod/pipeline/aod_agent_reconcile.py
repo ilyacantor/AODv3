@@ -716,7 +716,6 @@ def classify_actual(
     
     # Compute v2 key for preview (uses domain_provenance if available)
     from .canonical_key import compute_canonical_key_v2
-    from ..core.policy import get_current_config
     
     domain_provenance = {}
     if asset.identifiers and hasattr(asset.identifiers, 'domain_provenance'):

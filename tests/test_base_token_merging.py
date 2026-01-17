@@ -39,15 +39,20 @@ class TestExtractBaseToken:
 
 
 class TestAggressiveDomainMerging:
-    """Tests for aggressive domain merging in normalize_observations."""
+    """Tests for aggressive domain merging in normalize_observations.
+    
+    After the Category 5 FP fix (Jan 2026), observations must have domain evidence
+    (domain/hostname/uri) to create entities. These tests verify that observations
+    with matching domains merge correctly.
+    """
     
     def test_airtable_name_plus_domain_creates_single_entity(self):
-        """Airtable (name) + airtable.com (domain) → single entity with domain."""
+        """Two observations with same domain merge into single entity."""
         observations = [
             Observation(
                 observation_id="obs_finance_1",
                 name="Airtable",
-                domain=None,
+                domain="airtable.com",
                 source="finance"
             ),
             Observation(
@@ -67,7 +72,7 @@ class TestAggressiveDomainMerging:
         assert "obs_discovery_1" in entity.observation_ids
     
     def test_domain_first_then_name_merges(self):
-        """Domain entity first, then name entity merges into it."""
+        """Domain entity first, then second observation with same domain merges into it."""
         observations = [
             Observation(
                 observation_id="obs_discovery_1",
@@ -78,7 +83,7 @@ class TestAggressiveDomainMerging:
             Observation(
                 observation_id="obs_finance_1",
                 name="Slack",
-                domain=None,
+                domain="slack.com",
                 source="finance"
             ),
         ]
@@ -92,12 +97,12 @@ class TestAggressiveDomainMerging:
         assert "obs_finance_1" in entity.observation_ids
     
     def test_name_first_then_domain_upgrades(self):
-        """Name entity created first gets upgraded when domain entity arrives."""
+        """Two observations with same domain merge correctly."""
         observations = [
             Observation(
                 observation_id="obs_finance_1",
                 name="Notion",
-                domain=None,
+                domain="notion.so",
                 source="finance"
             ),
             Observation(
@@ -117,12 +122,12 @@ class TestAggressiveDomainMerging:
         assert "obs_discovery_1" in entity.observation_ids
     
     def test_legacy_suffix_merges_with_domain(self):
-        """Airtable (Legacy) should merge with airtable.com."""
+        """Observations with same base domain merge regardless of name suffix."""
         observations = [
             Observation(
                 observation_id="obs_finance_1",
                 name="Airtable (Legacy)",
-                domain=None,
+                domain="airtable.com",
                 source="finance"
             ),
             Observation(
@@ -141,12 +146,12 @@ class TestAggressiveDomainMerging:
         assert len(entity.observation_ids) == 2
     
     def test_env_suffix_merges_with_domain(self):
-        """PagerDuty-prod should merge with pagerduty.com."""
+        """PagerDuty-prod with pagerduty.com domain merges correctly."""
         observations = [
             Observation(
                 observation_id="obs_finance_1",
                 name="PagerDuty-prod",
-                domain=None,
+                domain="pagerduty.com",
                 source="finance"
             ),
             Observation(
@@ -166,13 +171,13 @@ class TestAggressiveDomainMerging:
         assert "obs_discovery_1" in entity.observation_ids
     
     def test_different_base_tokens_stay_separate(self):
-        """Different tools should remain as separate entities."""
+        """Different tools with different domains remain as separate entities."""
         observations = [
             Observation(
                 observation_id="obs_1",
                 name="Airtable",
-                domain=None,
-                source="finance"
+                domain="airtable.com",
+                source="discovery"
             ),
             Observation(
                 observation_id="obs_2",
@@ -190,12 +195,12 @@ class TestAggressiveDomainMerging:
         assert "airtable.com" in domains
     
     def test_multiple_sources_all_merge(self):
-        """Multiple observations from different sources all merge into one entity."""
+        """Multiple observations with same domain from different sources all merge into one entity."""
         observations = [
             Observation(
                 observation_id="obs_finance",
                 name="Stripe",
-                domain=None,
+                domain="stripe.com",
                 source="finance"
             ),
             Observation(
@@ -207,7 +212,7 @@ class TestAggressiveDomainMerging:
             Observation(
                 observation_id="obs_idp",
                 name="Stripe",
-                domain=None,
+                domain="stripe.com",
                 source="idp"
             ),
         ]
@@ -223,12 +228,12 @@ class TestAggressiveDomainMerging:
         assert "obs_idp" in entity.observation_ids
     
     def test_vendor_data_preserved_on_merge(self):
-        """Vendor information from name-only entity transfers during merge."""
+        """Vendor information from observation transfers during merge."""
         observations = [
             Observation(
                 observation_id="obs_finance_1",
                 name="Datadog",
-                domain=None,
+                domain="datadog.com",
                 vendor="Datadog Inc",
                 source="finance"
             ),
@@ -246,3 +251,41 @@ class TestAggressiveDomainMerging:
         entity = entities[0]
         assert entity.domain == "datadog.com"
         assert entity.vendor == "datadog inc"
+
+
+class TestObservationsWithoutDomainRejected:
+    """Tests that observations without domain evidence are rejected (Category 5 FP fix)."""
+    
+    def test_name_only_observation_rejected(self):
+        """Observation with only name (no domain) is rejected."""
+        observations = [
+            Observation(
+                observation_id="obs_1",
+                name="Some App",
+                domain=None,
+                source="discovery"
+            ),
+        ]
+        
+        entities, rejected = normalize_observations(observations)
+        
+        assert len(entities) == 0
+        assert len(rejected) == 1
+        assert rejected[0]["observation_id"] == "obs_1"
+    
+    def test_vendor_only_observation_rejected(self):
+        """Observation with vendor but no domain evidence is rejected."""
+        observations = [
+            Observation(
+                observation_id="obs_1",
+                name="Some App",
+                vendor="Some Vendor",
+                domain=None,
+                source="discovery"
+            ),
+        ]
+        
+        entities, rejected = normalize_observations(observations)
+        
+        assert len(entities) == 0
+        assert len(rejected) == 1

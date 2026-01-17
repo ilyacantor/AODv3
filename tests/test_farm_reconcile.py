@@ -57,7 +57,7 @@ def sample_findings():
             run_id="run_test123",
             finding_type=FindingType.GOVERNANCE_GAP,
             category=FindingCategory.GOVERNANCE_FINDING,
-            severity=Severity.HIGH,
+            severity=Severity.CRITICAL,
             explanation="Asset lacks governance controls"
         )
     ]

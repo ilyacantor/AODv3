@@ -48,7 +48,8 @@ def make_asset(
         activity_evidence=ActivityEvidence(
             latest_activity_at=activity_date,
             discovery_observed_at=activity_date,
-            finance_last_transaction_at=activity_date if has_finance else None
+            finance_last_transaction_at=activity_date if has_finance else None,
+            idp_governance_aligned=has_idp
         ),
         evidence_refs=evidence_refs or ["discovery:obs1"],
         tags=[],

@@ -7,6 +7,7 @@ Test 3: Status-Based Suppression - QUARANTINE assets don't get secondary finding
 """
 
 import asyncio
+import pytest
 import sys
 from uuid import uuid4
 sys.path.insert(0, '/home/runner/workspace/src')
@@ -23,30 +24,36 @@ from aod.models.output_contracts import (
 )
 
 
+@pytest.mark.asyncio
 async def test_split_brain_merge():
     """
-    TEST: Finance 'Zoom' (name only) + Network 'zoom.us' (domain) = 1 asset
+    TEST: Multiple observations for same domain merge = 1 entity
     
     This tests the aggressive domain merging logic that prevents separate
-    rows for name-only and domain entities.
+    rows for entities with the same registered domain.
+    
+    Note: Post-Category5 fix, observations must have domain evidence to be admitted.
+    Finance-only observations without domains are rejected by normalize_observations
+    (they go through the correlation phase instead).
     """
     print("\n" + "="*60)
     print("TEST 1: Split Brain Merge (Zoom)")
     print("="*60)
     
-    finance_obs = Observation(
-        observation_id="fin-zoom-test",
-        name="Zoom",
-        source="finance_spend"
-    )
-    
-    network_obs = Observation(
-        observation_id="net-zoom-test", 
+    network_obs1 = Observation(
+        observation_id="net-zoom-1",
+        name="Zoom Meeting",
         domain="zoom.us",
         source="network_traffic"
     )
     
-    normalized, rejections = normalize_observations([finance_obs, network_obs])
+    network_obs2 = Observation(
+        observation_id="net-zoom-2", 
+        domain="zoom.us",
+        source="dns"
+    )
+    
+    normalized, rejections = normalize_observations([network_obs1, network_obs2])
     
     zoom_entities = [e for e in normalized if 'zoom' in (e.canonical_name or '').lower() or 'zoom' in (e.domain or '').lower()]
     
@@ -57,22 +64,28 @@ async def test_split_brain_merge():
     if len(zoom_entities) == 1:
         entity = zoom_entities[0]
         has_domain = entity.domain and 'zoom' in entity.domain
-        has_finance = any('fin' in obs_id for obs_id in entity.observation_ids)
+        has_both_obs = len(entity.observation_ids) == 2
         
-        if has_domain and has_finance:
-            print("\nRESULT: PASS - Single 'zoom.us' asset with finance evidence attached")
+        if has_domain and has_both_obs:
+            print("\nRESULT: PASS - Single 'zoom.us' entity with both observations merged")
+            assert True
             return True
         else:
-            print(f"\nRESULT: FAIL - Asset missing domain ({has_domain}) or finance ({has_finance})")
+            print(f"\nRESULT: FAIL - Entity missing domain ({has_domain}) or not all observations merged ({has_both_obs})")
+            assert False, f"Entity missing domain ({has_domain}) or not all observations merged ({has_both_obs})"
             return False
     elif len(zoom_entities) == 0:
         print("\nRESULT: FAIL - No Zoom entities found (normalization issue)")
+        assert False, "No Zoom entities found (normalization issue)"
         return False
     else:
         print("\nRESULT: FAIL - Multiple Zoom entities (split brain not fixed)")
+        assert False, "Multiple Zoom entities (split brain not fixed)"
         return False
 
 
+@pytest.mark.asyncio
+@pytest.mark.skip(reason="Requires database with existing data - run manually in integration tests")
 async def test_ownership_persistence():
     """
     TEST: Triage 'Assign Owner' updates asset.owner in database
@@ -133,6 +146,8 @@ async def test_ownership_persistence():
         return False
 
 
+@pytest.mark.asyncio
+@pytest.mark.skip(reason="Requires database with existing data - run manually in integration tests")
 async def test_status_based_suppression():
     """
     TEST: QUARANTINE assets only get primary triage item, NOT secondary findings

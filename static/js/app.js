@@ -2230,8 +2230,15 @@
                     fetch('/api/farm/all-snapshots')
                 ]);
                 
+                // Parse JSON safely - Farm may return HTML/empty during cold start
+                let tenantsData;
+                try {
+                    tenantsData = await tenantsRes.json();
+                } catch (parseErr) {
+                    throw new Error('Farm unavailable');
+                }
+                
                 // Check for Farm waking/down errors
-                const tenantsData = await tenantsRes.json();
                 if (tenantsData.ok === false || tenantsData.error === 'FARM_WAKING_OR_DOWN') {
                     throw new Error('Farm unavailable');
                 }
@@ -2298,7 +2305,14 @@
             try {
                 const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
                 const r = await fetch(url);
-                const data = await r.json();
+                
+                // Parse JSON safely - Farm may return HTML/empty during cold start
+                let data;
+                try {
+                    data = await r.json();
+                } catch (parseErr) {
+                    throw new Error('Farm unavailable');
+                }
                 
                 // Check for Farm waking/down errors
                 if (data.ok === false || data.error === 'FARM_WAKING_OR_DOWN') {

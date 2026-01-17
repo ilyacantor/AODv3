@@ -2239,11 +2239,14 @@
                 }
                 
                 // Check for Farm waking/down errors
-                if (tenantsData.ok === false || tenantsData.error === 'FARM_WAKING_OR_DOWN') {
+                const isFarmWaking = tenantsData.ok === false || 
+                    tenantsData.error === 'FARM_WAKING_OR_DOWN' ||
+                    (tenantsData.detail && tenantsData.detail.includes('FARM_WAKING'));
+                if (isFarmWaking) {
                     throw new Error('Farm unavailable');
                 }
                 if (!tenantsRes.ok && !tenantsData.tenants) {
-                    throw new Error(tenantsData.detail || 'Failed to load tenants');
+                    throw new Error('Failed to load tenants');
                 }
                 const tenants = tenantsData.tenants || [];
                 
@@ -2321,11 +2324,14 @@
                 }
                 
                 // Check for Farm waking/down errors
-                if (data.ok === false || data.error === 'FARM_WAKING_OR_DOWN') {
+                const isFarmWaking = data.ok === false || 
+                    data.error === 'FARM_WAKING_OR_DOWN' ||
+                    (data.detail && data.detail.includes('FARM_WAKING'));
+                if (isFarmWaking) {
                     throw new Error('Farm unavailable');
                 }
                 if (!r.ok && !data.snapshots) {
-                    throw new Error(data.detail || 'Failed to load snapshots');
+                    throw new Error('Failed to load snapshots');
                 }
                 loadedSnapshots = data.snapshots || [];
                 

@@ -1,65 +1,47 @@
-"""Farm-related route module with automatic dev/prod fallback"""
+"""Farm-related route module"""
 
+import os
 from typing import Optional
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException
 
 from ..schemas import TenantListResponse, SnapshotListResponse
-from ...farm_url_resolver import fetch_from_farm
+from ..deps import get_farm_url
+from ...farm_client import FarmClient
 
 router = APIRouter(prefix="/farm")
 
 
 @router.get("/url")
 async def get_farm_url_endpoint():
-    """Get the configured Farm URL mode and status"""
-    from ...farm_url_resolver import get_farm_config
-    config = get_farm_config()
-    return {
-        "mode": config.mode,
-        "dev_url": config.dev_url or "(not configured)",
-        "prod_url": config.prod_url,
-    }
+    """Get the configured Farm URL"""
+    farm_url = os.environ.get("FARM_URL")
+    return {"farm_url": farm_url}
 
 
-@router.get("/tenants")
+@router.get("/tenants", response_model=TenantListResponse)
 async def list_farm_tenants():
     """
     List available tenants from Farm.
     
     Fetches all snapshots and extracts unique tenant_ids.
-    Uses automatic fallback from dev to prod if dev is unavailable.
     """
-    result = await fetch_from_farm("/api/snapshots?tenant_id=&limit=100")
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
     
-    if not result.ok:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "tenants": [],
-                "count": 0,
-                "warning": result.warning or "Farm unavailable",
-                "error": result.error,
-                "mode": result.mode,
-                "attempted": result.attempted,
-            }
+    farm_client = FarmClient(farm_url)
+    result = await farm_client.list_snapshots("", limit=100)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
         )
     
-    snapshots = result.data if isinstance(result.data, list) else []
+    snapshots = result.snapshots or []
     tenants = sorted(set(s.get("tenant_id", "") for s in snapshots if s.get("tenant_id")))
-    
-    response_data: dict = {
-        "tenants": tenants,
-        "count": len(tenants),
-    }
-    
-    if result.warning:
-        response_data["warning"] = result.warning
-    if result.used_url:
-        response_data["source"] = result.used_url
-    
-    return response_data
+    return TenantListResponse(tenants=tenants, count=len(tenants))
 
 
 @router.get("/all-snapshots")
@@ -68,34 +50,23 @@ async def list_all_farm_snapshots():
     List all available snapshots from Farm (no tenant filter).
     
     Returns all snapshots sorted by created_at descending (most recent first).
-    Uses automatic fallback from dev to prod if dev is unavailable.
+    Used to find the latest snapshot across all tenants.
     """
-    result = await fetch_from_farm("/api/snapshots?tenant_id=&limit=100")
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
     
-    if not result.ok:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "snapshots": [],
-                "warning": result.warning or "Farm unavailable",
-                "error": result.error,
-                "mode": result.mode,
-                "attempted": result.attempted,
-            }
+    farm_client = FarmClient(farm_url)
+    result = await farm_client.list_snapshots("", limit=100)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
         )
     
-    snapshots = result.data if isinstance(result.data, list) else []
-    
-    response_data: dict = {
-        "snapshots": snapshots,
-    }
-    
-    if result.warning:
-        response_data["warning"] = result.warning
-    if result.used_url:
-        response_data["source"] = result.used_url
-    
-    return response_data
+    snapshots = result.snapshots or []
+    return snapshots
 
 
 @router.get("/snapshots", response_model=SnapshotListResponse)
@@ -103,42 +74,27 @@ async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
     """
     List available snapshots from Farm for a tenant.
     
+    Proxies to {FARM_URL}/api/snapshots?tenant_id=<tenant>&limit=20&size=<size>
+    Returns metadata list with snapshot_id, tenant_id, created_at, schema_version.
+    
     Args:
         tenant_id: The tenant to filter snapshots by
         size: Optional size filter (small, medium, large)
     """
-    path = f"/api/snapshots?tenant_id={tenant_id}&limit=20"
-    if size:
-        path += f"&size={size}"
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise HTTPException(status_code=400, detail="No Farm URL configured. Set FARM_URL environment variable.")
     
-    result = await fetch_from_farm(path)
+    farm_client = FarmClient(farm_url)
+    result = await farm_client.list_snapshots(tenant_id, size=size)
     
-    if not result.ok:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "snapshots": [],
-                "count": 0,
-                "warning": result.warning or "Farm unavailable",
-                "error": result.error,
-                "mode": result.mode,
-                "attempted": result.attempted,
-            }
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{result.error_type}: {result.error}"
         )
     
-    snapshots = result.data if isinstance(result.data, list) else []
-    
-    if result.warning:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "snapshots": snapshots,
-                "count": len(snapshots),
-                "warning": result.warning,
-                "source": result.used_url,
-            }
-        )
-    
+    snapshots = result.snapshots or []
     return SnapshotListResponse(
         snapshots=snapshots,
         count=len(snapshots)

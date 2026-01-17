@@ -21,7 +21,6 @@ def now_pst() -> datetime:
 
 from .models.output_contracts import RunLog, Asset, Finding, SyncStatus
 from .pipeline.aod_agent_reconcile import emit_actual_results
-from .api.deps import get_farm_url
 
 
 def build_reconcile_payload(
@@ -172,7 +171,7 @@ async def reconcile_to_farm(
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
     """
-    base_url = farm_url or get_farm_url()
+    base_url = farm_url or os.environ.get("FARM_URL")
     if not base_url:
         return False, "No Farm URL configured"
     

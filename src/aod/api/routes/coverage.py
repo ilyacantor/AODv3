@@ -10,7 +10,6 @@ from ..schemas import (
     PlaneCoverage,
     TimestampCoverageResponse,
 )
-from ..deps import get_farm_url
 
 
 router = APIRouter(prefix="")
@@ -35,7 +34,7 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
     Compares what timestamp fields exist in the raw Farm snapshot payload
     vs what fields are present after normalization.
     """
-    farm_url = get_farm_url() or "http://localhost:8000"
+    farm_url = os.environ.get("FARM_URL", "http://localhost:8000")
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:

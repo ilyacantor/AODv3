@@ -2277,10 +2277,16 @@
                 msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;
                 msg.classList.remove('hidden');
             } catch (e) {
-                msg.className = 'error-message';
-                msg.textContent = e.message === 'Farm unavailable' ? 'Farm unavailable' : e.message;
-                msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Farm unavailable</option>';
+                if (e.message === 'Farm unavailable') {
+                    showToast('Waking up Farm...', 'info');
+                    msg.classList.add('hidden');
+                    select.innerHTML = '<option value="">—</option>';
+                } else {
+                    msg.className = 'error-message';
+                    msg.textContent = e.message;
+                    msg.classList.remove('hidden');
+                    select.innerHTML = '<option value="">—</option>';
+                }
                 select.disabled = true;
             }
         }
@@ -2347,10 +2353,16 @@
                 msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
                 msg.classList.remove('hidden');
             } catch (e) {
-                msg.className = 'error-message';
-                msg.textContent = e.message === 'Farm unavailable' ? 'Farm unavailable' : e.message;
-                msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Farm unavailable</option>';
+                if (e.message === 'Farm unavailable') {
+                    showToast('Waking up Farm...', 'info');
+                    msg.classList.add('hidden');
+                    select.innerHTML = '<option value="">—</option>';
+                } else {
+                    msg.className = 'error-message';
+                    msg.textContent = e.message;
+                    msg.classList.remove('hidden');
+                    select.innerHTML = '<option value="">—</option>';
+                }
                 select.disabled = true;
             }
         }

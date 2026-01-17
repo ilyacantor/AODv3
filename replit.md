@@ -2,18 +2,32 @@
 
 ## What is AOD?
 
-AOD (Asset Ownership Discovery) is the discovery and policy engine for **AOS (Asset Ownership System)**. It identifies all SaaS applications, cloud services, and software assets in use across an organization, then classifies them based on governance status.
+AOD (Asset Ownership Discovery) is the **front-end entry point** to the AOS (AutonomOS) platform. It discovers all SaaS applications, cloud services, and software assets in use across an organization, preparing them for connection to the broader AOS data stack.
 
 **Production URL:** `discover.autonomos.tech`
 
-### Why AOD Exists
+### AOD's Role in AOS
 
-Organizations lose track of their software. Employees sign up for tools without IT approval, subscriptions continue after users leave, and shadow IT proliferates. AOD solves this by:
+AOD sits at the beginning of the AOS data flow:
 
-1. **Discovering** assets from multiple data sources (browser logs, network scans, SSO logs, expense reports)
-2. **Classifying** each asset by governance status (governed, shadow, zombie)
-3. **Surfacing findings** that require attention (identity gaps, finance gaps, data conflicts)
-4. **Enabling triage** so teams can take action on ungoverned assets
+```
+AOD (Discover) → AAM (Connect) → DCL (Unify) → Agents (Act)
+```
+
+| Layer | Component | Purpose |
+|-------|-----------|---------|
+| **Entry** | AOD | Discover & classify everything running in the estate |
+| **Connect** | AAM | Adaptive API Mesh - connection and auth layer |
+| **Unify** | DCL | Data Connectivity Layer - canonical ontology |
+| **Act** | Agents | Domain-specific AI agents (FinOps, RevOps, etc.) |
+
+### What AOD Does
+
+1. **Discovers** assets from multiple data sources (browser logs, network scans, SSO logs, expense reports)
+2. **Prepares for AAM** - identifies which assets need connectors
+3. **Classifies** (value-added byproduct) - categorizes assets by governance status (governed, shadow, zombie)
+4. **Surfaces findings** that require attention before AAM connection (identity gaps, finance gaps, data conflicts)
+5. **Enables triage** so teams can prioritize what to connect first
 
 ---
 

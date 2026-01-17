@@ -50,13 +50,18 @@ def resolve_domain_from_observation(obs: Observation) -> Optional[str]:
     Tries all possible domain sources in priority order, normalizing each
     through IdentityNormalizer. Returns the FIRST valid normalized domain.
     
-    Resolution order:
+    Resolution order (evidence-based only):
     1. obs.domain (if present) → IdentityNormalizer.normalize()
     2. obs.hostname (if present) → IdentityNormalizer.normalize()
     3. obs.uri (extract domain) → IdentityNormalizer.normalize()
     4. obs.name (if looks like domain) → IdentityNormalizer.normalize()
-    5. obs.name → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
-    6. obs.vendor → VENDOR_TO_DOMAIN lookup → IdentityNormalizer.normalize()
+    
+    REMOVED (Jan 2026 - Category 5 FP fix):
+    - Vendor name → domain inference no longer used for entity creation
+    - Vendor inference created false entities (e.g., "db-mongo" → mongodb.com)
+      when no actual discovery observation existed for that domain
+    - Vendor inference is still available via _lookup_vendor_domain() for
+      enrichment/correlation purposes, but NOT for entity domain resolution
     
     Args:
         obs: Observation object to resolve domain for
@@ -104,31 +109,15 @@ def resolve_domain_from_observation(obs: Observation) -> Optional[str]:
             })
             return normalized
     
-    if obs.name:
-        vendor_domain = _lookup_vendor_domain(obs.name)
-        if vendor_domain:
-            normalized = _NORMALIZER.normalize(vendor_domain)
-            if normalized:
-                logger.debug("resolve_domain.from_name_vendor_lookup", extra={
-                    "observation_id": obs.observation_id,
-                    "name": obs.name,
-                    "vendor_domain": vendor_domain,
-                    "normalized": normalized
-                })
-                return normalized
-    
-    if obs.vendor:
-        vendor_domain = _lookup_vendor_domain(obs.vendor)
-        if vendor_domain:
-            normalized = _NORMALIZER.normalize(vendor_domain)
-            if normalized:
-                logger.debug("resolve_domain.from_vendor_lookup", extra={
-                    "observation_id": obs.observation_id,
-                    "vendor": obs.vendor,
-                    "vendor_domain": vendor_domain,
-                    "normalized": normalized
-                })
-                return normalized
+    # Jan 2026: REMOVED vendor inference for entity creation (Category 5 FP fix)
+    # Observations without domain/hostname/uri/domain-like-name are skipped
+    # Vendor inference is enrichment-only, not a source of entity identity
+    logger.debug("resolve_domain.no_domain_evidence", extra={
+        "observation_id": obs.observation_id,
+        "name": obs.name,
+        "vendor": obs.vendor,
+        "reason": "No domain/hostname/uri evidence; vendor inference disabled for entity creation"
+    })
     
     return None
 

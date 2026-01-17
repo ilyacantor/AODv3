@@ -1,0 +1,270 @@
+"""IdP-related helper functions for domain extraction and matching."""
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from ...models.input_contracts import IdPObject
+from ..vendor_inference import extract_registered_domain, DOMAIN_TO_VENDOR
+from ..domain_cache import extract_domain
+
+
+def build_idp_activity_map(idp_records: dict) -> dict[str, datetime]:
+    """
+    Build a mapping of IdP name -> max login timestamp across ALL IdP records.
+
+    Jan 2026: Cross-IdP activity aggregation using IdP NAME as the grouping key.
+    This aligns with Farm's vendor family logic where multiple IdP records for
+    the same vendor (e.g., "Cloudsync" with domains .dev, .io, .tech) share activity.
+
+    The IdP `name` field is a safe aggregation key because:
+    1. It represents the vendor/product name, not a shared domain like okta.com
+    2. Farm uses vendor name for family grouping
+    3. Unlike domains, IdP names are specific to the application
+
+    Generic names are blocked to prevent false matches.
+
+    Args:
+        idp_records: Dictionary of idp_id -> IdPObject from PlaneIndex.records
+
+    Returns:
+        Dictionary of normalized IdP name -> max last_login_at datetime
+    """
+    # Generic names that could match multiple unrelated apps - must block
+    GENERIC_IDP_NAMES = {
+        'app', 'portal', 'admin', 'login', 'sso', 'auth', 'api', 'web', 'test',
+        'staging', 'dev', 'prod', 'demo', 'internal', 'external', 'legacy',
+        'service', 'system', 'platform', 'dashboard', 'console', 'gateway',
+        'proxy', 'agent', 'client', 'server', 'manager', 'hub', 'connector'
+    }
+
+    name_to_max_login: dict[str, datetime] = {}
+
+    for idp_id, obj in idp_records.items():
+        if not isinstance(obj, IdPObject):
+            continue
+
+        name = obj.name
+        if not name:
+            continue
+
+        normalized_name = name.lower().strip()
+
+        # Skip generic names that could match unrelated apps
+        if normalized_name in GENERIC_IDP_NAMES:
+            continue
+
+        # Skip names that are too short (likely abbreviations/codes)
+        if len(normalized_name) < 4:
+            continue
+
+        login_ts = obj.last_login_at
+
+        # Fallback: Check raw_data for login timestamps if main field is empty
+        if login_ts is None and obj.raw_data and isinstance(obj.raw_data, dict):
+            for field in ['last_login_at', 'lastLoginAt', 'lastLogin', 'last_activity', 'lastActivity']:
+                raw_val = obj.raw_data.get(field)
+                if raw_val:
+                    if isinstance(raw_val, datetime):
+                        login_ts = raw_val
+                        break
+                    elif isinstance(raw_val, str):
+                        try:
+                            parsed = datetime.fromisoformat(raw_val.replace('Z', '+00:00'))
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=timezone.utc)
+                            login_ts = parsed
+                            break
+                        except (ValueError, AttributeError):
+                            continue
+
+        if login_ts:
+            current_max = name_to_max_login.get(normalized_name)
+            if current_max is None or login_ts > current_max:
+                name_to_max_login[normalized_name] = login_ts
+
+    return name_to_max_login
+
+
+def _extract_idp_domain(record: IdPObject) -> Optional[str]:
+    """
+    Extract registered domain from IdP record.
+
+    Jan 2026: Domain-scoped IdP activity gating + vendor-based domain inference.
+
+    Extraction logic (in order):
+    1. record.domain field
+    2. record.raw_data['external_ref']
+    3. Infer from record.name via VENDOR_TO_DOMAIN mapping
+
+    Step 3 enables vendor-based governance for name-only IdP matches.
+    Example: IdP record "Teamsuite" (no domain field) → infers "teamsuite.cloud"
+             which matches entity "teamsuite.ai" via vendor="TeamSuite"
+
+    Returns:
+        Registered domain (eTLD+1) if found, None otherwise
+    """
+    from ..vendor_inference import VENDOR_TO_DOMAIN
+
+    # Step 1: Check domain field
+    idp_domain = record.domain
+
+    # Step 2: Check external_ref in raw_data
+    if not idp_domain and record.raw_data and isinstance(record.raw_data, dict):
+        ext_ref = record.raw_data.get('external_ref')
+        if ext_ref and isinstance(ext_ref, str):
+            ext_result = extract_domain(ext_ref)
+            if ext_result.registered_domain:
+                idp_domain = ext_result.registered_domain
+
+    # Step 3: Infer from name via VENDOR_TO_DOMAIN
+    # This enables cross-domain vendor governance for name-only IdP matches
+    if not idp_domain and record.name:
+        # Normalize IdP name for vendor lookup
+        normalized_name = record.name.lower().strip()
+
+        # Direct lookup (e.g., "microsoft 365" → "microsoft.com")
+        if normalized_name in VENDOR_TO_DOMAIN:
+            idp_domain = VENDOR_TO_DOMAIN[normalized_name]
+        else:
+            # Try matching vendor names (e.g., "Teamsuite" → find "TeamSuite" vendor → "teamsuite.cloud")
+            # Build reverse vendor map (vendor → domain)
+            vendor_to_canonical_domain = {}
+            for domain, vendor in DOMAIN_TO_VENDOR.items():
+                vendor_lower = vendor.lower().strip()
+                if vendor_lower not in vendor_to_canonical_domain:
+                    # Prefer .com/.so/.io/.us domains as canonical
+                    vendor_to_canonical_domain[vendor_lower] = domain
+                elif domain.endswith(('.com', '.so', '.io', '.us')):
+                    vendor_to_canonical_domain[vendor_lower] = domain
+
+            # Check if IdP name matches a known vendor
+            if normalized_name in vendor_to_canonical_domain:
+                idp_domain = vendor_to_canonical_domain[normalized_name]
+
+    if idp_domain:
+        return extract_registered_domain(idp_domain)
+    return None
+
+
+def _idp_domain_matches_entity(
+    idp_registered_domain: Optional[str],
+    entity_registered_domain: Optional[str],
+    idp_name: Optional[str] = None
+) -> bool:
+    """
+    Check if IdP domain matches entity domain for activity and governance purposes.
+
+    Multi-domain vendor governance alignment with name-based fallback.
+
+    Domains match if:
+    1. Exact domain match (e.g., salesforce.com == salesforce.com)
+    2. Same vendor (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
+    3. IdP has no domain but IdP name matches entity's base domain token
+
+    This enables cross-domain IdP governance for multi-TLD vendors while preserving
+    the strict matching for unrelated domains with the same base name.
+
+    Examples:
+    - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH (same vendor "TeamSuite")
+    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (name matches base token)
+    - dataflow.cloud (entity) vs dataflow.net (IdP) → NO MATCH (no vendor mapping)
+    - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
+    - fastbox.cloud (entity) vs fastbox.ai (IdP) → NO MATCH (different TLD, no vendor link)
+
+    Matching rules:
+    1. IdP has no domain → check if IdP name matches entity's base token
+    2. Entity has no domain → True (allow match)
+    3. Exact registered domain match → True
+    4. Same vendor (via DOMAIN_TO_VENDOR) → True
+    5. Different domains, no vendor link → False
+    """
+    # If IdP has no domain, check if the IdP name matches entity's base domain token
+    # This handles cases where the IdP record has no domain field but the name aligns
+    #
+    # Jan 2026: Option B - Stricter matching when IdP has no domain:
+    # - IdP name must EXACTLY match entity base token (not just startswith)
+    # - Entity base token must be at least 5 characters (avoid short token collisions)
+    # This reduces false positives where unrelated apps with short names match
+    if not idp_registered_domain:
+        if idp_name and entity_registered_domain:
+            # Extract base token from entity domain (e.g., "coreio.ai" → "coreio")
+            entity_base = entity_registered_domain.split('.')[0].lower()
+
+            # Apply the same suffix check as cross-TLD matching
+            # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
+            # applications, so they should NOT provide governance or activity inheritance
+            normalized_idp_name = idp_name.lower()
+            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
+                           ' legacy', ' deprecated', ' production', '-production']:
+                if normalized_idp_name.endswith(suffix):
+                    return False
+            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
+                return False
+
+            # Option B: Check if IdP name EXACTLY equals entity base token
+            # AND require entity_base to be at least 5 characters to avoid false matches
+            # (e.g., "db" or "api" would be too short and likely match unrelated apps)
+            idp_name_normalized = normalized_idp_name.replace('-', '').replace('_', '').replace(' ', '')
+            if len(entity_base) >= 5 and idp_name_normalized == entity_base:
+                return True
+        return False
+
+    # If entity has no domain, allow the match
+    if not entity_registered_domain:
+        return True
+
+    # Exact registered domain match
+    if idp_registered_domain == entity_registered_domain:
+        return True
+
+    # Check if both domains belong to the same vendor
+    # This enables multi-TLD vendor governance (teamsuite.cloud inherits from teamsuite.org)
+    from ..vendor_inference import infer_vendor_from_domain
+
+    idp_vendor_result = infer_vendor_from_domain(idp_registered_domain)
+    entity_vendor_result = infer_vendor_from_domain(entity_registered_domain)
+
+    if idp_vendor_result and entity_vendor_result:
+        # Both domains have vendor mappings - check if they're the same vendor
+        if idp_vendor_result.value.lower() == entity_vendor_result.value.lower():
+            return True
+
+    # Same base token with different TLD counts as a match, BUT
+    # Farm requires the IdP name to be a CLEAN match (no suffixes like "(Legacy)" or "-prod")
+    #
+    # Farm's idp_present_direct=True for cases like:
+    # - cloudsync.io (entity) vs cloudsync.org (IdP) + name "cloudsync" → MATCH
+    # - datacloud.co (entity) vs datacloud.cloud (IdP) + name "datacloud" → MATCH
+    #
+    # Farm's idp_present_direct=False for cases like:
+    # - fastbox.cloud (entity) vs fastbox.ai (IdP) + name "Fastbox (Legacy)" → NO MATCH
+    # - flowbase.dev (entity) vs flowbase.app (IdP) + name "Flowbase-prod" → NO MATCH
+    #
+    # The difference: "(Legacy)" and "-prod" suffixes indicate the IdP is not the
+    # canonical/current application for that brand, so cross-TLD governance doesn't apply.
+
+    idp_base = idp_registered_domain.split('.')[0].lower()
+    entity_base = entity_registered_domain.split('.')[0].lower()
+
+    if idp_base == entity_base:
+        # For cross-TLD match, also require IdP name to be a clean match
+        # Strip suffixes/modifiers and check if it matches entity base
+        if idp_name:
+            # Normalize IdP name: remove common suffixes, convert to lowercase
+            normalized_idp_name = idp_name.lower()
+            # Remove common suffixes that indicate non-canonical IdP
+            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
+                           ' legacy', ' deprecated', ' production', '-production']:
+                if normalized_idp_name.endswith(suffix):
+                    # IdP has a suffix indicating it's not canonical - reject cross-TLD match
+                    return False
+
+            # Also check if IdP name contains the suffix as a substring (e.g., "(Legacy)")
+            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
+                return False
+
+        # IdP name is clean, allow cross-TLD match
+        return True
+
+    # Different domains with no vendor or base-token link
+    return False

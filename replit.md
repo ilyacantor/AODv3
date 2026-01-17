@@ -86,6 +86,12 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Triage Sections:** Red = "Blocking — Cannot Connect", Yellow = "Review — Cost Optimization" (zombies), Green = "Informational — Non-Blocking"
 -   **Override Support:** Blocking findings can be overridden with "warn only" mode per customer policy
 
+**Farm Cold Start Support (Jan 2026):**
+-   **Timeout & Retry**: FarmClient uses 25s timeout with automatic retry on transient errors (502/503/504, network errors, timeouts).
+-   **JSON-Only Responses**: Backend farm routes always return JSON (never HTML) with structured error payloads (`{ok: false, error: "FARM_WAKING_OR_DOWN"}`).
+-   **UI Feedback**: Shows "Waking up Farm..." during fetch, displays "Farm unavailable" on errors with robust JSON parsing (handles non-JSON responses gracefully).
+-   **Environment Variables**: Uses `FARM_URL_PROD` as canonical source (in Secrets) with `FARM_URL` fallback for backward compatibility.
+
 **Snapshot Drift Detection (Jan 2026):**
 -   **Architecture**: Plane data (IdP/CMDB/Cloud/Finance) is built in-memory from `snapshot.planes` each run, NOT persisted in separate DB tables. Asset records persist with `lens_match_debug` containing matched record IDs.
 -   **Drift Risk**: If Farm regenerates a snapshot after a run was created, the asset's correlation data (IdP matches, etc.) becomes stale. The matched records may no longer exist.

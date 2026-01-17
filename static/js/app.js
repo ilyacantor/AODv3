@@ -2238,15 +2238,18 @@
                     throw new Error('Farm unavailable');
                 }
                 
-                // Check for Farm waking/down errors
-                const isFarmWaking = tenantsData.ok === false || 
+                // Check for Farm waking/down errors - be very thorough
+                const errorStr = JSON.stringify(tenantsData).toUpperCase();
+                const isFarmWaking = !tenantsRes.ok ||
+                    tenantsData.ok === false || 
                     tenantsData.error === 'FARM_WAKING_OR_DOWN' ||
-                    (tenantsData.detail && tenantsData.detail.includes('FARM_WAKING'));
-                if (isFarmWaking) {
+                    errorStr.includes('FARM_WAKING') ||
+                    errorStr.includes('UNAVAILABLE');
+                if (isFarmWaking && !tenantsData.tenants) {
                     throw new Error('Farm unavailable');
                 }
                 if (!tenantsRes.ok && !tenantsData.tenants) {
-                    throw new Error('Failed to load tenants');
+                    throw new Error('Farm unavailable');
                 }
                 const tenants = tenantsData.tenants || [];
                 
@@ -2323,15 +2326,18 @@
                     throw new Error('Farm unavailable');
                 }
                 
-                // Check for Farm waking/down errors
-                const isFarmWaking = data.ok === false || 
+                // Check for Farm waking/down errors - be very thorough
+                const errorStr = JSON.stringify(data).toUpperCase();
+                const isFarmWaking = !r.ok ||
+                    data.ok === false || 
                     data.error === 'FARM_WAKING_OR_DOWN' ||
-                    (data.detail && data.detail.includes('FARM_WAKING'));
-                if (isFarmWaking) {
+                    errorStr.includes('FARM_WAKING') ||
+                    errorStr.includes('UNAVAILABLE');
+                if (isFarmWaking && !data.snapshots) {
                     throw new Error('Farm unavailable');
                 }
                 if (!r.ok && !data.snapshots) {
-                    throw new Error('Failed to load snapshots');
+                    throw new Error('Farm unavailable');
                 }
                 loadedSnapshots = data.snapshots || [];
                 

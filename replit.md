@@ -1,7 +1,16 @@
 # AOS Discover - AutonomOS Discovery Module
 
 ## Overview
-AOS Discover is the discovery module of AutonomOS, an enterprise operating system designed to ingest raw enterprise evidence. Its primary function is to generate an Asset Catalog, a Run Log, and Explainable Findings by identifying and classifying enterprise assets without pre-adjudicated labels. The system aims to provide a clear, auditable, and deterministic view of an organization's digital footprint for robust asset management and risk mitigation, prioritizing evidence-only decisions and full explainability. The project's ambition is to provide a complete and accurate picture of an organization's digital assets, distinguishing between assets and artifacts to prevent asset count inflation.
+
+**Why You'll See "Farm"**
+
+Complex enterprise systems are easy to demo and hard to trust.
+
+AOS Farm is our stress-test engine. It validates the platform against a theoretical space of ~300,000 state combinations by generating realistic enterprise chaos:
+
+- **17,000 Asset Permutations**: From standard servers to "zombie" instances.
+- **37 Edge Case Categories**: Specifically targeting governance forks and data quality failures.
+- **800,000 Rule Evaluations**: Proving stability at scale.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

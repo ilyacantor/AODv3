@@ -31,9 +31,7 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery".
 -   **Domain Base Name Matching**: Matches entity domain base (e.g., "slack" from "slack.com") against record names when canonical_name match fails.
 -   **Canonical Domain Indexing**: Farm's `canonical_domain` field is now indexed for CMDB/IdP correlation.
--   **Alias Collapsing Alignment**: Updated per strategic policy (Jan 2026):
-    - **Collapse (infrastructure/TLD variants)**: zoom.us, zoomapp.io, zoom-meetings.net → zoom.com; atlassian.net, hipchat.com → atlassian.com; adobelogin.com → adobe.com
-    - **Standalone (distinct products)**: trello.com, bitbucket.org remain standalone assets (different attack surfaces, separate codebases)
+-   **Alias Collapsing Alignment**: Fixed direction (zoom.us → zoom.com). Added atlassian.net, trello.com, bitbucket.org → atlassian.com, hipchat.com → atlassian.com, yammer.com → microsoft.com.
 -   **Test Coverage**: 67 tests validating TLD isolation, match methods, correlation fixes, alias collapsing, and governance gate invariants.
 
 **Governance Gate Hardening (Jan 2026 - Phase A):**
@@ -49,7 +47,7 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **CMDB Indexing Expansion**: `canonical_domain` and `domains[]` are now indexed SEPARATELY (not as fallback), while still mirrored to `by_domain` for backward compatibility.
 -   **Deterministic Lookup Order**: CMDB correlation uses authoritative-only paths in order: (1) canonical_domain == D, (2) D ∈ domains[], (3) verified_alias_domain(D) == canonical_domain.
 -   **Runtime Governance Assertion**: `check_idp_admission` blocks heuristic match methods from asserting HAS_IDP. Fail-safe defaults unknown methods to heuristic.
--   **Legacy Product Handling**: hipchat.com now collapses to atlassian.com for zombie detection (legacy product under Atlassian umbrella). yammer.com remains standalone.
+-   **Legacy Product Standalone**: hipchat.com and yammer.com treated as standalone domains (legacy products, not technical aliases) for proper zombie detection.
 -   **Test Coverage**: 76 tests validating TLD isolation, governance invariants, heuristic blocking, and CMDB authoritative recovery.
 
 **Category 5 FP Fix - Entity Domain Evidence Requirement (Jan 2026):**

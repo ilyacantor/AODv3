@@ -264,7 +264,6 @@ VENDOR_TO_DOMAIN.update({
     # Jan 2026: Explicit canonical domain overrides per Farm contract
     "zoom": "zoom.com",  # Farm uses zoom.com as canonical (not zoom.us)
     "atlassian": "atlassian.com",  # Ensure atlassian.com is canonical
-    "adobe": "adobe.com",  # Adobe canonical domain for adobelogin.com collapse
 })
 
 

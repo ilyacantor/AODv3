@@ -91,13 +91,14 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     "zoom-meetings.net",
     "zoomapp.io",
     # Atlassian aliases - collapse to atlassian.com
-    # Jan 2026: Updated per strategic alias policy
-    "atlassian.net",  # Jira Cloud infrastructure - collapse to atlassian.com
-    "hipchat.com",    # Legacy product - collapse for zombie detection under Atlassian
+    # Jan 2026: Added missing aliases per Farm contract
+    "atlassian.net",  # Jira Cloud - Farm collapses to atlassian.com
+    "trello.com",     # Farm collapses to atlassian.com
+    "bitbucket.org",  # Farm collapses to atlassian.com
     "jira.com",
     "confluence.com",
     "opsgenie.com",
-    # NOTE: trello.com and bitbucket.org are STANDALONE - distinct products with separate attack surfaces
+    # NOTE: hipchat.com is a LEGACY PRODUCT, not a technical alias - keep standalone for zombie detection
     # GitHub aliases
     "github.io",
     "githubusercontent.com",

@@ -2197,6 +2197,30 @@
         function hideOutcome() {
             document.getElementById('outcomePanel').classList.add('hidden');
         }
+        
+        function showFarmWarning(message) {
+            let banner = document.getElementById('farmWarningBanner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'farmWarningBanner';
+                banner.style.cssText = 'background: #fbbf24; color: #1e293b; padding: 8px 16px; text-align: center; font-size: 14px; font-weight: 500;';
+                const header = document.querySelector('header');
+                if (header && header.nextSibling) {
+                    header.parentNode.insertBefore(banner, header.nextSibling);
+                } else {
+                    document.body.prepend(banner);
+                }
+            }
+            banner.textContent = message;
+            banner.style.display = 'block';
+        }
+        
+        function hideFarmWarning() {
+            const banner = document.getElementById('farmWarningBanner');
+            if (banner) {
+                banner.style.display = 'none';
+            }
+        }
 
         async function checkHealth() {
             const dot = document.getElementById('healthDot');
@@ -2226,25 +2250,27 @@
                     fetch('/api/farm/all-snapshots')
                 ]);
                 
-                if (!tenantsRes.ok) {
-                    const e = await tenantsRes.json();
-                    throw new Error(e.detail || 'Failed to load tenants');
-                }
                 const tenantsData = await tenantsRes.json();
                 const tenants = tenantsData.tenants || [];
                 
+                // Handle Farm fallback warning
+                if (tenantsData.warning) {
+                    showFarmWarning(tenantsData.warning);
+                } else {
+                    hideFarmWarning();
+                }
+                
                 // Find tenant with most recent snapshot
                 let latestTenantId = tenants[0] || '';
-                if (snapshotsRes.ok) {
-                    try {
-                        const allSnapshots = await snapshotsRes.json();
-                        if (Array.isArray(allSnapshots) && allSnapshots.length > 0) {
-                            // Farm returns most recent first
-                            latestTenantId = allSnapshots[0].tenant_id || latestTenantId;
-                        }
-                    } catch (e) {
-                        console.warn('Could not parse all-snapshots response', e);
+                try {
+                    const snapshotsData = await snapshotsRes.json();
+                    const allSnapshots = Array.isArray(snapshotsData) ? snapshotsData : (snapshotsData.snapshots || []);
+                    if (allSnapshots.length > 0) {
+                        // Farm returns most recent first
+                        latestTenantId = allSnapshots[0].tenant_id || latestTenantId;
                     }
+                } catch (e) {
+                    console.warn('Could not parse all-snapshots response', e);
                 }
                 
                 if (tenants.length === 0) {

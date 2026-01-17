@@ -14,6 +14,7 @@ from ..schemas import (
     ExplainNonflagResponse,
 )
 from ...db.database import get_db_direct
+from ..deps import get_farm_url
 
 
 router = APIRouter(prefix="")
@@ -477,7 +478,7 @@ async def snapshot_drift_check(run_id: str):
             "detail": "Run has no snapshot_id in input_meta"
         }
     
-    farm_url = os.environ.get("FARM_URL")
+    farm_url = get_farm_url()
     if not farm_url:
         return {
             "run_id": run_id,

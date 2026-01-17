@@ -1,0 +1,60 @@
+You are the AOD agent. Goal: stop AOD UI from breaking when Farm dev URL is not running, while still allowing dev→dev when it is running.
+
+Context
+- AOD UI calls AOD backend proxy endpoints like: /api/farm/tenants and /api/farm/all-snapshots.
+- AOD backend then calls Farm upstream.
+- When Farm dev is asleep, Replit returns HTML 503 (“The app is currently not running…”) and AOD currently bubbles this up as 502/HTML, breaking the UI.
+- We want: dev-first behavior, but fail-soft with automatic fallback to prod Farm.
+
+Requirements (do exactly this, nothing more)
+1) Environment variables:
+   - FARM_URL_DEV: <dev farm url>
+   - FARM_URL_PROD: https://autonomos.farm
+   - FARM_URL_MODE: one of {"dev","prod","auto"}; default "auto" if missing
+   - IMPORTANT: do not rely on FARM_URL anymore. Remove all direct reads of process.env.FARM_URL.
+   - Log resolved mode + chosen upstream once at startup (not spammy).
+
+2) Upstream selection behavior:
+   - If FARM_URL_MODE="dev": always use FARM_URL_DEV (but still sanitize errors into JSON).
+   - If FARM_URL_MODE="prod": always use FARM_URL_PROD.
+   - If FARM_URL_MODE="auto":
+       a) try FARM_URL_DEV first
+       b) if it fails, retry once against FARM_URL_PROD
+
+3) Failure detection for dev upstream:
+   - Consider dev upstream “down” if:
+     - network error / timeout / fetch throws
+     - HTTP status >= 500
+     - OR response is HTML (content-type includes text/html)
+     - OR body contains substring "The app is currently not running" (Replit splash)
+   - If down and mode=auto: fallback to prod immediately.
+
+4) Response sanitization:
+   - AOD proxy routes must NEVER return upstream HTML to the browser.
+   - Always return JSON with a stable shape on error, e.g.:
+     { ok:false, error:"FARM_UNAVAILABLE", mode:"auto", attempted:["dev","prod"], detail:"<short>" }
+   - For the specific routes /api/farm/tenants and /api/farm/all-snapshots:
+     - If both upstreams fail: return 200 with:
+       - tenants: [] (or snapshots: [])
+       - plus a warning field in JSON
+     - Rationale: UI should stay usable even if Farm is down.
+
+5) UI hint (minimal):
+   - If the proxy response includes warning/error fields, surface a small non-blocking banner:
+     “Farm dev is not running — using prod Farm” OR “Farm unavailable”.
+   - Do NOT redesign UI, just add the smallest possible banner/toast.
+
+Deliverables
+- Identify the exact files/routes implementing /api/farm/* and change only what’s needed.
+- Implement resolveFarmUrl() + fetchWithFallback() helpers.
+- Update the two proxy routes to use it.
+- Add 2-3 minimal tests OR a simple node script that simulates:
+   a) dev returns HTML 503 -> falls back to prod
+   b) dev returns 200 JSON -> uses dev
+   c) both fail -> returns empty list + warning JSON
+- After implementation, tell me exactly which env vars to set in Replit Secrets vs Configurations.
+
+Constraints
+- Do not touch reconciliation logic, policies, classification, or edge cases.
+- Do not add new dependencies unless absolutely necessary.
+- Keep changes tight and deterministic.

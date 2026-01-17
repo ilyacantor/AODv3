@@ -435,13 +435,22 @@ export default function Overview() {
             Complex enterprise systems are easy to demo and hard to trust.
           </p>
           <p className="leading-relaxed">
-            AOS Farm is a large-scale intelligent synthetic data generator that
-            produces realistic enterprise environments—including intentionally{" "}
-            <span className="text-orange-400">bad data</span>,{" "}
-            <span className="text-red-400">conflicts</span>, and{" "}
-            <span className="text-slate-300">unmanaged systems</span>.
-            Reconciliation exists to prove accuracy, not to simulate it.
+            AOS Farm is our stress-test engine. It validates the platform against a theoretical space of ~300,000 state combinations by generating realistic enterprise chaos:
           </p>
+          <div className="space-y-4 text-left max-w-xl mx-auto">
+            <div className="flex gap-3 items-start">
+              <div className="mt-2 w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(11,202,217,0.6)] shrink-0" />
+              <span><strong className="text-white">17,000 Asset Permutations:</strong> From standard servers to "zombie" instances.</span>
+            </div>
+            <div className="flex gap-3 items-start">
+              <div className="mt-2 w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(11,202,217,0.6)] shrink-0" />
+              <span><strong className="text-white">37 Edge Case Categories:</strong> Specifically targeting governance forks and data quality failures.</span>
+            </div>
+            <div className="flex gap-3 items-start">
+              <div className="mt-2 w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(11,202,217,0.6)] shrink-0" />
+              <span><strong className="text-white">800,000 Rule Evaluations:</strong> Proving stability at scale.</span>
+            </div>
+          </div>
         </div>
       </section>
 

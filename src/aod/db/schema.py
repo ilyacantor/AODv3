@@ -1,16 +1,19 @@
-"""Database schema initialization."""
+"""Database schema management and migrations."""
 
 import logging
+import asyncpg
 
 logger = logging.getLogger(__name__)
 
 
-async def initialize_schema(conn) -> None:
+async def initialize_schema(conn: asyncpg.Connection) -> None:
     """
-    Initialize database schema.
+    Initialize database schema with all tables and indexes.
 
-    Extracted from Database.initialize() - lines 156-379 of original.
+    This function creates all required tables if they don't exist
+    and runs schema migrations for new columns.
     """
+    # Core tables
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS runs (
             run_id TEXT PRIMARY KEY,
@@ -51,59 +54,29 @@ async def initialize_schema(conn) -> None:
     """)
 
     # Schema migrations - log failures instead of silently ignoring
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT")
-    except Exception as e:
-        logger.debug("Migration assets.vendor_hypothesis: %s", e)
+    migrations = [
+        ("assets", "vendor_hypothesis", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS vendor_hypothesis TEXT"),
+        ("assets", "provisioning_status", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS provisioning_status TEXT NOT NULL DEFAULT 'quarantine'"),
+        ("findings", "category", "ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'"),
+        ("findings", "confidence", "ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'med'"),
+        ("findings", "materiality", "ALTER TABLE findings ADD COLUMN IF NOT EXISTS materiality TEXT NOT NULL DEFAULT 'med'"),
+        ("findings", "triage_priority", "ALTER TABLE findings ADD COLUMN IF NOT EXISTS triage_priority TEXT NOT NULL DEFAULT 'p2'"),
+        ("findings", "conflict_field", "ALTER TABLE findings ADD COLUMN IF NOT EXISTS conflict_field TEXT"),
+        ("assets", "has_critical_gap", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS has_critical_gap BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("assets", "owner", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner TEXT"),
+        ("assets", "lens_match_debug", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS lens_match_debug TEXT"),
+        ("assets", "discovery_sources", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS discovery_sources TEXT NOT NULL DEFAULT '[]'"),
+        ("runs", "stage_timings", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT"),
+        ("runs", "policy_snapshot", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT"),
+    ]
 
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS provisioning_status TEXT NOT NULL DEFAULT 'quarantine'")
-    except Exception as e:
-        logger.debug("Migration assets.provisioning_status: %s", e)
+    for table, column, sql in migrations:
+        try:
+            await conn.execute(sql)
+        except Exception as e:
+            logger.debug("Migration %s.%s: %s", table, column, e)
 
-    try:
-        await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'governance_finding'")
-    except Exception as e:
-        logger.debug("Migration findings.category: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'med'")
-        await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS materiality TEXT NOT NULL DEFAULT 'med'")
-        await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS triage_priority TEXT NOT NULL DEFAULT 'p2'")
-        await conn.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS conflict_field TEXT")
-    except Exception as e:
-        logger.debug("Migration findings.(confidence|materiality|triage_priority|conflict_field): %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS has_critical_gap BOOLEAN NOT NULL DEFAULT FALSE")
-    except Exception as e:
-        logger.debug("Migration assets.has_critical_gap: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner TEXT")
-    except Exception as e:
-        logger.debug("Migration assets.owner: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS lens_match_debug TEXT")
-    except Exception as e:
-        logger.debug("Migration assets.lens_match_debug: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE assets ADD COLUMN IF NOT EXISTS discovery_sources TEXT NOT NULL DEFAULT '[]'")
-    except Exception as e:
-        logger.debug("Migration assets.discovery_sources: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT")
-    except Exception as e:
-        logger.debug("Migration runs.stage_timings: %s", e)
-
-    try:
-        await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT")
-    except Exception as e:
-        logger.debug("Migration runs.policy_snapshot: %s", e)
-
+    # Additional tables
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS artifacts (
             artifact_id TEXT PRIMARY KEY,
@@ -218,6 +191,7 @@ async def initialize_schema(conn) -> None:
         )
     """)
 
+    # Indexes
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_run_id ON triage_actions(run_id)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_item ON triage_actions(item_id, item_type)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_tenant ON triage_actions(tenant_id)")

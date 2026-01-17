@@ -1,6 +1,9 @@
-"""Database configuration utilities."""
+"""Database configuration and URL management."""
 
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_database_url() -> str:

@@ -2211,17 +2211,11 @@
         
         async function loadTenants() {
             const select = document.getElementById('tenantSelect');
-            const msg = document.getElementById('fetchMessage');
             const snapshotSelect = document.getElementById('snapshotSelect');
             
             select.disabled = true;
             snapshotSelect.disabled = true;
             snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
-            
-            // Show "Waking up Farm" status while loading
-            msg.className = 'info-message';
-            msg.textContent = 'Waking up Farm...';
-            msg.classList.remove('hidden');
             
             try {
                 // Fetch tenants and all snapshots to find the most recent
@@ -2279,20 +2273,8 @@
                     select.disabled = false;
                     loadSnapshots();
                 }
-                msg.className = 'success-message';
-                msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;
-                msg.classList.remove('hidden');
             } catch (e) {
-                if (e.message === 'Farm unavailable') {
-                    showToast('Waking up Farm...', 'info');
-                    msg.classList.add('hidden');
-                    select.innerHTML = '<option value="">—</option>';
-                } else {
-                    msg.className = 'error-message';
-                    msg.textContent = e.message;
-                    msg.classList.remove('hidden');
-                    select.innerHTML = '<option value="">—</option>';
-                }
+                select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
             }
         }
@@ -2300,7 +2282,6 @@
         async function loadSnapshots() {
             const tenantId = document.getElementById('tenantSelect').value;
             const select = document.getElementById('snapshotSelect');
-            const msg = document.getElementById('fetchMessage');
             
             if (!tenantId) {
                 select.innerHTML = '<option value="">Select a tenant first</option>';
@@ -2310,9 +2291,6 @@
             
             select.disabled = true;
             select.innerHTML = '<option value="">Loading snapshots...</option>';
-            msg.className = 'info-message';
-            msg.textContent = 'Waking up Farm...';
-            msg.classList.remove('hidden');
             
             try {
                 const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
@@ -2361,20 +2339,8 @@
                     select.disabled = false;
                     select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
                 }
-                msg.className = 'success-message';
-                msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
-                msg.classList.remove('hidden');
             } catch (e) {
-                if (e.message === 'Farm unavailable') {
-                    showToast('Waking up Farm...', 'info');
-                    msg.classList.add('hidden');
-                    select.innerHTML = '<option value="">—</option>';
-                } else {
-                    msg.className = 'error-message';
-                    msg.textContent = e.message;
-                    msg.classList.remove('hidden');
-                    select.innerHTML = '<option value="">—</option>';
-                }
+                select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
             }
         }
@@ -2632,27 +2598,21 @@
             const snapshotSelect = document.getElementById('snapshotSelect').value;
             const snapshotManual = document.getElementById('snapshotIdManual').value.trim();
             const snapshotId = snapshotManual || snapshotSelect;
-            const msg = document.getElementById('fetchMessage');
             
             hideOutcome();
             
             if (!tenantId) { 
-                msg.className = 'error-message'; 
-                msg.textContent = 'Please select a Tenant'; 
-                msg.classList.remove('hidden'); 
+                showToast('Please select a Tenant', 'error');
                 return; 
             }
             if (!snapshotId) { 
-                msg.className = 'error-message'; 
-                msg.textContent = 'Please select a snapshot or enter a Snapshot ID manually'; 
-                msg.classList.remove('hidden'); 
+                showToast('Please select a snapshot', 'error');
                 return; 
             }
             
             const btn = document.getElementById('fetchFromFarm'); 
             btn.disabled = true; 
             btn.textContent = 'Fetching...';
-            msg.classList.add('hidden');
             
             try {
                 const r = await fetch('/api/runs/from-farm', { 

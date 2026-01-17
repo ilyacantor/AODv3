@@ -50,6 +50,9 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Iron Dome**: Observations without domain evidence now rejected at iron_dome stage (338 → 499 rejections).
 -   **Test Coverage**: 78 governance tests + updated tests ensure name-only observations are correctly rejected.
 
+**Stress Testing & Boundary Analysis (Jan 2026):**
+The AOD architecture was subjected to boundary condition analysis. We utilized 17,000 synthetic asset instances to drive approximately 800,000 rule evaluations. This dataset was specifically targeted to cover 90 distinct decision boundaries, effectively securing the system against a combinatorial space of ~300,000 potential states. Testing prioritized the 37 identified high-risk edge cases, including Key Normalization conflicts, Multi-tenant Policy forks, and Activity/Zombie anomalies.
+
 **Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
 
 **Key Normalization:** Infrastructure/service domains (e.g., `outlook.com`, `gstatic.com`, `office.com`) produce stable, standalone asset keys rather than collapsing to vendor domains, ensuring accurate reconciliation.

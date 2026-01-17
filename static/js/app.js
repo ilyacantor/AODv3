@@ -7,18 +7,63 @@
         let decisionTraceFilter = 'all';
         let decisionMismatches = {};
         
-        function showToast(message, type = 'error') {
+        let farmWakingToast = null;
+        let farmWakeCheckInterval = null;
+        
+        function showToast(message, type = 'error', persistent = false) {
             const existing = document.getElementById('app-toast');
             if (existing) existing.remove();
             
             const toast = document.createElement('div');
             toast.id = 'app-toast';
             toast.className = `app-toast ${type}`;
-            toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+            
+            if (persistent) {
+                toast.innerHTML = `<span class="toast-spinner"></span><span>${message}</span>`;
+            } else {
+                toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+            }
             document.body.appendChild(toast);
             
             setTimeout(() => toast.classList.add('visible'), 10);
-            setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 4000);
+            
+            if (!persistent) {
+                setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 4000);
+            }
+            
+            return toast;
+        }
+        
+        function dismissToast() {
+            const toast = document.getElementById('app-toast');
+            if (toast) {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }
+        
+        function showFarmWakingToast() {
+            if (farmWakingToast) return; // Already showing
+            
+            farmWakingToast = showToast('Waking up Farm...', 'info', true);
+            
+            // Poll Farm until it responds
+            farmWakeCheckInterval = setInterval(async () => {
+                try {
+                    const r = await fetch('/api/farm/tenants');
+                    const data = await r.json();
+                    if (data.ok !== false && !data.error) {
+                        // Farm is awake!
+                        clearInterval(farmWakeCheckInterval);
+                        farmWakeCheckInterval = null;
+                        dismissToast();
+                        farmWakingToast = null;
+                        loadTenants(); // Reload tenants
+                    }
+                } catch (e) {
+                    // Still waking, keep polling
+                }
+            }, 3000);
         }
         
         function initMainTabs() {
@@ -2278,7 +2323,7 @@
             } catch (e) {
                 select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
-                showToast('Waking up Farm...', 'info');
+                showFarmWakingToast();
             }
         }
         

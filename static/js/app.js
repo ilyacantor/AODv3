@@ -2188,6 +2188,7 @@
         
         function showOutcome(status, message) {
             const panel = document.getElementById('outcomePanel');
+            if (!panel) return;
             const config = STATUS_CONFIG[status] || { type: 'error', label: status, explanation: message };
             panel.className = `outcome-panel ${config.type}`;
             panel.innerHTML = `<span class="outcome-badge ${config.type}">${config.label}</span><span class="outcome-explanation">${message || config.explanation}</span>`;
@@ -2195,7 +2196,8 @@
         }
         
         function hideOutcome() {
-            document.getElementById('outcomePanel').classList.add('hidden');
+            const panel = document.getElementById('outcomePanel');
+            if (panel) panel.classList.add('hidden');
         }
 
         async function checkHealth() {

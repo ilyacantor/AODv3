@@ -1,0 +1,1758 @@
+"""Stage 4: CorrelateEntitiesToPlanes - Real-world simple matcher with disambiguation"""
+
+import functools
+import logging
+import os
+import re
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+_DEBUG_MATCH = os.environ.get("AOD_DEBUG_MATCH", "0") == "1"
+
+
+def _log_match_debug(plane_name: str, match_method: str, entity_name: str, matched_id: str) -> None:
+    """Log match debug info when AOD_DEBUG_MATCH=1"""
+    if _DEBUG_MATCH:
+        log_type = "AUTH_MATCH" if match_method in AUTHORITATIVE_MATCH_METHODS else "HEURISTIC_MATCH"
+        logger.info(f"{log_type} plane={plane_name} method={match_method} entity={entity_name} matched={matched_id}")
+
+
+from .normalize_observations import CandidateEntity, normalize_string, normalize_domain
+from .build_plane_indexes import PlaneIndexes, PlaneIndex
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
+from ..core.policy import get_current_config
+from ..models.input_contracts import PlaneRecord
+from ..utils.normalization import get_normalization_token
+
+
+# =============================================================================
+# CORRELATION MATCHING CONSTANTS
+# =============================================================================
+# Thresholds for contains-match validation
+CONTAINS_MATCH_MIN_LENGTH = 8  # Minimum length for ratio-based contains matching
+CONTAINS_MATCH_RATIO_THRESHOLD = 0.7  # shorter/longer ratio for valid contains match
+
+# Token length thresholds for matching
+MIN_TOKEN_LENGTH_FOR_MATCH = 4  # Minimum token length for domain/name matching (allows zoom, slack)
+MIN_DOMAIN_TOKEN_LENGTH_FOR_FINANCE = 6  # Minimum domain token length for finance plane matching
+
+# Cache sizes
+LRU_CACHE_SIZE = 10000  # Standard LRU cache size for memoized functions
+
+
+class MatchStatus(str, Enum):
+    """Match status for correlation"""
+    MATCHED = "matched"
+    AMBIGUOUS = "ambiguous"
+    UNMATCHED = "unmatched"
+
+
+class AmbiguityCode(str, Enum):
+    """Disambiguation codes explaining why multiple matches occurred"""
+    NONE = "NONE"                    # Single clear match
+    MULTI_ENV = "MULTI_ENV"          # Same app in dev/staging/prod CIs
+    LEGACY = "LEGACY"                # Old/deprecated CI alongside current
+    DUPLICATE = "DUPLICATE"          # True duplicate records
+    PARENT_VENDOR = "PARENT_VENDOR"  # Matched parent vendor, not product
+    UNRESOLVED = "UNRESOLVED"        # Multiple matches, couldn't disambiguate
+
+
+ENV_SUFFIXES = {
+    "prod", "production", "prd",
+    "dev", "development", 
+    "staging", "stg", "stage",
+    "test", "testing", "tst",
+    "uat", "qa",
+    "sandbox", "sbx",
+    "demo"
+}
+
+LEGACY_MARKERS = {
+    "legacy", "old", "deprecated", "v1", "v2", "archive", "archived",
+    "retired", "obsolete", "backup", "previous"
+}
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings (memoized).
+    
+    Uses a wrapper to normalize argument order before caching, ensuring
+    that (a, b) and (b, a) hit the same cache entry since distance is symmetric.
+    """
+    # Normalize order to maximize cache hits (distance is symmetric)
+    if s1 > s2:
+        s1, s2 = s2, s1
+    return _levenshtein_distance_cached(s1, s2)
+
+
+@functools.lru_cache(maxsize=LRU_CACHE_SIZE)
+def _levenshtein_distance_cached(s1: str, s2: str) -> int:
+    """Internal cached implementation of Levenshtein distance."""
+    # Ensure s1 is the longer string for algorithm efficiency
+    if len(s1) < len(s2):
+        longer, shorter = s2, s1
+    else:
+        longer, shorter = s1, s2
+    
+    if len(shorter) == 0:
+        return len(longer)
+    
+    prev_row = list(range(len(shorter) + 1))
+    for i, c1 in enumerate(longer):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(shorter):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (c1 != c2)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    
+    return prev_row[-1]
+
+
+def _is_fuzzy_match(
+    name1: str,
+    name2: str,
+    max_distance: Optional[int] = None,
+    max_ratio: Optional[float] = None
+) -> bool:
+    """
+    Check if two names are a fuzzy match (typo tolerance).
+
+    Handles cases like:
+    - "monday" vs "mondayc" (truncation/typo)
+    - "monday" vs "monady" (transposition)
+
+    Rules:
+    - Names must be at least min_name_length chars to avoid false positives
+    - One must be a prefix of the other with ≤2 extra chars, OR
+    - Edit distance ≤ max_distance AND distance/max_len ≤ max_ratio
+
+    The ratio gate prevents short-token collisions like miro↔jira (2/4=0.50)
+    and loom↔zoom (1/4=0.25) while preserving longer fuzzy matches.
+    """
+    config = get_current_config()
+    if max_distance is None:
+        max_distance = config.fuzzy_matching.max_edit_distance
+    if max_ratio is None:
+        max_ratio = config.fuzzy_matching.max_edit_ratio
+
+    min_len = config.fuzzy_matching.min_name_length
+    if len(name1) < min_len or len(name2) < min_len:
+        return False
+    
+    if name1.startswith(name2) and len(name1) - len(name2) <= 2:
+        return True
+    if name2.startswith(name1) and len(name2) - len(name1) <= 2:
+        return True
+    
+    len_diff = abs(len(name1) - len(name2))
+    if len_diff <= 2:
+        distance = _levenshtein_distance(name1, name2)
+        max_len = max(len(name1), len(name2))
+        ratio = distance / max_len
+        return distance <= max_distance and ratio <= max_ratio
+    
+    return False
+
+
+class MatchQuality(Enum):
+    """
+    Distinguishes authoritative matches from heuristic matches.
+    
+    AUTHORITATIVE: Exact domain/URI/canonical_name matches - can assert governance
+    HEURISTIC: Fuzzy/vendor/contains matches - enrichment only, cannot assert governance
+    
+    Per governance policy: CMDB and IdP are authoritative truth sources.
+    An asset is governed only if there exists at least one CMDB or IdP record
+    that explicitly passes all governance gates via an AUTHORITATIVE match.
+    Heuristics may generate hypotheses and enrichment signals but may never
+    assert or override governance or classification outcomes.
+    """
+    AUTHORITATIVE = "authoritative"
+    HEURISTIC = "heuristic"
+    NONE = "none"
+
+
+# Match methods that are authoritative (exact matches)
+AUTHORITATIVE_MATCH_METHODS = {
+    "domain", "uri", "canonical_name",  # Existing
+    "verified_alias_domain",  # Explicit alias mapping (hipchat.com → atlassian.com)
+    "foreign_key",            # Explicit foreign key (idp_app_id, cmdb_ci_id)
+    "explicit_id",            # Explicit ID match
+    "cmdb_domains_array",     # CMDB record.domains[] exact match
+    "cmdb_canonical_domain",  # CMDB record.canonical_domain exact match
+}
+
+# Match methods that are heuristic (cannot assert governance)
+HEURISTIC_MATCH_METHODS = {
+    "fuzzy", "contains", "vendor", "domain_vendor", "vendor_fallback",
+    "name_contains_domain_token", "normalization_token", "cross_domain_brand",
+    "domain_token_to_name", "registered_domain_token", "canonical_name_as_domain"
+}
+
+# Match methods that indicate cross-TLD correlation (must not trigger identity merge)
+CROSS_TLD_MATCH_METHODS = {"cross_domain_brand"}
+
+
+@dataclass
+class RelatedDomainVariant:
+    """
+    Relationship metadata for cross-TLD domain variants.
+    
+    When brand-token matching finds a related domain (e.g., netcloud.com matches
+    record with netcloud.io), this stores the relationship WITHOUT triggering
+    identity merge. This is enrichment metadata only.
+    """
+    entity_domain: str  # The entity's registered domain (e.g., netcloud.com)
+    related_domain: str  # The related domain from the record (e.g., netcloud.io)
+    match_basis: str  # How they matched: "first_token", "collapsed_brand"
+    record_id: str  # The matched record ID
+    plane: str  # Which plane: "idp", "cmdb", "cloud", "finance"
+
+
+@dataclass
+class PlaneMatch:
+    """Match result for a single plane"""
+    status: MatchStatus
+    matched_ids: list[str] = field(default_factory=list)
+    matched_records: list[PlaneRecord] = field(default_factory=list)
+    match_method: Optional[str] = None
+    match_key: Optional[str] = None
+    ambiguity_code: AmbiguityCode = AmbiguityCode.NONE
+    disambiguation_detail: Optional[str] = None
+    # Cross-TLD relationships (enrichment only, never identity merge)
+    related_domain_variants: list[RelatedDomainVariant] = field(default_factory=list)
+    
+    @property
+    def match_quality(self) -> MatchQuality:
+        """
+        Determine if this match is authoritative or heuristic based on match_method.
+        
+        AUTHORITATIVE matches (domain, uri, canonical_name) can grant governance.
+        HEURISTIC matches (fuzzy, vendor, contains, etc.) are enrichment-only.
+        """
+        if self.status == MatchStatus.UNMATCHED:
+            return MatchQuality.NONE
+        if not self.match_method:
+            return MatchQuality.NONE
+        if self.match_method in AUTHORITATIVE_MATCH_METHODS:
+            return MatchQuality.AUTHORITATIVE
+        if self.match_method in HEURISTIC_MATCH_METHODS:
+            return MatchQuality.HEURISTIC
+        # Unknown method defaults to heuristic for safety
+        return MatchQuality.HEURISTIC
+    
+    @property
+    def is_authoritative(self) -> bool:
+        """Convenience property: True if this match can assert governance."""
+        return self.match_quality == MatchQuality.AUTHORITATIVE
+
+
+@dataclass
+class CorrelationResult:
+    """Correlation result for an entity across all planes"""
+    entity: CandidateEntity
+    idp: PlaneMatch = field(default_factory=lambda: PlaneMatch(status=MatchStatus.UNMATCHED))
+    cmdb: PlaneMatch = field(default_factory=lambda: PlaneMatch(status=MatchStatus.UNMATCHED))
+    cloud: PlaneMatch = field(default_factory=lambda: PlaneMatch(status=MatchStatus.UNMATCHED))
+    finance: PlaneMatch = field(default_factory=lambda: PlaneMatch(status=MatchStatus.UNMATCHED))
+    
+    def all_evidence_refs(self) -> list[str]:
+        """Get all evidence references from matched planes.
+        
+        For finance plane, ALSO adds 'recurring_' prefixed refs for records
+        with is_recurring=True. Original IDs are always preserved for
+        downstream consumers (findings, UI).
+        
+        NOTE: Both MATCHED and AMBIGUOUS statuses count as having evidence,
+        consistent with admission logic in check_*_admission functions.
+        """
+        from ..models.input_contracts import Contract, Transaction
+        
+        refs = list(self.entity.observation_ids)
+        for plane_match in [self.idp, self.cmdb, self.cloud]:
+            if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+                refs.extend(plane_match.matched_ids)
+        
+        if self.finance.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            refs.extend(self.finance.matched_ids)
+            
+            for i, record_id in enumerate(self.finance.matched_ids):
+                record = self.finance.matched_records[i] if i < len(self.finance.matched_records) else None
+                if record:
+                    if isinstance(record, Contract):
+                        if record.is_recurring:
+                            raw_id = record_id.removeprefix("contract:")
+                            refs.append(f"recurring_contract:{raw_id}")
+                    elif isinstance(record, Transaction):
+                        if record.is_recurring:
+                            raw_id = record_id.removeprefix("transaction:")
+                            refs.append(f"recurring_transaction:{raw_id}")
+        
+        return refs
+
+
+def _extract_base_name(name: str) -> str:
+    """Extract base name by stripping environment suffixes and legacy markers."""
+    normalized = normalize_string(name)
+    
+    for suffix in ENV_SUFFIXES | LEGACY_MARKERS:
+        patterns = [
+            rf"[-_]?{suffix}[-_]?$",
+            rf"^{suffix}[-_]",
+            rf"[-_]{suffix}[-_]",
+        ]
+        for pattern in patterns:
+            normalized = re.sub(pattern, "", normalized, flags=re.IGNORECASE)
+    
+    return normalized.strip("-_")
+
+
+def _is_legacy_name(name: str) -> bool:
+    """Check if a name contains legacy/deprecated markers."""
+    normalized = name.lower()
+    return any(marker in normalized for marker in LEGACY_MARKERS)
+
+
+def _get_record_name(record: PlaneRecord) -> str:
+    """Extract name from a record (handles dict or object).
+
+    Also checks vendor_name for finance Transaction records.
+    """
+    if record is None:
+        return ""
+    if isinstance(record, dict):
+        return record.get("name", "") or record.get("app_name", "") or record.get("vendor_name", "") or ""
+    return getattr(record, "name", "") or getattr(record, "app_name", "") or getattr(record, "vendor_name", "") or ""
+
+
+def _get_record_vendor(record: PlaneRecord) -> str:
+    """Extract vendor from a record (handles dict or object)."""
+    if record is None:
+        return ""
+    if isinstance(record, dict):
+        return record.get("vendor", "") or ""
+    return getattr(record, "vendor", "") or ""
+
+
+def _extract_domain_base_token(domain: str) -> str:
+    """Extract base token from domain (e.g., 'pagerduty.com' -> 'pagerduty', 'service-now.com' -> 'servicenow')."""
+    if not domain:
+        return ""
+    normalized = domain.lower().strip()
+    normalized = normalized.removeprefix("www.")
+    parts = normalized.split(".")
+    if parts:
+        token = parts[0]
+        token = token.replace("-", "").replace("_", "")
+        return token
+    return ""
+
+
+KNOWN_DISTINCT_PRODUCTS = {
+    ("box", "dropbox"),
+    ("hub", "github"),
+    ("hub", "hubspot"),
+    ("git", "github"),
+    ("git", "gitlab"),
+    ("git", "gitea"),
+    ("lab", "gitlab"),
+    ("air", "airtable"),
+    ("flow", "flowdock"),
+    ("flow", "webflow"),
+    ("flow", "overflow"),
+    ("doc", "docusign"),
+    ("doc", "document"),
+    ("base", "basecamp"),
+    ("base", "firebase"),
+    ("base", "database"),
+    ("cloud", "cloudflare"),
+    ("cloud", "soundcloud"),
+    ("cloud", "salesforce"),
+    ("work", "workday"),
+    ("work", "framework"),
+    ("work", "network"),
+    ("mail", "mailchimp"),
+    ("mail", "sendmail"),
+    ("mail", "gmail"),
+    ("data", "datadog"),
+    ("data", "database"),
+    ("data", "metadata"),
+    ("one", "onenote"),
+    ("one", "onedrive"),
+    ("note", "onenote"),
+    ("note", "evernote"),
+    ("drive", "onedrive"),
+    ("drive", "googledrive"),
+    ("team", "teams"),
+    ("team", "teamwork"),
+    ("zoom", "zoominfo"),
+    ("sales", "salesforce"),
+    ("service", "servicenow"),
+    ("snow", "snowflake"),
+    ("snow", "servicenow"),
+}
+
+
+
+def _is_valid_contains_match(canonical: str, indexed_name: str) -> bool:
+    """
+    Check if a contains match is valid (not a false positive).
+    
+    Prevents matches like:
+    - "box" matching "dropbox" (different products)
+    - "git" matching "github" (different products)
+    
+    Valid matches:
+    - "userservice" matching "userserviceprod" (same product, env suffix)
+    - "billing" matching "billingapi" (same product, function suffix)
+    """
+    if canonical == indexed_name:
+        return True
+    
+    if canonical not in indexed_name and indexed_name not in canonical:
+        return False
+    
+    shorter = canonical if len(canonical) <= len(indexed_name) else indexed_name
+    longer = indexed_name if len(canonical) <= len(indexed_name) else canonical
+    
+    if len(shorter) < 3:
+        return False
+    
+    for short_prod, long_prod in KNOWN_DISTINCT_PRODUCTS:
+        if shorter == short_prod and longer == long_prod:
+            return False
+        if short_prod in shorter and long_prod == longer:
+            return False
+        if shorter == short_prod and long_prod in longer:
+            return False
+    
+    if longer.startswith(shorter):
+        suffix = longer[len(shorter):]
+        if suffix and suffix[0] in "-_":
+            return True
+        
+        suffix_lower = suffix.lower()
+        for env_suffix in ENV_SUFFIXES:
+            if suffix_lower == env_suffix or suffix_lower.startswith(env_suffix):
+                return True
+        
+        if suffix_lower in {"api", "service", "app", "web", "backend", "frontend", "client", "server"}:
+            return True
+    
+    if longer.endswith(shorter):
+        prefix = longer[:-len(shorter)]
+        if prefix and prefix[-1] in "-_":
+            return True
+        
+        prefix_lower = prefix.lower()
+        for env_prefix in ENV_SUFFIXES:
+            if prefix_lower == env_prefix or prefix_lower.endswith(env_prefix):
+                return True
+    
+    if len(shorter) >= CONTAINS_MATCH_MIN_LENGTH and len(shorter) / len(longer) >= CONTAINS_MATCH_RATIO_THRESHOLD:
+        return True
+    
+    return False
+
+
+def _get_record_field(record: PlaneRecord, field: str, default=None):
+    """Extract a field from a record (handles dict or object)."""
+    if record is None:
+        return default
+    if isinstance(record, dict):
+        return record.get(field, default)
+    return getattr(record, field, default)
+
+
+def _is_deprecated_by_field(record: PlaneRecord) -> bool:
+    """Check if a record is deprecated based on actual CMDB fields."""
+    status = str(_get_record_field(record, "status", "") or "").lower()
+    lifecycle = str(_get_record_field(record, "lifecycle_state", "") or "").lower()
+    is_deprecated = _get_record_field(record, "is_deprecated", False)
+    is_retired = _get_record_field(record, "is_retired", False)
+
+    deprecated_statuses = {"deprecated", "retired", "archived", "decommissioned", "obsolete", "inactive"}
+
+    if is_deprecated or is_retired:
+        return True
+    if status in deprecated_statuses:
+        return True
+    if lifecycle in deprecated_statuses:
+        return True
+
+    return False
+
+
+def _get_environment_field(record: PlaneRecord) -> Optional[str]:
+    """Extract environment from actual CMDB field."""
+    env = _get_record_field(record, "environment")
+    if env:
+        return str(env).lower()
+
+    env_type = _get_record_field(record, "environment_type")
+    if env_type:
+        return str(env_type).lower()
+
+    return None
+
+
+def disambiguate_matches(
+    entity: CandidateEntity,
+    matched_ids: list[str],
+    matched_records: list[PlaneRecord],
+    match_method: str
+) -> tuple[AmbiguityCode, Optional[str], Optional[list[str]]]:
+    """
+    Analyze multiple matches and attempt to disambiguate using EVIDENCE from record fields.
+    
+    PRINCIPLE: Resolve only when CMDB fields support it; otherwise keep AMBIGUOUS.
+    
+    Evidence-driven resolution:
+    - MULTI_ENV: Only if `environment` field differs between records
+    - LEGACY: Only if `status`, `is_deprecated`, or `lifecycle_state` indicates deprecated
+    - DUPLICATE: Only if records have identical key fields
+    - PARENT_VENDOR: Vendor-only match with no product match
+    
+    Returns:
+        Tuple of (ambiguity_code, detail_message, resolved_ids)
+        - resolved_ids is None if ambiguity cannot be resolved
+        - resolved_ids is a single-element list if disambiguation succeeded
+    """
+    if len(matched_ids) <= 1:
+        return AmbiguityCode.NONE, None, matched_ids
+    
+    if match_method == "vendor":
+        names = [_get_record_name(r) for r in matched_records]
+        entity_base = _extract_base_name(entity.canonical_name)
+        
+        exact_matches = []
+        for i, record in enumerate(matched_records):
+            record_base = _extract_base_name(_get_record_name(record))
+            if record_base == entity_base:
+                exact_matches.append(matched_ids[i])
+        
+        if len(exact_matches) == 1:
+            return AmbiguityCode.NONE, f"Vendor match refined by name: {entity_base}", exact_matches
+        
+        return (
+            AmbiguityCode.PARENT_VENDOR,
+            f"Matched vendor only, not specific product. Records: {names}",
+            None
+        )
+    
+    deprecated_records = []
+    active_records = []
+    for i, record in enumerate(matched_records):
+        if _is_deprecated_by_field(record):
+            deprecated_records.append((matched_ids[i], _get_record_name(record), record))
+        else:
+            active_records.append((matched_ids[i], _get_record_name(record), record))
+    
+    if deprecated_records and active_records and len(active_records) == 1:
+        best = active_records[0]
+        deprecated_names = [r[1] for r in deprecated_records]
+        return (
+            AmbiguityCode.LEGACY,
+            f"Evidence: picked active '{best[1]}' (status field) over deprecated: {deprecated_names}",
+            [best[0]]
+        )
+    
+    env_groups: dict[str, list[tuple[str, str, Any]]] = {}
+    records_with_env = 0
+    for i, record in enumerate(matched_records):
+        env = _get_environment_field(record)
+        if env:
+            records_with_env += 1
+            if env not in env_groups:
+                env_groups[env] = []
+            env_groups[env].append((matched_ids[i], _get_record_name(record), record))
+    
+    if records_with_env == len(matched_records) and len(env_groups) > 1:
+        prod_envs = {"prod", "production", "prd", "live"}
+        for env_name in prod_envs:
+            if env_name in env_groups and len(env_groups[env_name]) == 1:
+                best = env_groups[env_name][0]
+                other_envs = [e for e in env_groups.keys() if e not in prod_envs]
+                return (
+                    AmbiguityCode.MULTI_ENV,
+                    f"Evidence: picked prod '{best[1]}' (environment={env_name}) over envs: {other_envs}",
+                    [best[0]]
+                )
+        
+        all_names = [_get_record_name(r) for r in matched_records]
+        return (
+            AmbiguityCode.UNRESOLVED,
+            f"Multiple environments but no single prod: {list(env_groups.keys())}. Records: {all_names}",
+            None
+        )
+    
+    def get_identity_tuple(record: PlaneRecord) -> tuple:
+        return (
+            normalize_string(_get_record_name(record)),
+            normalize_string(_get_record_vendor(record) or ""),
+            normalize_string(str(_get_record_field(record, "app_type", "") or "")),
+        )
+    
+    identities = [get_identity_tuple(r) for r in matched_records]
+    if len(set(identities)) == 1:
+        return (
+            AmbiguityCode.DUPLICATE,
+            f"Evidence: true duplicates (identical name/vendor/type), picked first",
+            [matched_ids[0]]
+        )
+    
+    all_names = [_get_record_name(r) for r in matched_records]
+    return (
+        AmbiguityCode.UNRESOLVED,
+        f"No field-level evidence to disambiguate: {all_names}",
+        None
+    )
+
+
+@dataclass
+class PrecomputedEntityData:
+    """Pre-computed data for an entity to avoid repeated calculations."""
+    registered_domain: Optional[str] = None
+    domain_token: str = ""
+    canonical_vendor: Optional[str] = None
+    normalization_token: str = ""
+
+
+def correlate_to_plane(
+    entity: CandidateEntity,
+    plane_index: PlaneIndex,
+    use_domain: bool = True,
+    use_uri: bool = False,
+    use_vendor: bool = False,
+    precomputed: Optional[PrecomputedEntityData] = None,
+    plane_name: str = "unknown"
+) -> PlaneMatch:
+    """
+    Correlate an entity to a plane using multi-pass matching with disambiguation.
+    
+    Pass 1: Domain match (if applicable)
+    Pass 2: Exact canonical normalized name match
+    Pass 3: Unique contains match (strict; if >1 candidate → try disambiguate)
+    Pass 4: Vendor match (last resort, PARENT_VENDOR if multiple)
+    Pass 5: Domain-to-vendor match (for CMDB - use domain to find vendor, then match)
+    
+    When multiple matches occur, disambiguation logic attempts to resolve:
+    - MULTI_ENV: Same app in different environments → pick prod
+    - LEGACY: Current + deprecated → pick current
+    - DUPLICATE: True duplicates → pick first
+    - PARENT_VENDOR: Vendor-only match → treat as UNMATCHED
+    
+    Args:
+        entity: The candidate entity to correlate
+        plane_index: The index to search
+        use_domain: Enable domain-based matching
+        plane_name: Name of the plane being correlated (idp, cmdb, cloud, finance)
+        use_uri: Enable URI-based matching
+        use_vendor: Enable domain-to-vendor lookup for matching (useful for CMDB)
+        precomputed: Pre-computed entity data to avoid repeated calculations
+    
+    Returns matched/ambiguous/unmatched plus evidence refs.
+    """
+    
+    if use_domain and entity.domain and plane_index.by_domain:
+        # Jan 2026 FIX: Try both exact domain AND registered domain (eTLD+1) lookup
+        # This fixes governance correlation failures where entity.domain differs from
+        # CMDB/IdP record.domain but they share the same registered domain.
+        # Example: entity.domain="maxsoft.org", record.domain="app.maxsoft.org"
+        # The index stores both raw and registered domains, but if entity has the
+        # registered domain and record has a subdomain, exact lookup fails.
+        # Solution: Try exact first, then registered domain as fallback.
+        from .vendor_inference import extract_registered_domain
+        
+        domain_matches = plane_index.by_domain.get(entity.domain, [])
+        match_key_used = entity.domain
+        
+        # If exact lookup failed, try registered domain version
+        if not domain_matches:
+            entity_registered = extract_registered_domain(entity.domain)
+            if entity_registered and entity_registered != entity.domain:
+                domain_matches = plane_index.by_domain.get(entity_registered, [])
+                match_key_used = entity_registered
+        
+        if len(domain_matches) == 1:
+            _log_match_debug(plane_name, "domain", entity.canonical_name, domain_matches[0])
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=domain_matches,
+                matched_records=[plane_index.records.get(mid) for mid in domain_matches],
+                match_method="domain",
+                match_key=match_key_used,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(domain_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in domain_matches]
+            code, detail, resolved = disambiguate_matches(entity, domain_matches, records, "domain")
+            
+            if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, "domain", entity.canonical_name, resolved[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="domain",
+                    match_key=match_key_used,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            _log_match_debug(plane_name, "domain", entity.canonical_name, ",".join(domain_matches))
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=domain_matches,
+                matched_records=records,
+                match_method="domain",
+                match_key=match_key_used,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
+    # ============================================================
+    # Jan 2026 Phase B: CMDB Authoritative Recovery Paths
+    # These lookups use CMDB-specific indexes that are AUTHORITATIVE
+    # Lookup order: canonical_domain → domains[] → verified_alias
+    # ============================================================
+    if use_domain and entity.domain and plane_name == "cmdb":
+        from .vendor_inference import extract_registered_domain
+        from .canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+        
+        # Authoritative path 1: canonical_domain == D
+        if hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
+            canonical_matches = plane_index.by_canonical_domain.get(entity.domain, [])
+            if not canonical_matches:
+                # Try registered domain version
+                entity_registered = extract_registered_domain(entity.domain)
+                if entity_registered and entity_registered != entity.domain:
+                    canonical_matches = plane_index.by_canonical_domain.get(entity_registered, [])
+            
+            if len(canonical_matches) == 1:
+                _log_match_debug(plane_name, "cmdb_canonical_domain", entity.canonical_name, canonical_matches[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=canonical_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in canonical_matches],
+                    match_method="cmdb_canonical_domain",
+                    match_key=entity.domain,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(canonical_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in canonical_matches]
+                code, detail, resolved = disambiguate_matches(entity, canonical_matches, records, "cmdb_canonical_domain")
+                if resolved and len(resolved) == 1:
+                    _log_match_debug(plane_name, "cmdb_canonical_domain", entity.canonical_name, resolved[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="cmdb_canonical_domain",
+                        match_key=entity.domain,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+        
+        # Authoritative path 2: D ∈ domains[]
+        if hasattr(plane_index, 'by_domains_array') and plane_index.by_domains_array:
+            array_matches = plane_index.by_domains_array.get(entity.domain, [])
+            if not array_matches:
+                entity_registered = extract_registered_domain(entity.domain)
+                if entity_registered and entity_registered != entity.domain:
+                    array_matches = plane_index.by_domains_array.get(entity_registered, [])
+            
+            if len(array_matches) == 1:
+                _log_match_debug(plane_name, "cmdb_domains_array", entity.canonical_name, array_matches[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=array_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in array_matches],
+                    match_method="cmdb_domains_array",
+                    match_key=entity.domain,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(array_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in array_matches]
+                code, detail, resolved = disambiguate_matches(entity, array_matches, records, "cmdb_domains_array")
+                if resolved and len(resolved) == 1:
+                    _log_match_debug(plane_name, "cmdb_domains_array", entity.canonical_name, resolved[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="cmdb_domains_array",
+                        match_key=entity.domain,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+        
+        # Authoritative path 3: verified_alias_domain(D) == canonical_domain
+        # If entity.domain has a known alias, try the canonical version
+        if entity.domain in ALIAS_DOMAINS_TO_COLLAPSE:
+            from .canonical_key import normalize_to_canonical_vendor_domain
+            alias_canonical = normalize_to_canonical_vendor_domain(entity.domain)
+            if alias_canonical and hasattr(plane_index, 'by_canonical_domain') and plane_index.by_canonical_domain:
+                alias_matches = plane_index.by_canonical_domain.get(alias_canonical, [])
+                if len(alias_matches) == 1:
+                    _log_match_debug(plane_name, "verified_alias_domain", entity.canonical_name, alias_matches[0])
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=alias_matches,
+                        matched_records=[plane_index.records.get(mid) for mid in alias_matches],
+                        match_method="verified_alias_domain",
+                        match_key=f"{entity.domain}→{alias_canonical}",
+                        ambiguity_code=AmbiguityCode.NONE
+                    )
+    
+    # ============================================================
+    # Jan 2026 FIX: Additional domain fallback paths (HEURISTIC)
+    # These address cases where entity.domain and record.domain differ but share identity
+    # ============================================================
+    if use_domain and plane_index.by_domain:
+        from .vendor_inference import extract_registered_domain
+        domain_matches = []
+        match_key_used = None
+        match_method_used = "domain"
+        
+        # Fallback 1: If entity has no domain but canonical_name looks like a domain, try that
+        # Example: entity.canonical_name="slack.com" should match IdP record with domain="slack.com"
+        # CRITICAL: This is HEURISTIC - canonical_name is not authoritative domain evidence
+        # Jan 2026: Fixed to use canonical_name_as_domain (heuristic) not "domain" (authoritative)
+        if not entity.domain and entity.canonical_name and '.' in entity.canonical_name:
+            canonical_as_domain = entity.canonical_name.lower().strip()
+            # Must look like a valid domain (not "Microsoft 365.com" etc)
+            if re.match(r'^[a-z0-9][-a-z0-9]*(\.[a-z0-9][-a-z0-9]*)+$', canonical_as_domain):
+                domain_matches = plane_index.by_domain.get(canonical_as_domain, [])
+                if not domain_matches:
+                    registered = extract_registered_domain(canonical_as_domain)
+                    if registered and registered != canonical_as_domain:
+                        domain_matches = plane_index.by_domain.get(registered, [])
+                        match_key_used = registered
+                    else:
+                        match_key_used = canonical_as_domain
+                else:
+                    match_key_used = canonical_as_domain
+                # Mark as heuristic - inferring domain from canonical_name is NOT authoritative
+                if domain_matches:
+                    match_method_used = "canonical_name_as_domain"
+                    logger.debug(
+                        f"CANONICAL_NAME_AS_DOMAIN entity={entity.canonical_name} "
+                        f"inferred_domain={canonical_as_domain} matches={len(domain_matches)}"
+                    )
+        
+        # Fallback 2: Look up entity's domain token in by_name_words (catches record.canonical_domain indexed as token)
+        # Example: entity.domain="flexpoint.cloud" → token "flexpoint" → matches IdP record indexed with "flexpoint"
+        if not domain_matches and entity.domain and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+            domain_token = entity.domain.split('.')[0].lower().strip() if '.' in entity.domain else None
+            if domain_token and len(domain_token) >= 4:
+                word_matches = plane_index.by_name_words.get(domain_token, [])
+                if word_matches:
+                    domain_matches = list(word_matches)
+                    match_key_used = domain_token
+                    match_method_used = "domain_token_to_name"
+                    logger.debug(
+                        f"DOMAIN_TOKEN_FALLBACK entity={entity.canonical_name} "
+                        f"domain_token={domain_token} matches={len(domain_matches)}"
+                    )
+        
+        # Fallback 3: Reverse lookup - entity's registered domain might match a record's tenant token
+        # Example: entity.domain="flowsoft.org" → record has domain="flowsoft.okta.com" → tenant token "flowsoft" indexed
+        if not domain_matches and entity.domain and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+            entity_registered = extract_registered_domain(entity.domain)
+            if entity_registered:
+                reg_token = entity_registered.split('.')[0].lower().strip() if '.' in entity_registered else None
+                if reg_token and len(reg_token) >= 4:
+                    word_matches = plane_index.by_name_words.get(reg_token, [])
+                    if word_matches:
+                        domain_matches = list(word_matches)
+                        match_key_used = reg_token
+                        match_method_used = "registered_domain_token"
+                        logger.debug(
+                            f"REGISTERED_TOKEN_FALLBACK entity={entity.canonical_name} "
+                            f"reg_token={reg_token} matches={len(domain_matches)}"
+                        )
+        
+        if len(domain_matches) == 1:
+            _log_match_debug(plane_name, match_method_used, entity.canonical_name, domain_matches[0])
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=domain_matches,
+                matched_records=[plane_index.records.get(mid) for mid in domain_matches],
+                match_method=match_method_used,
+                match_key=match_key_used,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(domain_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in domain_matches]
+            code, detail, resolved = disambiguate_matches(entity, domain_matches, records, match_method_used)
+            
+            if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, match_method_used, entity.canonical_name, resolved[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method=match_method_used,
+                    match_key=match_key_used,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            _log_match_debug(plane_name, match_method_used, entity.canonical_name, ",".join(domain_matches))
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=domain_matches,
+                matched_records=records,
+                match_method=match_method_used,
+                match_key=match_key_used,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
+    if use_uri and entity.uri and plane_index.by_uri:
+        uri_matches = plane_index.by_uri.get(entity.uri.lower().strip(), [])
+        if len(uri_matches) == 1:
+            _log_match_debug(plane_name, "uri", entity.canonical_name, uri_matches[0])
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=uri_matches,
+                matched_records=[plane_index.records.get(mid) for mid in uri_matches],
+                match_method="uri",
+                match_key=entity.uri,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(uri_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in uri_matches]
+            code, detail, resolved = disambiguate_matches(entity, uri_matches, records, "uri")
+            
+            if resolved and len(resolved) == 1:
+                _log_match_debug(plane_name, "uri", entity.canonical_name, resolved[0])
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="uri",
+                    match_key=entity.uri,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            _log_match_debug(plane_name, "uri", entity.canonical_name, ",".join(uri_matches))
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=uri_matches,
+                matched_records=records,
+                match_method="uri",
+                match_key=entity.uri,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
+    canonical = entity.canonical_name
+    name_matches = plane_index.by_canonical_name.get(canonical, [])
+    
+    # Jan 2026 FIX: If no canonical_name match and entity has domain, try domain base name
+    # Entity canonical_name is often the full domain (e.g., "slack.com") but IdP/CMDB records
+    # are indexed by app name (e.g., "slack"). This enables matching when record has name
+    # but no external_ref/domain field.
+    # Example: entity.domain="slack.com", record.name="Slack" → record indexed as "slack"
+    #          canonical="slack.com" fails, but domain_base="slack" matches
+    domain_base_used = False
+    domain_base = None  # Initialize to avoid UnboundLocalError
+    if not name_matches and entity.domain:
+        domain_base = entity.domain.split('.')[0].lower().strip() if '.' in entity.domain else None
+        if domain_base and len(domain_base) >= 3:
+            # First try by_canonical_name (exact match on normalized record name)
+            name_matches = plane_index.by_canonical_name.get(domain_base, [])
+            # Also try by_name_words (domain bases are indexed there from canonical_domain field)
+            if not name_matches and hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+                name_matches = list(plane_index.by_name_words.get(domain_base, []))
+            if name_matches:
+                domain_base_used = True
+                logger.debug(
+                    f"DOMAIN_BASE_NAME_MATCH entity={entity.canonical_name} "
+                    f"domain_base={domain_base} matches={len(name_matches)}"
+                )
+    
+    if name_matches and use_vendor:
+        expected_vendor = None
+        if precomputed and precomputed.canonical_vendor:
+            expected_vendor = precomputed.canonical_vendor
+        elif entity.domain:
+            normalized_domain = normalize_domain(entity.domain) or entity.domain.lower().strip()
+            expected_vendor = DOMAIN_TO_VENDOR.get(normalized_domain)
+        if not expected_vendor:
+            canonical_lower = entity.canonical_name.lower().strip()
+            if canonical_lower in VENDOR_TO_DOMAIN:
+                expected_vendor = canonical_lower.title()
+        if expected_vendor:
+            expected_vendor_normalized = normalize_string(expected_vendor)
+            validated_matches = []
+            for mid in name_matches:
+                record = plane_index.records.get(mid)
+                if record:
+                    record_vendor = normalize_string(str(getattr(record, 'vendor', '') or ''))
+                    if record_vendor and record_vendor == expected_vendor_normalized:
+                        validated_matches.append(mid)
+            name_matches = validated_matches
+    
+    # Determine effective match key (domain_base or canonical name)
+    effective_match_key = domain_base if domain_base_used else canonical
+    
+    if len(name_matches) == 1:
+        _log_match_debug(plane_name, "canonical_name", entity.canonical_name, name_matches[0])
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=name_matches,
+            matched_records=[plane_index.records.get(mid) for mid in name_matches],
+            match_method="canonical_name",
+            match_key=effective_match_key,
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(name_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in name_matches]
+        code, detail, resolved = disambiguate_matches(entity, name_matches, records, "canonical_name")
+        
+        if resolved and len(resolved) == 1:
+            _log_match_debug(plane_name, "canonical_name", entity.canonical_name, resolved[0])
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="canonical_name",
+                match_key=effective_match_key,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        _log_match_debug(plane_name, "canonical_name", entity.canonical_name, ",".join(name_matches))
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=name_matches,
+            matched_records=records,
+            match_method="canonical_name",
+            match_key=effective_match_key,
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
+    fuzzy_matches: list[str] = []
+    if len(canonical) >= 4 and hasattr(plane_index, 'by_name_prefix'):
+        prefix = canonical[:4]
+        prefix_candidates = set(plane_index.by_name_prefix.get(prefix, []))
+        for candidate_id in prefix_candidates:
+            record = plane_index.records.get(candidate_id)
+            if record:
+                record_name = normalize_string(_get_record_name(record))
+                if _is_fuzzy_match(canonical, record_name):
+                    if candidate_id not in fuzzy_matches:
+                        fuzzy_matches.append(candidate_id)
+    else:
+        for indexed_name, record_ids in plane_index.by_canonical_name.items():
+            if _is_fuzzy_match(canonical, indexed_name):
+                fuzzy_matches.extend(record_ids)
+    
+    fuzzy_matches = list(set(fuzzy_matches))
+    
+    if len(fuzzy_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=fuzzy_matches,
+            matched_records=[plane_index.records.get(mid) for mid in fuzzy_matches],
+            match_method="fuzzy",
+            match_key=canonical,
+            ambiguity_code=AmbiguityCode.NONE
+        )
+    elif len(fuzzy_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in fuzzy_matches]
+        code, detail, resolved = disambiguate_matches(entity, fuzzy_matches, records, "fuzzy")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="fuzzy",
+                match_key=canonical,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=fuzzy_matches,
+            matched_records=records,
+            match_method="fuzzy",
+            match_key=canonical,
+            ambiguity_code=code,
+            disambiguation_detail=detail
+        )
+    
+    contains_matches: list[str] = []
+    # Track cross-TLD domain variants as relationship metadata ONLY (never identity merge)
+    cross_tld_variants: list[RelatedDomainVariant] = []
+    
+    if hasattr(plane_index, 'by_name_words') and plane_index.by_name_words:
+        canonical_words = {w for w in re.split(r'[\s\-_./]+', canonical) if len(w) >= 4}
+        candidate_ids = set()
+        for word in canonical_words:
+            candidate_ids.update(plane_index.by_name_words.get(word, []))
+        for candidate_id in candidate_ids:
+            record = plane_index.records.get(candidate_id)
+            if record:
+                record_name = normalize_string(_get_record_name(record))
+                record_domain = getattr(record, 'domain', None)
+                if not record_domain:
+                    raw_data = getattr(record, 'raw_data', None)
+                    if raw_data and isinstance(raw_data, dict):
+                        record_domain = raw_data.get('domain')
+                record_domain_normalized = normalize_string(record_domain) if record_domain else ""
+                
+                name_match = _is_valid_contains_match(canonical, record_name)
+                domain_match = record_domain_normalized and canonical in record_domain_normalized
+                
+                # TLD VARIANT FIX (Jan 2026):
+                # Cross-domain brand matching (e.g., netcloud.com vs netcloud.io) must NOT
+                # trigger identity merge. Record as relationship metadata only.
+                # This prevents KEY_NORMALIZATION_MISMATCH from entity collapse.
+                cross_tld_match_basis = None
+                if not name_match and not domain_match and record_domain:
+                    entity_domain = getattr(entity, 'domain', None) or ""
+                    if entity_domain and '.' in entity_domain and '.' in record_domain:
+                        from .vendor_inference import extract_registered_domain
+                        entity_registered = extract_registered_domain(entity_domain)
+                        record_registered = extract_registered_domain(record_domain)
+                        
+                        # CRITICAL: If registered domains differ, this is a cross-TLD match
+                        # Store as relationship metadata, NOT as identity match
+                        if entity_registered and record_registered and entity_registered != record_registered:
+                            entity_label = entity_domain.lower().split('.')[0]
+                            record_label = record_domain.lower().split('.')[0]
+                            
+                            entity_first = re.split(r'[\-_]+', entity_label)[0]
+                            record_first = re.split(r'[\-_]+', record_label)[0]
+                            entity_collapsed = re.sub(r'[\-_]', '', entity_label)
+                            record_collapsed = re.sub(r'[\-_]', '', record_label)
+                            
+                            first_match = len(entity_first) >= 4 and entity_first == record_first
+                            collapsed_match = len(entity_collapsed) >= 4 and entity_collapsed == record_collapsed
+                            
+                            if first_match:
+                                cross_tld_match_basis = "first_token"
+                            elif collapsed_match:
+                                cross_tld_match_basis = "collapsed_brand"
+                            
+                            if cross_tld_match_basis:
+                                # Record as relationship, NOT as identity match
+                                cross_tld_variants.append(RelatedDomainVariant(
+                                    entity_domain=entity_registered,
+                                    related_domain=record_registered,
+                                    match_basis=cross_tld_match_basis,
+                                    record_id=candidate_id,
+                                    plane=plane_name
+                                ))
+                                logger.debug(
+                                    f"CROSS_TLD_VARIANT_RECORDED entity={entity_registered} "
+                                    f"related={record_registered} basis={cross_tld_match_basis} "
+                                    f"record_id={candidate_id} (NOT identity merge)"
+                                )
+                                # DO NOT add to contains_matches - prevents identity merge
+                                continue
+                
+                # For finance transactions, match via domain base token alignment
+                GENERIC_TOKENS = frozenset({
+                    'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
+                    'solutions', 'platform', 'systems', 'tech', 'technology', 'global',
+                    'enterprise', 'business', 'group', 'corp', 'corporation', 'company',
+                    'consulting', 'analytics', 'media', 'network', 'security', 'storage',
+                    'hosting', 'managed', 'professional', 'integration', 'connect'
+                })
+                VENDOR_PREFIXES = frozenset({'the', 'a', 'an', 'team', 'inc', 'corp', 'llc', 'ltd', 'co', 'by'})
+                token_match = False
+                if not name_match and not domain_match:
+                    from ..models.input_contracts import Transaction, Contract
+                    if isinstance(record, (Transaction, Contract)):
+                        entity_domain = getattr(entity, 'domain', None) or ""
+                        domain_base_token = None
+                        if entity_domain and '.' in entity_domain:
+                            domain_parts = entity_domain.lower().split('.')
+                            if len(domain_parts) >= 2:
+                                domain_base_token = re.sub(r'[\-_]', '', domain_parts[0])
+                                if domain_base_token in GENERIC_TOKENS or len(domain_base_token) < MIN_TOKEN_LENGTH_FOR_MATCH:
+                                    domain_base_token = None
+                        
+                        if domain_base_token:
+                            vendor_tokens = [re.sub(r'[\-_]', '', w.lower()) for w in re.split(r'[\s\-_./]+', record_name) if len(w) >= 2]
+                            primary_brand_token = None
+                            for vt in vendor_tokens:
+                                if vt not in VENDOR_PREFIXES and len(vt) >= 3:
+                                    primary_brand_token = vt
+                                    break
+                            token_match = primary_brand_token and domain_base_token == primary_brand_token
+                
+                # Only add to contains_matches for SAME-DOMAIN matches (name or domain match)
+                # NOT for cross-TLD brand matches (those are relationship metadata only)
+                if name_match or domain_match or token_match:
+                    if candidate_id not in contains_matches:
+                        contains_matches.append(candidate_id)
+    else:
+        for indexed_name, record_ids in plane_index.by_canonical_name.items():
+            if _is_valid_contains_match(canonical, indexed_name):
+                contains_matches.extend(record_ids)
+    
+    contains_matches = list(set(contains_matches))
+    
+    if len(contains_matches) == 1:
+        return PlaneMatch(
+            status=MatchStatus.MATCHED,
+            matched_ids=contains_matches,
+            matched_records=[plane_index.records.get(mid) for mid in contains_matches],
+            match_method="contains",
+            match_key=canonical,
+            ambiguity_code=AmbiguityCode.NONE,
+            related_domain_variants=cross_tld_variants
+        )
+    elif len(contains_matches) > 1:
+        records = [plane_index.records.get(mid) for mid in contains_matches]
+        code, detail, resolved = disambiguate_matches(entity, contains_matches, records, "contains")
+        
+        if resolved and len(resolved) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=resolved,
+                matched_records=[plane_index.records.get(resolved[0])],
+                match_method="contains",
+                match_key=canonical,
+                ambiguity_code=code,
+                disambiguation_detail=detail,
+                related_domain_variants=cross_tld_variants
+            )
+        
+        return PlaneMatch(
+            status=MatchStatus.AMBIGUOUS,
+            matched_ids=contains_matches,
+            matched_records=records,
+            match_method="contains",
+            match_key=canonical,
+            ambiguity_code=code,
+            disambiguation_detail=detail,
+            related_domain_variants=cross_tld_variants
+        )
+    
+    # If only cross-TLD variants found (no same-domain matches), return UNMATCHED with variants
+    if cross_tld_variants:
+        return PlaneMatch(
+            status=MatchStatus.UNMATCHED,
+            related_domain_variants=cross_tld_variants
+        )
+    
+    if entity.domain and plane_index.by_canonical_name:
+        domain_token = precomputed.domain_token if precomputed else ""
+        if not domain_token:
+            raw_domain_token = _extract_domain_base_token(entity.domain)
+            domain_token = normalize_string(raw_domain_token) if raw_domain_token else ""
+        if domain_token and len(domain_token) >= 6:
+            token_matches: list[str] = []
+            if hasattr(plane_index, 'by_name_words') and domain_token in plane_index.by_name_words:
+                token_matches = list(plane_index.by_name_words[domain_token])
+            else:
+                for indexed_name, record_ids in plane_index.by_canonical_name.items():
+                    if domain_token in indexed_name:
+                        token_matches.extend(record_ids)
+            
+            token_matches = list(set(token_matches))
+            
+            if len(token_matches) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=token_matches,
+                    matched_records=[plane_index.records.get(mid) for mid in token_matches],
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            elif len(token_matches) > 1:
+                records = [plane_index.records.get(mid) for mid in token_matches]
+                code, detail, resolved = disambiguate_matches(entity, token_matches, records, "name_contains_domain_token")
+                
+                if resolved and len(resolved) == 1:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=resolved,
+                        matched_records=[plane_index.records.get(resolved[0])],
+                        match_method="name_contains_domain_token",
+                        match_key=domain_token,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+                
+                return PlaneMatch(
+                    status=MatchStatus.AMBIGUOUS,
+                    matched_ids=token_matches,
+                    matched_records=records,
+                    match_method="name_contains_domain_token",
+                    match_key=domain_token,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+    
+    if entity.vendor and plane_index.by_vendor_product:
+        vendor_key = normalize_string(entity.vendor)
+        vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
+        
+        if len(vendor_matches) == 1:
+            matched_record = plane_index.records.get(vendor_matches[0])
+            matched_name = normalize_string(_get_record_name(matched_record)) if matched_record else ""
+            entity_name = entity.canonical_name
+            
+            if matched_name == entity_name or matched_name in entity_name or entity_name in matched_name:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=vendor_matches,
+                    matched_records=[matched_record],
+                    match_method="vendor",
+                    match_key=entity.vendor,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+        elif len(vendor_matches) > 1:
+            records = [plane_index.records.get(mid) for mid in vendor_matches]
+            code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="vendor",
+                    match_key=entity.vendor,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.AMBIGUOUS,
+                matched_ids=vendor_matches,
+                matched_records=records,
+                match_method="vendor",
+                match_key=entity.vendor,
+                ambiguity_code=code,
+                disambiguation_detail=detail
+            )
+    
+    if use_vendor and entity.domain and plane_index.by_vendor_product:
+        domain_vendor = precomputed.canonical_vendor if precomputed else None
+        if not domain_vendor:
+            entity_normalized_domain = normalize_domain(entity.domain) or entity.domain.lower().strip()
+            domain_vendor = DOMAIN_TO_VENDOR.get(entity_normalized_domain)
+            if not domain_vendor and entity_normalized_domain != entity.domain.lower().strip():
+                domain_vendor = DOMAIN_TO_VENDOR.get(entity.domain.lower().strip())
+        if domain_vendor:
+            vendor_key = normalize_string(domain_vendor)
+            vendor_matches = plane_index.by_vendor_product.get(vendor_key, [])
+            
+            if len(vendor_matches) >= 1:
+                records = [plane_index.records.get(mid) for mid in vendor_matches]
+                matching_ids = []
+                matching_records = []
+                
+                for idx, record in enumerate(records):
+                    if record:
+                        record_name = normalize_string(_get_record_name(record))
+                        entity_name = entity.canonical_name
+                        if record_name == entity_name or record_name in entity_name or entity_name in record_name:
+                            matching_ids.append(vendor_matches[idx])
+                            matching_records.append(record)
+                
+                if len(matching_ids) == 1:
+                    return PlaneMatch(
+                        status=MatchStatus.MATCHED,
+                        matched_ids=matching_ids,
+                        matched_records=matching_records,
+                        match_method="domain_vendor",
+                        match_key=domain_vendor,
+                        ambiguity_code=AmbiguityCode.NONE
+                    )
+                elif len(matching_ids) > 1:
+                    code, detail, resolved = disambiguate_matches(entity, matching_ids, matching_records, "domain_vendor")
+                    if resolved and len(resolved) == 1:
+                        return PlaneMatch(
+                            status=MatchStatus.MATCHED,
+                            matched_ids=resolved,
+                            matched_records=[plane_index.records.get(resolved[0])],
+                            match_method="domain_vendor",
+                            match_key=domain_vendor,
+                            ambiguity_code=code,
+                            disambiguation_detail=detail
+                        )
+                    return PlaneMatch(
+                        status=MatchStatus.AMBIGUOUS,
+                        matched_ids=matching_ids,
+                        matched_records=matching_records,
+                        match_method="domain_vendor",
+                        match_key=domain_vendor,
+                        ambiguity_code=code,
+                        disambiguation_detail=detail
+                    )
+    
+    if use_vendor and entity.vendor and plane_index.by_vendor_product:
+        entity_vendor_key = normalize_string(entity.vendor)
+        vendor_matches = plane_index.by_vendor_product.get(entity_vendor_key, [])
+        
+        if len(vendor_matches) >= 1:
+            exact_in_vendor = []
+            for mid in vendor_matches:
+                record = plane_index.records.get(mid)
+                if record and normalize_string(_get_record_name(record)) == entity.canonical_name:
+                    exact_in_vendor.append(mid)
+            
+            if len(exact_in_vendor) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=exact_in_vendor,
+                    matched_records=[plane_index.records.get(exact_in_vendor[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            
+            if len(vendor_matches) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=vendor_matches,
+                    matched_records=[plane_index.records.get(vendor_matches[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=AmbiguityCode.NONE
+                )
+            
+            records = [plane_index.records.get(mid) for mid in vendor_matches]
+            code, detail, resolved = disambiguate_matches(entity, vendor_matches, records, "vendor_fallback")
+            
+            if resolved and len(resolved) == 1:
+                return PlaneMatch(
+                    status=MatchStatus.MATCHED,
+                    matched_ids=resolved,
+                    matched_records=[plane_index.records.get(resolved[0])],
+                    match_method="vendor_fallback",
+                    match_key=entity.vendor,
+                    ambiguity_code=code,
+                    disambiguation_detail=detail
+                )
+            
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=[vendor_matches[0]],
+                matched_records=[plane_index.records.get(vendor_matches[0])],
+                match_method="vendor_fallback",
+                match_key=entity.vendor,
+                ambiguity_code=AmbiguityCode.PARENT_VENDOR,
+                disambiguation_detail=f"Vendor-only match: {entity.vendor}"
+            )
+    
+    # For finance plane, skip normalization_token matching for generic/short tokens
+    # to prevent false positives like "cloud.io" matching "Cloud Services Inc"
+    GENERIC_TOKENS_FOR_FINANCE = frozenset({
+        'cloud', 'data', 'online', 'digital', 'software', 'service', 'services',
+        'solutions', 'platform', 'systems', 'tech', 'technology', 'global',
+        'enterprise', 'business', 'group', 'corp', 'corporation', 'company',
+        'consulting', 'analytics', 'media', 'network', 'security', 'storage',
+        'hosting', 'managed', 'professional', 'integration', 'connect'
+    })
+    # Use module-level MIN_TOKEN_LENGTH_FOR_MATCH constant
+    
+    entity_token = precomputed.normalization_token if precomputed else ""
+    if not entity_token:
+        entity_token = get_normalization_token(entity.canonical_name)
+        if not entity_token and entity.domain:
+            entity_token = get_normalization_token(entity.domain)
+    
+    # Skip normalization_token matching for finance plane with generic/short tokens
+    is_finance_plane = hasattr(plane_index, 'by_name_words')  # Finance plane has this attribute
+    skip_token_match = is_finance_plane and (entity_token in GENERIC_TOKENS_FOR_FINANCE or len(entity_token) < MIN_TOKEN_LENGTH_FOR_MATCH)
+    
+    if entity_token and len(entity_token) >= 3 and not skip_token_match:
+        token_matches: list[str] = []
+        matched_vendor_tokens: set[str] = set()
+        
+        for record_id, record in plane_index.records.items():
+            record_name = _get_record_name(record)
+            record_vendor = _get_record_vendor(record)
+            
+            record_name_token = get_normalization_token(record_name) if record_name else ""
+            record_vendor_token = get_normalization_token(record_vendor) if record_vendor else ""
+            
+            if entity_token == record_name_token or entity_token == record_vendor_token:
+                token_matches.append(record_id)
+                if record_vendor_token:
+                    matched_vendor_tokens.add(record_vendor_token)
+                elif record_name_token:
+                    matched_vendor_tokens.add(record_name_token)
+        
+        token_matches = list(set(token_matches))
+        
+        if len(token_matches) >= 1 and len(matched_vendor_tokens) == 1:
+            return PlaneMatch(
+                status=MatchStatus.MATCHED,
+                matched_ids=token_matches,
+                matched_records=[plane_index.records.get(mid) for mid in token_matches],
+                match_method="normalization_token",
+                match_key=entity_token,
+                ambiguity_code=AmbiguityCode.NONE
+            )
+        elif len(token_matches) > 1 and len(matched_vendor_tokens) > 1:
+            pass
+    
+    return PlaneMatch(status=MatchStatus.UNMATCHED)
+
+
+def _precompute_entity_data(entity: CandidateEntity) -> PrecomputedEntityData:
+    """
+    Pre-compute normalized tokens and lookups for an entity.
+    
+    This avoids repeated calls to expensive normalization functions
+    when correlating the same entity across multiple planes.
+    """
+    data = PrecomputedEntityData()
+    
+    if entity.domain:
+        domain_normalized = normalize_domain(entity.domain) or entity.domain.lower().strip()
+        data.registered_domain = domain_normalized
+        data.domain_token = normalize_string(_extract_domain_base_token(entity.domain))
+        
+        if data.registered_domain:
+            data.canonical_vendor = DOMAIN_TO_VENDOR.get(data.registered_domain)
+        if not data.canonical_vendor:
+            data.canonical_vendor = DOMAIN_TO_VENDOR.get(entity.domain.lower().strip())
+    
+    data.normalization_token = get_normalization_token(entity.canonical_name)
+    if not data.normalization_token and entity.domain:
+        data.normalization_token = get_normalization_token(entity.domain)
+    
+    return data
+
+
+def _recover_domain_from_planes(result: CorrelationResult) -> Optional[str]:
+    """
+    Post-correlation domain recovery for name-only entities.
+    
+    When a discovery observation lacks a domain (e.g., name="OpenSuite" with no domain field),
+    the entity is keyed by name. If correlation later matches it to IdP/CMDB/Cloud records
+    that have domains, we should adopt that domain as the entity's canonical key.
+    
+    Priority order: IdP → CMDB → Cloud → Finance
+    
+    Returns:
+        Normalized domain from matched plane record, or None if no domain found
+    """
+    planes_to_check = [
+        (result.idp, "idp"),
+        (result.cmdb, "cmdb"),
+        (result.cloud, "cloud"),
+        (result.finance, "finance"),
+    ]
+    
+    for plane_match, plane_name in planes_to_check:
+        if plane_match.status in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+            for record in plane_match.matched_records:
+                if record is None:
+                    continue
+                raw_domain = getattr(record, 'domain', None)
+                if raw_domain:
+                    normalized = normalize_domain(raw_domain)
+                    if normalized:
+                        logger.debug("domain_recovery.found", extra={
+                            "plane": plane_name,
+                            "raw_domain": raw_domain,
+                            "normalized": normalized
+                        })
+                        return normalized
+    
+    return None
+
+
+def _expand_finance_to_include_all_vendor_records(
+    finance_match: PlaneMatch,
+    finance_index: PlaneIndex
+) -> PlaneMatch:
+    """
+    Expand finance matches to include ALL records from the same vendor.
+    
+    When a finance match is found (e.g., contract for "Corespace"), this function
+    gathers all other finance records (contracts AND transactions) with the same
+    vendor name. This ensures that if any record has is_recurring=True, the asset
+    will correctly get has_ongoing_finance=True.
+    
+    This is finance-specific to avoid impacting other planes' matching semantics.
+    """
+    if finance_match.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
+        return finance_match
+    
+    if not finance_match.matched_records:
+        return finance_match
+    
+    vendor_names: set[str] = set()
+    for record in finance_match.matched_records:
+        if record is None:
+            continue
+        vendor = getattr(record, 'vendor_name', None)
+        if vendor:
+            vendor_names.add(normalize_string(vendor))
+    
+    if not vendor_names:
+        return finance_match
+    
+    all_matched_ids: set[str] = set(finance_match.matched_ids)
+    
+    for vendor_name in vendor_names:
+        for indexed_vendor, record_ids in finance_index.by_vendor_product.items():
+            indexed_vendor_normalized = normalize_string(indexed_vendor)
+            if indexed_vendor_normalized == vendor_name:
+                all_matched_ids.update(record_ids)
+        
+        for indexed_name, record_ids in finance_index.by_canonical_name.items():
+            indexed_name_normalized = normalize_string(indexed_name)
+            if indexed_name_normalized == vendor_name:
+                all_matched_ids.update(record_ids)
+    
+    all_matched_ids_list = list(all_matched_ids)
+    all_records = [finance_index.records.get(mid) for mid in all_matched_ids_list]
+    
+    if len(all_matched_ids_list) == len(finance_match.matched_ids):
+        return finance_match
+    
+    return PlaneMatch(
+        status=finance_match.status,
+        matched_ids=all_matched_ids_list,
+        matched_records=all_records,
+        match_method=finance_match.match_method,
+        match_key=finance_match.match_key,
+        ambiguity_code=finance_match.ambiguity_code,
+        disambiguation_detail=f"{finance_match.disambiguation_detail or ''} [expanded from {len(finance_match.matched_ids)} to {len(all_matched_ids_list)} records via vendor match]".strip()
+    )
+
+
+def correlate_entities_to_planes(
+    entities: list[CandidateEntity],
+    indexes: PlaneIndexes
+) -> list[CorrelationResult]:
+    """
+    Correlate all entities to all planes with disambiguation.
+    
+    Per plane, per entity:
+    - Pass 1: domain match (if applicable)
+    - Pass 2: exact canonical normalized name match
+    - Pass 3: unique contains match
+    - Pass 4: vendor match (with PARENT_VENDOR detection)
+    
+    When multiple matches occur, disambiguation attempts to resolve to single match.
+    PARENT_VENDOR matches are treated as UNMATCHED (not specific enough).
+    
+    Returns matched/ambiguous/unmatched plus evidence refs.
+    No shared IDs across planes. No truth keys.
+    
+    Args:
+        entities: Candidate entities from normalization stage
+        indexes: Plane indexes from indexing stage
+        
+    Returns:
+        List of correlation results for each entity
+    """
+    t_total_start = time.perf_counter()
+    
+    logger.info("correlate_entities.start", extra={
+        "entity_count": len(entities),
+        "idp_records": len(indexes.idp.by_canonical_name),
+        "cmdb_records": len(indexes.cmdb.by_canonical_name),
+        "cloud_records": len(indexes.cloud.by_canonical_name),
+        "finance_records": len(indexes.finance.by_canonical_name)
+    })
+    
+    t_precompute_start = time.perf_counter()
+    sorted_entities = sorted(entities, key=lambda e: e.entity_id)
+    precomputed = {e.entity_id: _precompute_entity_data(e) for e in sorted_entities}
+    t_precompute = time.perf_counter() - t_precompute_start
+    
+    results = []
+    matched_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
+    ambiguous_counts = {"idp": 0, "cmdb": 0, "cloud": 0, "finance": 0}
+    
+    t_idp, t_cmdb, t_cloud, t_finance = 0.0, 0.0, 0.0, 0.0
+    
+    for entity in sorted_entities:
+        result = CorrelationResult(entity=entity)
+        entity_precomputed = precomputed[entity.entity_id]
+        
+        t_start = time.perf_counter()
+        result.idp = correlate_to_plane(entity, indexes.idp, use_domain=True, use_vendor=True, precomputed=entity_precomputed, plane_name="idp")
+        t_idp += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.cmdb = correlate_to_plane(entity, indexes.cmdb, use_domain=True, use_vendor=True, precomputed=entity_precomputed, plane_name="cmdb")
+        t_cmdb += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.cloud = correlate_to_plane(entity, indexes.cloud, use_domain=False, use_uri=True, precomputed=entity_precomputed, plane_name="cloud")
+        t_cloud += time.perf_counter() - t_start
+        
+        t_start = time.perf_counter()
+        result.finance = correlate_to_plane(entity, indexes.finance, use_domain=False, precomputed=entity_precomputed, plane_name="finance")
+        result.finance = _expand_finance_to_include_all_vendor_records(result.finance, indexes.finance)
+        t_finance += time.perf_counter() - t_start
+        
+        if result.idp.status == MatchStatus.MATCHED:
+            matched_counts["idp"] += 1
+        elif result.idp.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["idp"] += 1
+            
+        if result.cmdb.status == MatchStatus.MATCHED:
+            matched_counts["cmdb"] += 1
+        elif result.cmdb.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["cmdb"] += 1
+            
+        if result.cloud.status == MatchStatus.MATCHED:
+            matched_counts["cloud"] += 1
+        elif result.cloud.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["cloud"] += 1
+            
+        if result.finance.status == MatchStatus.MATCHED:
+            matched_counts["finance"] += 1
+        elif result.finance.status == MatchStatus.AMBIGUOUS:
+            ambiguous_counts["finance"] += 1
+        
+        if not entity.domain:
+            recovered_domain = _recover_domain_from_planes(result)
+            if recovered_domain:
+                entity.domain = recovered_domain
+                entity.entity_id = f"entity:{recovered_domain}"
+                entity.canonical_name = recovered_domain
+                logger.debug("correlate_entities.domain_recovered", extra={
+                    "original_name": entity.original_name,
+                    "recovered_domain": recovered_domain
+                })
+        
+        results.append(result)
+    
+    t_total = time.perf_counter() - t_total_start
+    
+    logger.info("correlate_entities.complete", extra={
+        "entity_count": len(entities), "result_count": len(results),
+        "matched_idp": matched_counts["idp"], "matched_cmdb": matched_counts["cmdb"],
+        "matched_cloud": matched_counts["cloud"], "matched_finance": matched_counts["finance"],
+        "ambiguous_idp": ambiguous_counts["idp"], "ambiguous_cmdb": ambiguous_counts["cmdb"],
+        "ambiguous_cloud": ambiguous_counts["cloud"], "ambiguous_finance": ambiguous_counts["finance"],
+        "timing_precompute_sec": round(t_precompute, 4),
+        "timing_idp_sec": round(t_idp, 4),
+        "timing_cmdb_sec": round(t_cmdb, 4),
+        "timing_cloud_sec": round(t_cloud, 4),
+        "timing_finance_sec": round(t_finance, 4),
+        "timing_total_sec": round(t_total, 4)
+    })
+    
+    return results

@@ -1,13 +1,63 @@
 """AOD Fresh - AutonomOS Discover Main Application"""
 
-from fastapi import FastAPI, Response
+import os
+import logging
+from fastapi import FastAPI, Response, Depends, HTTPException, Security
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from pathlib import Path
 
 from aod.api.routes import router
 from aod.db.database import get_db_direct
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# SECURITY: API Key Authentication
+# =============================================================================
+# When AOD_API_KEY is set, all /api/* endpoints require X-API-Key header.
+# When not set (development), authentication is bypassed.
+# =============================================================================
+
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+    """
+    Verify API key for protected endpoints.
+
+    Behavior:
+    - If AOD_API_KEY env var is NOT set: Allow all requests (dev mode)
+    - If AOD_API_KEY env var IS set: Require matching X-API-Key header
+    """
+    expected_key = os.environ.get("AOD_API_KEY")
+
+    if not expected_key:
+        # No key configured = dev mode, allow all
+        return True
+
+    if not api_key:
+        logger.warning("api.auth.missing_key", extra={"path": "api"})
+        raise HTTPException(
+            status_code=401,
+            detail="API key required. Provide X-API-Key header."
+        )
+
+    if api_key != expected_key:
+        logger.warning("api.auth.invalid_key", extra={"path": "api"})
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key."
+        )
+
+    return True
+
+
+# =============================================================================
+# APPLICATION SETUP
+# =============================================================================
 
 app = FastAPI(
     title="AOD Fresh",
@@ -15,15 +65,37 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# =============================================================================
+# SECURITY: CORS Configuration
+# =============================================================================
+# In production, restrict to known origins. In development, allow all.
+# =============================================================================
+
+AOD_ENVIRONMENT = os.environ.get("AOD_ENVIRONMENT", "development")
+
+if AOD_ENVIRONMENT == "production":
+    # Production: Restrict to configured origins
+    allowed_origins_str = os.environ.get("AOD_CORS_ORIGINS", "")
+    if allowed_origins_str:
+        allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+    else:
+        # Default to same-origin only (no CORS) if not configured
+        allowed_origins = []
+    logger.info("cors.production_mode", extra={"origins": allowed_origins})
+else:
+    # Development: Allow all origins
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(router)
+# Include API router with authentication dependency
+app.include_router(router, dependencies=[Depends(verify_api_key)])
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"

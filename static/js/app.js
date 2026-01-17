@@ -2276,6 +2276,7 @@
             } catch (e) {
                 select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
+                showToast('Waking up Farm...', 'info');
             }
         }
         

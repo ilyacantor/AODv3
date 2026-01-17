@@ -233,3 +233,14 @@ Farm provides snapshots containing discovery observations, IdP records, CMDB ent
 - **Palette:** Dark slate foundation with cyan and purple accents
 - **Font:** Quicksand
 - **Notifications:** Minimal, non-alarming feedback (cyan toast for loading states)
+
+---
+
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| `replit.md` | Project overview, architecture, current state |
+| `docs/OPERATING_GUIDE.md` | Day-to-day operation of AOD + Farm |
+| `docs/POLICY_SWITCHES.md` | Detailed policy configuration reference |
+| `docs/guided-validation-tour-script.md` | Demo tour script |

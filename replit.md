@@ -90,7 +90,11 @@ AOS Discover operates on core principles including no ground truth ingestion, no
 -   **Timeout & Retry**: FarmClient uses 25s timeout with automatic retry on transient errors (502/503/504, network errors, timeouts).
 -   **JSON-Only Responses**: Backend farm routes always return JSON (never HTML) with structured error payloads (`{ok: false, error: "FARM_WAKING_OR_DOWN"}`).
 -   **UI Feedback**: Shows "Waking up Farm..." during fetch, displays "Farm unavailable" on errors with robust JSON parsing (handles non-JSON responses gracefully).
--   **Environment Variables**: Uses `FARM_URL_PROD` as canonical source (in Secrets) with `FARM_URL` fallback for backward compatibility.
+-   **Environment Variables**: `FARM_URL_MODE` controls URL selection:
+    - `prod`: Use `FARM_URL_PROD` only (autonomos.farm)
+    - `dev`: Use `FARM_URL_DEV` only (Replit dev URL)
+    - `auto` (default): Prefers `FARM_URL_DEV` since PROD domain not yet deployed
+-   **IMPORTANT**: `autonomos.farm` currently returns 404 - Farm PROD deployment needed.
 
 **Snapshot Drift Detection (Jan 2026):**
 -   **Architecture**: Plane data (IdP/CMDB/Cloud/Finance) is built in-memory from `snapshot.planes` each run, NOT persisted in separate DB tables. Asset records persist with `lens_match_debug` containing matched record IDs.

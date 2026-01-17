@@ -17,10 +17,23 @@ def now_pst() -> datetime:
 def get_farm_url() -> str | None:
     """Get Farm URL from environment.
     
-    Uses FARM_URL_PROD as the canonical source.
+    FARM_URL_MODE controls which URL to use:
+    - "prod": Use FARM_URL_PROD only
+    - "dev": Use FARM_URL_DEV only  
+    - "auto" (default): Try FARM_URL_PROD, fall back to FARM_URL_DEV
+    
     Falls back to FARM_URL for backward compatibility.
     """
-    return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+    mode = os.environ.get("FARM_URL_MODE", "auto").lower()
+    
+    if mode == "prod":
+        return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+    elif mode == "dev":
+        return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL")
+    else:
+        # Auto mode - prefer DEV since PROD (autonomos.farm) isn't deployed yet
+        # TODO: Switch to PROD-first when autonomos.farm is properly deployed
+        return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
 
 
 def get_farm_client() -> FarmClient | None:

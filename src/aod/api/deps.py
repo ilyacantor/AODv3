@@ -15,8 +15,12 @@ def now_pst() -> datetime:
 
 
 def get_farm_url() -> str | None:
-    """Get Farm URL from environment"""
-    return os.environ.get("FARM_URL")
+    """Get Farm URL from environment.
+    
+    Uses FARM_URL_PROD as the canonical source.
+    Falls back to FARM_URL for backward compatibility.
+    """
+    return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
 
 
 def get_farm_client() -> FarmClient | None:

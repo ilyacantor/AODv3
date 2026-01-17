@@ -477,12 +477,13 @@ async def snapshot_drift_check(run_id: str):
             "detail": "Run has no snapshot_id in input_meta"
         }
     
-    farm_url = os.environ.get("FARM_URL")
+    from ..deps import get_farm_url as _get_farm_url
+    farm_url = _get_farm_url()
     if not farm_url:
         return {
             "run_id": run_id,
             "status": "NO_FARM_URL",
-            "detail": "FARM_URL not configured"
+            "detail": "FARM_URL_PROD not configured"
         }
     
     try:

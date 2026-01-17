@@ -2217,7 +2217,11 @@
             select.disabled = true;
             snapshotSelect.disabled = true;
             snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
-            msg.classList.add('hidden');
+            
+            // Show "Waking up Farm" status while loading
+            msg.className = 'info-message';
+            msg.textContent = 'Waking up Farm...';
+            msg.classList.remove('hidden');
             
             try {
                 // Fetch tenants and all snapshots to find the most recent
@@ -2226,11 +2230,14 @@
                     fetch('/api/farm/all-snapshots')
                 ]);
                 
-                if (!tenantsRes.ok) {
-                    const e = await tenantsRes.json();
-                    throw new Error(e.detail || 'Failed to load tenants');
-                }
+                // Check for Farm waking/down errors
                 const tenantsData = await tenantsRes.json();
+                if (tenantsData.ok === false || tenantsData.error === 'FARM_WAKING_OR_DOWN') {
+                    throw new Error('Farm unavailable');
+                }
+                if (!tenantsRes.ok && !tenantsData.tenants) {
+                    throw new Error(tenantsData.detail || 'Failed to load tenants');
+                }
                 const tenants = tenantsData.tenants || [];
                 
                 // Find tenant with most recent snapshot
@@ -2264,9 +2271,9 @@
                 msg.classList.remove('hidden');
             } catch (e) {
                 msg.className = 'error-message';
-                msg.textContent = e.message;
+                msg.textContent = e.message === 'Farm unavailable' ? 'Farm unavailable' : e.message;
                 msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Failed to load tenants</option>';
+                select.innerHTML = '<option value="">Farm unavailable</option>';
                 select.disabled = true;
             }
         }
@@ -2284,15 +2291,22 @@
             
             select.disabled = true;
             select.innerHTML = '<option value="">Loading snapshots...</option>';
+            msg.className = 'info-message';
+            msg.textContent = 'Waking up Farm...';
+            msg.classList.remove('hidden');
             
             try {
                 const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
                 const r = await fetch(url);
-                if (!r.ok) {
-                    const e = await r.json();
-                    throw new Error(e.detail || 'Failed to load snapshots');
-                }
                 const data = await r.json();
+                
+                // Check for Farm waking/down errors
+                if (data.ok === false || data.error === 'FARM_WAKING_OR_DOWN') {
+                    throw new Error('Farm unavailable');
+                }
+                if (!r.ok && !data.snapshots) {
+                    throw new Error(data.detail || 'Failed to load snapshots');
+                }
                 loadedSnapshots = data.snapshots || [];
                 
                 if (loadedSnapshots.length === 0) {
@@ -2320,9 +2334,9 @@
                 msg.classList.remove('hidden');
             } catch (e) {
                 msg.className = 'error-message';
-                msg.textContent = e.message;
+                msg.textContent = e.message === 'Farm unavailable' ? 'Farm unavailable' : e.message;
                 msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Failed to load snapshots</option>';
+                select.innerHTML = '<option value="">Farm unavailable</option>';
                 select.disabled = true;
             }
         }

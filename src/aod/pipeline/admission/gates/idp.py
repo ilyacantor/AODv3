@@ -6,6 +6,7 @@ from typing import Optional
 
 from ...correlate_entities import CorrelationResult, MatchStatus, HEURISTIC_MATCH_METHODS
 from ....models.input_contracts import IdPObject
+from ....core.policy.loader import get_current_config
 from ...vendor_inference import extract_registered_domain
 from ..constants import NON_CANONICAL_IDP_TOKENS
 from ..idp_helpers import _extract_idp_domain, _idp_domain_matches_entity
@@ -60,6 +61,11 @@ def check_idp_admission(
     - easyworks.ai entity + easyworks.ai IdP → admitted (exact match)
     """
     debug_match = os.environ.get("AOD_DEBUG_MATCH", "").lower() in ("1", "true", "yes")
+    
+    # Load policy configuration for IdP governance
+    config = get_current_config()
+    trust_heuristic = config.idp_governance.trust_heuristic_matches
+    heuristic_requires_sso = config.idp_governance.heuristic_requires_sso
 
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
@@ -68,20 +74,30 @@ def check_idp_admission(
     # Heuristic matches (fuzzy, vendor, contains) are enrichment-only.
     idp_match_method = correlation.idp.match_method
     is_authoritative = correlation.idp.is_authoritative
+    is_heuristic_match = idp_match_method and idp_match_method in HEURISTIC_MATCH_METHODS
 
-    # GOVERNANCE INVARIANT ASSERTION (Jan 2026 - Phase B)
-    # If match method is heuristic, IdP governance MUST NOT be granted.
-    # This is a defensive check - the gate below should already block heuristics.
-    if idp_match_method and idp_match_method in HEURISTIC_MATCH_METHODS:
-        if debug_match:
-            logging.warning(
-                f"[GOVERNANCE_GATE] IdP heuristic match blocked: domain={entity_registered_domain} "
-                f"method={idp_match_method} is_authoritative={is_authoritative}"
-            )
-        # INVARIANT: Heuristic matches NEVER assert HAS_IDP
-        return False, ""
+    # GOVERNANCE POLICY CHECK (Jan 2026 - Policy Variable)
+    # By default (strict mode), heuristic matches do NOT grant governance.
+    # If trust_heuristic_matches=True (loose mode), heuristic matches CAN grant governance.
+    if is_heuristic_match:
+        if not trust_heuristic:
+            # STRICT MODE: Heuristic matches NEVER assert HAS_IDP
+            if debug_match:
+                logging.warning(
+                    f"[GOVERNANCE_GATE] IdP heuristic match blocked (strict mode): domain={entity_registered_domain} "
+                    f"method={idp_match_method} is_authoritative={is_authoritative} trust_heuristic={trust_heuristic}"
+                )
+            return False, ""
+        else:
+            # LOOSE MODE: Heuristic matches CAN grant governance
+            if debug_match:
+                logging.info(
+                    f"[GOVERNANCE_GATE] IdP heuristic match ALLOWED (loose mode): domain={entity_registered_domain} "
+                    f"method={idp_match_method} trust_heuristic={trust_heuristic}"
+                )
+            # Continue to SSO check below - heuristic matches may still require SSO
 
-    if not is_authoritative:
+    if not is_authoritative and not (is_heuristic_match and trust_heuristic):
         if debug_match:
             logging.info(
                 f"[GOVERNANCE_GATE] IdP match NOT authoritative: domain={entity_registered_domain} "
@@ -91,8 +107,8 @@ def check_idp_admission(
 
     if debug_match:
         logging.info(
-            f"[GOVERNANCE_GATE] IdP authoritative match: domain={entity_registered_domain} "
-            f"method={idp_match_method} is_authoritative={is_authoritative}"
+            f"[GOVERNANCE_GATE] IdP match proceeding: domain={entity_registered_domain} "
+            f"method={idp_match_method} is_authoritative={is_authoritative} is_heuristic={is_heuristic_match}"
         )
 
     for record in correlation.idp.matched_records:
@@ -107,7 +123,7 @@ def check_idp_admission(
                     )
                 continue  # Skip this record, try next
 
-            # GOVERNANCE INVARIANT (Jan 2026 - Phase C)
+            # GOVERNANCE INVARIANT (Jan 2026 - Phase C, with Policy Variable)
             # SSO is the governance signal from IdP.
             # 
             # Farm's pattern (validated from expected data):
@@ -115,16 +131,32 @@ def check_idp_admission(
             # - Zombie-expected assets have IdP records with has_sso=True (89 records)
             # - SCIM alone (without SSO) does NOT grant governance
             #
-            # An IdP record provides governance ONLY if has_sso=True.
-            # SCIM is provisioning automation but not identity governance.
+            # Policy controls for heuristic matches:
+            # - If trust_heuristic_matches=True AND heuristic_requires_sso=False,
+            #   heuristic matches can grant governance even without SSO
+            # - Otherwise, SSO is required
             #
+            requires_sso = True  # Default: always require SSO
+            if is_heuristic_match and trust_heuristic and not heuristic_requires_sso:
+                # Loose mode with heuristic match AND SSO not required
+                requires_sso = False
+            
             if record.has_sso:
                 if debug_match:
                     logging.info(
                         f"[GOVERNANCE_GATE] IdP SSO governance granted: entity={entity_registered_domain} "
-                        f"idp_name={record.name}"
+                        f"idp_name={record.name} is_heuristic={is_heuristic_match}"
                     )
                 return True, "IdP match with SSO enabled"
+            
+            # No SSO - check if this match can still grant governance
+            if not requires_sso:
+                if debug_match:
+                    logging.info(
+                        f"[GOVERNANCE_GATE] IdP heuristic governance granted (no SSO required): entity={entity_registered_domain} "
+                        f"idp_name={record.name} is_heuristic={is_heuristic_match}"
+                    )
+                return True, "IdP heuristic match (SSO not required by policy)"
             
             # No SSO - this IdP record does not provide governance (SCIM alone is not enough)
             if debug_match:

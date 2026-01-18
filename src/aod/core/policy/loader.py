@@ -18,6 +18,7 @@ from .schema import (
     FinanceThresholdsConfig,
     AdmissionGatesConfig,
     ScopeTogglesConfig,
+    IdpGovernanceConfig,
     FuzzyMatchingConfig,
     VendorInferenceConfig,
     QueryLimitsConfig,
@@ -97,6 +98,12 @@ def _load_from_master(data: dict) -> PolicyConfig:
         treat_directory_as_idp=_extract_value(st_section, "treat_directory_as_idp", False),
         use_policy_engine=_extract_value(st_section, "use_policy_engine", True),
         late_binding_domain_merge=_extract_value(st_section, "late_binding_domain_merge", True),
+    )
+    
+    ig_section = data.get("idp_governance", {})
+    idp_governance = IdpGovernanceConfig(
+        trust_heuristic_matches=_extract_value(ig_section, "trust_heuristic_matches", False),
+        heuristic_requires_sso=_extract_value(ig_section, "heuristic_requires_sso", True),
     )
     
     fm_section = data.get("fuzzy_matching", {})
@@ -201,6 +208,7 @@ def _load_from_master(data: dict) -> PolicyConfig:
         finance_thresholds=finance_thresholds,
         admission_gates=admission_gates,
         scope_toggles=scope_toggles,
+        idp_governance=idp_governance,
         fuzzy_matching=fuzzy_matching,
         vendor_inference=vendor_inference,
         query_limits=query_limits,

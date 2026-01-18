@@ -152,6 +152,21 @@
       "ui_label": "Late Binding Domain Merge"
     }
   },
+  "idp_governance": {
+    "description": "IdP governance matching policy - controls how IdP matches assert governance",
+    "trust_heuristic_matches": {
+      "value": false,
+      "type": "boolean",
+      "description": "Whether heuristic IdP matches (fuzzy, name, vendor) can assert governance. FALSE (strict) = only domain-based matches grant governance, heuristic matches are enrichment-only (Farm's approach - never miss shadow IT). TRUE (loose) = heuristic matches CAN grant governance (reduces noise for customers with messy IdP data, but may hide shadow IT risks).",
+      "ui_label": "Trust Heuristic IdP Matches"
+    },
+    "heuristic_requires_sso": {
+      "value": true,
+      "type": "boolean",
+      "description": "When trust_heuristic_matches=true, require SSO for heuristic matches to grant governance. TRUE = heuristic matches only govern if IdP has SSO enabled. FALSE = heuristic matches govern even without SSO.",
+      "ui_label": "Heuristic Matches Require SSO"
+    }
+  },
   "fuzzy_matching": {
     "description": "Parameters for fuzzy name matching in correlation",
     "max_edit_distance": {

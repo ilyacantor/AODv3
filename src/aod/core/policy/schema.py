@@ -50,6 +50,27 @@ class ScopeTogglesConfig:
 
 
 @dataclass
+class IdpGovernanceConfig:
+    """
+    IdP governance matching policy - controls how IdP matches assert governance.
+    
+    This is a risk-appetite policy. Different customers have different tolerances:
+    
+    STRICT (trust_heuristic_matches=False, Farm's approach):
+    - Only domain-based matches grant governance
+    - Heuristic matches (fuzzy, name, vendor) are enrichment-only
+    - Never miss shadow IT, but may create more alerts
+    
+    LOOSE (trust_heuristic_matches=True):
+    - Heuristic matches CAN grant governance
+    - Reduces noise for customers with messy IdP data
+    - May hide shadow IT risks (false negatives)
+    """
+    trust_heuristic_matches: bool = False  # Default: strict (Farm's approach)
+    heuristic_requires_sso: bool = True    # When loose, still require SSO
+
+
+@dataclass
 class FuzzyMatchingConfig:
     """Parameters for fuzzy name matching in correlation."""
     max_edit_distance: int = 2
@@ -178,6 +199,7 @@ class PolicyConfig:
     finance_thresholds: FinanceThresholdsConfig = field(default_factory=FinanceThresholdsConfig)
     admission_gates: AdmissionGatesConfig = field(default_factory=AdmissionGatesConfig)
     scope_toggles: ScopeTogglesConfig = field(default_factory=ScopeTogglesConfig)
+    idp_governance: IdpGovernanceConfig = field(default_factory=IdpGovernanceConfig)
     fuzzy_matching: FuzzyMatchingConfig = field(default_factory=FuzzyMatchingConfig)
     vendor_inference: VendorInferenceConfig = field(default_factory=VendorInferenceConfig)
     query_limits: QueryLimitsConfig = field(default_factory=QueryLimitsConfig)
@@ -247,6 +269,10 @@ class PolicyConfig:
                 "treat_directory_as_idp": self.scope_toggles.treat_directory_as_idp,
                 "use_policy_engine": self.scope_toggles.use_policy_engine,
                 "late_binding_domain_merge": self.scope_toggles.late_binding_domain_merge,
+            },
+            "idp_governance": {
+                "trust_heuristic_matches": self.idp_governance.trust_heuristic_matches,
+                "heuristic_requires_sso": self.idp_governance.heuristic_requires_sso,
             },
             "fuzzy_matching": {
                 "max_edit_distance": self.fuzzy_matching.max_edit_distance,

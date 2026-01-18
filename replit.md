@@ -174,6 +174,21 @@ Remaining edge cases (~0.5-1% of total):
 - `outlook.com`: Vendor-governed under Microsoft hierarchy
 - `zoom-legacy.com`, `basecamp.com`: Legacy product alias handling
 
+### IdP Governance Policy (Jan 2026)
+
+The `idp_governance` policy section controls how IdP matches assert governance. This is a **risk-appetite policy** - different customers have different tolerances:
+
+| Policy | Description | Risk Trade-off |
+|--------|-------------|----------------|
+| **Strict** (default) | `trust_heuristic_matches=false` | Only domain-based matches grant governance. Heuristic matches (fuzzy, name, vendor) are enrichment-only. Never miss shadow IT, but may create more alerts. |
+| **Loose** | `trust_heuristic_matches=true` | Heuristic matches CAN grant governance. Reduces noise for customers with messy IdP data, but may hide shadow IT risks (false negatives). |
+
+**Example scenario:**
+- IdP has "Linkify" (no domain field)
+- Discovery observes `linkify.dev`
+- **Strict mode**: Shadow IT (IdP has no domain → cannot assert governance)
+- **Loose mode**: Governed (name match → governance granted)
+
 Note: After branch merges, Farm snapshots may regenerate, causing temporary misalignment with historical reports. Re-run from Farm to get fresh reconciliation.
 
 ### Debugging Discrepancies

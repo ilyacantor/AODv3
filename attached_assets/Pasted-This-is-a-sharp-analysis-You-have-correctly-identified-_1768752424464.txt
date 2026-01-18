@@ -1,0 +1,100 @@
+This is a sharp analysis. You have correctly identified the root cause of the discrepancies by triangulating the `Reason Codes` in the report with the logic likely present in the correlation engine.
+
+Based on the `HelixSystems-K5PD` report and your hypothesis, here is the detailed breakdown of the bugs and the recommended remediation.
+
+### 1. The "Over-Correlation" Bug (Missed Shadows)
+
+**Status:** **Confirmed Critical**
+**Impact:** 29 Assets (High Risk)
+
+The most significant finding in this report is the **29 Missed Shadows** (e.g., `linkify.dev`, `docusign.com`). These are assets that **Farm** identifies as high-risk Shadow IT (`NO_IDP`), but **AOD** incorrectly classifies as "Anchored" or Governed (`HAS_IDP`).
+
+#### Evidence of "Name-Based" Matching
+
+Comparing the reason codes confirms your hypothesis that AOD is using a loose "Name Match" fallback that Farm does not use.
+
+| Asset | Farm State (Truth) | AOD State (Bug) | Token Analysis |
+| --- | --- | --- | --- |
+| **linkify.dev** | `NO_IDP` | `HAS_IDP`, `ANCHORED` | "linkify" (7 chars) likely matches IdP Name "Linkify" |
+| **docusign.com** | `NO_IDP` | `HAS_IDP`, `ANCHORED` | "docusign" (8 chars) likely matches IdP Name "DocuSign" |
+| **datapoint.ai** | `NO_IDP` | `HAS_IDP`, `ANCHORED` | "datapoint" (9 chars) likely matches IdP Name "Datapoint" |
+
+**The Logic Flaw:**
+As you noted, the code likely contains a fallback similar to this:
+
+```python
+# DANGEROUS FALLBACK
+if len(entity_base) >= 5 and idp_name_normalized == entity_base:
+    return True
+
+```
+
+In a clean dataset, this might be acceptable. However, in a security context, matching `linkify.dev` (a SaaS app) to an internal IdP entry just named "Linkify" (without a matching domain) creates a **False Negative for Shadow IT**. It assumes governance where none is proven to exist.
+
+### 2. The Key Normalization Bug
+
+**Status:** **Confirmed**
+**Impact:** 1 Asset (`outlook.com`)
+
+The report flags `outlook.com` as a "Key Normalization Mismatch".
+
+* **Farm:** Treats `outlook.com` as a distinct asset.
+* **AOD:** Likely aggressively normalizes `outlook.com` into a parent entity (e.g., `microsoft.com` or `office.com`) or discards it as a sub-component.
+* **Result:** The asset is "Missed" in the reconciliation because the keys do not match 1:1, even if the evidence was processed.
+
+### 3. The "Under-Correlation" Bug (False Positive Shadows)
+
+**Status:** **Secondary Issue**
+**Impact:** 13 Assets (False Alarms)
+
+While your prompt focused on the *Missed* Shadows, the report also shows **13 False Positive Shadows** (e.g., `maxtech.app`, `gosuite.net`).
+
+* **Farm:** `HAS_IDP` (Governed)
+* **AOD:** `NO_IDP` (Shadow)
+
+**Insight:** This suggests the correlation logic is inconsistent in *both* directions.
+
+* **Direction A (The 29 Missed Shadows):** AOD is *too loose* (matching on names where it shouldn't).
+* **Direction B (The 13 FP Shadows):** AOD is *too strict* or missing data (failing to match domains that Farm successfully matched).
+
+### Strategic Recommendation
+
+The following steps are recommended to bring AOD's logic into alignment with Farm's strict policy.
+
+#### Step 1: Disable Name-Based IdP Fallback
+
+You must remove or flag-gate the name-based matching logic. IdP correlation for governance (which suppresses Shadow IT alerts) should rely **exclusively on strict domain matching** or explicit configuration (e.g., `entity_id` mapping).
+
+**Fix (Conceptual Python):**
+
+```python
+# Remove this block entirely for Shadow IT classification
+# if len(entity_base) >= 5 and idp_name_normalized == entity_base:
+#    return True
+
+# STRICT LOGIC ONLY
+if idp_domain and idp_domain == entity_domain:
+    return True
+
+```
+
+#### Step 2: Investigate `outlook.com` Canonicalization
+
+Check the domain normalization library. `outlook.com` is a high-volume public email domain and should likely remain distinct rather than being rolled up into Microsoft, as it often represents personal usage (Shadow IT) rather than corporate infrastructure.
+
+#### Step 3: Review Admission Logic for `zoom.us`
+
+The "Admission Analysis" shows `zoom.us` and `atlassian.net` were rejected by AOD but admitted by Farm.
+
+* **Hypothesis:** AOD might be treating `zoom.us` as an alias of `zoom.com` and rejecting the alias, whereas Farm keeps both or prefers `.us`. Ensure the "Canonical Leader" logic matches Farm's dictionary.
+
+### Summary of Next Steps
+
+| Bug Type | Count | Fix Priority | Action |
+| --- | --- | --- | --- |
+| **IdP Correlation (Over-match)** | 29 | **P0 (Critical)** | **Disable name-based fallback.** This is hiding Shadow IT risks. |
+| **IdP Correlation (Under-match)** | 13 | P1 | Investigate why Farm matched `maxtech.app` to an IdP but AOD didn't. |
+| **Key Normalization** | 1 | P2 | Whitelist `outlook.com` as a unique root domain. |
+| **Admission Rejections** | 4 | P2 | Sync admission/rejection lists for `zoom.us` and `atlassian.net`. |
+
+Would you like me to draft the specific Jira ticket description for the "Disable Name-Based Fallback" fix?

@@ -154,60 +154,43 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Domain-aligned IdP governance matching.
+    Strict domain-aligned IdP governance matching.
+
+    IdP governance requires an EXPLICIT DOMAIN on the IdP record. Name-only IdP
+    entries cannot grant governance (enrichment only, not security assertion).
 
     Domains match if:
     1. Exact domain match (e.g., salesforce.com == salesforce.com)
     2. Same vendor via DOMAIN_TO_VENDOR (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
-    3. IdP has no domain but IdP name EXACTLY matches entity's base domain token (>= 5 chars)
-
-    Cross-TLD matching ONLY works with explicit vendor mappings. Pure base-token
-    matching (smartsuite.cloud vs smartsuite.org) does NOT match unless both
-    domains are mapped to the same vendor in DOMAIN_TO_VENDOR.
 
     Examples:
     - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
     - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH IF both map to same vendor
     - smartsuite.cloud (entity) vs smartsuite.org (IdP) → NO MATCH (no vendor mapping)
     - fastbox.cloud (entity) vs fastbox.ai (IdP) → NO MATCH (different TLD, no vendor link)
-    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (name matches base token >= 5 chars)
+    - linkify.dev (entity) vs IdP "Linkify" with no domain → NO MATCH (IdP has no domain)
 
     Matching rules:
-    1. IdP has no domain → check if IdP name matches entity's base token
+    1. IdP has no domain → False (cannot grant governance)
     2. Entity has no domain → True (allow match)
     3. Exact registered domain match → True
     4. Same vendor (via DOMAIN_TO_VENDOR) → True
     5. Different domains, no vendor link → False
     """
-    # If IdP has no domain, check if the IdP name matches entity's base domain token
-    # This handles cases where the IdP record has no domain field but the name aligns
+    # Jan 2026 FIX: DISABLED name-based IdP fallback.
     #
-    # Jan 2026: Option B - Stricter matching when IdP has no domain:
-    # - IdP name must EXACTLY match entity base token (not just startswith)
-    # - Entity base token must be at least 5 characters (avoid short token collisions)
-    # This reduces false positives where unrelated apps with short names match
+    # Previously, if IdP had no domain but its name matched entity's base token
+    # (e.g., IdP "Linkify" → entity "linkify.dev"), we granted governance.
+    #
+    # This caused 29 MISSED SHADOWS in HelixSystems reconciliation:
+    # - Farm: NO_IDP (Shadow IT risk)
+    # - AOD: HAS_IDP (incorrectly governed via name match)
+    #
+    # Policy alignment: IdP governance requires EXPLICIT DOMAIN on the IdP record.
+    # Name-only IdP entries are for enrichment/visibility, not governance assertion.
+    #
+    # If IdP has no domain, it cannot grant governance - return False
     if not idp_registered_domain:
-        if idp_name and entity_registered_domain:
-            # Extract base token from entity domain (e.g., "coreio.ai" → "coreio")
-            entity_base = entity_registered_domain.split('.')[0].lower()
-
-            # Apply the same suffix check as cross-TLD matching
-            # IdP names with suffixes like "(Legacy)" or "-prod" indicate non-canonical
-            # applications, so they should NOT provide governance or activity inheritance
-            normalized_idp_name = idp_name.lower()
-            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
-                           ' legacy', ' deprecated', ' production', '-production']:
-                if normalized_idp_name.endswith(suffix):
-                    return False
-            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
-                return False
-
-            # Option B: Check if IdP name EXACTLY equals entity base token
-            # AND require entity_base to be at least 5 characters to avoid false matches
-            # (e.g., "db" or "api" would be too short and likely match unrelated apps)
-            idp_name_normalized = normalized_idp_name.replace('-', '').replace('_', '').replace(' ', '')
-            if len(entity_base) >= 5 and idp_name_normalized == entity_base:
-                return True
         return False
 
     # If entity has no domain, allow the match

@@ -244,3 +244,4 @@ Farm provides snapshots containing discovery observations, IdP records, CMDB ent
 | `docs/OPERATING_GUIDE.md` | Day-to-day operation of AOD + Farm |
 | `docs/POLICY_SWITCHES.md` | Detailed policy configuration reference |
 | `docs/guided-validation-tour-script.md` | Demo tour script |
+| `docs/AOD_PRODUCT_SPEC.md` | Sales/prospect techno-functional spec |

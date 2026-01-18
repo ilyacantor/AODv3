@@ -154,22 +154,23 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Multi-domain vendor governance alignment with name-based fallback.
+    Domain-aligned IdP governance matching.
 
     Domains match if:
     1. Exact domain match (e.g., salesforce.com == salesforce.com)
-    2. Same vendor (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
-    3. IdP has no domain but IdP name matches entity's base domain token
+    2. Same vendor via DOMAIN_TO_VENDOR (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
+    3. IdP has no domain but IdP name EXACTLY matches entity's base domain token (>= 5 chars)
 
-    This enables cross-domain IdP governance for multi-TLD vendors while preserving
-    the strict matching for unrelated domains with the same base name.
+    Cross-TLD matching ONLY works with explicit vendor mappings. Pure base-token
+    matching (smartsuite.cloud vs smartsuite.org) does NOT match unless both
+    domains are mapped to the same vendor in DOMAIN_TO_VENDOR.
 
     Examples:
-    - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH (same vendor "TeamSuite")
-    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (name matches base token)
-    - dataflow.cloud (entity) vs dataflow.net (IdP) → NO MATCH (no vendor mapping)
     - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
+    - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH IF both map to same vendor
+    - smartsuite.cloud (entity) vs smartsuite.org (IdP) → NO MATCH (no vendor mapping)
     - fastbox.cloud (entity) vs fastbox.ai (IdP) → NO MATCH (different TLD, no vendor link)
+    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (name matches base token >= 5 chars)
 
     Matching rules:
     1. IdP has no domain → check if IdP name matches entity's base token
@@ -229,42 +230,22 @@ def _idp_domain_matches_entity(
         if idp_vendor_result.value.lower() == entity_vendor_result.value.lower():
             return True
 
-    # Same base token with different TLD counts as a match, BUT
-    # Farm requires the IdP name to be a CLEAN match (no suffixes like "(Legacy)" or "-prod")
+    # Jan 2026 FIX: Cross-TLD base-token matching was too permissive.
+    # Farm does NOT match cross-TLD without an explicit vendor mapping.
+    # 
+    # Previous (buggy) behavior:
+    # - smartsuite.cloud (entity) vs smartsuite.org (IdP) → MATCH (base tokens equal)
     #
-    # Farm's idp_present_direct=True for cases like:
-    # - cloudsync.io (entity) vs cloudsync.org (IdP) + name "cloudsync" → MATCH
-    # - datacloud.co (entity) vs datacloud.cloud (IdP) + name "datacloud" → MATCH
+    # Correct (Farm-aligned) behavior:
+    # - smartsuite.cloud (entity) vs smartsuite.org (IdP) → NO MATCH (no vendor link)
+    # - Only match cross-TLD if DOMAIN_TO_VENDOR maps both to same vendor
     #
-    # Farm's idp_present_direct=False for cases like:
-    # - fastbox.cloud (entity) vs fastbox.ai (IdP) + name "Fastbox (Legacy)" → NO MATCH
-    # - flowbase.dev (entity) vs flowbase.app (IdP) + name "Flowbase-prod" → NO MATCH
+    # The vendor mapping (lines 220-230 above) already handles legitimate cross-TLD
+    # matching for known vendors. Pure base-token matching was causing 23 false
+    # positives where AOD said HAS_IDP but Farm expected NO_IDP.
     #
-    # The difference: "(Legacy)" and "-prod" suffixes indicate the IdP is not the
-    # canonical/current application for that brand, so cross-TLD governance doesn't apply.
+    # REMOVED: Cross-TLD base-token matching without vendor link.
+    # This aligns with the docstring: "fastbox.cloud vs fastbox.ai → NO MATCH (no vendor link)"
 
-    idp_base = idp_registered_domain.split('.')[0].lower()
-    entity_base = entity_registered_domain.split('.')[0].lower()
-
-    if idp_base == entity_base:
-        # For cross-TLD match, also require IdP name to be a clean match
-        # Strip suffixes/modifiers and check if it matches entity base
-        if idp_name:
-            # Normalize IdP name: remove common suffixes, convert to lowercase
-            normalized_idp_name = idp_name.lower()
-            # Remove common suffixes that indicate non-canonical IdP
-            for suffix in [' (legacy)', ' (deprecated)', '-legacy', '-prod', '-dev', '-staging',
-                           ' legacy', ' deprecated', ' production', '-production']:
-                if normalized_idp_name.endswith(suffix):
-                    # IdP has a suffix indicating it's not canonical - reject cross-TLD match
-                    return False
-
-            # Also check if IdP name contains the suffix as a substring (e.g., "(Legacy)")
-            if '(legacy)' in normalized_idp_name or '(deprecated)' in normalized_idp_name:
-                return False
-
-        # IdP name is clean, allow cross-TLD match
-        return True
-
-    # Different domains with no vendor or base-token link
+    # Different domains with no vendor link - no match
     return False

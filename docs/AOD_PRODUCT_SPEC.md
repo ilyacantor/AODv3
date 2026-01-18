@@ -230,6 +230,22 @@ Typical PoV timeline:
 
 ---
 
+## Roadmap
+
+| Capability | Status | Description |
+|------------|--------|-------------|
+| **Snapshot-Based Discovery** | Available | Process point-in-time data exports from enterprise sources |
+| **Multi-Source Correlation** | Available | Correlate signals across IdP, CMDB, Finance, Network |
+| **Governance Classification** | Available | Automatic Shadow/Zombie/Governed classification |
+| **Triage Workflow** | Available | Prioritized findings with acknowledge/reject actions |
+| **Continuous Monitoring** | Roadmap | Real-time ingestion with streaming data sources |
+| **Change Detection** | Roadmap | Track assets added/removed over time, alert on drift |
+| **Scheduled Sync** | Roadmap | Automated periodic refresh from connected sources |
+| **Triage State Persistence** | Roadmap | Maintain triage decisions across discovery runs |
+| **Historical Trending** | Roadmap | Track Shadow IT and Zombie counts over time |
+
+---
+
 ## Pricing
 
 Contact sales for pricing based on:

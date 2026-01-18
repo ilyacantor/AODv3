@@ -232,6 +232,8 @@ Typical PoV timeline:
 
 ## Roadmap
 
+### Functional Capabilities
+
 | Capability | Status | Description |
 |------------|--------|-------------|
 | **Snapshot-Based Discovery** | Available | Process point-in-time data exports from enterprise sources |
@@ -243,6 +245,30 @@ Typical PoV timeline:
 | **Scheduled Sync** | Roadmap | Automated periodic refresh from connected sources |
 | **Triage State Persistence** | Roadmap | Maintain triage decisions across discovery runs |
 | **Historical Trending** | Roadmap | Track Shadow IT and Zombie counts over time |
+
+### Enterprise-Grade Hardening
+
+**Must-Have (Roadmap):**
+
+| Capability | Description |
+|------------|-------------|
+| Auth Layer | JWT/OAuth/API key authentication |
+| Tenant Enforcement | Middleware ensuring strict data isolation |
+| Rate Limiting | API throttling to prevent abuse |
+| Container Deployment | Docker images + Kubernetes manifests |
+| CI/CD Pipeline | Automated build, test, deploy |
+| Database Migrations | Alembic-managed schema versioning |
+| Secrets Vault | Integration with HashiCorp Vault or equivalent |
+
+**Should-Have (Roadmap):**
+
+| Capability | Description |
+|------------|-------------|
+| Security Headers | CSP, HSTS, X-Frame-Options, etc. |
+| CORS Lockdown | Restrict origins (currently permissive) |
+| Metrics/APM | Prometheus, Datadog, or OpenTelemetry |
+| Integration Tests | E2E test coverage for critical paths |
+| API Versioning | `/v1/`, `/v2/` strategy for backward compatibility |
 
 ---
 

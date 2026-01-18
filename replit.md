@@ -108,10 +108,13 @@ An asset is **governed** if it has ANY of:
 - **Control** (vendor-governed lifecycle)
 
 ### Alias Collapsing
-Multiple domains belonging to the same vendor collapse to a canonical domain:
-- `zoom.us` → `zoom.com`
-- `atlassian.net` → `atlassian.com`
+Technical infrastructure domains collapse to their canonical vendor domain:
 - `office365.com` → `microsoft.com`
+- `microsoftonline.com` → `microsoft.com`
+
+**Note:** Distinct products remain standalone (not collapsed):
+- `zoom.us`, `zoomapp.io`, `zoom-meetings.net` → standalone (Zoom variants)
+- `atlassian.net`, `trello.com`, `bitbucket.org` → standalone (Atlassian products)
 
 ### Authoritative vs Heuristic Matching
 - **Authoritative methods** (domain, uri, canonical_name) can assert governance
@@ -152,9 +155,12 @@ The following discrepancies between AOD and Farm are **documented policy decisio
 
 ## Reconciliation Status
 
-**Current Accuracy:** ~99.3-99.8% combined (Shadow: 99.7-100%, Zombie: 97.6-100%)
+**Current Accuracy:** ~99.3-99.5% combined (Shadow: 99.5-100%, Zombie: 97.5-99.2%)
 
 Recent changes:
+- **Jan 2026 (Phase D)**: Removed Zoom/Atlassian variants from alias collapsing. These domains are now STANDALONE per Farm contract:
+  - `zoom.us`, `zoomapp.io`, `zoom-meetings.net`, `zoom-video.com` → standalone
+  - `atlassian.net`, `trello.com`, `bitbucket.org` → standalone (distinct products)
 - **Jan 2026 (Phase C)**: SSO-based IdP governance invariant. IdP records now provide governance ONLY if `has_sso=True`:
   - `has_sso=True` → IdP governance granted (zombies if inactive)
   - `has_sso=False` (even with `has_scim=True`) → NO IdP governance (shadows if no other governance)
@@ -164,9 +170,9 @@ Recent changes:
   2. Same vendor via DOMAIN_TO_VENDOR mapping
   - Pure base-token matching (e.g., smartsuite.cloud vs smartsuite.org) no longer grants IdP governance
 
-Remaining edge cases (~1% of total):
+Remaining edge cases (~0.5-1% of total):
 - `outlook.com`: Vendor-governed under Microsoft hierarchy
-- `hipchat.com`, `basecamp.com`, `zoom-legacy.com`: Alias collapsing policy differences
+- `zoom-legacy.com`, `basecamp.com`: Legacy product alias handling
 
 Note: After branch merges, Farm snapshots may regenerate, causing temporary misalignment with historical reports. Re-run from Farm to get fresh reconciliation.
 

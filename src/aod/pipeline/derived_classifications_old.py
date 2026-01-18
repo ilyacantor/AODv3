@@ -1,0 +1,1060 @@
+"""
+Derived Classifications Module
+
+Computes Shadow, Zombie, and Parked classifications from evidence AFTER the main pipeline.
+These are computed on-read, not stored as flags.
+
+GOVERNANCE POLICY (Dec 2025):
+Governance is defined as: is_governed = has_idp OR has_cmdb
+  - IdP presence alone = governed
+  - CMDB presence alone = governed  
+  - Neither = ungoverned
+
+This OR policy applies consistently across all classification logic.
+There are NO instances where both IdP AND CMDB are required.
+
+Finance presence does NOT equal governance. An organization can pay for
+unsanctioned tools. There is no "Grey IT" - binary classification only.
+
+Activity Status (ActivityStatus enum):
+  - RECENT = has activity timestamp within activity_window_days (default 90)
+  - STALE = has activity timestamp outside activity_window_days
+  - NONE = no activity timestamps at all (indeterminate)
+
+Anchored Predicate (for zombie eligibility):
+  - anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+  - Used to determine zombie eligibility - only anchored assets can be zombies
+
+Shadow Asset = admitted asset with:
+  - ungoverned (NOT has_idp AND NOT has_cmdb)
+  - AND activity_status == RECENT
+  - Interpretation: Active ungoverned SaaS that needs to be sanctioned or banned
+  - NOTE: Finance does NOT exempt from shadow - pay doesn't equal governance
+
+Zombie Asset = admitted asset with:
+  - governed (has_idp OR has_cmdb)
+  - AND activity_status == STALE (NOT NONE - "no evidence" ≠ "stale evidence")
+  - AND has_ongoing_finance (recurring spend - contracts/subscriptions)
+  - Interpretation: "Paying for something you don't use" - requires ongoing spend to be a zombie
+
+Parked Asset = admitted asset with:
+  - ungoverned (NOT has_idp AND NOT has_cmdb)
+  - AND activity_status == STALE
+  - Interpretation: Non-actionable - can't deprovision what isn't managed
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from enum import Enum
+import re
+from ..models.output_contracts import Asset, LensStatus, ProvisioningStatus
+from .vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
+from ..utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
+from .cache import get_domain_rollups_cache
+from ..core.policy import get_current_config
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize a datetime to UTC-aware. Returns None if input is None."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+class ActivityStatus(str, Enum):
+    """
+    Activity status for an asset based on timestamp evidence.
+    
+    RECENT = has activity timestamp within activity_window_days (active)
+    STALE = has activity timestamp outside activity_window_days (inactive)
+    NONE = no activity timestamps at all (indeterminate - we don't know)
+    
+    Key distinction: NONE means "no evidence" which is different from STALE ("evidence of staleness").
+    This matters for zombie classification - we only classify as zombie when we KNOW it's stale.
+    """
+    RECENT = "recent"
+    STALE = "stale"
+    NONE = "none"
+
+
+def get_activity_status(
+    latest_activity_at: Optional[datetime],
+    activity_window_days: Optional[int] = None,
+    snapshot_as_of: Optional[datetime] = None
+) -> ActivityStatus:
+    """
+    Determine the activity status based on the latest activity timestamp.
+    
+    Args:
+        latest_activity_at: The latest activity timestamp (may be None)
+        activity_window_days: Number of days for the activity window (default from policy config)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
+    
+    Returns:
+        ActivityStatus.RECENT if activity is within window
+        ActivityStatus.STALE if activity is outside window
+        ActivityStatus.NONE if no activity timestamp exists
+    """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
+    if latest_activity_at is None:
+        return ActivityStatus.NONE
+    
+    latest = _ensure_utc_aware(latest_activity_at)
+    if latest is None:
+        return ActivityStatus.NONE
+    
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    if reference_time is None:
+        reference_time = _utc_now()
+    cutoff = reference_time - timedelta(days=activity_window_days)
+    
+    if latest >= cutoff:
+        return ActivityStatus.RECENT
+    else:
+        return ActivityStatus.STALE
+
+
+@dataclass
+class ClassificationResult:
+    """Result of a derived classification check"""
+    is_classified: bool
+    is_indeterminate: bool
+    classification_type: str
+    reason: str
+    evidence_summary: list[str]
+
+
+@dataclass
+class DistributionDiagnostic:
+    """Diagnostic information about asset distribution"""
+    total_assets: int = 0
+    with_idp_match: int = 0
+    with_cmdb_match: int = 0
+    with_activity_last_30_days: int = 0
+    with_any_activity_timestamp: int = 0
+    indeterminate_count: int = 0
+
+
+@dataclass
+class DomainRollup:
+    """Aggregated governance signals for a domain (OR logic across entities)"""
+    domain_key: str
+    has_idp: bool
+    has_cmdb: bool
+    has_finance: bool
+    has_cloud: bool
+    has_discovery: bool
+    latest_activity_at: Optional[datetime]
+    entity_names: list[str]
+    entity_count: int
+    is_domain_canonical: bool = True
+    alias_keys: list[str] = field(default_factory=list)
+    has_ongoing_finance: bool = False  # Recurring spend (contracts/subscriptions)
+    # Stage 3: Farm-style vendor governance propagation
+    has_vendor_governed: bool = False  # True if governance inherited via vendor domain set
+    
+    def get_activity_status(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> ActivityStatus:
+        """Get the activity status for this domain rollup."""
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        return get_activity_status(self.latest_activity_at, activity_window_days, snapshot_as_of)
+    
+    def is_anchored(self) -> bool:
+        """
+        Anchored predicate: asset is tracked/governed in at least one system.
+        
+        anchored = has_idp OR has_cmdb OR has_finance OR has_cloud
+        
+        This is broader than just governance (IdP/CMDB) - it includes any
+        evidence that the asset is being tracked in an authoritative system:
+        - IdP = identity/SSO integration exists
+        - CMDB = configuration management entry exists
+        - Finance = recurring financial spend tracked
+        - Cloud = cloud resource present (AWS/Azure/GCP etc)
+        
+        Used to determine zombie eligibility - only anchored assets can be zombies
+        because you can only deprovision what's tracked somewhere.
+        """
+        return self.has_idp or self.has_cmdb or self.has_finance or self.has_cloud
+    
+    def is_governed(self) -> bool:
+        """
+        Check if asset is governed (aligned with Policy Engine).
+        
+        Stage 3 Update: Governed = has_idp OR has_cmdb OR has_vendor_governed
+        
+        This is the single source of truth for governance status,
+        matching the PolicyEngine._classify() logic.
+        
+        vendor_governed is set via Farm-style vendor governance propagation:
+        - If any asset in a vendor's domain set has authoritative governance,
+          all assets in that vendor's domain set inherit governance.
+        """
+        return self.has_idp or self.has_cmdb or getattr(self, 'has_vendor_governed', False)
+    
+    def is_shadow(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
+        """
+        Domain-level shadow: ungoverned AND activity_status==RECENT.
+        
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Shadow = NOT is_governed AND activity_status==RECENT
+        Where is_governed = has_idp OR has_cmdb
+        
+        INVARIANT: Only domain-canonical assets count as shadow.
+        Internal identifiers (name-derived keys) are excluded from shadow counts.
+        
+        INVARIANT: activity_status must be RECENT. NONE (no timestamps) is indeterminate.
+        """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
+        if not self.is_domain_canonical:
+            return False
+        
+        if self.is_governed():
+            return False
+        
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
+        return activity_status == ActivityStatus.RECENT
+    
+    def has_contact_point(self) -> bool:
+        """
+        Check if asset has a contact point for deprovisioning.
+        
+        Contact points include any means to identify who to reach out to:
+        - CMDB: registered owner in asset catalog
+        - IdP: SSO record of who provisioned via corporate identity
+        - Finance: expense record of who is paying (traceable via finance system)
+        
+        Used to distinguish Zombie (orphaned) from Parked (has contact point).
+        An asset with ANY contact point prevents zombie classification.
+        """
+        return self.has_cmdb or self.has_idp or self.has_finance
+    
+    def is_zombie(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
+        """
+        Domain-level zombie: governed AND stale AND ongoing finance.
+        
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
+        Where is_governed = has_idp OR has_cmdb
+        
+        Interpretation: "Paying for something you don't use" - requires ongoing spend.
+        Without ongoing finance, stale governed assets are just inactive (not wasting money).
+        
+        INVARIANT: Only domain-canonical assets count as zombie.
+        Internal identifiers (name-derived keys) are excluded from zombie counts.
+        
+        INVARIANT: activity_status must be STALE (proven stale). NONE (no timestamps)
+        is indeterminate and does NOT count as zombie per design principle:
+        "no evidence" ≠ "stale evidence"
+        """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
+        if not self.is_domain_canonical:
+            return False
+        
+        if not self.is_governed():
+            return False
+        
+        if not self.has_ongoing_finance:
+            return False
+        
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
+        return activity_status == ActivityStatus.STALE
+    
+    def is_parked(self, activity_window_days: Optional[int] = None, snapshot_as_of: Optional[datetime] = None) -> bool:
+        """
+        Domain-level parked: ungoverned AND stale.
+        
+        ALIGNED WITH POLICY ENGINE (Dec 2025):
+        Parked = NOT is_governed AND activity_status==STALE
+        Where is_governed = has_idp OR has_cmdb
+        
+        Parked assets are stale but not in governance systems (not zombie candidates).
+        
+        INVARIANT: Only domain-canonical assets count as parked.
+        Internal identifiers (name-derived keys) are excluded.
+        
+        INVARIANT: activity_status must be STALE (proven stale). NONE (no timestamps)
+        is indeterminate and does NOT count as parked.
+        """
+        if activity_window_days is None:
+            activity_window_days = get_current_config().activity_windows.default_activity_window_days
+        
+        if not self.is_domain_canonical:
+            return False
+        
+        if self.is_governed():
+            return False
+        
+        activity_status = self.get_activity_status(activity_window_days, snapshot_as_of)
+        return activity_status == ActivityStatus.STALE
+    
+    def get_reason_codes(self) -> list[str]:
+        """Generate canonical reason codes for this domain"""
+        codes = []
+        codes.append("HAS_IDP" if self.has_idp else "NO_IDP")
+        codes.append("HAS_CMDB" if self.has_cmdb else "NO_CMDB")
+        codes.append("HAS_FINANCE" if self.has_finance else "NO_FINANCE")
+        codes.append("HAS_CLOUD" if self.has_cloud else "NO_CLOUD")
+        codes.append("HAS_DISCOVERY" if self.has_discovery else "NO_DISCOVERY")
+        
+        activity_status = self.get_activity_status()
+        if activity_status == ActivityStatus.RECENT:
+            codes.append("RECENT_ACTIVITY")
+        elif activity_status == ActivityStatus.STALE:
+            codes.append("STALE_ACTIVITY")
+        else:
+            codes.append("NO_ACTIVITY_TIMESTAMPS")
+        
+        if self.is_anchored():
+            codes.append("ANCHORED")
+        else:
+            codes.append("NOT_ANCHORED")
+        
+        if self.is_shadow():
+            codes.append("SHADOW_CLASSIFICATION")
+        elif self.is_zombie():
+            codes.append("ZOMBIE_CLASSIFICATION")
+        elif self.is_parked():
+            codes.append("PARKED_CLASSIFICATION")
+        
+        return codes
+
+
+@dataclass
+class DerivedClassificationSummary:
+    """Summary of derived classifications for a run"""
+    shadow_count: int
+    zombie_count: int
+    parked_count: int
+    indeterminate_count: int
+    shadow_assets: list[dict]
+    zombie_assets: list[dict]
+    parked_assets: list[dict]
+    distribution: DistributionDiagnostic = field(default_factory=DistributionDiagnostic)
+    domain_rollups: dict[str, DomainRollup] = field(default_factory=dict)
+
+
+def classify_shadow(asset: Asset, activity_window_days: Optional[int] = None) -> ClassificationResult:
+    """
+    Determine if an asset is a Shadow Asset.
+    
+    POLICY (Dec 2025): Uses Traffic Light provisioning_status as primary source of truth.
+    - QUARANTINE → Shadow Block (Tier 1 triage item)
+    - ACTIVE/REVIEW/BLOCKED/RETIRED → Not shadow
+    
+    Interpretation: "Shadow IT blocked from DCL, needs user approval to sanction."
+    
+    Args:
+        asset: The asset to classify
+        activity_window_days: Number of days to consider for recent activity (default 90)
+    """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
+    if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
+            evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
+    if asset.provisioning_status == ProvisioningStatus.QUARANTINE:
+        has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+        # Source of truth: asset.discovery_sources (set by admission from footprint)
+        has_discovery = bool(getattr(asset, "discovery_sources", None))
+        has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+        
+        presence_sources = []
+        if has_cloud:
+            presence_sources.append("cloud infrastructure")
+        if has_discovery:
+            presence_sources.append("discovery")
+        if has_finance:
+            presence_sources.append("finance")
+        
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason=f"Shadow Block: Asset quarantined - no IdP/CMDB governance, blocked from DCL",
+            evidence_summary=[
+                f"Status: QUARANTINE (Shadow IT)",
+                f"Presence: {', '.join(presence_sources) if presence_sources else 'discovery-only'}",
+                "Action required: SANCTION to approve, or BAN to reject"
+            ]
+        )
+    
+    if asset.provisioning_status != ProvisioningStatus.QUARANTINE:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason=f"Asset status is {asset.provisioning_status.value} - not shadow",
+            evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
+        )
+    
+    # Use lens_coverage for governance (reflects gate-validated admission, not raw match)
+    # This aligns with Farm's passes_gate logic
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    # Stage 3: Include vendor_governed in governance check
+    has_vendor_governed = asset.lens_coverage.vendor_governed if asset.lens_coverage else False
+    
+    has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+    # Source of truth: asset.discovery_sources (set by admission from footprint)
+    has_discovery = bool(getattr(asset, "discovery_sources", None))
+    
+    # GOVERNANCE: IdP OR CMDB OR vendor_governed (Stage 3)
+    if has_idp or has_cmdb or has_vendor_governed:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason="Asset has IdP or CMDB presence - governed, not shadow",
+            evidence_summary=[]
+        )
+    
+    presence_sources = []
+    if has_cloud:
+        presence_sources.append("cloud infrastructure")
+    if has_discovery:
+        presence_sources.append("discovery (corroborated usage)")
+    
+    if not presence_sources:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=True,
+            classification_type="shadow",
+            reason="No evidence of presence - cannot determine shadow status",
+            evidence_summary=[]
+        )
+    
+    latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
+    
+    if latest_activity is None:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=True,
+            classification_type="shadow",
+            reason="No activity timestamps available - cannot determine shadow status",
+            evidence_summary=[f"Presence: {', '.join(presence_sources)}", "Activity: No timestamps"]
+        )
+    
+    if latest_activity < cutoff_date:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="shadow",
+            reason=f"Activity too old (last seen: {latest_activity.isoformat()}) - outside {activity_window_days} day window",
+            evidence_summary=[f"Presence: {', '.join(presence_sources)}", f"Last activity: {latest_activity.isoformat()}"]
+        )
+    
+    gaps = []
+    gaps.append("No IdP match (not in SSO/SCIM/identity systems)")
+    gaps.append("No CMDB match (not in configuration management)")
+    
+    return ClassificationResult(
+        is_classified=True,
+        is_indeterminate=False,
+        classification_type="shadow",
+        reason=f"Shadow IT: Found via {', '.join(presence_sources)} but missing from official systems",
+        evidence_summary=[
+            f"Presence: {', '.join(presence_sources)}",
+            f"Gaps: {'; '.join(gaps)}",
+            f"Last activity: {latest_activity.isoformat()}"
+        ]
+    )
+
+
+def compute_zombie_status(asset: Asset, window_days: int = 90) -> tuple[bool, bool, str]:
+    """
+    Shared zombie status computation used by BOTH KPI counts and debug explainer.
+    
+    ALIGNED WITH POLICY ENGINE (Dec 2025, Stage 3 Jan 2026 update):
+    Zombie = is_governed AND activity_status==STALE AND has_ongoing_finance
+    
+    Where:
+    - is_governed = has_idp OR has_cmdb OR vendor_governed (uses lens_coverage for gate-validated admission)
+    - activity_status==STALE means we have timestamps outside the window
+    - has_ongoing_finance = recurring contracts/subscriptions (paying for it)
+    - NO_ACTIVITY_TIMESTAMPS does NOT count as zombie (indeterminate, not proven stale)
+    
+    Interpretation: "Paying for something you don't use" - requires ongoing spend.
+    Without ongoing finance, stale governed assets are just inactive (not wasting money).
+    
+    Args:
+        asset: The asset to check
+        window_days: Activity window in days (default 90)
+        
+    Returns:
+        Tuple of (is_zombie, is_indeterminate, reason)
+    """
+    # Use lens_coverage for governance (reflects gate-validated admission, not raw match)
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    # Stage 3: Include vendor_governed in governance check
+    has_vendor_governed = asset.lens_coverage.vendor_governed if asset.lens_coverage else False
+    
+    is_governed = has_idp or has_cmdb or has_vendor_governed
+    
+    if not is_governed:
+        return False, False, "Not governed (no IdP, CMDB, or vendor propagation) - cannot be zombie"
+    
+    # Check for ongoing finance (recurring spend)
+    has_ongoing_finance = any(
+        isinstance(ref, str) and (
+            ref.startswith("recurring_contract:") or 
+            ref.startswith("recurring_transaction:")
+        )
+        for ref in asset.evidence_refs
+    )
+    
+    if not has_ongoing_finance:
+        return False, False, "No ongoing finance - stale but not wasting money (not zombie)"
+    
+    governance_sources = []
+    if has_idp:
+        governance_sources.append("IdP")
+    if has_cmdb:
+        governance_sources.append("CMDB")
+    
+    latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    activity_status = get_activity_status(latest, window_days)
+    
+    if activity_status == ActivityStatus.NONE:
+        return False, True, f"Indeterminate: Governed in {', '.join(governance_sources)} but no activity timestamps (cannot prove stale)"
+    
+    if activity_status == ActivityStatus.STALE:
+        return True, False, f"Zombie: Governed in {', '.join(governance_sources)} with ongoing finance but stale activity ({latest.isoformat() if latest else 'unknown'})"
+    
+    return False, False, f"Not zombie: Recent activity at {latest.isoformat() if latest else 'unknown'}"
+
+
+def classify_zombie(asset: Asset, activity_window_days: Optional[int] = None) -> ClassificationResult:
+    """
+    Determine if an asset is a Zombie Asset.
+    
+    POLICY (Dec 2025): Uses Traffic Light provisioning_status as primary source of truth.
+    - REVIEW → Zombie Review (Tier 2 triage item)
+    - ACTIVE/QUARANTINE/BLOCKED/RETIRED → Not zombie
+    
+    Interpretation: "Zombie candidate needs cleanup - has governance but stale activity."
+    
+    Args:
+        asset: The asset to classify
+        activity_window_days: Number of days to consider for recent activity (default 90)
+    """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    
+    if asset.llm_metadata and asset.llm_metadata.exclusion_reason == "asset_type_infra_tech":
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason="Asset excluded: LLM classified as INFRA_TECH (infrastructure technology)",
+            evidence_summary=[f"LLM confidence: {asset.llm_metadata.llm_confidence}", f"Reason: {asset.llm_metadata.llm_reason}"]
+        )
+    
+    if asset.provisioning_status == ProvisioningStatus.REVIEW:
+        # Use lens_coverage for governance (reflects gate-validated admission)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        
+        official_sources = []
+        if has_idp:
+            official_sources.append("IdP")
+        if has_cmdb:
+            official_sources.append("CMDB")
+        
+        latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+        activity_info = f"Last activity: {latest_activity.isoformat()}" if latest_activity else "No activity timestamps"
+        
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Zombie Review: Asset flagged for cleanup - in {', '.join(official_sources) if official_sources else 'governance'} but stale activity",
+            evidence_summary=[
+                f"Status: REVIEW (Zombie candidate)",
+                f"Official presence: {', '.join(official_sources) if official_sources else 'CMDB'}",
+                activity_info,
+                "Action required: DEPROVISION to retire, or update activity evidence"
+            ]
+        )
+    
+    if asset.provisioning_status != ProvisioningStatus.REVIEW:
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Asset status is {asset.provisioning_status.value} - not zombie",
+            evidence_summary=[f"Provisioning status: {asset.provisioning_status.value}"]
+        )
+    
+    # Use lens_coverage for governance (reflects gate-validated admission)
+    has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+    has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+    
+    if not (has_idp or has_cmdb):
+        return ClassificationResult(
+            is_classified=False,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason="Asset not in CMDB or IdP - cannot be zombie",
+            evidence_summary=[]
+        )
+    
+    official_presence = []
+    if has_idp:
+        official_presence.append("IdP/identity systems")
+    if has_cmdb:
+        official_presence.append("CMDB")
+    
+    latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+    cutoff_date = _utc_now() - timedelta(days=activity_window_days)
+    
+    activity_sources = []
+    if asset.activity_evidence.discovery_observed_at:
+        activity_sources.append("discovery observations")
+    if asset.activity_evidence.finance_last_transaction_at:
+        activity_sources.append("finance activity")
+    if asset.activity_evidence.cloud_observed_at:
+        activity_sources.append("cloud activity")
+    if asset.activity_evidence.idp_last_login_at:
+        activity_sources.append("IdP login")
+    if asset.activity_evidence.endpoint_last_seen_at:
+        activity_sources.append("endpoint activity")
+    if asset.activity_evidence.network_last_seen_at:
+        activity_sources.append("network activity")
+    
+    if latest_activity is None:
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Zombie: Exists in {', '.join(official_presence)} but no activity timestamps to prove usage",
+            evidence_summary=[
+                f"Official presence: {', '.join(official_presence)}",
+                "No timestamped activity evidence"
+            ]
+        )
+    
+    if latest_activity < cutoff_date:
+        return ClassificationResult(
+            is_classified=True,
+            is_indeterminate=False,
+            classification_type="zombie",
+            reason=f"Zombie: Exists in {', '.join(official_presence)} with stale activity (last: {latest_activity.isoformat()}, outside {activity_window_days} day window)",
+            evidence_summary=[
+                f"Official presence: {', '.join(official_presence)}",
+                f"Activity sources: {', '.join(activity_sources)}",
+                f"Last activity: {latest_activity.isoformat()} (stale)"
+            ]
+        )
+    
+    return ClassificationResult(
+        is_classified=False,
+        is_indeterminate=False,
+        classification_type="zombie",
+        reason=f"Asset has recent activity: {', '.join(activity_sources)} (last: {latest_activity.isoformat()})",
+        evidence_summary=[f"Last activity: {latest_activity.isoformat()}"]
+    )
+
+
+def compute_derived_classifications(
+    assets: list[Asset],
+    activity_window_days: Optional[int] = None,
+    run_id: Optional[str] = None,
+    snapshot_as_of: Optional[datetime] = None
+) -> DerivedClassificationSummary:
+    """
+    Compute derived classifications for all assets.
+
+    Returns summary with counts and detailed lists.
+
+    IMPORTANT: Both counts AND drilldown lists use DOMAIN-AGGREGATED assets.
+    This ensures KPI count (16) matches drilldown count (16), not individual
+    asset count (49). Multiple assets sharing the same domain are merged.
+
+    Note: vendor_hypothesis is included in output dicts for UI DISPLAY ONLY.
+    It is NOT used in classification logic.
+    Inference decorates reality; it does not redefine it.
+
+    Args:
+        assets: List of assets to classify
+        activity_window_days: Number of days to consider for recent activity (default from policy config)
+        run_id: Optional run ID for caching (recommended for API routes)
+        snapshot_as_of: Reference time for recency calculation (default: wall-clock now).
+                       When processing historical snapshots, use the snapshot's generated_at
+                       to avoid falsely marking active assets as stale.
+    """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    reference_time = _ensure_utc_aware(snapshot_as_of) if snapshot_as_of else _utc_now()
+    if reference_time is None:
+        reference_time = _utc_now()
+    cutoff_date = reference_time - timedelta(days=activity_window_days)
+    distribution = DistributionDiagnostic(total_assets=len(assets))
+    
+    domain_to_assets: dict[str, list[Asset]] = {}
+    
+    for asset in assets:
+        if asset.lens_status.idp == LensStatus.MATCHED:
+            distribution.with_idp_match += 1
+        if asset.lens_status.cmdb == LensStatus.MATCHED:
+            distribution.with_cmdb_match += 1
+        if asset.activity_evidence.latest_activity_at is not None:
+            distribution.with_any_activity_timestamp += 1
+            latest = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+            if latest is not None and latest > cutoff_date:
+                distribution.with_activity_last_30_days += 1
+        
+        domain_key, _, _ = _resolve_domain_key(asset)
+        if domain_key not in domain_to_assets:
+            domain_to_assets[domain_key] = []
+        domain_to_assets[domain_key].append(asset)
+
+    domain_rollups = compute_domain_rollups(assets, activity_window_days, run_id=run_id)
+    
+    shadow_assets = []
+    zombie_assets = []
+    parked_assets = []
+    indeterminate_count = 0
+    
+    for domain_key in sorted(domain_rollups.keys()):
+        rollup = domain_rollups[domain_key]
+        domain_assets = domain_to_assets.get(domain_key, [])
+        if not domain_assets:
+            continue
+        
+        representative = domain_assets[0]
+        
+        vendor_hyp = None
+        for a in domain_assets:
+            if a.vendor_hypothesis:
+                vendor_hyp = {
+                    "value": a.vendor_hypothesis.value,
+                    "confidence": a.vendor_hypothesis.confidence,
+                    "basis": a.vendor_hypothesis.basis
+                }
+                break
+        
+        all_domains = set()
+        all_hostnames = set()
+        all_uris = set()
+        for a in domain_assets:
+            if a.identifiers:
+                all_domains.update(a.identifiers.domains)
+                all_hostnames.update(a.identifiers.hostnames)
+                all_uris.update(a.identifiers.uris)
+        
+        activity_status = rollup.get_activity_status(activity_window_days, snapshot_as_of)
+        
+        base_entry = {
+            "asset_id": str(representative.asset_id),
+            "name": domain_key if rollup.is_domain_canonical else representative.name,
+            "vendor": representative.vendor,
+            "vendor_hypothesis": vendor_hyp,
+            "asset_type": representative.asset_type.value,
+            "environment": representative.environment.value,
+            "identifiers": {
+                "domains": sorted(all_domains),
+                "hostnames": sorted(all_hostnames),
+                "uris": sorted(all_uris)
+            },
+            "lens_status": {
+                "idp": representative.lens_status.idp.value,
+                "cmdb": representative.lens_status.cmdb.value,
+                "cloud": representative.lens_status.cloud.value,
+                "finance": representative.lens_status.finance.value
+            },
+            "lens_coverage": {
+                "idp": representative.lens_coverage.idp,
+                "cmdb": representative.lens_coverage.cmdb,
+                "cloud": representative.lens_coverage.cloud,
+                "finance": representative.lens_coverage.finance,
+                "discovery": representative.lens_coverage.discovery
+            },
+            "activity_evidence": {
+                "latest_activity_at": rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else None,
+                "activity_status": activity_status.value
+            },
+            "entity_count": rollup.entity_count,
+            "aliases": rollup.entity_names if rollup.entity_count > 1 else [],
+            "aggregated_evidence": {
+                "has_idp": rollup.has_idp,
+                "has_cmdb": rollup.has_cmdb,
+                "has_finance": rollup.has_finance,
+                "has_cloud": rollup.has_cloud,
+                "has_discovery": rollup.has_discovery,
+                "is_anchored": rollup.is_anchored()
+            }
+        }
+        
+        if rollup.is_shadow(activity_window_days, snapshot_as_of):
+            shadow_assets.append({
+                **base_entry,
+                "classification": "shadow",
+                "reason": f"Shadow IT: {domain_key} found via evidence but missing from official systems",
+                "evidence_summary": [
+                    f"Presence: {', '.join(filter(None, ['finance' if rollup.has_finance else None, 'cloud' if rollup.has_cloud else None, 'discovery' if rollup.has_discovery else None]))}",
+                    "Gaps: No IdP match; No CMDB match",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}"
+                ]
+            })
+        elif rollup.is_zombie(activity_window_days, snapshot_as_of):
+            anchored_sources = filter(None, [
+                'IdP' if rollup.has_idp else None, 
+                'CMDB' if rollup.has_cmdb else None,
+                'Finance' if rollup.has_finance else None,
+                'Cloud' if rollup.has_cloud else None
+            ])
+            zombie_assets.append({
+                **base_entry,
+                "classification": "zombie",
+                "reason": f"Zombie: {domain_key} anchored in systems but has stale activity",
+                "evidence_summary": [
+                    f"Anchored in: {', '.join(anchored_sources)}",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}"
+                ]
+            })
+        elif rollup.is_parked(activity_window_days, snapshot_as_of):
+            parked_assets.append({
+                **base_entry,
+                "classification": "parked",
+                "reason": f"Parked: {domain_key} not anchored in any system and has stale activity - non-actionable",
+                "evidence_summary": [
+                    "Not anchored: No IdP, CMDB, Finance, or Cloud presence",
+                    f"Last activity: {rollup.latest_activity_at.isoformat() if rollup.latest_activity_at else 'unknown'}",
+                    f"Activity status: {activity_status.value}",
+                    "Non-actionable: Cannot deprovision what isn't managed"
+                ]
+            })
+        elif not rollup.is_domain_canonical:
+            indeterminate_count += 1
+    
+    distribution.indeterminate_count = indeterminate_count
+    
+    return DerivedClassificationSummary(
+        shadow_count=len(shadow_assets),
+        zombie_count=len(zombie_assets),
+        parked_count=len(parked_assets),
+        indeterminate_count=indeterminate_count,
+        shadow_assets=shadow_assets,
+        zombie_assets=zombie_assets,
+        parked_assets=parked_assets,
+        distribution=distribution,
+        domain_rollups=domain_rollups
+    )
+
+
+# Domains that are ALIASES and should collapse to the vendor canonical domain.
+# Only domains in this set will be normalized. Other domains in DOMAIN_TO_VENDOR
+# that are legitimate primary SaaS keys (atlassian.net, notion.so) are preserved.
+# Phase 1 Consolidation (Jan 2026): Import from canonical_key module (single source of truth)
+from .canonical_key import ALIAS_DOMAINS_TO_COLLAPSE
+
+
+def _normalize_to_canonical_vendor_domain(registered_domain: str) -> str | None:
+    """
+    Normalize a registered domain to its canonical vendor domain (only for known aliases).
+
+    Phase 1 Consolidation (Jan 2026): Now delegates to canonical_key.normalize_to_canonical_vendor_domain()
+    as single source of truth. This wrapper kept for backward compatibility.
+
+    Examples:
+        microsoftonline.com -> microsoft.com (known alias)
+        office365.com -> microsoft.com (known alias)
+        googleapis.com -> google.com (known alias)
+        atlassian.net -> None (legitimate primary domain, not an alias)
+    """
+    from .canonical_key import normalize_to_canonical_vendor_domain
+    return normalize_to_canonical_vendor_domain(registered_domain)
+
+
+def _resolve_domain_key(asset: Asset) -> tuple[str, bool, list[str]]:
+    """
+    Resolve the canonical domain key for an asset.
+
+    Phase 1 Consolidation (Jan 2026): Now uses canonical_key.compute_canonical_key()
+    as single source of truth for domain normalization.
+
+    Returns:
+        Tuple of (domain_key, is_canonical, alias_keys) where:
+        - domain_key: The canonical vendor domain (e.g., microsoft.com for microsoftonline.com)
+        - is_canonical: True if key is a registered domain, False if name-derived
+        - alias_keys: List of ALL domain variants from identifiers.domains
+
+    INVARIANT: Primary key is determined from domain[0] only - never changes based on later domains.
+    INVARIANT: All domain variants (raw, registered, canonical) are preserved in alias_keys.
+    """
+    from .canonical_key import compute_canonical_key
+
+    domains = asset.identifiers.domains if asset.identifiers else []
+    vendor = asset.vendor if asset.vendor else None
+    name = asset.name if asset.name else ""
+
+    try:
+        result = compute_canonical_key(domains=domains, vendor=vendor, name=name)
+        return (result.primary_key, result.is_canonical, result.all_variants)
+    except ValueError as e:
+        # Fallback: sanitized name (should rarely happen)
+        import re
+        sanitized = re.sub(r'[^a-z0-9]', '', name.lower())
+        return (sanitized, False, [])
+
+
+def _get_parent_domain(domain: str) -> Optional[str]:
+    """
+    Extract parent domain from a subdomain.
+    e.g., mail.google.com -> google.com
+    Returns None if already a root domain or invalid.
+    """
+    from .domain_cache import extract_domain
+    extracted = extract_domain(domain)
+    if not extracted.suffix:
+        return None
+    registered_domain = f"{extracted.domain}.{extracted.suffix}"
+    if domain.lower() == registered_domain.lower():
+        return None
+    return registered_domain
+
+
+def compute_domain_rollups(
+    assets: list[Asset],
+    activity_window_days: Optional[int] = None,
+    run_id: Optional[str] = None
+) -> dict[str, DomainRollup]:
+    """
+    Compute domain-level rollups using OR logic across entities.
+
+    For reconciliation, governance signals are aggregated at domain level:
+    - has_idp = OR(all entities with this domain)
+    - has_cmdb = OR(all entities with this domain)
+    - etc.
+
+    IMPORTANT: HAS_* means PRESENCE (evidence exists), not admission gate passed.
+    - has_finance = True if finance correlation found evidence (MATCHED/AMBIGUOUS)
+    - has_discovery = True if discovery observations exist (even if stale)
+
+    This ensures that if ANY entity under a domain has evidence,
+    the domain is considered to have that evidence for reconciliation purposes.
+
+    ACTIVITY ROLLUP (Zombie Cure): Activity from subdomains is propagated to parent domains.
+    e.g., activity on mail.google.com counts as activity for google.com
+
+    INVARIANT: Domain key resolution matches aod_agent_reconcile.py to ensure
+    UI counts match reconciliation counts (eliminating IRL breach).
+
+    Args:
+        assets: List of assets to aggregate
+        activity_window_days: Activity window for zombie classification (default from policy config)
+        run_id: Optional run ID for caching (recommended for API routes)
+
+    Returns:
+        Dictionary mapping domain keys to DomainRollup objects
+    """
+    if activity_window_days is None:
+        activity_window_days = get_current_config().activity_windows.default_activity_window_days
+    # Check cache if run_id is provided
+    cache = get_domain_rollups_cache()
+    if run_id:
+        cache_key = f"run:{run_id}:window:{activity_window_days}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    rollups: dict[str, DomainRollup] = {}
+    
+    for asset in assets:
+        domain_key, is_canonical, alias_keys = _resolve_domain_key(asset)
+        
+        # Use lens_coverage for governance (reflects gate-validated admission)
+        has_idp = asset.lens_coverage.idp if asset.lens_coverage else False
+        has_cmdb = asset.lens_coverage.cmdb if asset.lens_coverage else False
+        has_finance = asset.lens_coverage.finance if asset.lens_coverage else False
+        has_cloud = asset.lens_coverage.cloud if asset.lens_coverage else False
+        # Source of truth: asset.discovery_sources (set by admission from footprint)
+        has_discovery = bool(getattr(asset, "discovery_sources", None))
+        has_ongoing_finance = any(
+            isinstance(ref, str) and (
+                ref.startswith("recurring_contract:") or 
+                ref.startswith("recurring_transaction:")
+            )
+            for ref in asset.evidence_refs
+        )
+        latest_activity = _ensure_utc_aware(asset.activity_evidence.latest_activity_at)
+        
+        if domain_key in rollups:
+            r = rollups[domain_key]
+            r.has_idp = r.has_idp or has_idp
+            r.has_cmdb = r.has_cmdb or has_cmdb
+            r.has_finance = r.has_finance or has_finance
+            r.has_cloud = r.has_cloud or has_cloud
+            r.has_discovery = r.has_discovery or has_discovery
+            r.has_ongoing_finance = r.has_ongoing_finance or has_ongoing_finance
+            r.entity_names.append(asset.name)
+            r.entity_count += 1
+            for ak in alias_keys:
+                if ak not in r.alias_keys:
+                    r.alias_keys.append(ak)
+            if latest_activity is not None:
+                if r.latest_activity_at is None or latest_activity > r.latest_activity_at:
+                    r.latest_activity_at = latest_activity
+        else:
+            rollups[domain_key] = DomainRollup(
+                domain_key=domain_key,
+                has_idp=has_idp,
+                has_cmdb=has_cmdb,
+                has_finance=has_finance,
+                has_cloud=has_cloud,
+                has_discovery=has_discovery,
+                latest_activity_at=latest_activity,
+                entity_names=[asset.name],
+                entity_count=1,
+                is_domain_canonical=is_canonical,
+                alias_keys=list(alias_keys),
+                has_ongoing_finance=has_ongoing_finance
+            )
+    
+    # ACTIVITY ROLLUP (Zombie Cure): Propagate activity from subdomains to parent domains
+    # e.g., activity on mail.google.com should count as activity for google.com
+    for domain_key, rollup in list(rollups.items()):
+        parent_domain = _get_parent_domain(domain_key)
+        if parent_domain and parent_domain in rollups:
+            parent_rollup = rollups[parent_domain]
+            # Propagate activity: if subdomain has more recent activity, use it for parent
+            if rollup.latest_activity_at is not None:
+                subdomain_activity = _ensure_utc_aware(rollup.latest_activity_at)
+                parent_activity = _ensure_utc_aware(parent_rollup.latest_activity_at)
+                if parent_activity is None or (subdomain_activity and subdomain_activity > parent_activity):
+                    parent_rollup.latest_activity_at = subdomain_activity
+
+    # Store in cache if run_id is provided
+    if run_id:
+        cache_key = f"run:{run_id}:window:{activity_window_days}"
+        cache.set(cache_key, rollups)
+
+    return rollups

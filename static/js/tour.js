@@ -353,13 +353,14 @@ const TourManager = (function() {
             elementWidth = rect.width;
             elementHeight = rect.height;
             
-            element.style.width = elementWidth + 'px';
-            element.style.right = 'auto';
-            element.style.bottom = 'auto';
-            element.style.transform = 'none';
-            element.style.transition = 'none';
-            element.style.left = rect.left + 'px';
-            element.style.top = rect.top + 'px';
+            // Use setProperty with 'important' to override CSS !important rules
+            element.style.setProperty('width', elementWidth + 'px', 'important');
+            element.style.setProperty('right', 'auto', 'important');
+            element.style.setProperty('bottom', 'auto', 'important');
+            element.style.setProperty('transform', 'none', 'important');
+            element.style.setProperty('transition', 'none', 'important');
+            element.style.setProperty('left', rect.left + 'px', 'important');
+            element.style.setProperty('top', rect.top + 'px', 'important');
             
             initialX = rect.left;
             initialY = rect.top;
@@ -385,8 +386,9 @@ const TourManager = (function() {
             newX = Math.max(minX, Math.min(newX, maxX));
             newY = Math.max(minY, Math.min(newY, maxY));
             
-            element.style.left = newX + 'px';
-            element.style.top = newY + 'px';
+            // Use setProperty with 'important' to override CSS !important rules
+            element.style.setProperty('left', newX + 'px', 'important');
+            element.style.setProperty('top', newY + 'px', 'important');
         });
         
         document.addEventListener('mouseup', () => {

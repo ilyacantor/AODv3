@@ -7,18 +7,63 @@
         let decisionTraceFilter = 'all';
         let decisionMismatches = {};
         
-        function showToast(message, type = 'error') {
+        let farmWakingToast = null;
+        let farmWakeCheckInterval = null;
+        
+        function showToast(message, type = 'error', persistent = false) {
             const existing = document.getElementById('app-toast');
             if (existing) existing.remove();
             
             const toast = document.createElement('div');
             toast.id = 'app-toast';
             toast.className = `app-toast ${type}`;
-            toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+            
+            if (persistent) {
+                toast.innerHTML = `<span class="toast-spinner"></span><span>${message}</span>`;
+            } else {
+                toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+            }
             document.body.appendChild(toast);
             
             setTimeout(() => toast.classList.add('visible'), 10);
-            setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 4000);
+            
+            if (!persistent) {
+                setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 4000);
+            }
+            
+            return toast;
+        }
+        
+        function dismissToast() {
+            const toast = document.getElementById('app-toast');
+            if (toast) {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }
+        
+        function showFarmWakingToast() {
+            if (farmWakingToast) return; // Already showing
+            
+            farmWakingToast = showToast('Waking up Farm...', 'info', true);
+            
+            // Poll Farm until it responds
+            farmWakeCheckInterval = setInterval(async () => {
+                try {
+                    const r = await fetch('/api/farm/tenants');
+                    const data = await r.json();
+                    if (data.ok !== false && !data.error) {
+                        // Farm is awake!
+                        clearInterval(farmWakeCheckInterval);
+                        farmWakeCheckInterval = null;
+                        dismissToast();
+                        farmWakingToast = null;
+                        loadTenants(); // Reload tenants
+                    }
+                } catch (e) {
+                    // Still waking, keep polling
+                }
+            }, 3000);
         }
         
         function initMainTabs() {
@@ -2188,6 +2233,7 @@
         
         function showOutcome(status, message) {
             const panel = document.getElementById('outcomePanel');
+            if (!panel) return;
             const config = STATUS_CONFIG[status] || { type: 'error', label: status, explanation: message };
             panel.className = `outcome-panel ${config.type}`;
             panel.innerHTML = `<span class="outcome-badge ${config.type}">${config.label}</span><span class="outcome-explanation">${message || config.explanation}</span>`;
@@ -2195,7 +2241,8 @@
         }
         
         function hideOutcome() {
-            document.getElementById('outcomePanel').classList.add('hidden');
+            const panel = document.getElementById('outcomePanel');
+            if (panel) panel.classList.add('hidden');
         }
 
         async function checkHealth() {
@@ -2211,13 +2258,11 @@
         
         async function loadTenants() {
             const select = document.getElementById('tenantSelect');
-            const msg = document.getElementById('fetchMessage');
             const snapshotSelect = document.getElementById('snapshotSelect');
             
             select.disabled = true;
             snapshotSelect.disabled = true;
             snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
-            msg.classList.add('hidden');
             
             try {
                 // Fetch tenants and all snapshots to find the most recent
@@ -2226,11 +2271,27 @@
                     fetch('/api/farm/all-snapshots')
                 ]);
                 
-                if (!tenantsRes.ok) {
-                    const e = await tenantsRes.json();
-                    throw new Error(e.detail || 'Failed to load tenants');
+                // Parse JSON safely - Farm may return HTML/empty during cold start
+                let tenantsData;
+                try {
+                    tenantsData = await tenantsRes.json();
+                } catch (parseErr) {
+                    throw new Error('Farm unavailable');
                 }
-                const tenantsData = await tenantsRes.json();
+                
+                // Check for Farm waking/down errors - be very thorough
+                const errorStr = JSON.stringify(tenantsData).toUpperCase();
+                const isFarmWaking = !tenantsRes.ok ||
+                    tenantsData.ok === false || 
+                    tenantsData.error === 'FARM_WAKING_OR_DOWN' ||
+                    errorStr.includes('FARM_WAKING') ||
+                    errorStr.includes('UNAVAILABLE');
+                if (isFarmWaking && !tenantsData.tenants) {
+                    throw new Error('Farm unavailable');
+                }
+                if (!tenantsRes.ok && !tenantsData.tenants) {
+                    throw new Error('Farm unavailable');
+                }
                 const tenants = tenantsData.tenants || [];
                 
                 // Find tenant with most recent snapshot
@@ -2259,22 +2320,16 @@
                     select.disabled = false;
                     loadSnapshots();
                 }
-                msg.className = 'success-message';
-                msg.textContent = `Loaded ${tenants.length} tenant(s) from Farm`;
-                msg.classList.remove('hidden');
             } catch (e) {
-                msg.className = 'error-message';
-                msg.textContent = e.message;
-                msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Failed to load tenants</option>';
+                select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
+                showFarmWakingToast();
             }
         }
         
         async function loadSnapshots() {
             const tenantId = document.getElementById('tenantSelect').value;
             const select = document.getElementById('snapshotSelect');
-            const msg = document.getElementById('fetchMessage');
             
             if (!tenantId) {
                 select.innerHTML = '<option value="">Select a tenant first</option>';
@@ -2288,11 +2343,28 @@
             try {
                 const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
                 const r = await fetch(url);
-                if (!r.ok) {
-                    const e = await r.json();
-                    throw new Error(e.detail || 'Failed to load snapshots');
+                
+                // Parse JSON safely - Farm may return HTML/empty during cold start
+                let data;
+                try {
+                    data = await r.json();
+                } catch (parseErr) {
+                    throw new Error('Farm unavailable');
                 }
-                const data = await r.json();
+                
+                // Check for Farm waking/down errors - be very thorough
+                const errorStr = JSON.stringify(data).toUpperCase();
+                const isFarmWaking = !r.ok ||
+                    data.ok === false || 
+                    data.error === 'FARM_WAKING_OR_DOWN' ||
+                    errorStr.includes('FARM_WAKING') ||
+                    errorStr.includes('UNAVAILABLE');
+                if (isFarmWaking && !data.snapshots) {
+                    throw new Error('Farm unavailable');
+                }
+                if (!r.ok && !data.snapshots) {
+                    throw new Error('Farm unavailable');
+                }
                 loadedSnapshots = data.snapshots || [];
                 
                 if (loadedSnapshots.length === 0) {
@@ -2315,14 +2387,8 @@
                     select.disabled = false;
                     select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
                 }
-                msg.className = 'success-message';
-                msg.textContent = `Loaded ${loadedSnapshots.length} snapshot(s) for "${tenantId}"`;
-                msg.classList.remove('hidden');
             } catch (e) {
-                msg.className = 'error-message';
-                msg.textContent = e.message;
-                msg.classList.remove('hidden');
-                select.innerHTML = '<option value="">Failed to load snapshots</option>';
+                select.innerHTML = '<option value="">—</option>';
                 select.disabled = true;
             }
         }
@@ -2580,27 +2646,21 @@
             const snapshotSelect = document.getElementById('snapshotSelect').value;
             const snapshotManual = document.getElementById('snapshotIdManual').value.trim();
             const snapshotId = snapshotManual || snapshotSelect;
-            const msg = document.getElementById('fetchMessage');
             
             hideOutcome();
             
             if (!tenantId) { 
-                msg.className = 'error-message'; 
-                msg.textContent = 'Please select a Tenant'; 
-                msg.classList.remove('hidden'); 
+                showToast('Please select a Tenant', 'error');
                 return; 
             }
             if (!snapshotId) { 
-                msg.className = 'error-message'; 
-                msg.textContent = 'Please select a snapshot or enter a Snapshot ID manually'; 
-                msg.classList.remove('hidden'); 
+                showToast('Please select a snapshot', 'error');
                 return; 
             }
             
             const btn = document.getElementById('fetchFromFarm'); 
             btn.disabled = true; 
             btn.textContent = 'Fetching...';
-            msg.classList.add('hidden');
             
             try {
                 const r = await fetch('/api/runs/from-farm', { 
@@ -2758,15 +2818,9 @@
                         TourManager.start();
                     }
                 } else if (event.data.action === 'startSimulation') {
-                    // Navigate to Farm tab and start the simulation tour
-                    const farmTab = document.querySelector('.header-nav-tab[data-tab="farm"]');
-                    if (farmTab) {
-                        farmTab.click();
-                        setTimeout(() => {
-                            if (typeof TourManager !== 'undefined') {
-                                TourManager.startSimulation();
-                            }
-                        }, 300);
+                    // Start simulation tour - opens Farm in new window
+                    if (typeof TourManager !== 'undefined') {
+                        TourManager.startSimulation();
                     }
                 } else if (event.data.action === 'skipToSimulation') {
                     if (typeof TourManager !== 'undefined') {

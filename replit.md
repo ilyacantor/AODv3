@@ -1,120 +1,247 @@
-# AOS Discover - AutonomOS Discovery Module
+# AOD - AutonomOS Discovery Module
 
-## Overview
+## What is AOD?
 
-**Why You'll See "Farm"**
+AOD (Asset Ownership Discovery) is the **front-end entry point** to the AOS (AutonomOS) platform. It discovers all SaaS applications, cloud services, and software assets in use across an organization, preparing them for connection to the broader AOS data stack.
 
-Complex enterprise systems are easy to demo and hard to trust.
+**Production URL:** `discover.autonomos.tech`
 
-AOS Farm is our stress-test engine. It validates the platform against a theoretical space of ~300,000 state combinations by generating realistic enterprise chaos:
+### AOD's Role in AOS
 
-- **17,000 Asset Permutations**: From standard servers to "zombie" instances.
-- **37 Edge Case Categories**: Specifically targeting governance forks and data quality failures.
-- **800,000 Rule Evaluations**: Proving stability at scale.
+AOD sits at the beginning of the AOS data flow:
 
-## User Preferences
-Preferred communication style: Simple, everyday language.
+```
+AOD (Discover) → AAM (Connect) → DCL (Unify) → Agents (Act)
+```
 
-## System Architecture
-AOS Discover operates on core principles including no ground truth ingestion, no ML/anomaly scores, determinism, and evidence-only decisions. It processes data through a 7-stage sequential pipeline: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Findings Generation.
+| Layer | Component | Purpose |
+|-------|-----------|---------|
+| **Entry** | AOD | Discover & classify everything running in the estate |
+| **Connect** | AAM | Adaptive API Mesh - connection and auth layer |
+| **Unify** | DCL | Data Connectivity Layer - canonical ontology |
+| **Act** | Agents | Domain-specific AI agents (FinOps, RevOps, etc.) |
 
-**Governance Trinity & Classifications:** Assets are classified as "Shadow" if they lack Visibility (CMDB registration), Validation (IdP presence), or Control (managed lifecycle), rejecting the concept of "Grey IT." Derived classifications include Activity Status (RECENT, STALE, NONE), Anchored Predicate, Shadow Asset, Financial Anchor Governance Gap, Zombie Asset, and Parked Asset. The governance policy is defined as `is_governed = has_idp OR has_cmdb OR vendor_governed`.
+### What AOD Does
 
-**Vendor Governance Propagation:** The system propagates vendor governance using `VENDOR_DOMAIN_SETS` and `DOMAIN_TO_VENDOR` mappings, seeded from authoritative matches only (CMDB or IdP). This propagation is fully traceable and does not add new domains or seed from heuristic matches.
+1. **Discovers** assets from multiple data sources (browser logs, network scans, SSO logs, expense reports)
+2. **Prepares for AAM** - identifies which assets need connectors
+3. **Classifies** (value-added byproduct) - categorizes assets by governance status (governed, shadow, zombie)
+4. **Surfaces findings** that require attention before AAM connection (identity gaps, finance gaps, data conflicts)
+5. **Enables triage** so teams can prioritize what to connect first
 
-**Authoritative vs. Heuristic Matching:** CMDB and IdP are authoritative truth sources for governance. Authoritative match methods (`domain`, `uri`, `canonical_name`) can assert governance, while heuristic methods (`fuzzy`, `contains`, `vendor`, etc.) are for enrichment only and cannot assert or override governance or classification outcomes.
+---
 
-**TLD Variant Identity Fix:** Entity identity is strictly defined by the registered domain (eTLD+1). Cross-TLD matches are treated as `RelatedDomainVariant` metadata, not identity merges, preventing false positives from TLD variant merging. Domain promotion is blocked for heuristic match methods.
+## How AOD Works
 
-**Governance Correlation Fixes (Jan 2026):** Enhancements include:
--   **Registered Domain Fallback**: When exact domain lookup fails, tries eTLD+1 fallback for authoritative matching.
--   **Discovery Provenance Preservation**: Domains recovered from correlation retain provenance="discovery".
--   **Domain Base Name Matching**: Matches entity domain base (e.g., "slack" from "slack.com") against record names when canonical_name match fails.
--   **Canonical Domain Indexing**: Farm's `canonical_domain` field is now indexed for CMDB/IdP correlation.
--   **Alias Collapsing Alignment**: Fixed direction (zoom.us → zoom.com). Added atlassian.net, trello.com, bitbucket.org → atlassian.com, hipchat.com → atlassian.com, yammer.com → microsoft.com.
--   **Test Coverage**: 67 tests validating TLD isolation, match methods, correlation fixes, alias collapsing, and governance gate invariants.
+### Data Flow Overview
 
-**Governance Gate Hardening (Jan 2026 - Phase A):**
--   **Expanded AUTHORITATIVE_MATCH_METHODS**: Added 5 new authoritative methods: `verified_alias_domain`, `foreign_key`, `explicit_id`, `cmdb_domains_array`, `cmdb_canonical_domain`.
--   **HEURISTIC_MATCH_METHODS Set**: Explicit set of heuristic-only methods (`fuzzy`, `contains`, `vendor`, `domain_token_to_name`, `registered_domain_token`, `canonical_name_as_domain`). No overlap with authoritative set.
--   **Governance Invariant**: Unknown match methods default to heuristic (fail-safe). Heuristics produce candidates/enrichment only, NEVER HAS_IDP/HAS_CMDB.
--   **Debug Instrumentation**: AOD_DEBUG_MATCH env var logs per-plane match method classification. LensMatchDebug includes IDP_CANDIDATE/CMDB_CANDIDATE flags.
--   **PROMOTION_ALLOWED_MATCH_METHODS**: Updated to include all authoritative methods for domain promotion.
+```
+Farm (Test Data) → Fetch → Pipeline → Catalog → Triage UI
+     ↓
+  Snapshots contain:
+  - Discovery observations
+  - IdP records (SSO)
+  - CMDB records
+  - Finance transactions
+  - Cloud inventory
+```
 
-**CMDB Authoritative Recovery (Jan 2026 - Phase B):**
--   **CMDBConfigItem.domains[]**: New array field to hold all authoritative domains from Farm.
--   **PlaneIndex Authoritative Indexes**: Added `by_canonical_domain` and `by_domains_array` separate indexes for authoritative CMDB correlation.
--   **CMDB Indexing Expansion**: `canonical_domain` and `domains[]` are now indexed SEPARATELY (not as fallback), while still mirrored to `by_domain` for backward compatibility.
--   **Deterministic Lookup Order**: CMDB correlation uses authoritative-only paths in order: (1) canonical_domain == D, (2) D ∈ domains[], (3) verified_alias_domain(D) == canonical_domain.
--   **Runtime Governance Assertion**: `check_idp_admission` blocks heuristic match methods from asserting HAS_IDP. Fail-safe defaults unknown methods to heuristic.
--   **Legacy Product Standalone**: hipchat.com and yammer.com treated as standalone domains (legacy products, not technical aliases) for proper zombie detection.
--   **Test Coverage**: 76 tests validating TLD isolation, governance invariants, heuristic blocking, and CMDB authoritative recovery.
+### Core Components
 
-**Category 5 FP Fix - Entity Domain Evidence Requirement (Jan 2026):**
--   **Problem**: Vendor name inference (e.g., "db-mongo" → mongodb.com) created false entities without actual discovery domain evidence.
--   **Fix**: Removed vendor name → domain inference from `resolve_domain_from_observation()` for entity creation.
--   **New Rule**: Observations must have domain/hostname/uri evidence to create entities.
--   **Vendor Inference**: Still available via `_lookup_vendor_domain()` for enrichment/correlation, but NOT for entity creation.
--   **Verification**: Old run had 720 assets; new run has 717 assets (3 FPs eliminated: mongodb.com, elasticsearch.com, sentry.io).
--   **Iron Dome**: Observations without domain evidence now rejected at iron_dome stage (338 → 499 rejections).
--   **Test Coverage**: 78 governance tests + updated tests ensure name-only observations are correctly rejected.
+#### 1. Fetch (`/api/farm/*`)
+Retrieves snapshot data from Farm (the test data generator). Handles cold-start autoscale with automatic retry and user-friendly loading states.
 
-**Reconciliation Milestone (Jan 2026):**
--   **Combined Accuracy**: 98.7% across all tested snapshots
--   **Classification Accuracy**: 98.0% (649/657 correct classifications)
--   **Admission Accuracy**: 99.2% (877/884 correct admission decisions)
--   **Zombie Detection**: 100% (45/45 zombies correctly identified)
--   **Shadow Detection**: 98.7% (604/612 shadows matched)
--   **Remaining Discrepancies**: 5 IdP token edge cases + 2 Zoom TLD variants (documented policy differences)
--   **Validation**: Tested across multiple Farm snapshot combinations with consistent results
+#### 2. Pipeline (`src/aod/pipeline/`)
+Processes raw observations through a 7-stage sequential pipeline:
 
-**Reason Code Semantics:** Reason codes like `HAS_CMDB`, `HAS_IDP`, and `VENDOR_GOVERNED` distinguish the source of governance for auditing, while `lens_coverage` fields reflect direct matches or inherited vendor governance.
+| Stage | Purpose |
+|-------|---------|
+| **Validation** | Verify snapshot structure and data integrity |
+| **Normalization** | Standardize domains, extract tenant tokens |
+| **Indexing** | Build lookup indexes for correlation |
+| **Correlation** | Match discovery data to IdP/CMDB/Finance records |
+| **Admission** | Apply gates to determine which assets enter catalog |
+| **Artifact Handling** | Process findings and classifications |
+| **Output** | Generate final catalog with reason codes |
 
-**Key Normalization:** Infrastructure/service domains (e.g., `outlook.com`, `gstatic.com`, `office.com`) produce stable, standalone asset keys rather than collapsing to vendor domains, ensuring accurate reconciliation.
+#### 3. Classifications (`src/aod/pipeline/classifications/`)
+Determines asset status based on governance signals:
 
-**Key Selection Contract v2.0:** A formal contract defines deterministic rules for Farm alignment, using discovery observations as the sole source. It specifies canonical key generation, alias collapsing, standalone domains, policy exclusions, and alignment with Farm using the same PSL, collapse list, and lexicographic tie-breaker.
+- **Shadow IT**: Assets lacking governance (no IdP, no CMDB, not vendor-governed)
+- **Zombie**: Governed assets with no recent activity (abandoned subscriptions)
+- **Governed**: Assets with IdP integration, CMDB registration, or vendor governance
 
-**Identity Model & Key Strategy:** The system tracks domain provenance (`identifiers.domain_provenance`), allows authoritative CMDB domains to be promoted to `identifiers.domains`, suppresses generic collision roots, and uses `key_strategy_version` (v1/v2) for canonical key generation. A reconciliation mapping layer (`anchor_type`, `absence_flags`, `entity_key_v2`) aligns with Farm's vocabulary.
+#### 4. Findings (`src/aod/pipeline/findings/`)
+Generates actionable findings for each asset:
 
-**AAM Blocking Logic (Jan 2026):** Finding types determine whether assets can connect to AAM (Asset & Access Management):
--   **BLOCKING findings (Red section):** `identity_gap`, `finance_gap`, `data_conflict` - AAM connection blocked by default
-    - `identity_gap`: No IdP/SSO integration = no lifecycle control, no offboarding, no access auditability
-    - `finance_gap`: Active spend without accountable owner = dangerous to enable integrations
-    - `data_conflict`: Sources disagree on identity/ownership = cannot safely act
--   **NON-BLOCKING findings (Green section):** `cmdb_gap`, `governance_gap`, `duplication_risk` - Informational only
-    - These are hygiene issues that don't prevent AAM connection
--   **Triage Sections:** Red = "Blocking — Cannot Connect", Yellow = "Review — Cost Optimization" (zombies), Green = "Informational — Non-Blocking"
--   **Override Support:** Blocking findings can be overridden with "warn only" mode per customer policy
+| Finding | Description | Blocks AAM? |
+|---------|-------------|-------------|
+| `identity_gap` | No SSO integration | Yes |
+| `finance_gap` | Spend without owner | Yes |
+| `data_conflict` | Sources disagree | Yes |
+| `cmdb_gap` | Not in asset registry | No |
+| `governance_gap` | Missing governance controls | No |
+| `duplication_risk` | Possible duplicate | No |
 
-**Snapshot Drift Detection (Jan 2026):**
--   **Architecture**: Plane data (IdP/CMDB/Cloud/Finance) is built in-memory from `snapshot.planes` each run, NOT persisted in separate DB tables. Asset records persist with `lens_match_debug` containing matched record IDs.
--   **Drift Risk**: If Farm regenerates a snapshot after a run was created, the asset's correlation data (IdP matches, etc.) becomes stale. The matched records may no longer exist.
--   **Snapshot Fingerprint Tracking**: New runs store `provenance.snapshot_fingerprint` to detect when Farm regenerates snapshots.
--   **Drift Check Endpoint**: `GET /api/debug/snapshot-drift-check?run_id=X` compares stored vs current fingerprint to detect snapshot changes.
--   **Invariant Check Endpoint**: `GET /api/debug/catalog-invariant-check?run_id=X` validates all assets have valid admission basis (discovery OR idp OR cmdb OR finance OR cloud).
--   **Detection Status Codes**: `OK` (no drift), `DRIFT_DETECTED` (snapshot changed), `NO_STORED_FINGERPRINT` (legacy run).
+#### 5. Triage (`/api/triage/*`)
+Provides workflow for reviewing and acting on discovered assets. Organizes findings into:
+- **Red (Blocking)**: Must resolve before AAM connection
+- **Yellow (Review)**: Cost optimization opportunities (zombies)
+- **Green (Informational)**: Hygiene issues, non-blocking
 
-**Key Technical Implementations & Features:**
--   **Central Policy Switchboard:** Externalizes all admission and classification policy logic to `config/policy_master.json`, allowing operators to control policies via a web UI (`/switchboard`) with webhook notifications to Farm.
--   **Policy Impact Panel:** Displays which domains are blocked by each policy rule and their counts, categorized by CDN/Static Hosts, Vendor Portals, Dev/Build Infra, Custom, Admission Gates, and Other.
--   **Semantic Infrastructure Domain Handling:** Configurable modes ("exclude," "observe_only," "include") for `shared_infrastructure_domains`, `vendor_root_portals`, and `dev_build_infrastructure`.
--   **Policy Categories:** Comprehensive policy control covering Activity Windows, Finance Thresholds, Admission Gates, Scope Toggles, Fuzzy Matching, Vendor Inference, Query Limits, Infrastructure Domain Handling, Custom Exclusions, Corporate Root Domains, and Farm Sync.
--   **Admission Gates:** Require corroboration with governance or sufficient discovery for asset admission, finance alone is not enough.
--   **Domain Normalization & Tenant Token Indexing:** Standardizes domain names and extracts tenant tokens for cross-matching.
--   **Activity Status & Zombie Detection:** Calculates activity based on Discovery observations and IdP timestamps, using TLD-aware domain matching.
--   **Domain Recovery & Cross-Domain Correlation:** Recovers entity domains from correlated plane records and enables correlation between entities with different domains sharing the same brand.
--   **Multi-Domain Identifiers:** Assets include all domains from correlated plane records.
--   **Indexing Enhancements:** Extracts base names from registered domains and vendor names from finance transactions.
--   **Token-Based Finance Correlation:** Uses token-based matching for finance transactions.
--   **Discovery Sources Single Source of Truth:** `discovery_sources` is the canonical source for `HAS_DISCOVERY`.
--   **Performance Optimizations:** Utilizes memoization and pre-computation.
--   **UI Design:** Adheres to the AutonomOS palette with cyan and purple accents, a dark slate foundation, and the Quicksand font.
--   **Quality Guardrails:** Emphasizes semantic preservation, real-world proof, and negative test inclusion.
+#### 6. Policy Switchboard (`/switchboard`, `config/policy_master.json`)
+Central configuration for all admission and classification logic:
+- Activity windows (discovery, zombie detection)
+- Finance thresholds (minimum spend for admission)
+- Admission gates (require corroboration)
+- Infrastructure domain handling (CDN, vendor portals)
+- Custom exclusions (corporate root domains)
 
-## External Dependencies
--   Python 3.11
--   FastAPI with Pydantic v2
--   PostgreSQL (via asyncpg)
--   Uvicorn
--   httpx
--   Farm Integration
+---
+
+## Key Concepts
+
+### Governance Trinity
+An asset is **governed** if it has ANY of:
+- **Visibility** (CMDB registration)
+- **Validation** (IdP/SSO presence)
+- **Control** (vendor-governed lifecycle)
+
+### Alias Collapsing
+Multiple domains belonging to the same vendor collapse to a canonical domain:
+- `zoom.us` → `zoom.com`
+- `atlassian.net` → `atlassian.com`
+- `office365.com` → `microsoft.com`
+
+### Authoritative vs Heuristic Matching
+- **Authoritative methods** (domain, uri, canonical_name) can assert governance
+- **Heuristic methods** (fuzzy, contains, vendor) are for enrichment only
+
+---
+
+## Known Policy Differences with Farm
+
+The following discrepancies between AOD and Farm are **documented policy decisions**, not bugs:
+
+### Category A: Infrastructure Variants (Collapse to Parent)
+| Domain | AOD Behavior | Rationale |
+|--------|--------------|-----------|
+| `zoom.us` | → `zoom.com` | TLD variant, same service |
+| `zoomapp.io` | → `zoom.com` | App infrastructure domain |
+| `zoom-meetings.net` | → `zoom.com` | Meeting infrastructure |
+| `adobelogin.com` | → `adobe.com` | Auth portal for Adobe |
+
+**Farm Action Required:** Update expectations to accept parent domain as canonical key.
+
+### Category B: Distinct Products (Standalone)
+| Domain | AOD Behavior | Rationale |
+|--------|--------------|-----------|
+| `trello.com` | Standalone | Distinct product, separate attack surface |
+| `bitbucket.org` | Standalone | Separate codebase and tech stack |
+
+**Farm Action Required:** Update to expect these as separate assets from `atlassian.com`.
+
+### Category C: Legacy Products (Collapse for Zombie Monitoring)
+| Domain | AOD Behavior | Rationale |
+|--------|--------------|-----------|
+| `hipchat.com` | → `atlassian.com` | Discontinued product, zombie detection only |
+
+**Farm Action Required:** Update expectations to accept parent domain.
+
+---
+
+## Reconciliation Status
+
+**Current Accuracy:** 98.8%
+- Classification: 657/663 (98.5%)
+- Admission: 874/882 (99.1%)
+- Zombie Detection: 43/44 (97.7%)
+- Shadow Detection: 614/619 (99.2%)
+
+Remaining discrepancies are documented policy differences above.
+
+---
+
+## Project Structure
+
+```
+src/
+├── aod/
+│   ├── api/routes/       # REST endpoints
+│   │   ├── catalog.py    # Asset catalog endpoints
+│   │   ├── farm.py       # Farm data fetching
+│   │   ├── policy.py     # Policy switchboard API
+│   │   ├── reconcile.py  # Reconciliation with Farm
+│   │   ├── runs.py       # Pipeline run management
+│   │   └── triage.py     # Triage workflow
+│   ├── pipeline/         # Processing pipeline
+│   │   ├── admission.py  # Admission gates
+│   │   ├── classifications/  # Shadow/Zombie detection
+│   │   ├── findings/     # Finding generators
+│   │   └── vendor_governance.py
+│   ├── db/               # Database models
+│   ├── farm_client.py    # Farm API client
+│   └── models/           # Pydantic models
+├── main.py               # FastAPI application
+config/
+├── policy_master.json    # Policy configuration
+static/
+├── js/app.js            # Frontend application
+├── css/main.css         # Styles
+templates/
+├── index.html           # Main UI template
+```
+
+---
+
+## Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `FARM_URL_DEV` | Farm development URL |
+| `FARM_URL_PROD` | Farm production URL (autonomos.farm) |
+| `FARM_URL_MODE` | URL selection: `prod`, `dev`, `auto` |
+| `REPLIT_DEPLOYMENT` | Auto-detected in production |
+
+---
+
+## Running Locally
+
+The server runs on port 5000:
+```bash
+PYTHONPATH=/home/runner/workspace/src python -m uvicorn src.main:app --host 0.0.0.0 --port 5000 --reload
+```
+
+---
+
+## Farm Integration
+
+Farm is the test data generator that creates realistic enterprise scenarios:
+- 17,000+ asset permutations
+- 37 edge case categories
+- 800,000+ rule evaluations
+
+Farm provides snapshots containing discovery observations, IdP records, CMDB entries, and finance transactions. AOD processes these through its pipeline and the reconciliation endpoint compares results.
+
+**Note:** Farm uses autoscale and may take 10-15 seconds to wake from cold start. The UI shows a loading indicator during this time.
+
+---
+
+## UI Design
+
+- **Palette:** Dark slate foundation with cyan and purple accents
+- **Font:** Quicksand
+- **Notifications:** Minimal, non-alarming feedback (cyan toast for loading states)
+
+---
+
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| `replit.md` | Project overview, architecture, current state |
+| `docs/OPERATING_GUIDE.md` | Day-to-day operation of AOD + Farm |
+| `docs/POLICY_SWITCHES.md` | Detailed policy configuration reference |
+| `docs/guided-validation-tour-script.md` | Demo tour script |
+| `docs/AOD_PRODUCT_SPEC.md` | Sales/prospect techno-functional spec |

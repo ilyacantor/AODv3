@@ -18,7 +18,7 @@ AOD is the discovery and classification engine for the AutonomOS platform. It au
 
 ---
 
-## Value Proposition
+## Stand-Alone Value Proposition
 
 | Stakeholder | Pain Point | AOD Value |
 |-------------|------------|-----------|
@@ -138,7 +138,7 @@ Prioritized work queue for IT/Security teams:
 | **Classification** | Determine governance status | Shadow/Zombie/Governed |
 | **Findings** | Generate actionable items | Prioritized work |
 
-### Policy Switchboard
+### Configurable Policy Switchboard
 
 Central configuration for all business rules:
 
@@ -192,9 +192,7 @@ AOD outputs feed directly into:
 
 ---
 
-## Demo & Proof of Value
-
-### Live Simulation
+## Simulation & Validation of Enterprise-Grade Functionality
 
 AOD includes a built-in simulation capability:
 
@@ -204,16 +202,6 @@ AOD includes a built-in simulation capability:
 
 This allows prospects to see AOD handle real-world complexity—not sanitized demo data.
 
-### Proof of Value Engagement
-
-Typical PoV timeline:
-
-| Week | Activity |
-|------|----------|
-| 1 | Connect 2-3 data sources (SSO logs, expense data, network logs) |
-| 2 | AOD processes and classifies |
-| 3 | Review findings, quantify shadow IT and zombie spend |
-| 4 | Present findings, discuss platform expansion |
 
 ---
 

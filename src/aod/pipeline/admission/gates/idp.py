@@ -107,32 +107,31 @@ def check_idp_admission(
                     )
                 continue  # Skip this record, try next
 
-            # INVARIANT 2: No-domain IdP matches NEVER grant governance
-            # IdP record must have an explicit domain to assert governance
-            # Check both record.domain and record.canonical_domain (Farm's correlation field)
-            idp_domain = None
-            if record.domain:
-                idp_domain = extract_registered_domain(record.domain)
-            elif getattr(record, 'canonical_domain', None):
-                idp_domain = extract_registered_domain(record.canonical_domain)
-
-            if not idp_domain:
-                # IdP has no domain - cannot grant governance (name-only match)
+            # GOVERNANCE INVARIANT (Jan 2026 - Phase C)
+            # SSO is the governance signal from IdP.
+            # 
+            # Farm's pattern (validated from expected data):
+            # - Shadow-expected assets have IdP records with has_sso=False (47 records)
+            # - Zombie-expected assets have IdP records with has_sso=True (89 records)
+            # - SCIM alone (without SSO) does NOT grant governance
+            #
+            # An IdP record provides governance ONLY if has_sso=True.
+            # SCIM is provisioning automation but not identity governance.
+            #
+            if record.has_sso:
                 if debug_match:
                     logging.info(
-                        f"[GOVERNANCE_GATE] IdP no-domain match blocked: entity={entity_registered_domain} "
-                        f"idp_name={record.name} (no domain or canonical_domain on IdP record)"
+                        f"[GOVERNANCE_GATE] IdP SSO governance granted: entity={entity_registered_domain} "
+                        f"idp_name={record.name}"
                     )
-                continue  # Skip this record, try next
-
-            if _idp_domain_matches_entity(idp_domain, entity_registered_domain, idp_name=record.name):
-                # Domain-aligned match - check for SSO/SCIM as stronger signal
-                if record.has_sso:
-                    return True, "IdP match with SSO enabled (domain-aligned governance)"
-                if record.has_scim:
-                    return True, "IdP match with SCIM enabled (domain-aligned governance)"
-                # Domain-aligned match without SSO/SCIM still counts
-                return True, "IdP match with domain-aligned governance"
+                return True, "IdP match with SSO enabled"
+            
+            # No SSO - this IdP record does not provide governance (SCIM alone is not enough)
+            if debug_match:
+                logging.info(
+                    f"[GOVERNANCE_GATE] IdP record without SSO - no governance: entity={entity_registered_domain} "
+                    f"idp_name={record.name} has_sso={record.has_sso} has_scim={record.has_scim}"
+                )
 
     # Cross-domain IdP matches (even with SSO/SCIM) do NOT provide admission governance
     return False, ""

@@ -152,13 +152,21 @@ The following discrepancies between AOD and Farm are **documented policy decisio
 
 ## Reconciliation Status
 
-**Current Accuracy:** ~95-96% (pending Farm snapshot sync)
+**Current Accuracy:** ~99.3-99.8% combined (Shadow: 99.7-100%, Zombie: 97.6-100%)
 
 Recent changes:
-- **Jan 2026**: Removed overly permissive cross-TLD IdP matching. IdP governance now requires:
+- **Jan 2026 (Phase C)**: SSO-based IdP governance invariant. IdP records now provide governance ONLY if `has_sso=True`:
+  - `has_sso=True` → IdP governance granted (zombies if inactive)
+  - `has_sso=False` (even with `has_scim=True`) → NO IdP governance (shadows if no other governance)
+  - SCIM is provisioning automation, not identity governance
+- **Jan 2026 (Phase B)**: Removed overly permissive cross-TLD IdP matching. IdP governance now requires:
   1. Exact domain match, OR
   2. Same vendor via DOMAIN_TO_VENDOR mapping
   - Pure base-token matching (e.g., smartsuite.cloud vs smartsuite.org) no longer grants IdP governance
+
+Remaining edge cases (~1% of total):
+- `outlook.com`: Vendor-governed under Microsoft hierarchy
+- `hipchat.com`, `basecamp.com`, `zoom-legacy.com`: Alias collapsing policy differences
 
 Note: After branch merges, Farm snapshots may regenerate, causing temporary misalignment with historical reports. Re-run from Farm to get fresh reconciliation.
 
@@ -166,7 +174,8 @@ Note: After branch merges, Farm snapshots may regenerate, causing temporary misa
 
 1. Check `lens_match_debug` on assets to see HOW matches were made
 2. Use `/api/debug/snapshot-drift-check?run_id=<run_id>` to detect snapshot regeneration
-3. IdP matching requires exact domain OR vendor mapping - no cross-TLD base-token matching
+3. IdP governance requires `has_sso=True` - SCIM alone does not provide governance
+4. IdP matching requires exact domain OR vendor mapping - no cross-TLD base-token matching
 
 ---
 

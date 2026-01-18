@@ -40,6 +40,7 @@ IDP_OBJECT_MAPPING = {
     "idp_id": {"sources": ["idp_id"], "required": True},
     "name": {"sources": ["name"], "required": True},
     "idp_type": {"sources": ["idp_type"], "default": "app"},
+    # external_ref is used for correlation/indexing, but governance is determined by has_sso/has_scim
     "domain": {"sources": ["external_ref", "domain"], "default": None},
     "has_sso": {"sources": ["has_sso"], "default": False},
     "has_scim": {"sources": ["has_scim"], "default": False},

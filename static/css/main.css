@@ -247,6 +247,7 @@ main { padding: 2rem; }
 @media (max-width: 600px) { .help-kpi-grid { grid-template-columns: 1fr; } }
 .main-tab-content { display: none; }
 .main-tab-content.active { display: block; }
+#overviewTabContent.active, #policyTabContent.active { height: calc(100vh - 60px); overflow: hidden; }
 .test-card { background: var(--slate-800); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; transition: all 0.2s ease; }
 .test-card:hover { border-color: var(--cyan-600); }
 .test-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }

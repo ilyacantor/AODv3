@@ -1,21 +1,33 @@
 """
-AAM Handoff API - Target Manifest for Adaptive API Mesh
+Handoff API - Target Manifests and Connector Provisioning
 
 AOD (Asset Observation & Discovery) identifies assets and their governance state.
-AAM (Adaptive API Mesh) is the downstream consumer that executes connections.
+This module provides handoff interfaces to:
+- AAM (Adaptive API Mesh) - Target Manifests for connection establishment
+- DCL (Data Connectivity Layer) - Direct provisioning for the Ingest Sidecar
 
-This module provides the handoff interface between AOD and AAM.
-AOD NEVER talks directly to DCL - it provides a Target Manifest to AAM.
+Phase 4: The Autonomous Handshake
+AOD finds the route -> POSTs config to DCL -> DCL starts ingesting.
 """
 
+import os
+import logging
+
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from pydantic import BaseModel
 
 from src.aod.db.database import get_db_direct
 from src.aod.models.output_contracts import ProvisioningStatus
+from src.aod.pipeline.middleware_scanner import MiddlewareScanner
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/handoff")
+
+DCL_URL = os.environ.get("DCL_URL", "http://localhost:5001")
+DCL_PROVISION_ENDPOINT = "/api/ingest/provision"
 
 
 class GovernanceInfo(BaseModel):
@@ -135,3 +147,183 @@ async def get_aam_manifest(
         orders=orders,
         count=len(orders)
     )
+
+
+class ScanResponse(BaseModel):
+    """Response from middleware scan."""
+    platform: str
+    detected_url: str
+    related_asset: str
+    confidence: float
+    stream_type: str
+
+
+class ScanAllResponse(BaseModel):
+    """Response from scan-all request."""
+    routes: list[ScanResponse]
+    count: int
+
+
+class ProvisionRequest(BaseModel):
+    """Request to provision a connector to DCL."""
+    platform: str = "mulesoft"
+    chaos_mode: bool = True
+    dcl_url: Optional[str] = None
+
+
+class ProvisionResponse(BaseModel):
+    """Response from provision request."""
+    status: str
+    message: str
+    connector_id: str
+    dcl_response: Optional[dict] = None
+
+
+@router.get("/scan-middleware", response_model=ScanResponse)
+async def scan_middleware(platform: str = "mulesoft"):
+    """
+    Scan for middleware integration routes.
+    
+    Returns detected middleware route configuration for platforms like
+    MuleSoft, Workato, Zapier, etc.
+    """
+    scanner = MiddlewareScanner()
+    route = scanner.scan(platform)
+    
+    return ScanResponse(
+        platform=route.platform,
+        detected_url=route.detected_url,
+        related_asset=route.related_asset,
+        confidence=route.confidence,
+        stream_type=route.stream_type
+    )
+
+
+@router.get("/scan-middleware/all", response_model=ScanAllResponse)
+async def scan_middleware_all():
+    """
+    Scan for all known middleware integration routes.
+    
+    Returns list of all detected middleware routes across known platforms.
+    """
+    scanner = MiddlewareScanner()
+    routes = scanner.scan_all()
+    
+    return ScanAllResponse(
+        routes=[
+            ScanResponse(
+                platform=r.platform,
+                detected_url=r.detected_url,
+                related_asset=r.related_asset,
+                confidence=r.confidence,
+                stream_type=r.stream_type
+            )
+            for r in routes
+        ],
+        count=len(routes)
+    )
+
+
+@router.post("/provision-connector", response_model=ProvisionResponse)
+async def provision_connector(request: ProvisionRequest):
+    """
+    Provision a connector from AOD to DCL (The Autonomous Handshake).
+    
+    Flow:
+    1. AOD scans for middleware route
+    2. AOD generates Targeting Package
+    3. AOD POSTs to DCL's provision endpoint
+    4. DCL reconfigures its Ingest Sidecar
+    
+    Returns provisioning status and the targeting package sent.
+    """
+    scanner = MiddlewareScanner()
+    route = scanner.scan(request.platform)
+    
+    targeting_package = scanner.to_targeting_package(route, chaos_mode=request.chaos_mode)
+    
+    dcl_url = (request.dcl_url or DCL_URL).rstrip("/")
+    provision_url = f"{dcl_url}{DCL_PROVISION_ENDPOINT}"
+    
+    logger.info("handoff.provision_connector", extra={
+        "platform": request.platform,
+        "connector_id": targeting_package["connector_id"],
+        "target_url": targeting_package["target_url"],
+        "dcl_url": provision_url
+    })
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                provision_url,
+                json=targeting_package
+            )
+            
+            if response.status_code == 200:
+                dcl_response = response.json()
+                return ProvisionResponse(
+                    status="success",
+                    message="Provisioning Command Sent",
+                    connector_id=targeting_package["connector_id"],
+                    dcl_response=dcl_response
+                )
+            else:
+                logger.warning("handoff.provision_connector.dcl_error", extra={
+                    "status_code": response.status_code,
+                    "response": response.text[:500]
+                })
+                return ProvisionResponse(
+                    status="dcl_error",
+                    message=f"DCL returned {response.status_code}: {response.text[:200]}",
+                    connector_id=targeting_package["connector_id"],
+                    dcl_response=None
+                )
+                
+    except httpx.ConnectError:
+        logger.warning("handoff.provision_connector.dcl_unreachable", extra={
+            "dcl_url": provision_url
+        })
+        return ProvisionResponse(
+            status="dcl_unreachable",
+            message=f"DCL not reachable at {dcl_url}. Package ready for manual provisioning.",
+            connector_id=targeting_package["connector_id"],
+            dcl_response={"targeting_package": targeting_package}
+        )
+        
+    except httpx.TimeoutException:
+        return ProvisionResponse(
+            status="timeout",
+            message="DCL provision request timed out",
+            connector_id=targeting_package["connector_id"],
+            dcl_response=None
+        )
+        
+    except Exception as e:
+        logger.exception("handoff.provision_connector.error")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to provision connector: {str(e)}"
+        )
+
+
+@router.get("/targeting-package")
+async def get_targeting_package(platform: str = "mulesoft", chaos_mode: bool = True):
+    """
+    Get the Targeting Package without sending to DCL.
+    
+    Useful for debugging or manual provisioning scenarios.
+    Returns both the detected route and the formatted targeting package.
+    """
+    scanner = MiddlewareScanner()
+    route = scanner.scan(platform)
+    package = scanner.to_targeting_package(route, chaos_mode=chaos_mode)
+    
+    return {
+        "detected_route": {
+            "platform": route.platform,
+            "detected_url": route.detected_url,
+            "related_asset": route.related_asset,
+            "confidence": route.confidence
+        },
+        "targeting_package": package
+    }

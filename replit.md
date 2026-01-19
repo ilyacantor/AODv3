@@ -31,6 +31,40 @@ AOD (Discover) → AAM (Connect) → DCL (Unify) → Agents (Act)
 
 ---
 
+## Phase 4: The Autonomous Handshake (Jan 2026)
+
+AOD now supports automatic provisioning to DCL's Ingest Sidecar:
+
+```
+AOD (Scan Middleware) → Targeting Package → DCL (Provision) → Sidecar starts ingesting
+```
+
+### New Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/handoff/scan-middleware?platform=mulesoft` | Scan for middleware routes |
+| `GET /api/handoff/scan-middleware/all` | Scan all known platforms |
+| `GET /api/handoff/targeting-package` | Preview targeting package without sending |
+| `POST /api/handoff/provision-connector` | Send targeting package to DCL |
+
+### Targeting Package Format
+
+```json
+{
+  "connector_id": "mule_auto_468",
+  "source_type": "mulesoft_stream",
+  "target_url": "https://autonomos.farm/api/stream/synthetic/mulesoft?chaos=true",
+  "policy": {
+    "repair_enabled": true,
+    "circuit_breaker_threshold": 5,
+    "backoff_seconds": 60
+  }
+}
+```
+
+---
+
 ## How AOD Works
 
 ### Data Flow Overview

@@ -279,6 +279,7 @@ Farm provides snapshots containing discovery observations, IdP records, CMDB ent
 | File | Purpose |
 |------|---------|
 | `replit.md` | Project overview, architecture, current state |
+| `docs/TEST_HARNESS.md` | **Internal test harness for autonomous development** |
 | `docs/OPERATING_GUIDE.md` | Day-to-day operation of AOD + Farm |
 | `docs/POLICY_SWITCHES.md` | Detailed policy configuration reference |
 | `docs/guided-validation-tour-script.md` | Demo tour script |

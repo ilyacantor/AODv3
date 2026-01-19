@@ -3,11 +3,8 @@ const TourManager = (function() {
     
     let aborted = false;
     let pendingTimeouts = [];
-    let lastAdvanceTime = 0;
-    const ADVANCE_DEBOUNCE_MS = 500;
-    let advanceInProgress = false;
     
-    const OVERVIEW_SECTIONS = ['market', 'legacy', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
+    const OVERVIEW_SECTIONS = ['market', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
     const INTRO_STEPS = OVERVIEW_SECTIONS.length;
     
     const TOUR_PHASES = {
@@ -295,10 +292,7 @@ const TourManager = (function() {
         const backBtn = overlay.querySelector('.tour-btn-back');
         
         if (nextBtn) {
-            nextBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                console.log('TourManager: Next button clicked in overlay');
+            nextBtn.addEventListener('click', () => {
                 if (options.onContinue) {
                     options.onContinue();
                 } else {
@@ -407,21 +401,15 @@ const TourManager = (function() {
     }
     
     function start() {
-        console.log('TourManager: start() called, clearing any existing state');
         aborted = false;
         clearAllTimeouts();
-        lastAdvanceTime = Date.now(); // Prevent immediate advances
         const state = { active: true, phase: 'overview_0', runId: null, overviewIndex: 0 };
         setState(state);
-        console.log('TourManager: set initial state:', JSON.stringify(state));
         
         const overviewTab = document.querySelector('.header-nav-tab[data-tab="overview"]');
         if (overviewTab) overviewTab.click();
         
-        setTimeout(() => {
-            console.log('TourManager: executing initial phase overview_0');
-            executePhase('overview_0');
-        }, 300);
+        setTimeout(() => executePhase('overview_0'), 300);
     }
     
     function exit() {
@@ -429,44 +417,19 @@ const TourManager = (function() {
         clearAllTimeouts();
         removeOverlay();
         clearState();
-        lastAdvanceTime = 0;
     }
     
     function advance() {
         if (aborted) return;
         
-        // Prevent concurrent advances
-        if (advanceInProgress) {
-            console.log('TourManager: advance() blocked - already in progress');
-            return;
-        }
-        
-        // Debounce rapid advances
-        const now = Date.now();
-        if (now - lastAdvanceTime < ADVANCE_DEBOUNCE_MS) {
-            console.log('TourManager: advance() debounced, too soon since last advance');
-            return;
-        }
-        lastAdvanceTime = now;
-        advanceInProgress = true;
-        
         const state = getState();
-        if (!state.active) {
-            advanceInProgress = false;
-            return;
-        }
-        
-        console.log('TourManager: advance() executing, current state:', JSON.stringify(state));
+        if (!state.active) return;
         
         if (typeof state.phase === 'string' && state.phase.startsWith('overview_')) {
             const currentIndex = state.overviewIndex || 0;
             const nextIndex = currentIndex + 1;
             
-            console.log('TourManager: advancing from index', currentIndex, 'to', nextIndex, 
-                        '(section:', OVERVIEW_SECTIONS[nextIndex], ')');
-            
             if (nextIndex >= OVERVIEW_SECTIONS.length) {
-                advanceInProgress = false;
                 navigateToFarmWithGuided();
                 return;
             }
@@ -475,8 +438,6 @@ const TourManager = (function() {
             state.phase = `overview_${nextIndex}`;
             setState(state);
             executePhase(state.phase);
-            // Release lock after phase execution starts - dialog will wait for next user click
-            setTimeout(() => { advanceInProgress = false; }, 100);
             return;
         }
         
@@ -484,7 +445,6 @@ const TourManager = (function() {
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
-            advanceInProgress = false;
             exit();
             return;
         }
@@ -493,7 +453,6 @@ const TourManager = (function() {
         state.phase = nextPhase;
         setState(state);
         executePhase(nextPhase);
-        setTimeout(() => { advanceInProgress = false; }, 100);
     }
     
     function goBack() {
@@ -564,11 +523,8 @@ const TourManager = (function() {
         const section = OVERVIEW_SECTIONS[sectionIndex];
         const isLastSection = sectionIndex === OVERVIEW_SECTIONS.length - 1;
         
-        console.log('TourManager: executeOverviewPhase', { sectionIndex, section, isLastSection });
-        
         const sendScrollMessage = () => {
             const overviewIframe = document.querySelector('.overview-iframe');
-            console.log('TourManager: sendScrollMessage to section:', section, 'iframe found:', !!overviewIframe);
             if (overviewIframe && overviewIframe.contentWindow) {
                 try {
                     overviewIframe.contentWindow.postMessage({
@@ -588,7 +544,6 @@ const TourManager = (function() {
         await trackedDelay(400);
         if (aborted) return;
         
-        console.log('TourManager: showing dialog for section:', section);
         showOverviewTourDialog(sectionIndex, isLastSection);
     }
     
@@ -675,10 +630,7 @@ const TourManager = (function() {
         // Make draggable
         makeDraggable(overlay);
         
-        overlay.querySelector('.tour-btn-next').addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            console.log('TourManager: Next button clicked in overview dialog');
+        overlay.querySelector('.tour-btn-next').addEventListener('click', () => {
             advance();
         });
         

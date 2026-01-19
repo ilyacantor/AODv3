@@ -5,6 +5,7 @@ const TourManager = (function() {
     let pendingTimeouts = [];
     let lastAdvanceTime = 0;
     const ADVANCE_DEBOUNCE_MS = 500;
+    let advanceInProgress = false;
     
     const OVERVIEW_SECTIONS = ['market', 'legacy', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
     const INTRO_STEPS = OVERVIEW_SECTIONS.length;
@@ -434,6 +435,12 @@ const TourManager = (function() {
     function advance() {
         if (aborted) return;
         
+        // Prevent concurrent advances
+        if (advanceInProgress) {
+            console.log('TourManager: advance() blocked - already in progress');
+            return;
+        }
+        
         // Debounce rapid advances
         const now = Date.now();
         if (now - lastAdvanceTime < ADVANCE_DEBOUNCE_MS) {
@@ -441,11 +448,15 @@ const TourManager = (function() {
             return;
         }
         lastAdvanceTime = now;
+        advanceInProgress = true;
         
         const state = getState();
-        if (!state.active) return;
+        if (!state.active) {
+            advanceInProgress = false;
+            return;
+        }
         
-        console.log('TourManager: advance() called, current state:', JSON.stringify(state));
+        console.log('TourManager: advance() executing, current state:', JSON.stringify(state));
         
         if (typeof state.phase === 'string' && state.phase.startsWith('overview_')) {
             const currentIndex = state.overviewIndex || 0;
@@ -455,6 +466,7 @@ const TourManager = (function() {
                         '(section:', OVERVIEW_SECTIONS[nextIndex], ')');
             
             if (nextIndex >= OVERVIEW_SECTIONS.length) {
+                advanceInProgress = false;
                 navigateToFarmWithGuided();
                 return;
             }
@@ -463,6 +475,8 @@ const TourManager = (function() {
             state.phase = `overview_${nextIndex}`;
             setState(state);
             executePhase(state.phase);
+            // Release lock after phase execution starts - dialog will wait for next user click
+            setTimeout(() => { advanceInProgress = false; }, 100);
             return;
         }
         
@@ -470,6 +484,7 @@ const TourManager = (function() {
         const currentIndex = phaseOrder.indexOf(state.phase);
         
         if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
+            advanceInProgress = false;
             exit();
             return;
         }
@@ -478,6 +493,7 @@ const TourManager = (function() {
         state.phase = nextPhase;
         setState(state);
         executePhase(nextPhase);
+        setTimeout(() => { advanceInProgress = false; }, 100);
     }
     
     function goBack() {

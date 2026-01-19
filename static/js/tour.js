@@ -425,9 +425,14 @@ const TourManager = (function() {
         const state = getState();
         if (!state.active) return;
         
+        console.log('TourManager: advance() called, current state:', JSON.stringify(state));
+        
         if (typeof state.phase === 'string' && state.phase.startsWith('overview_')) {
             const currentIndex = state.overviewIndex || 0;
             const nextIndex = currentIndex + 1;
+            
+            console.log('TourManager: advancing from index', currentIndex, 'to', nextIndex, 
+                        '(section:', OVERVIEW_SECTIONS[nextIndex], ')');
             
             if (nextIndex >= OVERVIEW_SECTIONS.length) {
                 navigateToFarmWithGuided();
@@ -523,8 +528,11 @@ const TourManager = (function() {
         const section = OVERVIEW_SECTIONS[sectionIndex];
         const isLastSection = sectionIndex === OVERVIEW_SECTIONS.length - 1;
         
+        console.log('TourManager: executeOverviewPhase', { sectionIndex, section, isLastSection });
+        
         const sendScrollMessage = () => {
             const overviewIframe = document.querySelector('.overview-iframe');
+            console.log('TourManager: sendScrollMessage to section:', section, 'iframe found:', !!overviewIframe);
             if (overviewIframe && overviewIframe.contentWindow) {
                 try {
                     overviewIframe.contentWindow.postMessage({
@@ -544,6 +552,7 @@ const TourManager = (function() {
         await trackedDelay(400);
         if (aborted) return;
         
+        console.log('TourManager: showing dialog for section:', section);
         showOverviewTourDialog(sectionIndex, isLastSection);
     }
     

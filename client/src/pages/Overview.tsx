@@ -15,6 +15,8 @@ export default function Overview() {
       if (event.data?.action === 'scrollToSection') {
         const section = event.data.section;
         
+        console.log('Overview: received scrollToSection message for:', section);
+        
         const sectionIds: Record<string, string> = {
           'market': 'section-market',
           'legacy': 'section-legacy',
@@ -28,10 +30,14 @@ export default function Overview() {
         };
         
         const targetId = sectionIds[section];
+        console.log('Overview: targetId resolved to:', targetId);
+        
         if (targetId) {
           const element = document.getElementById(targetId);
+          console.log('Overview: element found:', !!element, element?.id);
           if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            console.log('Overview: scrolled to', targetId);
           }
         } else if (section === 'hero') {
           window.scrollTo({ top: 0, behavior: 'smooth' });

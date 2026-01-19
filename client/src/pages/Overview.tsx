@@ -215,7 +215,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 3: INTRODUCING AUTONOMOS --- */}
-      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 min-h-screen flex items-center">
+      <section id="section-introducing" className="w-full max-w-6xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 h-[872px] flex items-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -334,7 +334,7 @@ export default function Overview() {
       </section>
 
       {/* --- SECTION 5: AOD INTRODUCTION ("The Gateway") --- */}
-      <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 min-h-screen flex items-center">
+      <section id="section-gateway" className="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 border-t border-slate-800 h-[872px] flex items-center">
         <div className="flex flex-col gap-8 text-center md:text-left w-full">
           <h2 className="text-[30px] md:text-[40px] font-bold text-white leading-tight">
             AOD is the gateway to autonom<span className="text-cyan-400">OS</span>.

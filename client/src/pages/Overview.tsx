@@ -17,6 +17,7 @@ export default function Overview() {
         
         const sectionIds: Record<string, string> = {
           'market': 'section-market',
+          'legacy': 'section-legacy',
           'paradigm': 'section-paradigm',
           'introducing': 'section-introducing',
           'pipeline': 'section-pipeline',

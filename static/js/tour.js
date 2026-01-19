@@ -3,6 +3,8 @@ const TourManager = (function() {
     
     let aborted = false;
     let pendingTimeouts = [];
+    let lastAdvanceTime = 0;
+    const ADVANCE_DEBOUNCE_MS = 500;
     
     const OVERVIEW_SECTIONS = ['market', 'legacy', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
     const INTRO_STEPS = OVERVIEW_SECTIONS.length;
@@ -292,7 +294,10 @@ const TourManager = (function() {
         const backBtn = overlay.querySelector('.tour-btn-back');
         
         if (nextBtn) {
-            nextBtn.addEventListener('click', () => {
+            nextBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                console.log('TourManager: Next button clicked in overlay');
                 if (options.onContinue) {
                     options.onContinue();
                 } else {
@@ -401,15 +406,21 @@ const TourManager = (function() {
     }
     
     function start() {
+        console.log('TourManager: start() called, clearing any existing state');
         aborted = false;
         clearAllTimeouts();
+        lastAdvanceTime = Date.now(); // Prevent immediate advances
         const state = { active: true, phase: 'overview_0', runId: null, overviewIndex: 0 };
         setState(state);
+        console.log('TourManager: set initial state:', JSON.stringify(state));
         
         const overviewTab = document.querySelector('.header-nav-tab[data-tab="overview"]');
         if (overviewTab) overviewTab.click();
         
-        setTimeout(() => executePhase('overview_0'), 300);
+        setTimeout(() => {
+            console.log('TourManager: executing initial phase overview_0');
+            executePhase('overview_0');
+        }, 300);
     }
     
     function exit() {
@@ -417,10 +428,19 @@ const TourManager = (function() {
         clearAllTimeouts();
         removeOverlay();
         clearState();
+        lastAdvanceTime = 0;
     }
     
     function advance() {
         if (aborted) return;
+        
+        // Debounce rapid advances
+        const now = Date.now();
+        if (now - lastAdvanceTime < ADVANCE_DEBOUNCE_MS) {
+            console.log('TourManager: advance() debounced, too soon since last advance');
+            return;
+        }
+        lastAdvanceTime = now;
         
         const state = getState();
         if (!state.active) return;
@@ -639,7 +659,10 @@ const TourManager = (function() {
         // Make draggable
         makeDraggable(overlay);
         
-        overlay.querySelector('.tour-btn-next').addEventListener('click', () => {
+        overlay.querySelector('.tour-btn-next').addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('TourManager: Next button clicked in overview dialog');
             advance();
         });
         

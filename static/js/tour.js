@@ -4,7 +4,7 @@ const TourManager = (function() {
     let aborted = false;
     let pendingTimeouts = [];
     
-    const OVERVIEW_SECTIONS = ['market', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
+    const OVERVIEW_SECTIONS = ['market', 'legacy', 'paradigm', 'introducing', 'pipeline', 'gateway', 'aod-details', 'farm-info'];
     const INTRO_STEPS = OVERVIEW_SECTIONS.length;
     
     const TOUR_PHASES = {

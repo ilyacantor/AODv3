@@ -34,6 +34,8 @@ from .artifact_handler import handle_artifacts
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
 from .asset_identity import late_bind_and_merge_assets
+from .sor_scoring import score_sor
+from ..models.output_contracts import SORTagging
 
 logger = logging.getLogger(__name__)
 
@@ -810,6 +812,81 @@ async def execute_pipeline(
             "cmdb_external_ref_domains_extracted_total": stage1_metrics["cmdb_external_ref_domains_extracted_total"],
             "domains_added_to_identifiers_from_cmdb_external_ref_total": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"],
             "stage1_effective": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"] == 0
+        })
+        
+        # Stage: SOR Scoring - Identify potential Systems of Record
+        t_start = time.perf_counter()
+        sor_scored_count = 0
+        sor_high_confidence_count = 0
+        
+        for asset in assets:
+            # Find correlation using evidence_refs-derived entity_id first, then name-based fallback
+            # (mirrors _compute_stage1_metrics pattern for reliable CMDB/finance/IdP wiring)
+            correlation = None
+            
+            # Try to get entity_id from evidence_refs (e.g., "cmdb:entity_123", "idp:entity_456")
+            entity_id_from_refs = None
+            for evidence_ref in asset.evidence_refs:
+                if evidence_ref.startswith("discovery:"):
+                    continue
+                entity_id_candidate = evidence_ref.split(":")[-1] if ":" in evidence_ref else None
+                if entity_id_candidate and entity_id_candidate in correlation_by_entity_id:
+                    entity_id_from_refs = entity_id_candidate
+                    break
+            
+            if entity_id_from_refs:
+                correlation = correlation_by_entity_id.get(entity_id_from_refs)
+            
+            # Fallback: name-based matching
+            if not correlation:
+                from .normalize_observations import normalize_string
+                for eid, corr in correlation_by_entity_id.items():
+                    if corr.entity and corr.entity.canonical_name and asset.name:
+                        if normalize_string(corr.entity.canonical_name) == normalize_string(asset.name):
+                            correlation = corr
+                            break
+            
+            # Extract CMDB record if matched
+            cmdb_record = None
+            if correlation and correlation.cmdb.matched_records:
+                cmdb_record = correlation.cmdb.matched_records[0]
+            
+            # Extract finance record if matched
+            finance_record = None
+            if correlation and correlation.finance.matched_records:
+                finance_record = correlation.finance.matched_records[0]
+            
+            # Extract IdP records for SSO/SCIM detection
+            idp_records = None
+            if correlation and correlation.idp.matched_records:
+                idp_records = correlation.idp.matched_records
+            
+            # Score the asset for SOR likelihood
+            sor_result = score_sor(
+                asset=asset,
+                cmdb_record=cmdb_record,
+                finance_record=finance_record,
+                idp_records=idp_records
+            )
+            
+            # Update asset with SOR tagging (using correct field names from SORTagging model)
+            if sor_result.likelihood != "none":
+                asset.sor_tagging = SORTagging(
+                    likelihood=sor_result.likelihood,
+                    confidence=sor_result.confidence,
+                    evidence=sor_result.evidence,
+                    domain=sor_result.domain,
+                    signals_matched=sor_result.signals_matched
+                )
+                sor_scored_count += 1
+                if sor_result.likelihood == "high":
+                    sor_high_confidence_count += 1
+        
+        timings['sor_scoring'] = time.perf_counter() - t_start
+        logger.info("pipeline.sor_scoring_complete", extra={
+            "run_id": run_id,
+            "assets_scored": sor_scored_count,
+            "high_confidence_sors": sor_high_confidence_count
         })
         
         if policy_mismatches:

@@ -2,7 +2,7 @@
 
 ## What is AOD?
 
-AOD (Asset Ownership Discovery) is the **front-end entry point** to the AOS (AutonomOS) platform. It discovers all SaaS applications, cloud services, and software assets in use across an organization, preparing them for connection to the broader AOS data stack.
+AOD (AutonomOS Discovery) is the **front-end entry point** to the AOS (AutonomOS) platform. It discovers all SaaS applications, cloud services, and software assets in use across an organization, preparing them for connection to the broader AOS data stack.
 
 **Production URL:** `discover.autonomos.tech`
 

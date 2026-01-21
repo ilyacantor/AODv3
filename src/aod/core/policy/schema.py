@@ -160,6 +160,39 @@ class FarmSyncConfig:
 
 
 @dataclass
+class SORScoringConfig:
+    """
+    System of Record (SOR) scoring configuration.
+    
+    SOR tagging identifies assets that serve as authoritative data sources
+    for specific data domains (customer, employee, financial, etc.).
+    
+    SOR is ORTHOGONAL to Shadow/Zombie/Governed classifications.
+    """
+    enabled: bool = True
+    weights: dict = field(default_factory=lambda: {
+        "cmdb_authoritative": 40,
+        "known_sor_vendor": 30,
+        "middleware_exporter": 25,
+        "enterprise_sso_scim": 20,
+        "enterprise_contract": 15,
+        "multi_department": 15,
+        "high_corroboration": 10,
+        "edge_app_penalty": -20
+    })
+    confidence_thresholds: dict = field(default_factory=lambda: {
+        "high": 0.75,
+        "medium": 0.50
+    })
+    known_sor_vendors: dict = field(default_factory=lambda: {
+        "customer": ["salesforce.com", "hubspot.com", "dynamics.com"],
+        "employee": ["workday.com", "adp.com", "bamboohr.com"],
+        "financial": ["netsuite.com", "quickbooks.com", "xero.com"],
+        "product": ["sap.com", "oracle.com"]
+    })
+
+
+@dataclass
 class AdmissionConfig:
     """
     Admission gate thresholds (legacy).
@@ -216,6 +249,9 @@ class PolicyConfig:
     # Jan 2026: Key strategy versioning for reconciliation compatibility
     # v1 = current (domains[0] based), v2 = new (provenance-aware priority)
     key_strategy_version: str = "v1"
+    
+    # Jan 2026: SOR (System of Record) scoring configuration
+    sor_scoring: SORScoringConfig = field(default_factory=SORScoringConfig)
     
     # Legacy fields for backward compatibility
     admission: AdmissionConfig = field(default_factory=AdmissionConfig)
@@ -311,6 +347,12 @@ class PolicyConfig:
                 "webhook_url": self.farm_sync.webhook_url,
                 "auto_notify_on_change": self.farm_sync.auto_notify_on_change,
                 "sync_interval_seconds": self.farm_sync.sync_interval_seconds,
+            },
+            "sor_scoring": {
+                "enabled": self.sor_scoring.enabled,
+                "weights": self.sor_scoring.weights,
+                "confidence_thresholds": self.sor_scoring.confidence_thresholds,
+                "known_sor_vendors": self.sor_scoring.known_sor_vendors,
             },
             "admission": {
                 "minimum_spend": self.admission.minimum_spend,

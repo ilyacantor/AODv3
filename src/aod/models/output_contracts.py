@@ -197,6 +197,25 @@ class VendorGovernanceTrace(BaseModel):
     seed_asset_id: Optional[str] = Field(default=None, description="Asset ID that provided the governance seed")
 
 
+class SORTagging(BaseModel):
+    """
+    System of Record (SOR) tagging for an asset.
+    
+    Identifies assets that are likely authoritative data sources for specific
+    data domains (customer, employee, financial, etc.).
+    
+    ORTHOGONAL to Shadow/Zombie/Governed - an asset can be:
+    - Governed + SOR (ideal state)
+    - Shadow + SOR-candidate (ungoverned CRM - red flag!)
+    - Zombie + former-SOR (abandoned authoritative system)
+    """
+    likelihood: str = Field(default="none", description="SOR likelihood: high, medium, low, none")
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence score 0.0-1.0")
+    evidence: list[str] = Field(default_factory=list, description="Evidence strings explaining the score")
+    domain: Optional[str] = Field(default=None, description="Data domain: customer, employee, financial, product, identity, it_assets")
+    signals_matched: list[str] = Field(default_factory=list, description="Signal names that contributed to score")
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
@@ -227,6 +246,11 @@ class Asset(BaseModel):
     vendor_governance_trace: Optional[VendorGovernanceTrace] = Field(
         default=None, 
         description="Trace info when governance was inherited via vendor domain set propagation"
+    )
+    # Jan 2026: System of Record (SOR) tagging
+    sor_tagging: Optional[SORTagging] = Field(
+        default=None,
+        description="SOR scoring results - identifies likely Systems of Record"
     )
     created_at: datetime = Field(default_factory=now_pst)
 

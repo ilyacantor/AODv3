@@ -216,6 +216,44 @@ class SORTagging(BaseModel):
     signals_matched: list[str] = Field(default_factory=list, description="Signal names that contributed to score")
 
 
+class CandidateFinding(BaseModel):
+    """Thin finding representation for ConnectionCandidate"""
+    code: str
+    severity: str
+    message: str
+
+
+class CandidateSORTagging(BaseModel):
+    """Thin SOR tagging for ConnectionCandidate"""
+    domain: Optional[str] = None
+    confidence: str = "none"
+    evidence: list[str] = Field(default_factory=list)
+
+
+class ConnectionCandidate(BaseModel):
+    """
+    Connection candidate for AAM (Adaptive API Mesh).
+    
+    AOD emits ConnectionCandidates to express connection INTENT + EVIDENCE.
+    AOD does NOT decide how to connect - AAM handles that.
+    AOD does NOT talk directly to DCL for provisioning.
+    
+    This is a one-way handoff: AOD -> AAM.
+    """
+    asset_key: str = Field(description="Canonical asset key (domain/vendor)")
+    vendor_name: Optional[str] = None
+    display_name: str
+    category: Optional[str] = Field(default=None, description="Category: crm, erp, finance, data, idp, etc.")
+    governance_status: str = Field(description="governed | shadow | zombie | edge")
+    findings: list[CandidateFinding] = Field(default_factory=list, description="Existing AOD findings")
+    sor_tagging: Optional[CandidateSORTagging] = None
+    evidence_refs: list[str] = Field(default_factory=list, description="Pointers to AOD evidence/observations")
+    signals_summary: dict = Field(default_factory=dict, description="Thin summary: counts, matches, booleans")
+    known_endpoints: Optional[dict] = Field(default=None, description="Known API endpoints if available")
+    preferred_modality: Optional[str] = Field(default=None, description="Preferred connection modality")
+    priority_score: Optional[float] = Field(default=None, description="Priority score for connection ordering")
+
+
 class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID

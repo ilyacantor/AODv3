@@ -56,8 +56,32 @@ The project is built using FastAPI for the backend, with a structured `src/` dir
 - `docs/FARM_SOR_INSTRUCTIONS.md` - Farm test data generation instructions
 - `docs/TEST_HARNESS.md` - Test harness documentation
 
+## AAM Integration
+
+AOD emits ConnectionCandidates to AAM (Adaptive API Mesh). AAM handles connectivity decisions.
+
+**Architecture:**
+- AOD discovers and classifies assets
+- AOD exports ConnectionCandidates via `POST /handoff/aam/candidates`
+- AAM receives candidates and determines how to connect
+- AOD does NOT provision connectors or talk directly to DCL
+
+**ConnectionCandidate fields:**
+- `asset_key`: Canonical identifier (domain/vendor)
+- `governance_status`: governed | shadow | zombie | edge
+- `sor_tagging`: SOR likelihood, domain, evidence
+- `findings`: List of finding codes, severities, messages
+- `signals_summary`: Thin summary (has_idp, has_cmdb, etc.)
+- `priority_score`: Score for connection ordering
+
+**Deprecated endpoints:**
+- `POST /handoff/provision-connector` - Returns 410 Gone
+- `GET /handoff/targeting-package` - Returns 410 Gone
+
 ## Recent Changes
 
+- **2026-01-22**: ConnectionCandidate output contract implemented - AAM handoff via POST /handoff/aam/candidates
+- **2026-01-22**: DCL provisioning endpoints deprecated - AOD no longer talks directly to DCL
 - **2026-01-22**: SOR Phase 2 complete - Pipeline integration with evidence_refs-derived entity_id correlation
 - **2026-01-21**: SOR Phase 1 complete - Signal-based scoring engine with 8 weighted signals
 - **2026-01-21**: Guided tour enhanced with "Legacy Stack" section (8 total stops)

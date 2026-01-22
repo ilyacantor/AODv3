@@ -1,33 +1,38 @@
 """
-Handoff API - Target Manifests and Connector Provisioning
+Handoff API - ConnectionCandidate Export for AAM
 
 AOD (Asset Observation & Discovery) identifies assets and their governance state.
-This module provides handoff interfaces to:
-- AAM (Adaptive API Mesh) - Target Manifests for connection establishment
-- DCL (Data Connectivity Layer) - Direct provisioning for the Ingest Sidecar
+This module provides handoff interfaces to AAM (Adaptive API Mesh).
 
-Phase 4: The Autonomous Handshake
-AOD finds the route -> POSTs config to DCL -> DCL starts ingesting.
+ARCHITECTURE:
+- AOD emits ConnectionCandidates to express connection INTENT + EVIDENCE
+- AOD does NOT decide how to connect - AAM handles that
+- AOD does NOT talk directly to DCL for provisioning
+
+GUARDRAILS:
+- AOD does NOT provision connectors
+- AOD does NOT call DCL ingestion/provision endpoints
+- AOD emits intent + evidence only
+- If something is unknown, emit it as-is; do NOT infer connectivity details
 """
 
-import os
 import logging
 
-import httpx
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from pydantic import BaseModel
 
 from src.aod.db.database import get_db_direct
-from src.aod.models.output_contracts import ProvisioningStatus
-from src.aod.pipeline.middleware_scanner import MiddlewareScanner
+from src.aod.models.output_contracts import (
+    ProvisioningStatus,
+    ConnectionCandidate,
+    CandidateFinding,
+    CandidateSORTagging,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/handoff")
-
-DCL_URL = os.environ.get("DCL_URL", "http://localhost:5001")
-DCL_PROVISION_ENDPOINT = "/api/ingest/provision"
 
 
 class GovernanceInfo(BaseModel):
@@ -149,181 +154,205 @@ async def get_aam_manifest(
     )
 
 
-class ScanResponse(BaseModel):
-    """Response from middleware scan."""
-    platform: str
-    detected_url: str
-    related_asset: str
-    confidence: float
-    stream_type: str
-
-
-class ScanAllResponse(BaseModel):
-    """Response from scan-all request."""
-    routes: list[ScanResponse]
+class AAMCandidatesResponse(BaseModel):
+    """Response for AAM candidates export"""
+    run_id: str
+    candidates: List[ConnectionCandidate]
     count: int
 
 
-class ProvisionRequest(BaseModel):
-    """Request to provision a connector to DCL."""
-    platform: str = "mulesoft"
-    chaos_mode: bool = True
-    dcl_url: Optional[str] = None
-
-
-class ProvisionResponse(BaseModel):
-    """Response from provision request."""
-    status: str
-    message: str
-    connector_id: str
-    dcl_response: Optional[dict] = None
-
-
-@router.get("/scan-middleware", response_model=ScanResponse)
-async def scan_middleware(platform: str = "mulesoft"):
-    """
-    Scan for middleware integration routes.
+def infer_category(asset) -> Optional[str]:
+    """Infer asset category from vendor/domain patterns"""
+    vendor_lower = (asset.vendor or "").lower()
+    domains = asset.identifiers.domains if asset.identifiers else []
+    domain_str = " ".join(domains).lower()
     
-    Returns detected middleware route configuration for platforms like
-    MuleSoft, Workato, Zapier, etc.
-    """
-    scanner = MiddlewareScanner()
-    route = scanner.scan(platform)
-    
-    return ScanResponse(
-        platform=route.platform,
-        detected_url=route.detected_url,
-        related_asset=route.related_asset,
-        confidence=route.confidence,
-        stream_type=route.stream_type
-    )
+    if any(x in vendor_lower or x in domain_str for x in ["salesforce", "hubspot", "zoho", "pipedrive"]):
+        return "crm"
+    if any(x in vendor_lower or x in domain_str for x in ["netsuite", "sap", "oracle", "dynamics"]):
+        return "erp"
+    if any(x in vendor_lower or x in domain_str for x in ["quickbooks", "xero", "sage", "freshbooks"]):
+        return "finance"
+    if any(x in vendor_lower or x in domain_str for x in ["workday", "adp", "bamboohr", "gusto"]):
+        return "hcm"
+    if any(x in vendor_lower or x in domain_str for x in ["okta", "onelogin", "auth0", "ping"]):
+        return "idp"
+    if any(x in vendor_lower or x in domain_str for x in ["snowflake", "databricks", "bigquery", "redshift"]):
+        return "data"
+    if any(x in vendor_lower or x in domain_str for x in ["servicenow", "jira", "zendesk", "freshdesk"]):
+        return "itsm"
+    return None
 
 
-@router.get("/scan-middleware/all", response_model=ScanAllResponse)
-async def scan_middleware_all():
-    """
-    Scan for all known middleware integration routes.
+def map_governance_status(provisioning_status: ProvisioningStatus) -> str:
+    """Map provisioning status to governance status string"""
+    mapping = {
+        ProvisioningStatus.ACTIVE: "governed",
+        ProvisioningStatus.REVIEW: "zombie",
+        ProvisioningStatus.QUARANTINE: "shadow",
+        ProvisioningStatus.BLOCKED: "shadow",
+        ProvisioningStatus.RETIRED: "zombie",
+        ProvisioningStatus.IGNORED: "edge",
+    }
+    return mapping.get(provisioning_status, "edge")
+
+
+def build_signals_summary(asset) -> dict:
+    """Build thin signals summary from asset"""
+    return {
+        "has_idp": asset.lens_coverage.idp if asset.lens_coverage else False,
+        "has_cmdb": asset.lens_coverage.cmdb if asset.lens_coverage else False,
+        "has_finance": asset.lens_coverage.finance if asset.lens_coverage else False,
+        "has_discovery": asset.lens_coverage.discovery if asset.lens_coverage else False,
+        "discovery_source_count": len(asset.discovery_sources) if asset.discovery_sources else 0,
+        "domain_count": len(asset.identifiers.domains) if asset.identifiers else 0,
+        "vendor_governed": asset.lens_coverage.vendor_governed if asset.lens_coverage else False,
+    }
+
+
+def calculate_priority_score(asset, findings: List) -> float:
+    """Calculate priority score for connection ordering"""
+    score = 0.0
     
-    Returns list of all detected middleware routes across known platforms.
-    """
-    scanner = MiddlewareScanner()
-    routes = scanner.scan_all()
+    if asset.sor_tagging:
+        if asset.sor_tagging.likelihood == "high":
+            score += 50.0
+        elif asset.sor_tagging.likelihood == "medium":
+            score += 30.0
+        elif asset.sor_tagging.likelihood == "low":
+            score += 10.0
     
-    return ScanAllResponse(
-        routes=[
-            ScanResponse(
-                platform=r.platform,
-                detected_url=r.detected_url,
-                related_asset=r.related_asset,
-                confidence=r.confidence,
-                stream_type=r.stream_type
+    if asset.provisioning_status == ProvisioningStatus.ACTIVE:
+        score += 20.0
+    elif asset.provisioning_status == ProvisioningStatus.REVIEW:
+        score += 10.0
+    
+    critical_findings = sum(1 for f in findings if f.severity.value == "critical")
+    score += critical_findings * 5.0
+    
+    return round(score, 2)
+
+
+@router.post("/aam/candidates", response_model=AAMCandidatesResponse)
+async def export_aam_candidates(
+    run_id: str,
+    status_filter: Optional[str] = Query(None, description="Filter by status: active, review, all")
+):
+    """
+    Export ConnectionCandidates for AAM (Adaptive API Mesh).
+    
+    AOD emits ConnectionCandidates to express connection INTENT + EVIDENCE.
+    AOD does NOT decide how to connect - AAM handles connectivity.
+    
+    This endpoint is idempotent and non-blocking.
+    """
+    db = await get_db_direct()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    all_assets = await db.get_assets_by_run(run_id)
+    all_findings = await db.get_findings_by_run(run_id)
+    
+    findings_by_asset = {}
+    for f in all_findings:
+        asset_id = str(f.asset_id) if f.asset_id else None
+        if asset_id:
+            if asset_id not in findings_by_asset:
+                findings_by_asset[asset_id] = []
+            findings_by_asset[asset_id].append(f)
+    
+    if status_filter == "all":
+        filtered_assets = all_assets
+    elif status_filter == "review":
+        filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.REVIEW]
+    else:
+        filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
+    
+    candidates = []
+    for asset in filtered_assets:
+        primary_domain = asset.identifiers.domains[0] if asset.identifiers and asset.identifiers.domains else None
+        asset_key = primary_domain or asset.name
+        
+        asset_findings = findings_by_asset.get(str(asset.asset_id), [])
+        thin_findings = [
+            CandidateFinding(
+                code=f.finding_type.value,
+                severity=f.severity.value,
+                message=f.explanation
             )
-            for r in routes
-        ],
-        count=len(routes)
-    )
-
-
-@router.post("/provision-connector", response_model=ProvisionResponse)
-async def provision_connector(request: ProvisionRequest):
-    """
-    Provision a connector from AOD to DCL (The Autonomous Handshake).
+            for f in asset_findings
+        ]
+        
+        thin_sor = None
+        if asset.sor_tagging and asset.sor_tagging.likelihood != "none":
+            thin_sor = CandidateSORTagging(
+                domain=asset.sor_tagging.domain,
+                confidence=asset.sor_tagging.likelihood,
+                evidence=asset.sor_tagging.evidence[:5]
+            )
+        
+        candidate = ConnectionCandidate(
+            asset_key=asset_key,
+            vendor_name=asset.vendor,
+            display_name=asset.name,
+            category=infer_category(asset),
+            governance_status=map_governance_status(asset.provisioning_status),
+            findings=thin_findings,
+            sor_tagging=thin_sor,
+            evidence_refs=asset.evidence_refs[:20] if asset.evidence_refs else [],
+            signals_summary=build_signals_summary(asset),
+            known_endpoints=None,
+            preferred_modality=None,
+            priority_score=calculate_priority_score(asset, asset_findings)
+        )
+        candidates.append(candidate)
     
-    Flow:
-    1. AOD scans for middleware route
-    2. AOD generates Targeting Package
-    3. AOD POSTs to DCL's provision endpoint
-    4. DCL reconfigures its Ingest Sidecar
+    candidates.sort(key=lambda c: c.priority_score or 0, reverse=True)
     
-    Returns provisioning status and the targeting package sent.
-    """
-    scanner = MiddlewareScanner()
-    route = scanner.scan(request.platform)
-    
-    targeting_package = scanner.to_targeting_package(route, chaos_mode=request.chaos_mode)
-    
-    dcl_url = (request.dcl_url or DCL_URL).rstrip("/")
-    provision_url = f"{dcl_url}{DCL_PROVISION_ENDPOINT}"
-    
-    logger.info("handoff.provision_connector", extra={
-        "platform": request.platform,
-        "connector_id": targeting_package["connector_id"],
-        "target_url": targeting_package["target_url"],
-        "dcl_url": provision_url
+    logger.info("handoff.aam_candidates.exported", extra={
+        "run_id": run_id,
+        "candidate_count": len(candidates),
+        "status_filter": status_filter or "active"
     })
     
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                provision_url,
-                json=targeting_package
-            )
-            
-            if response.status_code == 200:
-                dcl_response = response.json()
-                return ProvisionResponse(
-                    status="success",
-                    message="Provisioning Command Sent",
-                    connector_id=targeting_package["connector_id"],
-                    dcl_response=dcl_response
-                )
-            else:
-                logger.warning("handoff.provision_connector.dcl_error", extra={
-                    "status_code": response.status_code,
-                    "response": response.text[:500]
-                })
-                return ProvisionResponse(
-                    status="dcl_error",
-                    message=f"DCL returned {response.status_code}: {response.text[:200]}",
-                    connector_id=targeting_package["connector_id"],
-                    dcl_response=None
-                )
-                
-    except httpx.ConnectError:
-        logger.warning("handoff.provision_connector.dcl_unreachable", extra={
-            "dcl_url": provision_url
-        })
-        return ProvisionResponse(
-            status="dcl_unreachable",
-            message=f"DCL not reachable at {dcl_url}. Package ready for manual provisioning.",
-            connector_id=targeting_package["connector_id"],
-            dcl_response={"targeting_package": targeting_package}
-        )
-        
-    except httpx.TimeoutException:
-        return ProvisionResponse(
-            status="timeout",
-            message="DCL provision request timed out",
-            connector_id=targeting_package["connector_id"],
-            dcl_response=None
-        )
-        
-    except Exception as e:
-        logger.exception("handoff.provision_connector.error")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to provision connector: {str(e)}"
-        )
+    return AAMCandidatesResponse(
+        run_id=run_id,
+        candidates=candidates,
+        count=len(candidates)
+    )
+
+
+@router.post("/provision-connector")
+async def provision_connector_deprecated():
+    """
+    DEPRECATED: Direct DCL provisioning has been disabled.
+    
+    AOD no longer provisions connectors directly to DCL.
+    Use POST /handoff/aam/candidates to export ConnectionCandidates,
+    then let AAM handle connectivity decisions.
+    
+    GUARDRAILS:
+    - AOD does NOT decide how to connect
+    - AOD does NOT talk directly to DCL for provisioning
+    - AOD emits intent + evidence only via ConnectionCandidates
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Endpoint deprecated. Use POST /handoff/aam/candidates to export connection candidates to AAM. AOD no longer provisions connectors directly."
+    )
 
 
 @router.get("/targeting-package")
-async def get_targeting_package(platform: str = "mulesoft", chaos_mode: bool = True):
+async def get_targeting_package_deprecated():
     """
-    Get the Targeting Package without sending to DCL.
+    DEPRECATED: Targeting package generation has been disabled.
     
-    Useful for debugging or manual provisioning scenarios.
-    Returns both the detected route and the formatted targeting package.
+    AOD no longer generates targeting packages for DCL.
+    Use POST /handoff/aam/candidates instead.
     """
-    scanner = MiddlewareScanner()
-    route = scanner.scan(platform)
-    package = scanner.to_targeting_package(route, chaos_mode=chaos_mode)
-    
-    return {
-        "detected_route": {
-            "platform": route.platform,
-            "detected_url": route.detected_url,
-            "related_asset": route.related_asset,
-            "confidence": route.confidence
-        },
-        "targeting_package": package
-    }
+    raise HTTPException(
+        status_code=410,
+        detail="Endpoint deprecated. Use POST /handoff/aam/candidates instead."
+    )

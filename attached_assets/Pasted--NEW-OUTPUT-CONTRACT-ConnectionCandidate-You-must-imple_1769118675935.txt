@@ -1,0 +1,77 @@
+## NEW OUTPUT CONTRACT: ConnectionCandidate
+
+You must implement an export of ConnectionCandidate objects.
+
+Create (or reuse if already present) a model with the following fields:
+
+ConnectionCandidate:
+- asset_key: str               # canonical asset key (domain/vendor)
+- vendor_name: str | None
+- display_name: str
+- category: str | None         # crm, erp, finance, data, idp, etc.
+- governance_status: str       # governed | shadow | zombie | edge
+- findings: list[              # existing AOD findings
+    {
+      code: str,
+      severity: str,
+      message: str
+    }
+  ]
+- sor_tagging: optional {
+    domain: str,
+    confidence: str,
+    evidence: list[str]
+  }
+- evidence_refs: list[str]     # pointers to existing AOD evidence/observations
+- signals_summary: dict        # thin summary (counts, matches, booleans)
+- known_endpoints: optional dict
+- preferred_modality: optional str
+- priority_score: optional float
+
+---
+
+## IMPLEMENTATION TASKS
+
+1) Identify where AOD already has:
+   - asset canonicalization
+   - findings
+   - SOR tagging
+   - evidence references
+
+2) Add a single export mechanism:
+   ONE of:
+   - POST /api/aam/candidates
+   - OR publish to a queue / Redis channel named `aod.connection_candidates`
+
+   (Choose the mechanism already idiomatic to this repo.)
+
+3) Ensure that emitting ConnectionCandidates is:
+   - idempotent
+   - non-blocking
+   - does NOT affect existing AOD classification logic
+
+4) REMOVE or DISABLE any existing logic that:
+   - provisions connectors
+   - calls DCL ingestion/provision endpoints
+   - writes connector configs for downstream systems
+
+   Leave discovery, triage, and classification untouched.
+
+---
+
+## GUARDRails
+
+- AOD does NOT decide how to connect.
+- AOD does NOT talk directly to DCL for provisioning.
+- AOD emits intent + evidence only.
+- If something is unknown, emit it as-is; do NOT infer connectivity details.
+
+---
+
+## DELIVERABLES
+
+- ConnectionCandidate model
+- Export endpoint or publisher
+- Sample emitted payload (JSON)
+- Short README section explaining:
+  “AOD emits ConnectionCandidates to AAM; AAM handles connectivity.”

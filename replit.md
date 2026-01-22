@@ -45,3 +45,20 @@ The project is built using FastAPI for the backend, with a structured `src/` dir
 - **DCL (Data Connectivity Layer)**: AOD integrates with DCL for provisioning connectors and ingesting data through its Ingest Sidecar.
 - **AAM (Adaptive API Mesh)**: AOD prepares assets for connection to AAM, which serves as the connection and authentication layer for the broader AOS platform.
 - **Uvicorn**: Used to run the FastAPI application locally.
+
+## Important Files
+
+- `src/aod/pipeline/pipeline_executor.py` - Main pipeline orchestrator
+- `src/aod/pipeline/sor_scoring.py` - SOR signal-based scoring engine
+- `src/aod/models/output_contracts.py` - Data models including SORTagging
+- `src/aod/core/policy/schema.py` - Policy configuration schema
+- `config/policy_master.json` - Central policy switchboard configuration
+- `docs/FARM_SOR_INSTRUCTIONS.md` - Farm test data generation instructions
+- `docs/TEST_HARNESS.md` - Test harness documentation
+
+## Recent Changes
+
+- **2026-01-22**: SOR Phase 2 complete - Pipeline integration with evidence_refs-derived entity_id correlation
+- **2026-01-21**: SOR Phase 1 complete - Signal-based scoring engine with 8 weighted signals
+- **2026-01-21**: Guided tour enhanced with "Legacy Stack" section (8 total stops)
+- **2026-01-20**: Phase 4 Autonomous Handshake operational (99.3-99.8% accuracy)

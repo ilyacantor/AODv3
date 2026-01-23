@@ -104,6 +104,7 @@ AOD emits ConnectionCandidates to AAM (Adaptive API Mesh). AAM handles connectiv
 
 ## Recent Changes
 
+- **2026-01-23**: Execution signaling added - ConnectionCandidate now includes `execution_allowed` and `action_type` fields. Blocking findings (critical severity) set execution_allowed=false, action_type="inventory_only". Clear candidates get execution_allowed=true, action_type="provision". AAM receives complete inventory but knows which candidates require triage resolution before auto-provisioning.
 - **2026-01-23**: Nomenclature refactoring - "Pipeline" → "DiscoveryScan" terminology with backward-compatible aliases
 - **2026-01-23**: PolicyManifestBuilder created - GET /policy/manifest exports governance rules for AAM consumption
 - **2026-01-23**: scan_session_id added to AAM handoff responses (aliases run_id for lineage tracking)

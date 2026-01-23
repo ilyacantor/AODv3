@@ -246,6 +246,26 @@ def calculate_priority_score(asset, findings: List) -> float:
     return round(score, 2)
 
 
+def determine_execution_flags(findings: list) -> tuple[bool, str]:
+    """
+    Determine execution flags based on findings.
+    
+    Returns:
+        tuple: (execution_allowed, action_type)
+        - execution_allowed: False if any critical/blocking findings exist
+        - action_type: "inventory_only" if blocked, "provision" if clear
+    
+    Logic:
+        - CRITICAL severity findings = blocking → execution_allowed=False
+        - No critical findings = clear → execution_allowed=True
+    """
+    has_blocking = any(f.severity.value == "critical" for f in findings)
+    
+    if has_blocking:
+        return (False, "inventory_only")
+    return (True, "provision")
+
+
 @router.post("/aam/candidates", response_model=AAMCandidatesResponse)
 async def export_aam_candidates(
     run_id: str,
@@ -311,6 +331,8 @@ async def export_aam_candidates(
             vendor_display = asset.fabric_plane_tag.controller_vendor.replace("_", " ").title()
             connected_via = f"Connect via {vendor_display}"
         
+        execution_allowed, action_type = determine_execution_flags(asset_findings)
+        
         candidate = ConnectionCandidate(
             asset_key=asset_key,
             vendor_name=asset.vendor,
@@ -324,7 +346,9 @@ async def export_aam_candidates(
             known_endpoints=None,
             preferred_modality=None,
             priority_score=calculate_priority_score(asset, asset_findings),
-            connected_via_plane=connected_via
+            connected_via_plane=connected_via,
+            execution_allowed=execution_allowed,
+            action_type=action_type
         )
         candidates.append(candidate)
     

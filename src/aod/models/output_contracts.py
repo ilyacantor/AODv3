@@ -314,6 +314,13 @@ class ConnectionCandidate(BaseModel):
     AOD does NOT talk directly to DCL for provisioning.
     
     This is a one-way handoff: AOD -> AAM.
+    
+    EXECUTION SIGNALING:
+    - execution_allowed: Whether AAM should auto-provision this candidate
+    - action_type: "provision" (clear to act) or "inventory_only" (blocked, do not act)
+    
+    Blocking findings (critical severity) set execution_allowed=False.
+    AAM receives complete inventory but knows which candidates require triage resolution.
     """
     asset_key: str = Field(description="Canonical asset key (domain/vendor)")
     vendor_name: Optional[str] = None
@@ -328,6 +335,8 @@ class ConnectionCandidate(BaseModel):
     preferred_modality: Optional[str] = Field(default=None, description="Preferred connection modality")
     priority_score: Optional[float] = Field(default=None, description="Priority score for connection ordering")
     connected_via_plane: Optional[str] = Field(default=None, description="Fabric plane connection: 'Connect via MuleSoft', etc.")
+    execution_allowed: bool = Field(default=True, description="Whether AAM should auto-provision. False if blocking findings exist.")
+    action_type: str = Field(default="provision", description="Execution intent: 'provision' (clear) or 'inventory_only' (blocked)")
 
 
 class Asset(BaseModel):

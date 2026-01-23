@@ -25,6 +25,7 @@
                 <button class="header-nav-tab active" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
                 <button class="header-nav-tab" data-tab="policy">Policy</button>
+                <button class="header-nav-tab" data-tab="handoff">Handoff</button>
                 <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
             </nav>
         </div>
@@ -265,6 +266,53 @@
             title="Policy Switchboard"
             src="/static/policy-switchboard.html"
         ></iframe>
+    </div>
+    
+    <div id="handoffTabContent" class="main-tab-content">
+        <main class="container">
+            <div class="handoff-header">
+                <div>
+                    <h2 class="section-title" style="margin-bottom:0.25rem;">AAM Handoff Preview</h2>
+                    <p class="config-note" style="margin:0;">Connection candidates ready for AAM handoff.</p>
+                </div>
+                <div class="handoff-controls">
+                    <div class="handoff-run-select">
+                        <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
+                        <select class="form-input" id="handoffRunSelect" style="width:250px;">
+                            <option value="">Select a run...</option>
+                        </select>
+                    </div>
+                    <div class="handoff-status-filter">
+                        <label style="font-size:0.75rem;color:var(--slate-400);">Status</label>
+                        <select class="form-input" id="handoffStatusFilter" style="width:120px;">
+                            <option value="active">Active</option>
+                            <option value="review">Review</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="handoff-summary" id="handoffSummary">
+                <div class="handoff-stat">
+                    <span class="handoff-stat-value" id="handoffTotalCount">0</span>
+                    <span class="handoff-stat-label">Total Candidates</span>
+                </div>
+                <div class="handoff-stat">
+                    <span class="handoff-stat-value" id="handoffFabricCount">0</span>
+                    <span class="handoff-stat-label">Fabric Plane</span>
+                </div>
+                <div class="handoff-stat">
+                    <span class="handoff-stat-value" id="handoffSorCount">0</span>
+                    <span class="handoff-stat-label">SOR Candidates</span>
+                </div>
+                <button class="btn btn-primary" id="exportToAAMBtn" style="margin-left:auto;">Export to AAM</button>
+            </div>
+            
+            <div class="handoff-candidates-container" id="handoffCandidatesContainer">
+                <div class="handoff-empty">Select a snapshot to load candidates</div>
+            </div>
+        </main>
     </div>
     
     <div id="testTabContent" class="main-tab-content">

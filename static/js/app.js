@@ -75,6 +75,7 @@
                     tab.classList.add('active');
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
                     if (targetTab === 'triage') loadTriageRuns();
+                    if (targetTab === 'handoff') loadHandoffRuns();
                 });
             });
         }
@@ -2762,6 +2763,7 @@
         initMainTabs();
         initTriageTab();
         initTestTab();
+        initHandoffTab();
         
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('from') === 'farm' || urlParams.get('source') === 'farm') {

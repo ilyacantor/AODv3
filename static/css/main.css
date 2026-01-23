@@ -1117,3 +1117,194 @@ main { padding: 2rem; }
 @keyframes toast-spin {
     to { transform: rotate(360deg); }
 }
+
+/* Handoff Tab Styles */
+.handoff-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--slate-700);
+}
+.handoff-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+}
+.handoff-run-select, .handoff-status-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.handoff-summary {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    padding: 1rem 1.5rem;
+    background: var(--slate-800);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+.handoff-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.handoff-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--cyan-400);
+}
+.handoff-stat-label {
+    font-size: 0.75rem;
+    color: var(--slate-400);
+    text-transform: uppercase;
+}
+.handoff-candidates-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.handoff-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--slate-500);
+    background: var(--slate-800);
+    border-radius: 8px;
+}
+.handoff-candidate-card {
+    background: var(--slate-800);
+    border: 1px solid var(--slate-700);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    transition: all 0.2s ease;
+}
+.handoff-candidate-card:hover {
+    border-color: var(--cyan-600);
+}
+.handoff-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+.handoff-card-title {
+    font-weight: 600;
+    color: white;
+    font-size: 1rem;
+}
+.handoff-card-subtitle {
+    font-size: 0.8rem;
+    color: var(--slate-400);
+    margin-top: 0.15rem;
+}
+.handoff-card-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.handoff-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.handoff-badge.governed {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--green-400);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+.handoff-badge.shadow {
+    background: rgba(251, 191, 36, 0.2);
+    color: var(--amber-400);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+}
+.handoff-badge.zombie {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--red-400);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.handoff-badge.edge {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--slate-400);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+}
+.handoff-badge.fabric-plane {
+    background: rgba(168, 85, 247, 0.2);
+    color: var(--purple-400);
+    border: 1px solid rgba(168, 85, 247, 0.4);
+}
+.handoff-priority-score {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--cyan-400);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.handoff-card-body {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+}
+.handoff-sor-tag {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 6px;
+}
+.handoff-sor-label {
+    font-size: 0.65rem;
+    color: var(--purple-400);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.handoff-sor-value {
+    color: white;
+    font-weight: 500;
+}
+.handoff-sor-confidence {
+    font-size: 0.7rem;
+    color: var(--slate-400);
+}
+.handoff-finding-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex: 1;
+}
+.handoff-finding {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+.handoff-finding.severity-high {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--red-400);
+}
+.handoff-finding.severity-medium {
+    background: rgba(251, 191, 36, 0.15);
+    color: var(--amber-400);
+}
+.handoff-finding.severity-low {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--green-400);
+}
+.handoff-finding.severity-info {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--slate-400);
+}

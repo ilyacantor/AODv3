@@ -1343,6 +1343,178 @@
             
         }
         
+        function initHandoffTab() {
+            const handoffSelect = document.getElementById('handoffRunSelect');
+            const handoffStatusFilter = document.getElementById('handoffStatusFilter');
+            const exportBtn = document.getElementById('exportToAAMBtn');
+            
+            handoffSelect.addEventListener('change', () => {
+                const runId = handoffSelect.value;
+                const statusFilter = handoffStatusFilter.value;
+                if (runId) loadHandoffCandidates(runId, statusFilter);
+            });
+            
+            handoffStatusFilter.addEventListener('change', () => {
+                const runId = handoffSelect.value;
+                const statusFilter = handoffStatusFilter.value;
+                if (runId) loadHandoffCandidates(runId, statusFilter);
+            });
+            
+            exportBtn.addEventListener('click', exportToAAM);
+        }
+        
+        async function loadHandoffRuns() {
+            const select = document.getElementById('handoffRunSelect');
+            try {
+                const response = await fetch('/api/runs');
+                const runs = await response.json();
+                const currentVal = select.value;
+                select.innerHTML = '<option value="">Select a run...</option>';
+                const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
+                completedRuns.forEach(run => {
+                    const opt = document.createElement('option');
+                    opt.value = run.run_id;
+                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                    const dateStr = run.started_at || run.created_at;
+                    const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
+                    opt.textContent = `${tenant} - ${date}`;
+                    select.appendChild(opt);
+                });
+                if (currentVal) {
+                    select.value = currentVal;
+                } else if (completedRuns.length > 0) {
+                    select.value = completedRuns[0].run_id;
+                    loadHandoffCandidates(completedRuns[0].run_id, 'active');
+                }
+            } catch (err) {
+                console.error('Failed to load handoff runs:', err);
+            }
+        }
+        
+        async function loadHandoffCandidates(runId, statusFilter) {
+            const container = document.getElementById('handoffCandidatesContainer');
+            container.innerHTML = '<div class="handoff-empty"><div class="spinner"></div> Loading candidates...</div>';
+            
+            try {
+                const response = await fetch(`/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load candidates: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const candidates = data.candidates || [];
+                
+                document.getElementById('handoffTotalCount').textContent = data.count || candidates.length;
+                const fabricCount = candidates.filter(c => c.connected_via_plane).length;
+                document.getElementById('handoffFabricCount').textContent = fabricCount;
+                const sorCount = candidates.filter(c => c.sor_tagging && c.sor_tagging.domain).length;
+                document.getElementById('handoffSorCount').textContent = sorCount;
+                
+                renderHandoffCandidates(candidates);
+            } catch (err) {
+                console.error('Failed to load handoff candidates:', err);
+                container.innerHTML = `<div class="handoff-empty" style="color:var(--red-400);">Error: ${err.message}</div>`;
+            }
+        }
+        
+        function renderHandoffCandidates(candidates) {
+            const container = document.getElementById('handoffCandidatesContainer');
+            
+            if (!candidates || candidates.length === 0) {
+                container.innerHTML = '<div class="handoff-empty">No candidates found for this snapshot</div>';
+                return;
+            }
+            
+            let html = '';
+            for (const candidate of candidates) {
+                const displayName = candidate.display_name || candidate.asset_key || 'Unknown';
+                const vendorName = candidate.vendor_name || '';
+                const assetKey = candidate.asset_key || '';
+                const govStatus = candidate.governance_status || 'edge';
+                const priorityScore = candidate.priority_score != null ? candidate.priority_score.toFixed(1) : '-';
+                const connectedViaPlane = candidate.connected_via_plane;
+                const sorTagging = candidate.sor_tagging;
+                const findings = candidate.findings || [];
+                
+                let badgesHtml = `<span class="handoff-badge ${govStatus}">${govStatus}</span>`;
+                if (connectedViaPlane) {
+                    badgesHtml += `<span class="handoff-badge fabric-plane">⚡ ${connectedViaPlane}</span>`;
+                }
+                
+                let sorHtml = '';
+                if (sorTagging && sorTagging.domain) {
+                    const confidence = sorTagging.confidence || 'unknown';
+                    sorHtml = `
+                        <div class="handoff-sor-tag">
+                            <span class="handoff-sor-label">SOR Domain</span>
+                            <span class="handoff-sor-value">${sorTagging.domain}</span>
+                            <span class="handoff-sor-confidence">${confidence} confidence</span>
+                        </div>`;
+                }
+                
+                let findingsHtml = '';
+                if (findings.length > 0) {
+                    findingsHtml = '<div class="handoff-finding-list">';
+                    for (const finding of findings) {
+                        const code = finding.code || finding.type || 'unknown';
+                        const severity = (finding.severity || 'info').toLowerCase();
+                        findingsHtml += `<span class="handoff-finding severity-${severity}">${code}</span>`;
+                    }
+                    findingsHtml += '</div>';
+                }
+                
+                html += `
+                    <div class="handoff-candidate-card">
+                        <div class="handoff-card-header">
+                            <div>
+                                <div class="handoff-card-title">${displayName}</div>
+                                <div class="handoff-card-subtitle">${vendorName}${vendorName && assetKey ? ' • ' : ''}${assetKey}</div>
+                            </div>
+                            <div class="handoff-card-badges">
+                                ${badgesHtml}
+                                <span class="handoff-priority-score">Score: ${priorityScore}</span>
+                            </div>
+                        </div>
+                        <div class="handoff-card-body">
+                            ${sorHtml}
+                            ${findingsHtml}
+                        </div>
+                    </div>`;
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        async function exportToAAM() {
+            const runId = document.getElementById('handoffRunSelect').value;
+            const statusFilter = document.getElementById('handoffStatusFilter').value;
+            
+            if (!runId) {
+                showToast('Please select a snapshot first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Export failed: ${response.status}`);
+                }
+                
+                showToast('Candidates exported to AAM', 'success');
+            } catch (err) {
+                console.error('Failed to export to AAM:', err);
+                showToast(`Export failed: ${err.message}`, 'error');
+            }
+        }
+        
         function showDecisionDetail(assetKey) {
                 const t = decisionTracesCache[assetKey];
                 if (!t) return;

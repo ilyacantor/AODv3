@@ -1349,7 +1349,18 @@
             const loadBtn = document.getElementById('loadHandoffBtn');
             const exportBtn = document.getElementById('exportToAAMBtn');
             
+            if (!handoffSelect || !loadBtn) {
+                console.error('Handoff tab elements not found');
+                return;
+            }
+            
             loadBtn.addEventListener('click', () => {
+                const runId = handoffSelect.value;
+                const statusFilter = handoffStatusFilter.value;
+                if (runId) loadHandoffCandidates(runId, statusFilter);
+            });
+            
+            handoffSelect.addEventListener('change', () => {
                 const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
                 if (runId) loadHandoffCandidates(runId, statusFilter);
@@ -1384,10 +1395,11 @@
                     opt.textContent = `${tenant} - ${date}`;
                     select.appendChild(opt);
                 });
-                if (currentVal && currentVal !== 'Loading runs...') {
+                if (currentVal && currentVal !== 'Loading runs...' && currentVal !== '') {
                     select.value = currentVal;
                 } else if (completedRuns.length > 0) {
                     select.value = completedRuns[0].run_id;
+                    loadHandoffCandidates(completedRuns[0].run_id, 'all');
                 }
             } catch (err) {
                 console.error('Failed to load handoff runs:', err);

@@ -42,6 +42,8 @@ from .admission import (
 )
 from .vendor_inference import extract_registered_domain
 from .artifact_handler import handle_artifacts
+from .fabric_detector import detect_fabric_planes, apply_fabric_plane_tags
+from .preset_inference import infer_preset
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
 from .asset_identity import late_bind_and_merge_assets
@@ -459,6 +461,22 @@ def run_pipeline_ephemeral(
         # Propagates governance to all assets in the same vendor domain set
         assets = propagate_vendor_governance_farm_style(assets, logger)
         
+        # Stage 4: Fabric Plane Detection
+        # Identify Control Planes (motherships) - AAM connects to Fabric Planes, not apps
+        fabric_planes, asset_plane_tags = detect_fabric_planes(assets)
+        assets = apply_fabric_plane_tags(assets, asset_plane_tags)
+        
+        # Stage 5: Enterprise Preset Inference
+        # Determine organizational integration pattern for AAM connection strategy
+        preset_context = infer_preset(assets, fabric_planes)
+        logger.info("preset_inference.complete", extra={
+            "run_id": run_id,
+            "preset": preset_context.preset.value,
+            "confidence": preset_context.confidence,
+            "primary_plane": preset_context.primary_plane,
+            "fabric_planes_detected": len(fabric_planes)
+        })
+        
         # Stage 1 Metrics: Track CMDB external_ref domain injection
         # cmdb_external_ref_domains_extracted_total: How many domains from CMDB external_ref
         # domains_added_to_identifiers_from_cmdb_external_ref_total: Should be 0 after Stage 1
@@ -829,6 +847,25 @@ async def execute_pipeline(
         t_start = time.perf_counter()
         assets = propagate_vendor_governance_farm_style(assets, logger)
         timings['vendor_governance'] = time.perf_counter() - t_start
+        
+        # Stage 4: Fabric Plane Detection
+        # Identify Control Planes (motherships) - AAM connects to Fabric Planes, not apps
+        t_start = time.perf_counter()
+        fabric_planes, asset_plane_tags = detect_fabric_planes(assets)
+        assets = apply_fabric_plane_tags(assets, asset_plane_tags)
+        timings['fabric_detection'] = time.perf_counter() - t_start
+        
+        # Stage 5: Enterprise Preset Inference
+        t_start = time.perf_counter()
+        preset_context = infer_preset(assets, fabric_planes)
+        timings['preset_inference'] = time.perf_counter() - t_start
+        logger.info("preset_inference.complete", extra={
+            "run_id": run_id,
+            "preset": preset_context.preset.value,
+            "confidence": preset_context.confidence,
+            "primary_plane": preset_context.primary_plane,
+            "fabric_planes_detected": len(fabric_planes)
+        })
         
         # Stage 1 Metrics: Track CMDB external_ref domain injection
         stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)

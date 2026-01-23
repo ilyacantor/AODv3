@@ -306,6 +306,11 @@ async def export_aam_candidates(
                 evidence=asset.sor_tagging.evidence[:5]
             )
         
+        connected_via = None
+        if asset.fabric_plane_tag:
+            vendor_display = asset.fabric_plane_tag.controller_vendor.replace("_", " ").title()
+            connected_via = f"Connect via {vendor_display}"
+        
         candidate = ConnectionCandidate(
             asset_key=asset_key,
             vendor_name=asset.vendor,
@@ -318,7 +323,8 @@ async def export_aam_candidates(
             signals_summary=build_signals_summary(asset),
             known_endpoints=None,
             preferred_modality=None,
-            priority_score=calculate_priority_score(asset, asset_findings)
+            priority_score=calculate_priority_score(asset, asset_findings),
+            connected_via_plane=connected_via
         )
         candidates.append(candidate)
     

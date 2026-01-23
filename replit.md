@@ -34,6 +34,26 @@ The system's data flow begins with fetching snapshot data from Farm (a test data
 - **SOR Identification**: Assets are scored based on signals like CMDB authoritative status, known SOR vendors, middleware exporter presence, and SSO/SCIM enablement. Confidence bands (high, medium, low) indicate the likelihood of an asset being an SOR. SOR scoring runs as a DiscoveryScan stage after vendor governance propagation, populating `sor_tagging` on each asset with likelihood, confidence, evidence, domain, and signals_matched.
 - **Policy Manifest Export**: PolicyManifestBuilder compiles governance rules into a versioned JSON manifest (`GET /policy/manifest`) that AAM consumes during handshake for connection gating.
 - **IdP Governance Policy**: Configurable policy (`Strict` or `Loose`) to control how IdP matches assert governance, balancing between detecting shadow IT and reducing noise.
+- **Fabric Plane Detection**: FabricPlaneDetector identifies Control Planes (motherships) that aggregate data. AAM connects to Fabric Planes, not individual apps.
+- **Enterprise Preset Inference**: PresetInferenceEngine classifies organizational integration patterns (iPaaS-centric, Warehouse-centric, Event-driven, etc.) to determine AAM connection strategy.
+
+### Fabric Planes Architecture
+AOD prioritizes discovering **Fabric Control Planes** over individual endpoints. Finding 500 APIs is useless if they're all managed by one MuleSoft instance.
+
+**The 4 Fabric Planes:**
+1. **IPAAS**: Workato, MuleSoft - Control plane for integration flows
+2. **API_GATEWAY**: Kong, Apigee - Direct managed API access
+3. **EVENT_BUS**: Kafka, EventBridge - Streaming backbone
+4. **DATA_WAREHOUSE**: Snowflake, BigQuery - Source of Truth storage
+
+**Enterprise Presets:**
+- PRESET_6_SCRAPPY: Direct app connections (no fabric planes)
+- PRESET_8_IPAAS: >50% assets via iPaaS
+- PRESET_9_EVENT_DRIVEN: Kafka is primary integration bus
+- PRESET_10_API_GATEWAY: API Gateway-centric
+- PRESET_11_WAREHOUSE: Warehouse holds canonical data
+
+**ConnectionCandidate.connected_via_plane**: Assets include connection routing (e.g., "Connect via MuleSoft") so AAM knows to use the fabric plane, not direct connection.
 
 ### UI/UX Decisions
 The user interface features a dark slate foundation with cyan and purple accents. The 'Quicksand' font is used. Notifications are minimal, primarily using cyan toast messages for loading states.

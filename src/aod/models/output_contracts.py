@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -216,6 +216,81 @@ class SORTagging(BaseModel):
     signals_matched: list[str] = Field(default_factory=list, description="Signal names that contributed to score")
 
 
+class FabricPlaneType(str, Enum):
+    """
+    Types of Fabric Control Planes.
+    
+    AAM connects ONLY to Fabric Planes that aggregate data.
+    Direct app connections only in "Preset 6 (Scrappy)" mode.
+    """
+    IPAAS = "ipaas"               # Workato, MuleSoft - integration flows
+    API_GATEWAY = "api_gateway"   # Kong, Apigee - managed API access
+    EVENT_BUS = "event_bus"       # Kafka, EventBridge - streaming backbone
+    DATA_WAREHOUSE = "warehouse"  # Snowflake, BigQuery - source of truth storage
+    DIRECT = "direct"             # Direct app connection (Preset 6 only)
+    UNKNOWN = "unknown"
+
+
+class EnterprisePreset(str, Enum):
+    """
+    Enterprise Preset Patterns - determines AAM connection strategy.
+    
+    AAM switches logic based on organizational integration maturity.
+    """
+    PRESET_6_SCRAPPY = "preset_6_scrappy"         # Direct app connections
+    PRESET_8_IPAAS = "preset_8_ipaas"             # iPaaS-centric (MuleSoft/Workato)
+    PRESET_9_EVENT_DRIVEN = "preset_9_event"      # Event-driven (Kafka primary)
+    PRESET_10_API_GATEWAY = "preset_10_gateway"   # API Gateway-centric (Kong/Apigee)
+    PRESET_11_WAREHOUSE = "preset_11_warehouse"   # Warehouse-centric (Snowflake canonical)
+    PRESET_HYBRID = "preset_hybrid"               # Mixed pattern
+    PRESET_UNKNOWN = "preset_unknown"             # Unable to determine
+
+
+class FabricPlaneTag(BaseModel):
+    """
+    Tag indicating asset is managed by a Fabric Control Plane.
+    
+    Assets tagged with this are connected VIA the plane, not directly.
+    """
+    plane_type: FabricPlaneType
+    controller_vendor: str           # e.g., "mulesoft", "snowflake", "kafka"
+    controller_domain: Optional[str] = None  # e.g., "anypoint.mulesoft.com"
+    evidence: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class FabricPlane(BaseModel):
+    """
+    A detected Fabric Control Plane (Mothership).
+    
+    Finding 500 APIs is useless if they're all managed by one MuleSoft instance.
+    AOD must prioritize discovering these Control Planes first.
+    """
+    plane_id: str
+    plane_type: FabricPlaneType
+    vendor: str
+    display_name: str
+    domain: Optional[str] = None
+    managed_asset_count: int = 0
+    evidence_refs: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class PresetContext(BaseModel):
+    """
+    Enterprise Preset inference result.
+    
+    Determines the organizational integration pattern based on
+    Fabric Plane density and canonical data ownership.
+    """
+    preset: EnterprisePreset
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    rationale: str = ""
+    density_scores: Dict[str, float] = Field(default_factory=dict)  # plane_type -> % of assets
+    primary_plane: Optional[str] = None    # Primary control plane vendor
+    evidence: List[str] = Field(default_factory=list)
+
+
 class CandidateFinding(BaseModel):
     """Thin finding representation for ConnectionCandidate"""
     code: str
@@ -252,6 +327,7 @@ class ConnectionCandidate(BaseModel):
     known_endpoints: Optional[dict] = Field(default=None, description="Known API endpoints if available")
     preferred_modality: Optional[str] = Field(default=None, description="Preferred connection modality")
     priority_score: Optional[float] = Field(default=None, description="Priority score for connection ordering")
+    connected_via_plane: Optional[str] = Field(default=None, description="Fabric plane connection: 'Connect via MuleSoft', etc.")
 
 
 class Asset(BaseModel):
@@ -289,6 +365,11 @@ class Asset(BaseModel):
     sor_tagging: Optional[SORTagging] = Field(
         default=None,
         description="SOR scoring results - identifies likely Systems of Record"
+    )
+    # Jan 2026: Fabric Plane tagging - identifies assets behind control planes
+    fabric_plane_tag: Optional[FabricPlaneTag] = Field(
+        default=None,
+        description="Fabric Plane tag - indicates asset is managed by a control plane"
     )
     created_at: datetime = Field(default_factory=now_pst)
 

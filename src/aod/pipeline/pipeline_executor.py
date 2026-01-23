@@ -853,6 +853,12 @@ async def execute_pipeline(
         t_start = time.perf_counter()
         fabric_planes, asset_plane_tags = detect_fabric_planes(assets)
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
+        logger.info("fabric_detection.complete", extra={
+            "run_id": run_id,
+            "fabric_planes_count": len(fabric_planes),
+            "asset_plane_tags_count": len(asset_plane_tags),
+            "fabric_planes": [p.plane_id for p in fabric_planes]
+        })
         timings['fabric_detection'] = time.perf_counter() - t_start
         
         # Stage 5: Enterprise Preset Inference

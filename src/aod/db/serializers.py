@@ -12,7 +12,7 @@ from ..models.output_contracts import (
     AssetIdentifiers, ActivityEvidence, VendorHypothesis, ProvisioningStatus,
     Artifact, ArtifactType, Finding, FindingType, FindingCategory, Severity,
     Confidence, Materiality, TriagePriority, RunLog, RunStatus, RunCounts,
-    SyncStatus, PipelineStageTimings
+    SyncStatus, PipelineStageTimings, FabricPlaneTag, SORTagging
 )
 
 
@@ -25,13 +25,21 @@ def deserialize_asset_row(row: asyncpg.Record) -> Asset:
     activity_evidence_data = row.get("activity_evidence", "{}")
     vendor_hypothesis_data = row.get("vendor_hypothesis")
     lens_match_debug_data = row.get("lens_match_debug")
+    fabric_plane_tag_data = row.get("fabric_plane_tag")
+    sor_tagging_data = row.get("sor_tagging")
 
     vendor_hypothesis = None
     lens_match_debug = None
+    fabric_plane_tag = None
+    sor_tagging = None
     if vendor_hypothesis_data:
         vendor_hypothesis = VendorHypothesis.model_validate_json(vendor_hypothesis_data)
     if lens_match_debug_data:
         lens_match_debug = LensMatchDebug.model_validate_json(lens_match_debug_data)
+    if fabric_plane_tag_data:
+        fabric_plane_tag = FabricPlaneTag.model_validate_json(fabric_plane_tag_data)
+    if sor_tagging_data:
+        sor_tagging = SORTagging.model_validate_json(sor_tagging_data)
 
     prov_status_raw = row.get("provisioning_status", "quarantine")
     try:
@@ -60,6 +68,8 @@ def deserialize_asset_row(row: asyncpg.Record) -> Asset:
         has_critical_gap=row.get("has_critical_gap", False),
         owner=row.get("owner"),
         discovery_sources=json.loads(row.get("discovery_sources", "[]")),
+        fabric_plane_tag=fabric_plane_tag,
+        sor_tagging=sor_tagging,
         created_at=datetime.fromisoformat(row["created_at"])
     )
 

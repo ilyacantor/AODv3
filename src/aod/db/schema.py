@@ -66,6 +66,8 @@ async def initialize_schema(conn: asyncpg.Connection) -> None:
         ("assets", "owner", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner TEXT"),
         ("assets", "lens_match_debug", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS lens_match_debug TEXT"),
         ("assets", "discovery_sources", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS discovery_sources TEXT NOT NULL DEFAULT '[]'"),
+        ("assets", "fabric_plane_tag", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS fabric_plane_tag TEXT"),
+        ("assets", "sor_tagging", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS sor_tagging TEXT"),
         ("runs", "stage_timings", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT"),
         ("runs", "policy_snapshot", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT"),
     ]

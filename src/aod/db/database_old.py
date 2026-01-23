@@ -973,6 +973,9 @@ class Database:
                 asset.provisioning_status.value,
                 asset.has_critical_gap,
                 asset.owner,
+                json.dumps(asset.discovery_sources),
+                asset.fabric_plane_tag.model_dump_json() if asset.fabric_plane_tag else None,
+                asset.sor_tagging.model_dump_json() if asset.sor_tagging else None,
                 asset.created_at.isoformat()
             ))
         async with pool.acquire() as conn:
@@ -981,8 +984,9 @@ class Database:
                 INSERT INTO assets (
                     asset_id, tenant_id, run_id, name, asset_type, identifiers,
                     vendor, vendor_hypothesis, environment, evidence_refs, lens_status, lens_coverage,
-                    lens_match_debug, activity_evidence, tags, admission_reason, provisioning_status, has_critical_gap, owner, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                    lens_match_debug, activity_evidence, tags, admission_reason, provisioning_status, 
+                    has_critical_gap, owner, discovery_sources, fabric_plane_tag, sor_tagging, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     run_id = EXCLUDED.run_id,
                     asset_type = EXCLUDED.asset_type,
@@ -1000,6 +1004,9 @@ class Database:
                     provisioning_status = EXCLUDED.provisioning_status,
                     has_critical_gap = EXCLUDED.has_critical_gap,
                     owner = COALESCE(assets.owner, EXCLUDED.owner),
+                    discovery_sources = EXCLUDED.discovery_sources,
+                    fabric_plane_tag = EXCLUDED.fabric_plane_tag,
+                    sor_tagging = EXCLUDED.sor_tagging,
                     created_at = EXCLUDED.created_at
                 """,
                 rows

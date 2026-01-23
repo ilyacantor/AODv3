@@ -2,9 +2,11 @@
 |----------|------------|-----|-----|-----|-----|------|---------------------|
 | **DISCOVERY (AOD)** | | | | | | | *The Senses* |
 | **Fabric Detection** | **Fabric Plane Identification** (MuleSoft, Kafka, Snowflake, Kong) | **A/R** | C | | | | *Detects the Backbone, not just endpoints* |
+| | **Fabric Plane Tag Persistence** | **A/R** | I | | | | *Persists plane_type, controller_vendor, evidence to DB* |
 | | **Enterprise Preset Inference** (Scrappy vs Platform) | **A/R** | C | | | | *Classifies Org Architecture* |
 | | Connection Routing Logic (Set `connected_via_plane`) | **A/R** | I | | | | *Context for AAM Handoff* |
 | **Asset Scan** | Asset Discovery (Legacy Endpoints) | A/R | | | | | *Legacy Fallback* |
+| | **SOR Tagging & Persistence** | **A/R** | I | | | | *Scores and persists SOR likelihood, domain, evidence* |
 | | **Policy Manifest Export** (Governance Rules) | **A/R** | C | | | | *Export rules for AAM to enforce* |
 | **Handoff** | ConnectionCandidate Export | A/R | I | | | | *Sends Target + Preset to AAM* |
 | **MESH (AAM)** | | | | | | | *The Fabric* |

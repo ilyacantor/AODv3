@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=18">
+    <link rel="stylesheet" href="/static/css/main.css?v=19">
 </head>
 <body>
     <header>
@@ -311,26 +311,30 @@
                         </div>
                     </div>
                     <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
-                        <div class="fabric-plane-item ipaas">
+                        <div class="fabric-plane-item ipaas" onclick="filterByFabricPlane('ipaas')">
                             <span class="fabric-plane-icon">🔗</span>
                             <span class="fabric-plane-name">iPaaS</span>
                             <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
                         </div>
-                        <div class="fabric-plane-item api-gateway">
+                        <div class="fabric-plane-item api-gateway" onclick="filterByFabricPlane('api_gateway')">
                             <span class="fabric-plane-icon">🌐</span>
                             <span class="fabric-plane-name">API Gateway</span>
                             <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
                         </div>
-                        <div class="fabric-plane-item warehouse">
+                        <div class="fabric-plane-item warehouse" onclick="filterByFabricPlane('warehouse')">
                             <span class="fabric-plane-icon">📊</span>
                             <span class="fabric-plane-name">Warehouse</span>
                             <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
                         </div>
-                        <div class="fabric-plane-item event-bus">
+                        <div class="fabric-plane-item event-bus" onclick="filterByFabricPlane('event_bus')">
                             <span class="fabric-plane-icon">⚡</span>
                             <span class="fabric-plane-name">Event Bus</span>
                             <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
                         </div>
+                    </div>
+                    <div id="fabricFilterActive" class="fabric-filter-active hidden">
+                        <span id="fabricFilterLabel">Showing: All</span>
+                        <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
                     </div>
                     <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
                         <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
@@ -634,6 +638,6 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=26"></script>
+    <script src="/static/js/app.js?v=27"></script>
 </body>
 </html>

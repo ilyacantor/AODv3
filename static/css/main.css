@@ -1380,9 +1380,32 @@ main { padding: 2rem; }
     background: var(--slate-800);
     border: 1px solid var(--slate-700);
     transition: all 0.2s ease;
+    cursor: pointer;
 }
 .fabric-plane-item:hover {
     border-color: var(--purple-500);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.fabric-plane-item.active {
+    border-color: var(--cyan-400);
+    background: rgba(6, 182, 212, 0.15);
+}
+.fabric-filter-active {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid var(--cyan-600);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--cyan-400);
+}
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
 }
 .fabric-plane-item.ipaas { border-left: 3px solid #a855f7; }
 .fabric-plane-item.api-gateway { border-left: 3px solid #06b6d4; }

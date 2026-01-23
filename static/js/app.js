@@ -1479,36 +1479,75 @@
         }
         
         let handoffCandidatesData = [];
+        let handoffCandidatesFullData = [];
+        
+        const IPAAS_VENDORS = ['mulesoft', 'workato', 'boomi', 'tray', 'zapier', 'make', 'snaplogic', 'celigo'];
+        const API_GATEWAY_VENDORS = ['kong', 'apigee', 'aws_api_gateway', 'azure_api', 'api gateway'];
+        const WAREHOUSE_VENDORS = ['snowflake', 'bigquery', 'redshift', 'databricks', 'synapse'];
+        const EVENT_BUS_VENDORS = ['kafka', 'confluent', 'eventbridge', 'eventhub', 'pubsub', 'kinesis'];
+        
+        let activeFabricFilter = null;
+        
+        function getFabricPlaneType(candidate) {
+            if (!candidate.connected_via_plane && !candidate.fabric_plane_tag) return null;
+            
+            const planeStr = ((candidate.connected_via_plane || '') + ' ' + (candidate.fabric_plane_tag?.plane_type || '') + ' ' + (candidate.fabric_plane_tag?.controller_vendor || '')).toLowerCase();
+            
+            if (planeStr.includes('ipaas') || IPAAS_VENDORS.some(v => planeStr.includes(v))) {
+                return 'ipaas';
+            } else if (planeStr.includes('api_gateway') || planeStr.includes('gateway') || API_GATEWAY_VENDORS.some(v => planeStr.includes(v))) {
+                return 'api_gateway';
+            } else if (planeStr.includes('data_warehouse') || planeStr.includes('warehouse') || WAREHOUSE_VENDORS.some(v => planeStr.includes(v))) {
+                return 'warehouse';
+            } else if (planeStr.includes('event_bus') || planeStr.includes('event') || planeStr.includes('stream') || EVENT_BUS_VENDORS.some(v => planeStr.includes(v))) {
+                return 'event_bus';
+            }
+            return null;
+        }
         
         function countFabricPlaneTypes(candidates) {
             const counts = { ipaas: 0, api_gateway: 0, warehouse: 0, event_bus: 0 };
             
-            const ipaasVendors = ['mulesoft', 'workato', 'boomi', 'tray', 'zapier', 'make', 'snaplogic', 'celigo'];
-            const apiGatewayVendors = ['kong', 'apigee', 'aws_api_gateway', 'azure_api', 'api gateway'];
-            const warehouseVendors = ['snowflake', 'bigquery', 'redshift', 'databricks', 'synapse'];
-            const eventBusVendors = ['kafka', 'confluent', 'eventbridge', 'eventhub', 'pubsub', 'kinesis'];
-            
             for (const c of candidates) {
-                if (!c.connected_via_plane && !c.fabric_plane_tag) continue;
-                
-                const planeStr = ((c.connected_via_plane || '') + ' ' + (c.fabric_plane_tag?.plane_type || '') + ' ' + (c.fabric_plane_tag?.controller_vendor || '')).toLowerCase();
-                
-                if (planeStr.includes('ipaas') || ipaasVendors.some(v => planeStr.includes(v))) {
-                    counts.ipaas++;
-                } else if (planeStr.includes('api_gateway') || planeStr.includes('gateway') || apiGatewayVendors.some(v => planeStr.includes(v))) {
-                    counts.api_gateway++;
-                } else if (planeStr.includes('data_warehouse') || planeStr.includes('warehouse') || warehouseVendors.some(v => planeStr.includes(v))) {
-                    counts.warehouse++;
-                } else if (planeStr.includes('event_bus') || planeStr.includes('event') || planeStr.includes('stream') || eventBusVendors.some(v => planeStr.includes(v))) {
-                    counts.event_bus++;
-                }
+                const planeType = getFabricPlaneType(c);
+                if (planeType) counts[planeType]++;
             }
             
             return counts;
         }
         
-        function renderHandoffCandidates(candidates) {
+        function filterByFabricPlane(planeType) {
+            activeFabricFilter = planeType;
+            
+            document.querySelectorAll('.fabric-plane-item').forEach(el => el.classList.remove('active'));
+            const activeItem = document.querySelector(`.fabric-plane-item.${planeType.replace('_', '-')}`);
+            if (activeItem) activeItem.classList.add('active');
+            
+            const planeNames = { ipaas: 'iPaaS', api_gateway: 'API Gateway', warehouse: 'Warehouse', event_bus: 'Event Bus' };
+            document.getElementById('fabricFilterLabel').textContent = `Filtering: ${planeNames[planeType]}`;
+            document.getElementById('fabricFilterActive').classList.remove('hidden');
+            
+            const filtered = handoffCandidatesFullData.filter(c => getFabricPlaneType(c) === planeType);
+            renderHandoffCandidates(filtered, true);
+            
+            document.getElementById('handoffCandidateLabel').textContent = `${filtered.length} ${planeNames[planeType]} candidates`;
+        }
+        
+        function clearFabricFilter() {
+            activeFabricFilter = null;
+            
+            document.querySelectorAll('.fabric-plane-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('fabricFilterActive').classList.add('hidden');
+            
+            renderHandoffCandidates(handoffCandidatesFullData, true);
+            document.getElementById('handoffCandidateLabel').textContent = `${handoffCandidatesFullData.length} candidates`;
+        }
+        
+        function renderHandoffCandidates(candidates, isFiltered = false) {
             const container = document.getElementById('handoffCandidatesContainer');
+            if (!isFiltered) {
+                handoffCandidatesFullData = candidates || [];
+            }
             handoffCandidatesData = candidates || [];
             
             if (!candidates || candidates.length === 0) {

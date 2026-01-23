@@ -1,7 +1,7 @@
 | Category | Capability | AOD | AAM | DCL | AOA | FARM | Architectural Notes |
 |----------|------------|-----|-----|-----|-----|------|---------------------|
 | **DISCOVERY (AOD)** | | | | | | | *The Senses* |
-| **Fabric Detection** | **Fabric Plane Identification** (MuleSoft, Kafka, Snowflake) | **A/R** | C | | | | *Detects the Backbone, not just endpoints* |
+| **Fabric Detection** | **Fabric Plane Identification** (MuleSoft, Kafka, Snowflake, Kong) | **A/R** | C | | | | *Detects the Backbone, not just endpoints* |
 | | **Enterprise Preset Inference** (Scrappy vs Platform) | **A/R** | C | | | | *Classifies Org Architecture* |
 | | Connection Routing Logic (Set `connected_via_plane`) | **A/R** | I | | | | *Context for AAM Handoff* |
 | **Asset Scan** | Asset Discovery (Legacy Endpoints) | A/R | | | | | *Legacy Fallback* |
@@ -9,9 +9,12 @@
 | **Handoff** | ConnectionCandidate Export | A/R | I | | | | *Sends Target + Preset to AAM* |
 | **MESH (AAM)** | | | | | | | *The Fabric* |
 | **Fabric Mgmt** | **Fabric Plane Connection** (The Backbone) | | **A/R** | | | I | *Connects to Planes, not Apps* |
-| | **Preset Config Loading** (6, 8, 9, 11) | | **A/R** | | | I | *Configures Mesh behavior* |
+| | **Preset Config Loading** (6, 8, 9, 10, 11) | | **A/R** | | | I | *Configures Mesh behavior* |
 | | Routing Policy Enforcement | | A/R | | | I | *Enforces "Block Direct Access"* |
-| **Adapters** | Adapter Factory Resolution | | A/R | | | I | *Instantiates Strategy (Gateway vs Bus)* |
+| **Adapters** | iPaaS Adapter (Workato, MuleSoft) | | A/R | | | I | *Webhooks/Signals* |
+| | API Gateway Adapter (Kong, Apigee) | | A/R | | | I | *Managed API Proxy* |
+| | Event Bus Adapter (Kafka, EventBridge) | | A/R | | | I | *Streaming Consumer* |
+| | Warehouse Adapter (Snowflake, BigQuery) | | A/R | | | I | *JDBC Read* |
 | **Self-Healing** | **Connection/Fabric Drift Detection** | | **A/R** | | | I | *Detects lost connectivity to Plane* |
 | | **Execute Self-Heal** (Restart Consumers) | | **A/R** | | | I | *Restarts Consumers/Reconnects* |
 | **Governance** | PII Redaction (Edge) | | **A/R** | | | I | *Redacts before data enters DCL* |

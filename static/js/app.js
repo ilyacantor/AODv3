@@ -1517,6 +1517,8 @@
         }
         
         function filterByFabricPlane(planeType) {
+            hideHandoffDrill();
+            
             activeFabricFilter = planeType;
             
             document.querySelectorAll('.fabric-plane-item').forEach(el => el.classList.remove('active'));
@@ -1534,6 +1536,8 @@
         }
         
         function clearFabricFilter() {
+            hideHandoffDrill();
+            
             activeFabricFilter = null;
             
             document.querySelectorAll('.fabric-plane-item').forEach(el => el.classList.remove('active'));
@@ -1771,8 +1775,8 @@
         function hideHandoffDrill() {
             const panel = document.getElementById('handoffDrillPanel');
             const container = document.getElementById('handoffCandidatesContainer');
-            panel.classList.add('hidden');
-            container.classList.remove('hidden');
+            if (panel) panel.classList.add('hidden');
+            if (container) container.classList.remove('hidden');
         }
         
         async function exportToAAM() {

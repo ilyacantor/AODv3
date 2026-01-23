@@ -1361,3 +1361,46 @@ main { padding: 2rem; }
     background: rgba(148, 163, 184, 0.15);
     color: var(--slate-400);
 }
+
+/* Fabric Planes Breakdown */
+.fabric-planes-breakdown {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--slate-700);
+}
+.fabric-plane-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    background: var(--slate-800);
+    border: 1px solid var(--slate-700);
+    transition: all 0.2s ease;
+}
+.fabric-plane-item:hover {
+    border-color: var(--purple-500);
+}
+.fabric-plane-item.ipaas { border-left: 3px solid #a855f7; }
+.fabric-plane-item.api-gateway { border-left: 3px solid #06b6d4; }
+.fabric-plane-item.warehouse { border-left: 3px solid #22c55e; }
+.fabric-plane-item.event-bus { border-left: 3px solid #f59e0b; }
+.fabric-plane-icon {
+    font-size: 1.1rem;
+}
+.fabric-plane-name {
+    flex: 1;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--slate-300);
+}
+.fabric-plane-count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+    min-width: 1.5rem;
+    text-align: right;
+}

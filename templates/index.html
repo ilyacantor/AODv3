@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=17">
+    <link rel="stylesheet" href="/static/css/main.css?v=18">
 </head>
 <body>
     <header>
@@ -308,6 +308,28 @@
                         <div class="stat-card">
                             <div class="stat-value" id="handoffFindingsCount" style="color:var(--amber-400);">-</div>
                             <div class="stat-label">With Findings</div>
+                        </div>
+                    </div>
+                    <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
+                        <div class="fabric-plane-item ipaas">
+                            <span class="fabric-plane-icon">🔗</span>
+                            <span class="fabric-plane-name">iPaaS</span>
+                            <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
+                        </div>
+                        <div class="fabric-plane-item api-gateway">
+                            <span class="fabric-plane-icon">🌐</span>
+                            <span class="fabric-plane-name">API Gateway</span>
+                            <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
+                        </div>
+                        <div class="fabric-plane-item warehouse">
+                            <span class="fabric-plane-icon">📊</span>
+                            <span class="fabric-plane-name">Warehouse</span>
+                            <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
+                        </div>
+                        <div class="fabric-plane-item event-bus">
+                            <span class="fabric-plane-icon">⚡</span>
+                            <span class="fabric-plane-name">Event Bus</span>
+                            <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
                         </div>
                     </div>
                     <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
@@ -612,6 +634,6 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=25"></script>
+    <script src="/static/js/app.js?v=26"></script>
 </body>
 </html>

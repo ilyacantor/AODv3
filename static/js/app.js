@@ -1445,10 +1445,24 @@
                 const sorCount = candidates.filter(c => c.sor_tagging && c.sor_tagging.domain).length;
                 const findingsCount = candidates.filter(c => c.findings && c.findings.length > 0).length;
                 
+                const fabricCounts = countFabricPlaneTypes(candidates);
+                
                 document.getElementById('handoffTotalCount').textContent = totalCount;
                 document.getElementById('handoffFabricCount').textContent = fabricCount;
                 document.getElementById('handoffSorCount').textContent = sorCount;
                 document.getElementById('handoffFindingsCount').textContent = findingsCount;
+                
+                document.getElementById('fabricIpaasCount').textContent = fabricCounts.ipaas;
+                document.getElementById('fabricApiGatewayCount').textContent = fabricCounts.api_gateway;
+                document.getElementById('fabricWarehouseCount').textContent = fabricCounts.warehouse;
+                document.getElementById('fabricEventBusCount').textContent = fabricCounts.event_bus;
+                
+                const fabricBreakdown = document.getElementById('fabricPlanesBreakdown');
+                if (fabricCount > 0) {
+                    fabricBreakdown.classList.remove('hidden');
+                } else {
+                    fabricBreakdown.classList.add('hidden');
+                }
                 
                 labelEl.textContent = `${totalCount} candidates from ${runId.substring(0, 16)}...`;
                 
@@ -1465,6 +1479,33 @@
         }
         
         let handoffCandidatesData = [];
+        
+        function countFabricPlaneTypes(candidates) {
+            const counts = { ipaas: 0, api_gateway: 0, warehouse: 0, event_bus: 0 };
+            
+            const ipaasVendors = ['mulesoft', 'workato', 'boomi', 'tray', 'zapier', 'make', 'snaplogic', 'celigo'];
+            const apiGatewayVendors = ['kong', 'apigee', 'aws_api_gateway', 'azure_api', 'api gateway'];
+            const warehouseVendors = ['snowflake', 'bigquery', 'redshift', 'databricks', 'synapse'];
+            const eventBusVendors = ['kafka', 'confluent', 'eventbridge', 'eventhub', 'pubsub', 'kinesis'];
+            
+            for (const c of candidates) {
+                if (!c.connected_via_plane && !c.fabric_plane_tag) continue;
+                
+                const planeStr = ((c.connected_via_plane || '') + ' ' + (c.fabric_plane_tag?.plane_type || '') + ' ' + (c.fabric_plane_tag?.controller_vendor || '')).toLowerCase();
+                
+                if (planeStr.includes('ipaas') || ipaasVendors.some(v => planeStr.includes(v))) {
+                    counts.ipaas++;
+                } else if (planeStr.includes('api_gateway') || planeStr.includes('gateway') || apiGatewayVendors.some(v => planeStr.includes(v))) {
+                    counts.api_gateway++;
+                } else if (planeStr.includes('data_warehouse') || planeStr.includes('warehouse') || warehouseVendors.some(v => planeStr.includes(v))) {
+                    counts.warehouse++;
+                } else if (planeStr.includes('event_bus') || planeStr.includes('event') || planeStr.includes('stream') || eventBusVendors.some(v => planeStr.includes(v))) {
+                    counts.event_bus++;
+                }
+            }
+            
+            return counts;
+        }
         
         function renderHandoffCandidates(candidates) {
             const container = document.getElementById('handoffCandidatesContainer');

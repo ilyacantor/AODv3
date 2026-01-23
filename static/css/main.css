@@ -1132,9 +1132,109 @@ main { padding: 2rem; }
     border-radius: 10px;
     padding: 1rem 1.25rem;
     transition: all 0.2s ease;
+    cursor: pointer;
 }
 .handoff-candidate-card:hover {
     border-color: var(--cyan-600);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.handoff-badge.sor {
+    background: rgba(34, 197, 94, 0.25);
+    color: var(--green-400);
+    border: 1px solid rgba(34, 197, 94, 0.5);
+}
+.handoff-badge.soe {
+    background: rgba(6, 182, 212, 0.25);
+    color: var(--cyan-400);
+    border: 1px solid rgba(6, 182, 212, 0.5);
+}
+.handoff-badge.soi {
+    background: rgba(251, 191, 36, 0.25);
+    color: var(--amber-400);
+    border: 1px solid rgba(251, 191, 36, 0.5);
+}
+.handoff-drill-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+.handoff-drill-section {
+    background: var(--slate-800);
+    border-radius: 8px;
+    padding: 1rem;
+}
+.handoff-drill-section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--cyan-400);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.05em;
+}
+.handoff-drill-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--slate-700);
+}
+.handoff-drill-row:last-child {
+    border-bottom: none;
+}
+.handoff-drill-label {
+    color: var(--slate-400);
+    font-size: 0.85rem;
+}
+.handoff-drill-value {
+    color: white;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+.handoff-system-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+}
+.handoff-system-type.sor {
+    background: rgba(34, 197, 94, 0.15);
+    border: 2px solid rgba(34, 197, 94, 0.5);
+    color: var(--green-400);
+}
+.handoff-system-type.soe {
+    background: rgba(6, 182, 212, 0.15);
+    border: 2px solid rgba(6, 182, 212, 0.5);
+    color: var(--cyan-400);
+}
+.handoff-system-type.soi {
+    background: rgba(251, 191, 36, 0.15);
+    border: 2px solid rgba(251, 191, 36, 0.5);
+    color: var(--amber-400);
+}
+.handoff-system-type.unknown {
+    background: rgba(148, 163, 184, 0.15);
+    border: 2px solid rgba(148, 163, 184, 0.4);
+    color: var(--slate-400);
+}
+.handoff-evidence-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.handoff-evidence-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    font-size: 0.8rem;
+    color: var(--slate-300);
+}
+.handoff-evidence-item::before {
+    content: "•";
+    color: var(--purple-400);
 }
 .handoff-card-header {
     display: flex;

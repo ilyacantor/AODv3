@@ -1367,6 +1367,18 @@
             });
             
             exportBtn.addEventListener('click', exportToAAM);
+            
+            handoffStatusFilter.addEventListener('change', () => {
+                hideHandoffDrill();
+                const runId = handoffSelect.value;
+                const statusFilter = handoffStatusFilter.value;
+                if (runId) loadHandoffCandidates(runId, statusFilter);
+            });
+            
+            const backBtn = document.getElementById('handoffDrillBack');
+            if (backBtn) {
+                backBtn.addEventListener('click', hideHandoffDrill);
+            }
         }
         
         async function loadHandoffRuns() {
@@ -1452,8 +1464,11 @@
             }
         }
         
+        let handoffCandidatesData = [];
+        
         function renderHandoffCandidates(candidates) {
             const container = document.getElementById('handoffCandidatesContainer');
+            handoffCandidatesData = candidates || [];
             
             if (!candidates || candidates.length === 0) {
                 container.innerHTML = '<div class="empty-state">No candidates found for this snapshot</div>';
@@ -1461,7 +1476,8 @@
             }
             
             let html = '';
-            for (const candidate of candidates) {
+            for (let i = 0; i < candidates.length; i++) {
+                const candidate = candidates[i];
                 const displayName = candidate.display_name || candidate.asset_key || 'Unknown';
                 const vendorName = candidate.vendor_name || '';
                 const assetKey = candidate.asset_key || '';
@@ -1471,7 +1487,12 @@
                 const sorTagging = candidate.sor_tagging;
                 const findings = candidate.findings || [];
                 
+                const systemType = getSystemType(sorTagging);
+                
                 let badgesHtml = `<span class="handoff-badge ${govStatus}">${govStatus}</span>`;
+                if (systemType !== 'unknown') {
+                    badgesHtml += `<span class="handoff-badge ${systemType}">${systemType.toUpperCase()}</span>`;
+                }
                 if (connectedViaPlane) {
                     badgesHtml += `<span class="handoff-badge fabric-plane">⚡ ${connectedViaPlane}</span>`;
                 }
@@ -1490,16 +1511,19 @@
                 let findingsHtml = '';
                 if (findings.length > 0) {
                     findingsHtml = '<div class="handoff-finding-list">';
-                    for (const finding of findings) {
+                    for (const finding of findings.slice(0, 3)) {
                         const code = finding.code || finding.type || 'unknown';
                         const severity = (finding.severity || 'info').toLowerCase();
                         findingsHtml += `<span class="handoff-finding severity-${severity}">${code}</span>`;
+                    }
+                    if (findings.length > 3) {
+                        findingsHtml += `<span class="handoff-finding severity-info">+${findings.length - 3} more</span>`;
                     }
                     findingsHtml += '</div>';
                 }
                 
                 html += `
-                    <div class="handoff-candidate-card">
+                    <div class="handoff-candidate-card" data-candidate-index="${i}" onclick="showHandoffDrill(${i})">
                         <div class="handoff-card-header">
                             <div>
                                 <div class="handoff-card-title">${displayName}</div>
@@ -1518,6 +1542,157 @@
             }
             
             container.innerHTML = html;
+        }
+        
+        function getSystemType(sorTagging) {
+            if (!sorTagging) return 'unknown';
+            const domain = (sorTagging.domain || '').toLowerCase();
+            const confidence = (sorTagging.confidence || '').toLowerCase();
+            
+            if (domain && (confidence === 'high' || confidence === 'medium')) {
+                return 'sor';
+            }
+            if (domain === 'customer' || domain === 'employee' || domain === 'finance') {
+                return 'sor';
+            }
+            if (sorTagging.evidence && sorTagging.evidence.some(e => e.toLowerCase().includes('engagement'))) {
+                return 'soe';
+            }
+            if (sorTagging.evidence && sorTagging.evidence.some(e => e.toLowerCase().includes('integration') || e.toLowerCase().includes('middleware'))) {
+                return 'soi';
+            }
+            return 'unknown';
+        }
+        
+        function showHandoffDrill(index) {
+            const candidate = handoffCandidatesData[index];
+            if (!candidate) return;
+            
+            const panel = document.getElementById('handoffDrillPanel');
+            const title = document.getElementById('handoffDrillTitle');
+            const content = document.getElementById('handoffDrillContent');
+            const container = document.getElementById('handoffCandidatesContainer');
+            
+            container.classList.add('hidden');
+            panel.classList.remove('hidden');
+            
+            const displayName = candidate.display_name || candidate.asset_key || 'Unknown';
+            title.textContent = displayName;
+            
+            const sorTagging = candidate.sor_tagging || {};
+            const systemType = getSystemType(sorTagging);
+            const systemTypeLabel = systemType === 'sor' ? 'System of Record' : 
+                                    systemType === 'soe' ? 'System of Engagement' :
+                                    systemType === 'soi' ? 'System of Integration' : 'Unclassified';
+            
+            const signals = candidate.signals_summary || {};
+            const findings = candidate.findings || [];
+            const evidenceRefs = candidate.evidence_refs || [];
+            
+            let findingsHtml = '';
+            if (findings.length > 0) {
+                findingsHtml = '<ul class="handoff-evidence-list">';
+                for (const f of findings) {
+                    const code = f.code || f.type || 'Unknown';
+                    const msg = f.message || f.explanation || '';
+                    findingsHtml += `<li class="handoff-evidence-item">${code}: ${msg}</li>`;
+                }
+                findingsHtml += '</ul>';
+            } else {
+                findingsHtml = '<span style="color:var(--slate-500)">No findings</span>';
+            }
+            
+            let evidenceHtml = '';
+            if (sorTagging.evidence && sorTagging.evidence.length > 0) {
+                evidenceHtml = '<ul class="handoff-evidence-list">';
+                for (const e of sorTagging.evidence) {
+                    evidenceHtml += `<li class="handoff-evidence-item">${e}</li>`;
+                }
+                evidenceHtml += '</ul>';
+            } else {
+                evidenceHtml = '<span style="color:var(--slate-500)">No evidence</span>';
+            }
+            
+            content.innerHTML = `
+                <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;">
+                    <div class="handoff-system-type ${systemType}">
+                        ${systemType === 'sor' ? '📊' : systemType === 'soe' ? '👥' : systemType === 'soi' ? '🔗' : '❓'}
+                        ${systemTypeLabel}
+                    </div>
+                    <span class="handoff-badge ${candidate.governance_status || 'edge'}" style="font-size:0.8rem;">${candidate.governance_status || 'edge'}</span>
+                    ${candidate.connected_via_plane ? `<span class="handoff-badge fabric-plane">⚡ ${candidate.connected_via_plane}</span>` : ''}
+                </div>
+                
+                <div class="handoff-drill-grid">
+                    <div class="handoff-drill-section">
+                        <div class="handoff-drill-section-title">Asset Information</div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Asset Key</span>
+                            <span class="handoff-drill-value">${candidate.asset_key || '-'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Vendor</span>
+                            <span class="handoff-drill-value">${candidate.vendor_name || '-'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Priority Score</span>
+                            <span class="handoff-drill-value">${candidate.priority_score != null ? candidate.priority_score.toFixed(1) : '-'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Governance Status</span>
+                            <span class="handoff-drill-value">${candidate.governance_status || '-'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="handoff-drill-section">
+                        <div class="handoff-drill-section-title">Signal Summary</div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Has IdP</span>
+                            <span class="handoff-drill-value" style="color:${signals.has_idp ? 'var(--green-400)' : 'var(--slate-500)'}">${signals.has_idp ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Has CMDB</span>
+                            <span class="handoff-drill-value" style="color:${signals.has_cmdb ? 'var(--green-400)' : 'var(--slate-500)'}">${signals.has_cmdb ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Has Finance</span>
+                            <span class="handoff-drill-value" style="color:${signals.has_finance ? 'var(--green-400)' : 'var(--slate-500)'}">${signals.has_finance ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Discovery Sources</span>
+                            <span class="handoff-drill-value">${signals.discovery_source_count || 0}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="handoff-drill-section">
+                        <div class="handoff-drill-section-title">SOR Classification</div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Domain</span>
+                            <span class="handoff-drill-value">${sorTagging.domain || 'Not classified'}</span>
+                        </div>
+                        <div class="handoff-drill-row">
+                            <span class="handoff-drill-label">Confidence</span>
+                            <span class="handoff-drill-value">${sorTagging.confidence || '-'}</span>
+                        </div>
+                        <div style="margin-top:0.5rem;">
+                            <span class="handoff-drill-label">Evidence</span>
+                            ${evidenceHtml}
+                        </div>
+                    </div>
+                    
+                    <div class="handoff-drill-section">
+                        <div class="handoff-drill-section-title">Findings (${findings.length})</div>
+                        ${findingsHtml}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function hideHandoffDrill() {
+            const panel = document.getElementById('handoffDrillPanel');
+            const container = document.getElementById('handoffCandidatesContainer');
+            panel.classList.add('hidden');
+            container.classList.remove('hidden');
         }
         
         async function exportToAAM() {

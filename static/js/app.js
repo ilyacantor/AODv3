@@ -1346,15 +1346,10 @@
         function initHandoffTab() {
             const handoffSelect = document.getElementById('handoffRunSelect');
             const handoffStatusFilter = document.getElementById('handoffStatusFilter');
+            const loadBtn = document.getElementById('loadHandoffBtn');
             const exportBtn = document.getElementById('exportToAAMBtn');
             
-            handoffSelect.addEventListener('change', () => {
-                const runId = handoffSelect.value;
-                const statusFilter = handoffStatusFilter.value;
-                if (runId) loadHandoffCandidates(runId, statusFilter);
-            });
-            
-            handoffStatusFilter.addEventListener('change', () => {
+            loadBtn.addEventListener('click', () => {
                 const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
                 if (runId) loadHandoffCandidates(runId, statusFilter);
@@ -1384,16 +1379,20 @@
                     select.value = currentVal;
                 } else if (completedRuns.length > 0) {
                     select.value = completedRuns[0].run_id;
-                    loadHandoffCandidates(completedRuns[0].run_id, 'active');
                 }
             } catch (err) {
                 console.error('Failed to load handoff runs:', err);
+                select.innerHTML = '<option value="">Failed to load runs</option>';
             }
         }
         
         async function loadHandoffCandidates(runId, statusFilter) {
             const container = document.getElementById('handoffCandidatesContainer');
-            container.innerHTML = '<div class="handoff-empty"><div class="spinner"></div> Loading candidates...</div>';
+            const labelEl = document.getElementById('handoffCandidateLabel');
+            const exportBtn = document.getElementById('exportToAAMBtn');
+            
+            container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading candidates...</div>';
+            exportBtn.disabled = true;
             
             try {
                 const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
@@ -1408,16 +1407,27 @@
                 const data = await response.json();
                 const candidates = data.candidates || [];
                 
-                document.getElementById('handoffTotalCount').textContent = data.count || candidates.length;
+                const totalCount = candidates.length;
                 const fabricCount = candidates.filter(c => c.connected_via_plane).length;
-                document.getElementById('handoffFabricCount').textContent = fabricCount;
                 const sorCount = candidates.filter(c => c.sor_tagging && c.sor_tagging.domain).length;
+                const findingsCount = candidates.filter(c => c.findings && c.findings.length > 0).length;
+                
+                document.getElementById('handoffTotalCount').textContent = totalCount;
+                document.getElementById('handoffFabricCount').textContent = fabricCount;
                 document.getElementById('handoffSorCount').textContent = sorCount;
+                document.getElementById('handoffFindingsCount').textContent = findingsCount;
+                
+                labelEl.textContent = `${totalCount} candidates from ${runId.substring(0, 16)}...`;
+                
+                if (totalCount > 0) {
+                    exportBtn.disabled = false;
+                }
                 
                 renderHandoffCandidates(candidates);
             } catch (err) {
                 console.error('Failed to load handoff candidates:', err);
-                container.innerHTML = `<div class="handoff-empty" style="color:var(--red-400);">Error: ${err.message}</div>`;
+                container.innerHTML = `<div class="error-message">Failed to load candidates: ${err.message}</div>`;
+                labelEl.textContent = 'Error loading candidates';
             }
         }
         
@@ -1425,7 +1435,7 @@
             const container = document.getElementById('handoffCandidatesContainer');
             
             if (!candidates || candidates.length === 0) {
-                container.innerHTML = '<div class="handoff-empty">No candidates found for this snapshot</div>';
+                container.innerHTML = '<div class="empty-state">No candidates found for this snapshot</div>';
                 return;
             }
             

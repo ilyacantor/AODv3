@@ -269,48 +269,61 @@
     </div>
     
     <div id="handoffTabContent" class="main-tab-content">
-        <main class="container">
-            <div class="handoff-header">
-                <div>
-                    <h2 class="section-title" style="margin-bottom:0.25rem;">AAM Handoff Preview</h2>
-                    <p class="config-note" style="margin:0;">Connection candidates ready for AAM handoff.</p>
-                </div>
-                <div class="handoff-controls">
-                    <div class="handoff-run-select">
-                        <label style="font-size:0.75rem;color:var(--slate-400);">Snapshot</label>
-                        <select class="form-input" id="handoffRunSelect" style="width:250px;">
-                            <option value="">Select a run...</option>
+        <main style="padding:2rem;">
+            <div class="section-row">
+                <div class="section compact">
+                    <h2 class="section-title">Select Run</h2>
+                    <div class="form-group">
+                        <label class="form-label">Discovery Run</label>
+                        <select class="form-select" id="handoffRunSelect">
+                            <option value="">Loading runs...</option>
                         </select>
                     </div>
-                    <div class="handoff-status-filter">
-                        <label style="font-size:0.75rem;color:var(--slate-400);">Status</label>
-                        <select class="form-input" id="handoffStatusFilter" style="width:120px;">
-                            <option value="active">Active</option>
-                            <option value="review">Review</option>
-                            <option value="all">All</option>
+                    <div class="form-group">
+                        <label class="form-label">Status Filter</label>
+                        <select class="form-select" id="handoffStatusFilter">
+                            <option value="active">Active Only</option>
+                            <option value="review">Needs Review</option>
+                            <option value="all" selected>All Candidates</option>
                         </select>
+                    </div>
+                    <button class="btn btn-primary" id="loadHandoffBtn" style="width:100%;margin-top:0.5rem;">Load Candidates</button>
+                </div>
+                
+                <div class="section" style="flex:2;">
+                    <h2 class="section-title">Handoff Summary</h2>
+                    <div class="stats-grid stats-grid-4">
+                        <div class="stat-card">
+                            <div class="stat-value" id="handoffTotalCount">-</div>
+                            <div class="stat-label">Total Candidates</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="handoffFabricCount" style="color:var(--purple-400);">-</div>
+                            <div class="stat-label">Fabric Planes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="handoffSorCount" style="color:var(--green-400);">-</div>
+                            <div class="stat-label">SOR Tagged</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="handoffFindingsCount" style="color:var(--amber-400);">-</div>
+                            <div class="stat-label">With Findings</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
+                        <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
                     </div>
                 </div>
             </div>
             
-            <div class="handoff-summary" id="handoffSummary">
-                <div class="handoff-stat">
-                    <span class="handoff-stat-value" id="handoffTotalCount">0</span>
-                    <span class="handoff-stat-label">Total Candidates</span>
+            <div class="section" style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h2 class="section-title" style="margin-bottom:0;">Connection Candidates</h2>
+                    <span class="config-note" id="handoffCandidateLabel" style="margin:0;">Select a run to view candidates</span>
                 </div>
-                <div class="handoff-stat">
-                    <span class="handoff-stat-value" id="handoffFabricCount">0</span>
-                    <span class="handoff-stat-label">Fabric Plane</span>
+                <div id="handoffCandidatesContainer" class="handoff-candidates-list">
+                    <div class="empty-state">Select a discovery run and click "Load Candidates" to preview AAM handoff</div>
                 </div>
-                <div class="handoff-stat">
-                    <span class="handoff-stat-value" id="handoffSorCount">0</span>
-                    <span class="handoff-stat-label">SOR Candidates</span>
-                </div>
-                <button class="btn btn-primary" id="exportToAAMBtn" style="margin-left:auto;">Export to AAM</button>
-            </div>
-            
-            <div class="handoff-candidates-container" id="handoffCandidatesContainer">
-                <div class="handoff-empty">Select a snapshot to load candidates</div>
             </div>
         </main>
     </div>

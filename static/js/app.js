@@ -1360,12 +1360,21 @@
         
         async function loadHandoffRuns() {
             const select = document.getElementById('handoffRunSelect');
+            if (!select) {
+                console.error('handoffRunSelect element not found');
+                return;
+            }
+            select.innerHTML = '<option value="">Loading runs...</option>';
             try {
                 const response = await fetch('/api/runs');
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
                 const runs = await response.json();
                 const currentVal = select.value;
                 select.innerHTML = '<option value="">Select a run...</option>';
                 const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
+                console.log('Handoff: loaded', completedRuns.length, 'runs');
                 completedRuns.forEach(run => {
                     const opt = document.createElement('option');
                     opt.value = run.run_id;
@@ -1375,7 +1384,7 @@
                     opt.textContent = `${tenant} - ${date}`;
                     select.appendChild(opt);
                 });
-                if (currentVal) {
+                if (currentVal && currentVal !== 'Loading runs...') {
                     select.value = currentVal;
                 } else if (completedRuns.length > 0) {
                     select.value = completedRuns[0].run_id;
@@ -2946,6 +2955,7 @@
         initTriageTab();
         initTestTab();
         initHandoffTab();
+        loadHandoffRuns();
         
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('from') === 'farm' || urlParams.get('source') === 'farm') {

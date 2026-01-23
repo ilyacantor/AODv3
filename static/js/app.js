@@ -1396,7 +1396,7 @@
             container.innerHTML = '<div class="handoff-empty"><div class="spinner"></div> Loading candidates...</div>';
             
             try {
-                const response = await fetch(`/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -1499,7 +1499,7 @@
             }
             
             try {
-                const response = await fetch(`/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });

@@ -20,7 +20,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.aod.db.database import get_db_direct
 from src.aod.models.output_contracts import (
@@ -54,8 +54,14 @@ class ProvisioningOrder(BaseModel):
 
 
 class AAMManifestResponse(BaseModel):
-    """Target Manifest for AAM - what to connect to"""
+    """
+    Target Manifest for AAM - what to connect to.
+    
+    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
+    provided for clarity in the new DiscoveryScan terminology.
+    """
     run_id: str
+    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
     manifest_type: str = "provisioning_orders"
     orders: List[ProvisioningOrder]
     count: int
@@ -148,6 +154,7 @@ async def get_aam_manifest(
     
     return AAMManifestResponse(
         run_id=run_id,
+        scan_session_id=run_id,
         manifest_type="provisioning_orders",
         orders=orders,
         count=len(orders)
@@ -155,8 +162,14 @@ async def get_aam_manifest(
 
 
 class AAMCandidatesResponse(BaseModel):
-    """Response for AAM candidates export"""
+    """
+    Response for AAM candidates export.
+    
+    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
+    provided for clarity in the new DiscoveryScan terminology.
+    """
     run_id: str
+    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
     candidates: List[ConnectionCandidate]
     count: int
 
@@ -319,6 +332,7 @@ async def export_aam_candidates(
     
     return AAMCandidatesResponse(
         run_id=run_id,
+        scan_session_id=run_id,
         candidates=candidates,
         count=len(candidates)
     )

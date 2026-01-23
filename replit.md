@@ -18,10 +18,12 @@ I prefer simple language and detailed explanations when new concepts are introdu
 ## System Architecture
 
 ### Core Architecture
-AOD processes raw observations through a 7-stage sequential pipeline: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Output. This pipeline transforms raw data into a catalog of discovered assets, complete with classifications and findings.
+AOD processes raw observations through a 7-stage sequential **DiscoveryScan**: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Output. This DiscoveryScan transforms raw data into a catalog of discovered assets, complete with classifications and findings.
+
+**Terminology Note**: AOD uses "DiscoveryScan" terminology (not "Pipeline") to distinguish from DCL ingestion pipelines. Each scan execution is tracked by a `scan_session_id` (aliased as `run_id` for backward compatibility).
 
 ### Data Flow
-The system's data flow begins with fetching snapshot data from Farm (a test data generator), which then moves through the Pipeline, ultimately populating a Catalog and enabling interaction via the Triage UI. Snapshots include discovery observations, IdP records, CMDB records, finance transactions, and cloud inventory.
+The system's data flow begins with fetching snapshot data from Farm (a test data generator), which then moves through the DiscoveryScan, ultimately populating a Catalog and enabling interaction via the Triage UI. Snapshots include discovery observations, IdP records, CMDB records, finance transactions, and cloud inventory.
 
 ### Key Features and Specifications
 - **Classifications**: Determines asset status (Shadow IT, Zombie, Governed) based on governance signals.
@@ -29,7 +31,8 @@ The system's data flow begins with fetching snapshot data from Farm (a test data
 - **Policy Switchboard**: A central configuration (`config/policy_master.json`) that governs admission, classification logic, activity windows, finance thresholds, and custom exclusions.
 - **Governance Trinity**: Defines an asset as governed if it possesses Visibility (CMDB), Validation (IdP/SSO), or Control (vendor-governed lifecycle).
 - **Alias Collapsing**: Consolidates technical infrastructure domains to their canonical vendor domain (e.g., `office365.com` to `microsoft.com`).
-- **SOR Identification**: Assets are scored based on signals like CMDB authoritative status, known SOR vendors, middleware exporter presence, and SSO/SCIM enablement. Confidence bands (high, medium, low) indicate the likelihood of an asset being an SOR. SOR scoring runs as a pipeline stage after vendor governance propagation, populating `sor_tagging` on each asset with likelihood, confidence, evidence, domain, and signals_matched.
+- **SOR Identification**: Assets are scored based on signals like CMDB authoritative status, known SOR vendors, middleware exporter presence, and SSO/SCIM enablement. Confidence bands (high, medium, low) indicate the likelihood of an asset being an SOR. SOR scoring runs as a DiscoveryScan stage after vendor governance propagation, populating `sor_tagging` on each asset with likelihood, confidence, evidence, domain, and signals_matched.
+- **Policy Manifest Export**: PolicyManifestBuilder compiles governance rules into a versioned JSON manifest (`GET /policy/manifest`) that AAM consumes during handshake for connection gating.
 - **IdP Governance Policy**: Configurable policy (`Strict` or `Loose`) to control how IdP matches assert governance, balancing between detecting shadow IT and reducing noise.
 
 ### UI/UX Decisions
@@ -48,10 +51,11 @@ The project is built using FastAPI for the backend, with a structured `src/` dir
 
 ## Important Files
 
-- `src/aod/pipeline/pipeline_executor.py` - Main pipeline orchestrator
+- `src/aod/pipeline/pipeline_executor.py` - Main DiscoveryScan orchestrator (also exports `execute_scan`, `ScanResult` aliases)
 - `src/aod/pipeline/sor_scoring.py` - SOR signal-based scoring engine
-- `src/aod/models/output_contracts.py` - Data models including SORTagging
+- `src/aod/models/output_contracts.py` - Data models including SORTagging, RunLog (with `scan_session_id` alias)
 - `src/aod/core/policy/schema.py` - Policy configuration schema
+- `src/aod/core/policy/manifest.py` - PolicyManifestBuilder for AAM governance export
 - `config/policy_master.json` - Central policy switchboard configuration
 - `docs/FARM_SOR_INSTRUCTIONS.md` - Farm test data generation instructions
 - `docs/TEST_HARNESS.md` - Test harness documentation
@@ -80,6 +84,9 @@ AOD emits ConnectionCandidates to AAM (Adaptive API Mesh). AAM handles connectiv
 
 ## Recent Changes
 
+- **2026-01-23**: Nomenclature refactoring - "Pipeline" → "DiscoveryScan" terminology with backward-compatible aliases
+- **2026-01-23**: PolicyManifestBuilder created - GET /policy/manifest exports governance rules for AAM consumption
+- **2026-01-23**: scan_session_id added to AAM handoff responses (aliases run_id for lineage tracking)
 - **2026-01-22**: ConnectionCandidate output contract implemented - AAM handoff via POST /handoff/aam/candidates
 - **2026-01-22**: DCL provisioning endpoints deprecated - AOD no longer talks directly to DCL
 - **2026-01-22**: SOR Phase 2 complete - Pipeline integration with evidence_refs-derived entity_id correlation

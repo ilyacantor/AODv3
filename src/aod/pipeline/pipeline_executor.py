@@ -1,4 +1,15 @@
-"""Pipeline Executor - Orchestrate all pipeline stages"""
+"""
+DiscoveryScan Executor - Orchestrate all discovery scan stages.
+
+This module orchestrates the AOD (Asset Observation & Discovery) pipeline,
+now referred to as "DiscoveryScan" in the new terminology.
+
+Backward-compatible aliases are provided:
+- ScanResult = PipelineResult
+- EphemeralScanResult = EphemeralPipelineResult
+- execute_scan = execute_pipeline
+- run_scan_ephemeral = run_pipeline_ephemeral
+"""
 
 import hashlib
 import json
@@ -221,7 +232,12 @@ def _build_policy_asset_data(
 
 @dataclass
 class PipelineResult:
-    """Result of pipeline execution"""
+    """
+    Result of DiscoveryScan execution (formerly "pipeline execution").
+    
+    Contains the run log, discovered assets, artifacts, and findings.
+    Use `run_log.run_id` as the scan_session_id for downstream handoffs.
+    """
     success: bool
     run_log: RunLog
     assets: list[Asset] = field(default_factory=list)
@@ -233,7 +249,12 @@ class PipelineResult:
 
 @dataclass
 class EphemeralPipelineResult:
-    """Result of ephemeral pipeline execution (no database persistence)"""
+    """
+    Result of ephemeral DiscoveryScan execution (no database persistence).
+    
+    Used for testing and reconciliation validation. Runs all compute stages
+    but skips database writes, returning assets and rejections directly.
+    """
     success: bool
     assets: list[Asset] = field(default_factory=list)
     rejections: list[dict] = field(default_factory=list)
@@ -306,14 +327,16 @@ def run_pipeline_ephemeral(
     is_farm_source: bool = True
 ) -> EphemeralPipelineResult:
     """
-    Run the AOD pipeline without database persistence.
+    Run the AOD DiscoveryScan without database persistence.
     
     Useful for testing and reconciliation validation. Runs all compute stages
     but skips database writes, returning assets and rejections directly.
     
+    The run_id parameter also serves as the scan_session_id for tracking purposes.
+    
     Args:
         data: Raw snapshot JSON data
-        run_id: Run identifier (defaults to "ephemeral_run")
+        run_id: Run/scan session identifier (defaults to "ephemeral_run")
         is_farm_source: Whether snapshot is from Farm (enables Farm format normalization)
     
     Returns:
@@ -478,10 +501,12 @@ async def execute_pipeline(
     provenance: dict[str, Any] | None = None
 ) -> PipelineResult:
     """
-    Execute the full AOD discovery pipeline.
+    Execute the full AOD DiscoveryScan.
     
-    Pipeline computation is deterministic: same inputs produce same outputs.
+    DiscoveryScan computation is deterministic: same inputs produce same outputs.
     All identifiers and timestamps are provided from the API boundary.
+    
+    The run_id also serves as the scan_session_id for downstream handoffs to AAM.
     
     Stages:
     1. ValidateSnapshot - schema validate, reject banned fields
@@ -496,7 +521,7 @@ async def execute_pipeline(
     Args:
         data: Raw snapshot JSON data
         db: Database instance
-        run_id: Unique run identifier (generated at API boundary)
+        run_id: Unique run/scan session identifier (generated at API boundary)
         started_at: Run start timestamp (generated at API boundary)
         provenance: Optional provenance data for Farm runs (farm_url, snapshot_id, fetch_duration_ms, schema_version)
         
@@ -953,3 +978,24 @@ async def execute_pipeline(
             run_log=run_log,
             error=str(e)
         )
+
+
+# =============================================================================
+# BACKWARD-COMPATIBLE ALIASES - DiscoveryScan terminology
+# =============================================================================
+# These aliases allow gradual migration to the new "DiscoveryScan" terminology
+# while maintaining full backward compatibility with existing code.
+
+# Type aliases
+ScanResult = PipelineResult
+"""Alias for PipelineResult - represents the result of a DiscoveryScan execution."""
+
+EphemeralScanResult = EphemeralPipelineResult
+"""Alias for EphemeralPipelineResult - represents ephemeral DiscoveryScan result."""
+
+# Function aliases
+execute_scan = execute_pipeline
+"""Alias for execute_pipeline - executes a full DiscoveryScan with persistence."""
+
+run_scan_ephemeral = run_pipeline_ephemeral
+"""Alias for run_pipeline_ephemeral - runs a DiscoveryScan without persistence."""

@@ -108,6 +108,41 @@ async def get_policy_master() -> dict:
         raise HTTPException(status_code=500, detail=f"Error reading policy master: {e}")
 
 
+@router.get("/manifest")
+async def get_policy_manifest(scan_session_id: str | None = None) -> dict:
+    """
+    Get a versioned policy manifest for a DiscoveryScan session.
+    
+    Exports policy_master.json into a manifest format suitable for downstream
+    consumers (AAM, Farm, etc.). The manifest includes all governance rules
+    extracted from the policy configuration.
+    
+    Args:
+        scan_session_id: Optional DiscoveryScan session ID to associate with manifest.
+                        If provided, links this manifest to a specific scan session.
+    
+    Returns:
+        Policy manifest containing:
+        - manifest_version: Version of the manifest format
+        - policy_version: Version from policy_master.json
+        - generated_at: ISO timestamp of when manifest was generated
+        - scan_session_id: Associated DiscoveryScan session (if provided)
+        - governance_rules: All governance rules (admission_gates, idp_governance,
+          scope_toggles, infrastructure_domain_handling, finance_thresholds,
+          activity_windows, connection_policy)
+    """
+    from ...core.policy.manifest import PolicyManifestBuilder
+    
+    try:
+        builder = PolicyManifestBuilder()
+        return builder.build_manifest(scan_session_id=scan_session_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error building policy manifest: {e}")
+        raise HTTPException(status_code=500, detail=f"Error building policy manifest: {e}")
+
+
 def _deep_merge(base: dict, updates: dict) -> dict:
     """Deep merge updates into base dictionary."""
     result = base.copy()

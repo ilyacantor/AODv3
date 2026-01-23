@@ -442,7 +442,12 @@ class PipelineStageTimings(BaseModel):
 
 
 class RunLog(BaseModel):
-    """Run log entry"""
+    """
+    Run log entry for a DiscoveryScan session.
+    
+    The run_id field also serves as the scan_session_id for downstream handoffs to AAM.
+    The scan_session_id property is provided as an alias for clarity in the new terminology.
+    """
     run_id: str
     tenant_id: str
     status: RunStatus
@@ -450,10 +455,20 @@ class RunLog(BaseModel):
     completed_at: Optional[datetime] = None
     input_meta: dict = Field(default_factory=dict)
     counts: RunCounts = Field(default_factory=RunCounts)
-    stage_timings: Optional[PipelineStageTimings] = Field(default=None, description="Pipeline stage timing in seconds")
+    stage_timings: Optional[PipelineStageTimings] = Field(default=None, description="DiscoveryScan stage timing in seconds")
     failure_reasons: list[str] = Field(default_factory=list)
     sync_status: SyncStatus = SyncStatus.NOT_APPLICABLE
     sync_error: Optional[str] = None
-    policy_snapshot: Optional[dict] = Field(default=None, description="Policy configuration snapshot used for this run")
+    policy_snapshot: Optional[dict] = Field(default=None, description="Policy configuration snapshot used for this scan")
+    
+    @property
+    def scan_session_id(self) -> str:
+        """Alias for run_id - the unique identifier for this DiscoveryScan session."""
+        return self.run_id
+
+
+# Backward-compatible type alias
+DiscoveryScanSession = RunLog
+"""Type alias for RunLog - represents a DiscoveryScan session."""
 
 

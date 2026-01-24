@@ -143,7 +143,7 @@ async def view_catalog(run_id: str):
         item_id = action.get('item_id')
         item_type = action.get('item_type')
         
-        if item_type in ('asset', 'shadow', 'zombie', 'governance'):
+        if item_type in ('asset', 'shadow', 'zombie', 'governance', 'hygiene', 'toxic', 'blocked'):
             if item_id not in triage_by_asset:
                 triage_by_asset[item_id] = action
             else:

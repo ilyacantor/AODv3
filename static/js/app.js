@@ -455,7 +455,6 @@
             try {
                 const response = await fetch('/api/runs');
                 const runs = await response.json();
-                const currentVal = select.value;
                 select.innerHTML = '<option value="">Select a run...</option>';
                 const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
                 completedRuns.forEach(run => {
@@ -467,8 +466,9 @@
                     opt.textContent = `${tenant} - ${date}`;
                     select.appendChild(opt);
                 });
-                if (currentVal) {
-                    select.value = currentVal;
+                if (currentRunId && completedRuns.some(r => r.run_id === currentRunId)) {
+                    select.value = currentRunId;
+                    loadTriageData();
                 } else if (completedRuns.length > 0) {
                     select.value = completedRuns[0].run_id;
                     loadTriageData();
@@ -1407,8 +1407,9 @@
                     opt.textContent = `${tenant} - ${date}`;
                     select.appendChild(opt);
                 });
-                if (currentVal && currentVal !== 'Loading runs...' && currentVal !== '') {
-                    select.value = currentVal;
+                if (currentRunId && completedRuns.some(r => r.run_id === currentRunId)) {
+                    select.value = currentRunId;
+                    loadHandoffCandidates(currentRunId, 'all');
                 } else if (completedRuns.length > 0) {
                     select.value = completedRuns[0].run_id;
                     loadHandoffCandidates(completedRuns[0].run_id, 'all');

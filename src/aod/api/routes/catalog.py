@@ -467,12 +467,17 @@ async def view_catalog(run_id: str):
     <body>
         <div class="container">
             <div class="header">
-                <div>
-                    <div class="title">Asset Catalog</div>
-                    <div class="subtitle">
-                        Run: {run_id[:8]}... | 
-                        Tenant: {run.tenant_id} | 
-                        {run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else 'In Progress'}
+                <div style="display: flex; align-items: center; gap: 1.5rem;">
+                    <a href="/" style="display: flex; align-items: center; gap: 0.5rem; color: #06b6d4; text-decoration: none; font-weight: 600; padding: 0.5rem 1rem; background: rgba(6, 182, 212, 0.1); border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3); transition: all 0.2s;">
+                        <span style="font-size: 1.2rem;">&#8592;</span> Back to AOD
+                    </a>
+                    <div>
+                        <div class="title">Asset Catalog</div>
+                        <div class="subtitle">
+                            Run: {run_id[:8]}... | 
+                            Tenant: {run.tenant_id} | 
+                            {run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else 'In Progress'}
+                        </div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 1rem;">

@@ -349,6 +349,7 @@ class ProvisioningActionRequest(BaseModel):
     action: str = Field(..., description="Action: SANCTION, BAN, or DEPROVISION")
     reason: Optional[str] = Field(None, description="Reason for the action")
     actor: Optional[str] = Field(None, description="User performing the action")
+    item_type: Optional[str] = Field(None, description="Triage item type: shadow, zombie, blocked, hygiene, etc.")
 
 
 class ProvisioningActionResponse(BaseModel):

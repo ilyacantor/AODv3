@@ -211,10 +211,20 @@
         
         async function submitProvisioningAction(assetId, action) {
             try {
+                let itemType = 'asset';
+                for (const section of ['firewall', 'risk', 'hygiene']) {
+                    const items = triageSectionData[section];
+                    const idx = items.findIndex(item => (item.asset_id || item.id) === assetId);
+                    if (idx !== -1) {
+                        itemType = items[idx].itemType;
+                        break;
+                    }
+                }
+                
                 const response = await fetch(`/api/catalog/assets/${assetId}/provisioning`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action })
+                    body: JSON.stringify({ action: action, item_type: itemType })
                 });
                 
                 if (!response.ok) {
@@ -230,26 +240,18 @@
                 const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'ACKNOWLEDGE': 'acknowledged', 'RESOLVE': 'approved' };
                 const newState = stateMap[action] || action.toLowerCase();
                 
-                for (const section of ['firewall', 'risk', 'hygiene']) {
-                    const items = triageSectionData[section];
-                    const idx = items.findIndex(item => (item.asset_id || item.id) === assetId);
-                    if (idx !== -1) {
-                        const itemType = items[idx].itemType;
-                        const key = `${itemType}:${assetId}`;
-                        triageActionsMap[key] = {
-                            item_id: assetId,
-                            item_type: itemType,
-                            action: action.toLowerCase(),
-                            state: newState
-                        };
-                        
-                        updateTriageItemInSections(assetId, itemType, {
-                            triageState: newState,
-                            triageAction: action.toLowerCase()
-                        });
-                        break;
-                    }
-                }
+                const key = `${itemType}:${assetId}`;
+                triageActionsMap[key] = {
+                    item_id: assetId,
+                    item_type: itemType,
+                    action: action.toLowerCase(),
+                    state: newState
+                };
+                
+                updateTriageItemInSections(assetId, itemType, {
+                    triageState: newState,
+                    triageAction: action.toLowerCase()
+                });
                 
             } catch (err) {
                 console.error('Provisioning action failed:', err);

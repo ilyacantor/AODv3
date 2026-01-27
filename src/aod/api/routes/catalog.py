@@ -631,15 +631,10 @@ async def update_asset_provisioning(
     }
     
     tenant_id = "unknown"
-    item_type = "asset"
     if asset.tags and isinstance(asset.tags, dict):
         tenant_id = asset.tags.get("tenant_id", "unknown")
-        if asset.tags.get("shadow_actual") == True:
-            item_type = "shadow"
-        elif asset.tags.get("zombie_actual") == True:
-            item_type = "zombie"
-        elif asset.tags.get("governance_status") == "governed":
-            item_type = "governance"
+    
+    item_type = request.item_type or "asset"
     
     await db.save_triage_action(
         tenant_id=tenant_id,

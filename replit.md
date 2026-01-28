@@ -1,116 +1,189 @@
-# AOD - AutonomOS Discovery Module
+# AOD - Asset Observation & Discovery
 
-## Overview
-AOD (AutonomOS Discovery) is the front-end entry point to the AutonomOS (AOS) platform. Its primary purpose is to discover all SaaS applications, cloud services, and software assets within an organization, preparing them for integration into the broader AOS data stack. AOD plays a crucial role in the AOS data flow, preceding connection (AAM), unification (DCL), and agent-driven actions.
+## What AOD Does
 
-AOD's key capabilities include:
-- **Asset Discovery**: Identifies assets from various data sources (browser logs, network scans, SSO logs, expense reports).
-- **Preparation for AAM**: Pinpoints assets requiring connectors for AAM integration.
-- **Asset Classification**: Categorizes assets by governance status (governed, shadow, zombie).
-- **Issue Identification**: Surfaces critical findings like identity gaps, finance gaps, and data conflicts that need resolution before AAM connection.
-- **Triage**: Enables teams to prioritize assets for connection based on identified issues.
-- **Autonomous Handshake**: Supports automatic provisioning to DCL's Ingest Sidecar, streamlining the data ingestion process.
-- **System of Record (SOR) Identification**: Utilizes a signal-based scoring engine to identify potential Systems of Record, categorizing them by data domain and confidence level. This classification is orthogonal to governance status.
+AOD is the **discovery engine** for the autonomOS platform. Before an organization can connect, unify, or automate anything, it must first know what exists. AOD answers the fundamental question: *"What software assets does this organization actually use?"*
+
+### The Problem AOD Solves
+
+Enterprises typically have 1,000+ applications, but IT only knows about a fraction of them. The rest are:
+- **Shadow IT**: Apps employees adopted without IT approval (Notion, Airtable, personal Dropbox)
+- **Zombie Assets**: Licensed software nobody uses anymore but still costs money
+- **Ungoverned Systems**: Critical tools operating outside security and compliance controls
+
+AOD discovers ALL of these by ingesting signals from multiple sources and correlating them into a single source of truth.
+
+### Core Functional Capabilities
+
+1. **Multi-Source Discovery**
+   - Ingests data from identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories
+   - Correlates signals to identify unique applications even when named differently across sources
+   - Handles alias collapsing (e.g., `office365.com`, `outlook.com`, `microsoft365.com` → `microsoft.com`)
+
+2. **Governance Classification**
+   - **Governed**: Assets with visibility (in CMDB), validation (SSO-enabled), or control (vendor-managed lifecycle)
+   - **Shadow IT**: Assets in use but missing from official inventories — security and compliance blind spots
+   - **Zombie**: Assets in CMDB/licensed but with no recent activity — cost optimization opportunities
+
+3. **Finding Generation**
+   - Surfaces actionable issues for each asset:
+     - **Identity Gap** (Red): Users accessing app without SSO — security risk
+     - **Finance Gap** (Yellow): No expense records for paid service — potential rogue spending
+     - **Data Conflict** (Yellow): Multiple sources disagree on ownership or status
+     - **Stale Activity** (Yellow): No usage in 90+ days — zombie candidate
+   - Findings have severity levels: Red (blocking), Yellow (review), Green (informational)
+
+4. **Triage Workflow**
+   - Organizes discovered issues into workqueues: Firewall (security), Risk (compliance), Hygiene (cleanup)
+   - Enables teams to take action: Sanction (approve shadow IT), Ban (block access), Deprovision (retire zombie)
+   - Tracks disposition state and ownership for audit trails
+
+5. **System of Record (SOR) Detection**
+   - Identifies which applications are authoritative data sources for specific domains (HR, Finance, CRM)
+   - Uses signal-based scoring: CMDB flags, known SOR vendors, middleware presence, SCIM enablement
+   - Outputs confidence bands (high/medium/low) so downstream systems know which data to trust
+
+6. **Fabric Plane Detection**
+   - Recognizes integration "motherships" (MuleSoft, Workato, Snowflake, Kafka, Kong)
+   - Rather than connecting to 500 individual apps, identifies the 3-4 fabric planes that aggregate them
+   - Tags assets with `connected_via_plane` routing so AAM connects efficiently
+
+7. **AAM Handoff**
+   - Exports ConnectionCandidates to AAM (Adaptive API Mesh) for connection
+   - Includes execution signals: `execution_allowed` and `action_type`
+   - Blocking findings → `inventory_only` (human review required)
+   - Clear/overridden → `provision` (safe for auto-connection)
+   - AAM receives complete inventory but respects execution gates
+
+## User Interface
+
+### Console Tab
+- Fetch discovery snapshots from Farm (test data generator) or production sources
+- Execute DiscoveryScans and view run history
+- Monitor scan timing and status
+
+### Triage Tab
+- **Firewall Section**: Shadow IT and security-critical items requiring immediate attention
+- **Risk Section**: Compliance and governance gaps needing review
+- **Hygiene Section**: Zombie assets and cleanup opportunities
+- Actions: Sanction, Ban, Deprovision, Assign, Defer, Ignore
+
+### Catalog View
+- Browse all discovered assets with full detail
+- Filter by classification, governance status, or findings
+- View evidence sources and confidence scores
+- See triage disposition badges
+
+### Policy Tab
+- Configure governance rules and thresholds
+- Define activity windows for zombie detection
+- Set finance thresholds and custom exclusions
+- View policy manifest exported to AAM
+
+### Handoff Tab
+- Review ConnectionCandidates ready for AAM
+- See execution signals and blocking reasons
+- Monitor handoff history across runs
+
+### Overview Tab
+- Platform introduction and educational content
+- Interactive pipeline visualization
+- Guided tour of AOD capabilities
 
 ## User Preferences
-I prefer simple language and detailed explanations when new concepts are introduced. I want iterative development with clear communication at each step. Ask before making major architectural changes or introducing new dependencies. I prefer to review code changes before they are applied to the main branch. Do not make changes to the `docs/` folder.
 
-## System Architecture
+- Simple language with detailed explanations for new concepts
+- Iterative development with clear communication at each step
+- Ask before major architectural changes or new dependencies
+- Do not modify the `docs/` folder
 
-### Core Architecture
-AOD processes raw observations through a 7-stage sequential **DiscoveryScan**: Validation, Normalization, Indexing, Correlation, Admission, Artifact Handling, and Output. This DiscoveryScan transforms raw data into a catalog of discovered assets, complete with classifications and findings.
+## Technical Architecture
 
-**Terminology Note**: AOD uses "DiscoveryScan" terminology (not "Pipeline") to distinguish from DCL ingestion pipelines. Each scan execution is tracked by a `scan_session_id` (aliased as `run_id` for backward compatibility).
+### DiscoveryScan Pipeline
 
-### Data Flow
-The system's data flow begins with fetching snapshot data from Farm (a test data generator), which then moves through the DiscoveryScan, ultimately populating a Catalog and enabling interaction via the Triage UI. Snapshots include discovery observations, IdP records, CMDB records, finance transactions, and cloud inventory.
+AOD processes raw observations through a 7-stage sequential pipeline:
 
-### Key Features and Specifications
-- **Classifications**: Determines asset status (Shadow IT, Zombie, Governed) based on governance signals.
-- **Findings**: Generates actionable insights for each asset, categorized as Red (blocking), Yellow (review), or Green (informational). Examples include `identity_gap`, `finance_gap`, and `data_conflict`.
-- **Policy Switchboard**: A central configuration (`config/policy_master.json`) that governs admission, classification logic, activity windows, finance thresholds, and custom exclusions.
-- **Governance Trinity**: Defines an asset as governed if it possesses Visibility (CMDB), Validation (IdP/SSO), or Control (vendor-governed lifecycle).
-- **Alias Collapsing**: Consolidates technical infrastructure domains to their canonical vendor domain (e.g., `office365.com` to `microsoft.com`).
-- **SOR Identification**: Assets are scored based on signals like CMDB authoritative status, known SOR vendors, middleware exporter presence, and SSO/SCIM enablement. Confidence bands (high, medium, low) indicate the likelihood of an asset being an SOR. SOR scoring runs as a DiscoveryScan stage after vendor governance propagation, populating `sor_tagging` on each asset with likelihood, confidence, evidence, domain, and signals_matched.
-- **Policy Manifest Export**: PolicyManifestBuilder compiles governance rules into a versioned JSON manifest (`GET /policy/manifest`) that AAM consumes during handshake for connection gating.
-- **IdP Governance Policy**: Configurable policy (`Strict` or `Loose`) to control how IdP matches assert governance, balancing between detecting shadow IT and reducing noise.
-- **Fabric Plane Detection**: FabricPlaneDetector identifies Control Planes (motherships) that aggregate data. AAM connects to Fabric Planes, not individual apps.
-- **Enterprise Preset Inference**: PresetInferenceEngine classifies organizational integration patterns (iPaaS-centric, Warehouse-centric, Event-driven, etc.) to determine AAM connection strategy.
+1. **Validation**: Verify input data integrity and format
+2. **Normalization**: Standardize domains, names, and identifiers
+3. **Indexing**: Build searchable asset registry
+4. **Correlation**: Match signals to unique assets across sources
+5. **Admission**: Apply governance rules and generate findings
+6. **Artifact Handling**: Process SOR scoring, fabric plane detection
+7. **Output**: Produce catalog and ConnectionCandidates
 
-### Fabric Planes Architecture
-AOD prioritizes discovering **Fabric Control Planes** over individual endpoints. Finding 500 APIs is useless if they're all managed by one MuleSoft instance.
+Each scan execution is tracked by `scan_session_id` for lineage.
 
-**The 4 Fabric Planes:**
-1. **IPAAS**: Workato, MuleSoft - Control plane for integration flows
-2. **API_GATEWAY**: Kong, Apigee - Direct managed API access
-3. **EVENT_BUS**: Kafka, EventBridge - Streaming backbone
-4. **DATA_WAREHOUSE**: Snowflake, BigQuery - Source of Truth storage
+### Key Concepts
 
-**Enterprise Presets:**
-- PRESET_6_SCRAPPY: Direct app connections (no fabric planes)
-- PRESET_8_IPAAS: >50% assets via iPaaS
-- PRESET_9_EVENT_DRIVEN: Kafka is primary integration bus
-- PRESET_10_API_GATEWAY: API Gateway-centric
-- PRESET_11_WAREHOUSE: Warehouse holds canonical data
+- **Governance Trinity**: An asset is governed if it has Visibility (CMDB), Validation (IdP/SSO), or Control (vendor lifecycle)
+- **Policy Switchboard**: Central configuration (`config/policy_master.json`) governing all classification logic
+- **Enterprise Presets**: Inferred integration patterns (iPaaS-centric, Warehouse-centric, etc.) that determine AAM connection strategy
 
-**ConnectionCandidate.connected_via_plane**: Assets include connection routing (e.g., "Connect via MuleSoft") so AAM knows to use the fabric plane, not direct connection.
+### Project Structure
 
-### UI/UX Decisions
-The user interface features a dark slate foundation with cyan and purple accents. The 'Quicksand' font is used. Notifications are minimal, primarily using cyan toast messages for loading states.
+```
+src/
+├── aod/
+│   ├── api/routes/       # FastAPI endpoints (catalog, triage, handoff, policy)
+│   ├── pipeline/         # DiscoveryScan stages and orchestration
+│   ├── models/           # Data models and output contracts
+│   ├── core/policy/      # Policy schema and manifest builder
+│   └── db/               # Database operations and migrations
+static/
+├── css/                  # Stylesheets
+├── js/                   # Frontend application logic
+└── overview/             # React-based overview module
+templates/
+└── index.html            # Main application template
+config/
+└── policy_master.json    # Central policy configuration
+```
 
-### Technical Implementation
-The project is built using FastAPI for the backend, with a structured `src/` directory containing API routes, pipeline logic, database models, and client integrations. Frontend assets (JS, CSS, HTML templates) are located in `static/` and `templates/`.
+### Key Files
 
-## External Dependencies
+| File | Purpose |
+|------|---------|
+| `src/aod/pipeline/pipeline_executor.py` | Main DiscoveryScan orchestrator |
+| `src/aod/pipeline/sor_scoring.py` | System of Record signal scoring |
+| `src/aod/api/routes/catalog.py` | Asset catalog API and provisioning |
+| `src/aod/api/routes/triage.py` | Triage action management |
+| `src/aod/api/routes/handoff.py` | AAM ConnectionCandidate export |
+| `src/aod/core/policy/manifest.py` | Policy manifest builder for AAM |
+| `static/js/app.js` | Frontend application logic |
 
-- **Farm**: A test data generator providing snapshots of discovery observations, IdP records, CMDB entries, and finance transactions. This is a critical component for testing and reconciliation.
-- **PostgreSQL**: Used as the primary database for storing application data, configured via `DATABASE_URL`.
-- **DCL (Data Connectivity Layer)**: AOD integrates with DCL for provisioning connectors and ingesting data through its Ingest Sidecar.
-- **AAM (Adaptive API Mesh)**: AOD prepares assets for connection to AAM, which serves as the connection and authentication layer for the broader AOS platform.
-- **Uvicorn**: Used to run the FastAPI application locally.
+### External Dependencies
 
-## Important Files
+- **Farm**: Test data generator for discovery snapshots (identity, finance, CMDB, cloud)
+- **AAM**: Receives ConnectionCandidates for connection orchestration
+- **DCL**: Data Connectivity Layer for unified data ingestion (via AAM, not direct)
+- **PostgreSQL**: Primary database for assets, runs, and triage state
 
-- `src/aod/pipeline/pipeline_executor.py` - Main DiscoveryScan orchestrator (also exports `execute_scan`, `ScanResult` aliases)
-- `src/aod/pipeline/sor_scoring.py` - SOR signal-based scoring engine
-- `src/aod/models/output_contracts.py` - Data models including SORTagging, RunLog (with `scan_session_id` alias)
-- `src/aod/core/policy/schema.py` - Policy configuration schema
-- `src/aod/core/policy/manifest.py` - PolicyManifestBuilder for AAM governance export
-- `config/policy_master.json` - Central policy switchboard configuration
-- `docs/FARM_SOR_INSTRUCTIONS.md` - Farm test data generation instructions
-- `docs/TEST_HARNESS.md` - Test harness documentation
+### API Endpoints
 
-## AAM Integration
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/catalog/runs/{run_id}` | GET | Fetch assets for a discovery run |
+| `/api/catalog/assets/{id}/provisioning` | POST | Apply triage action to asset |
+| `/api/triage/data/{run_id}` | GET | Get triage workqueue for run |
+| `/api/triage/action` | POST | Record triage decision |
+| `/api/handoff/aam/candidates` | POST | Export ConnectionCandidates to AAM |
+| `/api/policy/manifest` | GET | Export governance rules for AAM |
+| `/api/runs/{run_id}/derived` | GET | Get derived classifications (shadow, zombie lists) |
 
-AOD emits ConnectionCandidates to AAM (Adaptive API Mesh). AAM handles connectivity decisions.
+## Design System
 
-**Architecture:**
-- AOD discovers and classifies assets
-- AOD exports ConnectionCandidates via `POST /handoff/aam/candidates`
-- AAM receives candidates and determines how to connect
-- AOD does NOT provision connectors or talk directly to DCL
-
-**ConnectionCandidate fields:**
-- `asset_key`: Canonical identifier (domain/vendor)
-- `governance_status`: governed | shadow | zombie | edge
-- `sor_tagging`: SOR likelihood, domain, evidence
-- `findings`: List of finding codes, severities, messages
-- `signals_summary`: Thin summary (has_idp, has_cmdb, etc.)
-- `priority_score`: Score for connection ordering
-
-**Deprecated endpoints:**
-- `POST /handoff/provision-connector` - Returns 410 Gone
-- `GET /handoff/targeting-package` - Returns 410 Gone
+- **Colors**: Dark slate foundation (#0f172a), cyan accent (#0bcad9), purple secondary (#a855f7)
+- **Typography**: Quicksand font family
+- **Notifications**: Minimal cyan toast messages
+- **Components**: Reusable overview template available in `handoff/aos-overview-template/`
 
 ## Recent Changes
 
-- **2026-01-23**: Execution signaling added - ConnectionCandidate now includes `execution_allowed` and `action_type` fields. Blocking findings (critical severity) set execution_allowed=false, action_type="inventory_only". Clear candidates get execution_allowed=true, action_type="provision". AAM receives complete inventory but knows which candidates require triage resolution before auto-provisioning.
-- **2026-01-23**: Nomenclature refactoring - "Pipeline" → "DiscoveryScan" terminology with backward-compatible aliases
-- **2026-01-23**: PolicyManifestBuilder created - GET /policy/manifest exports governance rules for AAM consumption
-- **2026-01-23**: scan_session_id added to AAM handoff responses (aliases run_id for lineage tracking)
-- **2026-01-22**: ConnectionCandidate output contract implemented - AAM handoff via POST /handoff/aam/candidates
-- **2026-01-22**: DCL provisioning endpoints deprecated - AOD no longer talks directly to DCL
-- **2026-01-22**: SOR Phase 2 complete - Pipeline integration with evidence_refs-derived entity_id correlation
-- **2026-01-21**: SOR Phase 1 complete - Signal-based scoring engine with 8 weighted signals
-- **2026-01-21**: Guided tour enhanced with "Legacy Stack" section (8 total stops)
-- **2026-01-20**: Phase 4 Autonomous Handshake operational (99.3-99.8% accuracy)
+- **2026-01-28**: Header branding updated - Logo replaced with text "AOD Asset Observation & Discovery"
+- **2026-01-28**: Triage item_type fix - Frontend now passes classification to backend for deterministic lookup
+- **2026-01-28**: Overview template packaged for reuse across AOS modules
+- **2026-01-23**: Execution signaling - ConnectionCandidates include `execution_allowed` and `action_type` fields
+- **2026-01-23**: PolicyManifestBuilder - Exports governance rules for AAM consumption
+- **2026-01-22**: AAM handoff architecture - ConnectionCandidate output contract implemented
+- **2026-01-21**: SOR scoring engine - Signal-based identification with confidence bands
+- **2026-01-20**: Fabric Plane detection - Identifies integration motherships for efficient connection

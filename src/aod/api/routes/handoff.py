@@ -17,6 +17,8 @@ GUARDRAILS:
 """
 
 import logging
+import os
+import httpx
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
@@ -443,6 +445,159 @@ async def export_aam_candidates(
         fabric_planes=fabric_plane_summaries,
         systems_of_record=sor_summaries
     )
+
+
+class AAMExportCandidate(BaseModel):
+    """Candidate format for AAM receive endpoint"""
+    asset_key: str
+    vendor_name: Optional[str] = None
+    display_name: str
+    category: Optional[str] = None
+    governance_status: str
+    known_endpoints: Optional[List[str]] = None
+    execution_allowed: bool = True
+    action_type: str = "provision"
+    aod_run_id: str
+    aod_asset_id: str
+
+
+class AAMExportRequest(BaseModel):
+    """Request body for AAM /api/handoff/aod/receive"""
+    run_id: str
+    candidates: List[AAMExportCandidate]
+
+
+class AAMExportResponse(BaseModel):
+    """Response from AOD export to AAM"""
+    success: bool
+    message: str
+    run_id: str
+    candidates_sent: int
+    aam_response: Optional[dict] = None
+
+
+@router.post("/aam/export", response_model=AAMExportResponse)
+async def export_to_aam(
+    run_id: str,
+    status_filter: Optional[str] = Query("all", description="Filter by status: active, review, all")
+):
+    """
+    Export ConnectionCandidates to AAM (Adaptive API Mesh).
+    
+    This endpoint:
+    1. Fetches candidates for the given run
+    2. Formats them for AAM's expected schema
+    3. POSTs to AAM's /api/handoff/aod/receive endpoint
+    
+    Requires AAM_URL environment variable to be set.
+    """
+    aam_url = os.environ.get("AAM_URL")
+    if not aam_url:
+        raise HTTPException(
+            status_code=503,
+            detail="AAM_URL environment variable not configured. Please set AAM_URL to the AAM service URL."
+        )
+    
+    db = await get_db_direct()
+    
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    all_assets = await db.get_assets_by_run(run_id)
+    all_findings = await db.get_findings_by_run(run_id)
+    
+    findings_by_asset = {}
+    for f in all_findings:
+        asset_id = str(f.asset_id) if f.asset_id else None
+        if asset_id:
+            if asset_id not in findings_by_asset:
+                findings_by_asset[asset_id] = []
+            findings_by_asset[asset_id].append(f)
+    
+    if status_filter == "all":
+        filtered_assets = all_assets
+    elif status_filter == "review":
+        filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.REVIEW]
+    else:
+        filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
+    
+    aam_candidates = []
+    for asset in filtered_assets:
+        primary_domain = asset.identifiers.domains[0] if asset.identifiers and asset.identifiers.domains else None
+        asset_key = primary_domain or asset.name
+        
+        asset_findings = findings_by_asset.get(str(asset.asset_id), [])
+        execution_allowed, action_type = determine_execution_flags(asset_findings)
+        
+        known_endpoints = []
+        if asset.identifiers and asset.identifiers.domains:
+            known_endpoints = [f"https://{d}" for d in asset.identifiers.domains[:5]]
+        
+        aam_candidate = AAMExportCandidate(
+            asset_key=asset_key,
+            vendor_name=asset.vendor,
+            display_name=asset.name,
+            category=infer_category(asset),
+            governance_status=map_governance_status(asset.provisioning_status),
+            known_endpoints=known_endpoints if known_endpoints else None,
+            execution_allowed=execution_allowed,
+            action_type=action_type,
+            aod_run_id=run_id,
+            aod_asset_id=str(asset.asset_id)
+        )
+        aam_candidates.append(aam_candidate)
+    
+    export_payload = AAMExportRequest(
+        run_id=run_id,
+        candidates=aam_candidates
+    )
+    
+    aam_endpoint = f"{aam_url.rstrip('/')}/api/handoff/aod/receive"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                aam_endpoint,
+                json=export_payload.model_dump(),
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code >= 400:
+                logger.error("handoff.aam_export.failed", extra={
+                    "run_id": run_id,
+                    "status_code": response.status_code,
+                    "response": response.text[:500]
+                })
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"AAM rejected export: {response.status_code} - {response.text[:200]}"
+                )
+            
+            aam_response = response.json() if response.text else {}
+            
+            logger.info("handoff.aam_export.success", extra={
+                "run_id": run_id,
+                "candidates_sent": len(aam_candidates),
+                "aam_status": response.status_code
+            })
+            
+            return AAMExportResponse(
+                success=True,
+                message=f"Successfully exported {len(aam_candidates)} candidates to AAM",
+                run_id=run_id,
+                candidates_sent=len(aam_candidates),
+                aam_response=aam_response
+            )
+    except httpx.RequestError as e:
+        logger.error("handoff.aam_export.connection_error", extra={
+            "run_id": run_id,
+            "error": str(e)
+        })
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to connect to AAM: {str(e)}"
+        )
 
 
 @router.post("/provision-connector")

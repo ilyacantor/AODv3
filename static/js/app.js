@@ -1875,26 +1875,36 @@
         async function exportToAAM() {
             const runId = document.getElementById('handoffRunSelect').value;
             const statusFilter = document.getElementById('handoffStatusFilter').value;
+            const exportBtn = document.getElementById('exportToAAMBtn');
             
             if (!runId) {
                 showToast('Please select a snapshot first', 'error');
                 return;
             }
             
+            exportBtn.disabled = true;
+            exportBtn.textContent = 'Exporting...';
+            
             try {
-                const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/export?run_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
                 
+                const data = await response.json();
+                
                 if (!response.ok) {
-                    throw new Error(`Export failed: ${response.status}`);
+                    throw new Error(data.detail || `Export failed: ${response.status}`);
                 }
                 
-                showToast('Candidates exported to AAM', 'success');
+                showToast(`Exported ${data.candidates_sent} candidates to AAM`, 'success');
+                console.log('AAM export response:', data);
             } catch (err) {
                 console.error('Failed to export to AAM:', err);
                 showToast(`Export failed: ${err.message}`, 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = 'Export to AAM';
             }
         }
         

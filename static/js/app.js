@@ -2087,6 +2087,30 @@
                     },
                     drillPaths: ['asset_type', 'vendor'],
                     displayName: 'Zombie Assets'
+                },
+                fabric_planes: {
+                    fields: {
+                        plane_id: { default: 'unknown' },
+                        plane_type: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        display_name: { default: 'Unknown Plane' },
+                        managed_asset_count: { default: 0 },
+                        sample_assets: { default: [] }
+                    },
+                    drillPaths: ['plane_type', 'vendor'],
+                    displayName: 'Fabric Planes'
+                },
+                sor: {
+                    fields: {
+                        name: { default: 'unknown' },
+                        vendor: { default: 'unknown' },
+                        sor_likelihood: { default: 'unknown' },
+                        sor_confidence: { default: 0 },
+                        sor_domain: { default: null },
+                        sor_evidence: { default: [] }
+                    },
+                    drillPaths: ['sor_likelihood', 'sor_domain'],
+                    displayName: 'Systems of Record'
                 }
             },
             summaryCardMappings: {
@@ -2096,7 +2120,9 @@
                 statObservations: 'observations',
                 statRejected: 'rejections',
                 statShadow: 'shadow',
-                statZombie: 'zombie'
+                statZombie: 'zombie',
+                statFabricPlanes: 'fabric_planes',
+                statSOR: 'sor'
             }
         };
         
@@ -3072,6 +3098,7 @@
         }
         
         async function loadArtifacts(runId) {
+            // Load general artifacts (legacy endpoint)
             try {
                 const r = await fetch(`/api/artifacts?run_id=${runId}`);
                 if (r.ok) {
@@ -3085,6 +3112,71 @@
             } catch (e) {
                 console.error('Failed to load artifacts:', e);
                 normalizedData.artifacts = [];
+            }
+
+            // Load Fabric Planes and Systems of Record
+            try {
+                const r = await fetch(`/api/runs/${runId}/artifacts`);
+                if (r.ok) {
+                    const data = await r.json();
+
+                    // Fabric Planes
+                    const fabricPlanes = data.fabric_planes || {};
+                    const fabricCount = fabricPlanes.count || 0;
+                    document.getElementById('statFabricPlanes').textContent = fabricCount;
+
+                    const fabricBreakdown = document.getElementById('fabricPlaneBreakdown');
+                    if (fabricCount > 0) {
+                        const byType = fabricPlanes.by_plane_type || {};
+                        const parts = [];
+                        if ((byType.ipaas || []).length > 0) parts.push(`${byType.ipaas.length} iPaaS`);
+                        if ((byType.api_gateway || []).length > 0) parts.push(`${byType.api_gateway.length} Gateway`);
+                        if ((byType.event_bus || []).length > 0) parts.push(`${byType.event_bus.length} Event`);
+                        if ((byType.warehouse || []).length > 0) parts.push(`${byType.warehouse.length} Warehouse`);
+                        fabricBreakdown.textContent = parts.join(', ') || `${fabricPlanes.total_assets_with_fabric_tag || 0} assets`;
+                    } else {
+                        fabricBreakdown.textContent = '';
+                    }
+
+                    // Store fabric data for drill-down
+                    normalizedData.fabric_planes = fabricPlanes.planes || [];
+
+                    // Systems of Record
+                    const sor = data.systems_of_record || {};
+                    const sorCount = sor.count || 0;
+                    document.getElementById('statSOR').textContent = sorCount;
+
+                    const sorBreakdown = document.getElementById('sorBreakdown');
+                    if (sorCount > 0) {
+                        const highCount = sor.high_confidence_count || 0;
+                        const medCount = sor.medium_confidence_count || 0;
+                        const parts = [];
+                        if (highCount > 0) parts.push(`${highCount} high`);
+                        if (medCount > 0) parts.push(`${medCount} medium`);
+                        sorBreakdown.textContent = parts.join(', ') || '';
+                    } else {
+                        sorBreakdown.textContent = '';
+                    }
+
+                    // Store SOR data for drill-down
+                    normalizedData.sor = sor.assets || [];
+
+                } else {
+                    document.getElementById('statFabricPlanes').textContent = '-';
+                    document.getElementById('fabricPlaneBreakdown').textContent = '';
+                    document.getElementById('statSOR').textContent = '-';
+                    document.getElementById('sorBreakdown').textContent = '';
+                    normalizedData.fabric_planes = [];
+                    normalizedData.sor = [];
+                }
+            } catch (e) {
+                console.error('Failed to load fabric/SOR artifacts:', e);
+                document.getElementById('statFabricPlanes').textContent = '-';
+                document.getElementById('fabricPlaneBreakdown').textContent = '';
+                document.getElementById('statSOR').textContent = '-';
+                document.getElementById('sorBreakdown').textContent = '';
+                normalizedData.fabric_planes = [];
+                normalizedData.sor = [];
             }
         }
         

@@ -202,6 +202,23 @@
                         </div>
                     </div>
                 </div>
+                <div class="kpi-section">
+                    <div class="kpi-section-label">Artifacts</div>
+                    <div id="artifactsStats" class="stats-grid stats-grid-2">
+                        <div class="stat-card clickable" data-drill-type="fabric_planes">
+                            <div class="stat-help" title="Fabric Planes: Integration 'motherships' detected (iPaaS, API Gateway, Event Bus, Warehouse). AAM connects to these instead of individual apps.">?</div>
+                            <div class="stat-value stat-fabric" id="statFabricPlanes">-</div>
+                            <div class="stat-label">Fabric Planes</div>
+                            <div class="stat-sublabel" id="fabricPlaneBreakdown"></div>
+                        </div>
+                        <div class="stat-card clickable" data-drill-type="sor">
+                            <div class="stat-help" title="Systems of Record: Authoritative data sources for specific domains (customer, employee, financial). High confidence SORs are likely data masters.">?</div>
+                            <div class="stat-value stat-sor" id="statSOR">-</div>
+                            <div class="stat-label">Systems of Record</div>
+                            <div class="stat-sublabel" id="sorBreakdown"></div>
+                        </div>
+                    </div>
+                </div>
                 <div id="drillPanel" class="drill-panel hidden">
                     <div class="drill-panel-header">
                         <div style="display: flex; align-items: center; gap: 1rem;">

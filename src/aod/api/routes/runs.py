@@ -34,6 +34,7 @@ from .utils import (
     get_run_snapshot_as_of as _get_run_snapshot_as_of,
     generate_ambiguous_explanation as _generate_ambiguous_explanation,
 )
+from ...pipeline.sor_scoring import batch_score_sor
 
 
 router = APIRouter(prefix="/runs")
@@ -724,6 +725,144 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
         "zombie_assets": summary.zombie_assets,
         "stage1_metrics": stage1_metrics
     }
+
+
+@router.get("/{run_id}/artifacts")
+async def get_run_artifacts(run_id: str):
+    """
+    Get discovered artifacts for a run: Fabric Planes and Systems of Record.
+
+    Returns:
+        - fabric_planes: List of detected fabric control planes (iPaaS, API Gateway, Event Bus, Warehouse)
+        - sor_assets: List of assets identified as potential Systems of Record
+        - summary counts for UI KPI display
+
+    Fabric Planes are "motherships" that aggregate integration connections.
+    SORs are authoritative data sources for specific domains (customer, employee, financial).
+    """
+    db = await get_db_direct()
+
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    assets = await db.get_assets_by_run(run_id)
+
+    # Extract fabric plane data from assets
+    fabric_planes = []
+    fabric_plane_assets = []
+    plane_vendor_counts: dict[str, dict] = {}  # {vendor: {plane_type, count, assets}}
+
+    for asset in assets:
+        if asset.fabric_plane_tag:
+            tag = asset.fabric_plane_tag
+            vendor = tag.controller_vendor
+            plane_type = tag.plane_type.value if hasattr(tag.plane_type, 'value') else str(tag.plane_type)
+
+            if vendor not in plane_vendor_counts:
+                plane_vendor_counts[vendor] = {
+                    "vendor": vendor,
+                    "plane_type": plane_type,
+                    "display_name": vendor.replace("_", " ").title(),
+                    "count": 0,
+                    "assets": []
+                }
+
+            plane_vendor_counts[vendor]["count"] += 1
+            plane_vendor_counts[vendor]["assets"].append({
+                "asset_id": str(asset.asset_id),
+                "name": asset.name,
+                "domain": tag.controller_domain
+            })
+
+            fabric_plane_assets.append({
+                "asset_id": str(asset.asset_id),
+                "name": asset.name,
+                "vendor": asset.vendor,
+                "plane_type": plane_type,
+                "controller_vendor": vendor,
+                "controller_domain": tag.controller_domain,
+                "confidence": tag.confidence
+            })
+
+    # Build fabric planes summary
+    for vendor, data in plane_vendor_counts.items():
+        fabric_planes.append({
+            "plane_id": f"{data['plane_type']}:{vendor}",
+            "plane_type": data["plane_type"],
+            "vendor": vendor,
+            "display_name": data["display_name"],
+            "managed_asset_count": data["count"],
+            "sample_assets": data["assets"][:5]  # First 5 for display
+        })
+
+    # Compute SOR scores for all assets
+    sor_results = batch_score_sor(assets)
+
+    # Filter to assets with SOR likelihood
+    sor_assets = []
+    sor_by_domain: dict[str, list] = {}  # {domain: [assets]}
+
+    for asset in assets:
+        asset_id = str(asset.asset_id)
+        if asset_id in sor_results:
+            result = sor_results[asset_id]
+            if result.likelihood in ("high", "medium"):
+                sor_asset = {
+                    "asset_id": asset_id,
+                    "name": asset.name,
+                    "vendor": asset.vendor,
+                    "sor_likelihood": result.likelihood,
+                    "sor_confidence": result.confidence,
+                    "sor_domain": result.domain,
+                    "sor_evidence": result.evidence[:3]  # Top 3 evidence items
+                }
+                sor_assets.append(sor_asset)
+
+                domain = result.domain or "unknown"
+                if domain not in sor_by_domain:
+                    sor_by_domain[domain] = []
+                sor_by_domain[domain].append(sor_asset)
+
+    # Get industry from provenance if available
+    industry = None
+    if run.input_meta:
+        industry = run.input_meta.get("industry")
+
+    return {
+        "run_id": run_id,
+        "industry": industry,
+        "fabric_planes": {
+            "count": len(fabric_planes),
+            "planes": fabric_planes,
+            "total_assets_with_fabric_tag": len(fabric_plane_assets),
+            "by_plane_type": _group_planes_by_type(fabric_planes)
+        },
+        "systems_of_record": {
+            "count": len(sor_assets),
+            "high_confidence_count": len([a for a in sor_assets if a["sor_likelihood"] == "high"]),
+            "medium_confidence_count": len([a for a in sor_assets if a["sor_likelihood"] == "medium"]),
+            "assets": sor_assets,
+            "by_domain": sor_by_domain
+        }
+    }
+
+
+def _group_planes_by_type(fabric_planes: list[dict]) -> dict:
+    """Group fabric planes by plane type for UI display"""
+    by_type: dict[str, list] = {
+        "ipaas": [],
+        "api_gateway": [],
+        "event_bus": [],
+        "warehouse": []
+    }
+
+    for plane in fabric_planes:
+        plane_type = plane.get("plane_type", "unknown")
+        if plane_type in by_type:
+            by_type[plane_type].append(plane)
+
+    return by_type
 
 
 @router.get("/{run_id}/policy")

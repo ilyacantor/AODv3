@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=20">
+    <link rel="stylesheet" href="/static/css/main.css?v=21">
 </head>
 <body>
     <header>
@@ -336,7 +336,7 @@
     </div>
     
     <div id="policyTabContent" class="main-tab-content">
-        <div style="padding: 1rem 2rem 0 2rem;">
+        <div style="padding: 1rem 2rem 0 2rem; flex-shrink: 0;">
             <div class="user-guide" id="policyGuide">
                 <div class="user-guide-header" onclick="toggleUserGuide('policyGuide')">
                     <span class="user-guide-icon">▶</span>
@@ -376,7 +376,7 @@
         <iframe 
             id="policyIframe"
             class="overview-iframe"
-            style="height: calc(100% - 100px);"
+            style="flex: 1; min-height: 0;"
             title="Policy Switchboard"
             src="/static/policy-switchboard.html"
         ></iframe>

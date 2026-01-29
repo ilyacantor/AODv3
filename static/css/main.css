@@ -1505,3 +1505,10 @@ main { padding: 2rem; }
     margin: 0.75rem 0;
     font-size: 0.75rem;
 }
+
+/* Policy tab needs flex layout for iframe sizing */
+#policyTabContent.active {
+    display: flex !important;
+    flex-direction: column;
+    height: calc(100vh - 56px);
+}

@@ -164,7 +164,8 @@ async def create_run_from_farm(request: FarmRunRequest):
         "schema_version": schema_version,
         "fetch_duration_ms": fetch_duration_ms,
         "snapshot_generated_at": snapshot_generated_at.isoformat() if snapshot_generated_at else None,
-        "snapshot_fingerprint": snapshot_fingerprint  # For detecting snapshot regeneration
+        "snapshot_fingerprint": snapshot_fingerprint,  # For detecting snapshot regeneration
+        "industry": request.industry  # Industry vertical for fabric plane weighting
     }
     
     db = await get_db_direct()

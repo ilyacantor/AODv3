@@ -29,6 +29,15 @@ class FarmListResult:
     error_type: str = ""
 
 
+@dataclass
+class FarmFabricResult:
+    """Result of fabric-related operations from Farm"""
+    success: bool
+    data: dict[str, Any] | list[dict[str, Any]] | None = None
+    error: str = ""
+    error_type: str = ""
+
+
 class FarmClientError(Exception):
     """Error from Farm client operations"""
     def __init__(self, message: str, error_type: str = "FARM_ERROR"):
@@ -274,6 +283,258 @@ class FarmClient:
             "snapshot_id": snapshot_id, "tenant_id": tenant_id
         })
         return FarmFetchResult(success=True, data=data)
+
+    # =========================================================================
+    # Fabric API Methods - Industry-Weighted Vendor Selection
+    # =========================================================================
+
+    async def list_industries(self) -> FarmFabricResult:
+        """
+        List all available industry verticals from Farm.
+
+        GET /api/fabric/industries
+
+        Returns 9 industry verticals:
+        - finance: Banks/insurance with SOX, PCI-DSS focus
+        - healthcare: Hospitals/pharma with HIPAA focus
+        - manufacturing: Industrial with edge computing
+        - logistics: Supply chain and fleet management
+        - tech_saas: Cloud-native startups
+        - retail: E-commerce omnichannel
+        - media: Streaming/gaming high throughput
+        - government: FedRAMP/FISMA sovereign cloud
+        - energy: Utilities with NERC-CIP focus
+        """
+        url = f"{self.base_url}/api/fabric/industries"
+
+        logger.info("farm.list_industries.start")
+
+        response, error = await self._make_request_with_retry(url, "list_industries")
+
+        if error:
+            return FarmFabricResult(
+                success=False,
+                error=error,
+                error_type="FARM_WAKING_OR_DOWN"
+            )
+
+        assert response is not None
+
+        if response.status_code >= 400:
+            logger.warning("farm.list_industries.http_error", extra={
+                "status_code": response.status_code
+            })
+            return FarmFabricResult(
+                success=False,
+                error=f"Farm returned HTTP {response.status_code}: {response.text[:200]}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return FarmFabricResult(
+                success=False,
+                error=f"Invalid JSON response: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        logger.info("farm.list_industries.success", extra={
+            "industry_count": len(data) if isinstance(data, list) else len(data.get("industries", []))
+        })
+        return FarmFabricResult(success=True, data=data)
+
+    async def get_industry_weights(self, industry: str) -> FarmFabricResult:
+        """
+        Get vendor selection weights for a specific industry.
+
+        GET /api/fabric/weights/{industry}
+
+        Args:
+            industry: Industry ID (e.g., 'finance', 'healthcare')
+
+        Returns:
+            Vendor probabilities per fabric plane for the industry.
+            Example: Finance favors MuleSoft (55%), Apigee (50%), Confluent (45%)
+        """
+        url = f"{self.base_url}/api/fabric/weights/{industry}"
+
+        logger.info("farm.get_industry_weights.start", extra={"industry": industry})
+
+        response, error = await self._make_request_with_retry(url, "get_industry_weights")
+
+        if error:
+            return FarmFabricResult(
+                success=False,
+                error=error,
+                error_type="FARM_WAKING_OR_DOWN"
+            )
+
+        assert response is not None
+
+        if response.status_code == 404:
+            return FarmFabricResult(
+                success=False,
+                error=f"Industry '{industry}' not found",
+                error_type="INDUSTRY_NOT_FOUND"
+            )
+
+        if response.status_code >= 400:
+            logger.warning("farm.get_industry_weights.http_error", extra={
+                "industry": industry, "status_code": response.status_code
+            })
+            return FarmFabricResult(
+                success=False,
+                error=f"Farm returned HTTP {response.status_code}: {response.text[:200]}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return FarmFabricResult(
+                success=False,
+                error=f"Invalid JSON response: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        logger.info("farm.get_industry_weights.success", extra={"industry": industry})
+        return FarmFabricResult(success=True, data=data)
+
+    async def get_weights_matrix(self) -> FarmFabricResult:
+        """
+        Get the complete weights matrix across all industries and planes.
+
+        GET /api/fabric/weights-matrix
+
+        Returns:
+            Complete matrix showing vendor weights for each industry/plane combination.
+            Useful for visualizing industry preferences across the entire fabric.
+        """
+        url = f"{self.base_url}/api/fabric/weights-matrix"
+
+        logger.info("farm.get_weights_matrix.start")
+
+        response, error = await self._make_request_with_retry(url, "get_weights_matrix")
+
+        if error:
+            return FarmFabricResult(
+                success=False,
+                error=error,
+                error_type="FARM_WAKING_OR_DOWN"
+            )
+
+        assert response is not None
+
+        if response.status_code >= 400:
+            logger.warning("farm.get_weights_matrix.http_error", extra={
+                "status_code": response.status_code
+            })
+            return FarmFabricResult(
+                success=False,
+                error=f"Farm returned HTTP {response.status_code}: {response.text[:200]}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return FarmFabricResult(
+                success=False,
+                error=f"Invalid JSON response: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        logger.info("farm.get_weights_matrix.success")
+        return FarmFabricResult(success=True, data=data)
+
+    async def generate_fabric(
+        self,
+        industry: str,
+        seed: int | None = None,
+        scale: str = "medium"
+    ) -> FarmFabricResult:
+        """
+        Generate a fabric configuration using industry-weighted vendor selection.
+
+        POST /api/fabric/generate
+
+        Determinism: Same seed + industry always produces identical fabric config,
+        enabling reproducible testing across environments.
+
+        Args:
+            industry: Industry ID (e.g., 'finance', 'healthcare')
+            seed: Optional seed for deterministic generation
+            scale: Enterprise scale: 'small', 'medium', 'large'
+
+        Returns:
+            Generated fabric configuration with selected vendors per plane.
+        """
+        url = f"{self.base_url}/api/fabric/generate"
+
+        payload = {
+            "industry": industry,
+            "scale": scale
+        }
+        if seed is not None:
+            payload["seed"] = seed
+
+        logger.info("farm.generate_fabric.start", extra={
+            "industry": industry, "seed": seed, "scale": scale
+        })
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, json=payload)
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
+            logger.warning("farm.generate_fabric.network_error", extra={
+                "industry": industry, "error": str(e)
+            })
+            return FarmFabricResult(
+                success=False,
+                error="FARM_WAKING_OR_DOWN",
+                error_type="FARM_WAKING_OR_DOWN"
+            )
+        except Exception as e:
+            logger.exception("farm.generate_fabric.unexpected_error")
+            return FarmFabricResult(
+                success=False,
+                error=str(e),
+                error_type="UNEXPECTED_ERROR"
+            )
+
+        if response.status_code == 404:
+            return FarmFabricResult(
+                success=False,
+                error=f"Industry '{industry}' not found",
+                error_type="INDUSTRY_NOT_FOUND"
+            )
+
+        if response.status_code >= 400:
+            logger.warning("farm.generate_fabric.http_error", extra={
+                "industry": industry, "status_code": response.status_code
+            })
+            return FarmFabricResult(
+                success=False,
+                error=f"Farm returned HTTP {response.status_code}: {response.text[:200]}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return FarmFabricResult(
+                success=False,
+                error=f"Invalid JSON response: {str(e)}",
+                error_type="UPSTREAM_ERROR"
+            )
+
+        logger.info("farm.generate_fabric.success", extra={
+            "industry": industry,
+            "seed": data.get("seed"),
+            "vendors_selected": len(data.get("fabric_config", []))
+        })
+        return FarmFabricResult(success=True, data=data)
 
 
 def validate_schema_version(data: dict[str, Any]) -> tuple[bool, str]:

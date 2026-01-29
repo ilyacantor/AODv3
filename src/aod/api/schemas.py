@@ -12,6 +12,11 @@ class FarmRunRequest(BaseModel):
     tenant_id: str
     farm_base_url: str | None = None
     snapshot_id: str
+    industry: str | None = Field(
+        default=None,
+        description="Industry vertical for fabric generation (e.g., 'finance', 'healthcare'). "
+                    "When provided, fabric planes are weighted by industry-specific vendor preferences."
+    )
 
 
 class RunResponse(BaseModel):
@@ -363,3 +368,83 @@ class ProvisioningActionResponse(BaseModel):
     reason: Optional[str] = None
     actor: Optional[str] = None
     message: str
+
+
+# ============================================================================
+# Fabric API Schemas - Industry-Weighted Vendor Selection (Farm Integration)
+# ============================================================================
+
+class IndustryVertical(BaseModel):
+    """A single industry vertical with its characteristics"""
+    id: str = Field(..., description="Industry identifier (e.g., 'finance', 'healthcare')")
+    name: str = Field(..., description="Display name for the industry")
+    compliance_focus: list[str] = Field(default_factory=list, description="Key compliance frameworks (e.g., ['SOX', 'PCI-DSS'])")
+    typical_scale: str = Field(default="medium", description="Typical enterprise scale: small, medium, large")
+    description: Optional[str] = Field(None, description="Brief description of the industry vertical")
+
+
+class IndustryListResponse(BaseModel):
+    """Response for listing all industry verticals"""
+    industries: list[IndustryVertical]
+    count: int
+
+
+class VendorWeight(BaseModel):
+    """Weight/probability for a single vendor within a plane"""
+    vendor: str = Field(..., description="Vendor name (e.g., 'mulesoft', 'workato')")
+    weight: float = Field(..., ge=0, le=1, description="Selection probability (0.0-1.0)")
+    display_name: Optional[str] = Field(None, description="Human-readable vendor name")
+
+
+class PlaneWeights(BaseModel):
+    """Vendor weights for a single fabric plane type"""
+    plane_type: str = Field(..., description="Plane type: ipaas, api_gateway, event_bus, warehouse")
+    vendors: list[VendorWeight]
+
+
+class IndustryWeightsResponse(BaseModel):
+    """Response for vendor weights for a specific industry"""
+    industry: str
+    industry_name: str
+    planes: list[PlaneWeights]
+    compliance_focus: list[str] = Field(default_factory=list)
+
+
+class WeightsMatrixEntry(BaseModel):
+    """A single entry in the weights matrix"""
+    industry: str
+    plane_type: str
+    vendor: str
+    weight: float
+
+
+class WeightsMatrixResponse(BaseModel):
+    """Complete matrix of vendor weights across all industries"""
+    matrix: list[WeightsMatrixEntry]
+    industries: list[str]
+    plane_types: list[str]
+    vendors: list[str]
+
+
+class FabricGenerateRequest(BaseModel):
+    """Request to generate a fabric configuration"""
+    industry: str = Field(..., description="Industry vertical ID")
+    seed: Optional[int] = Field(None, description="Seed for deterministic generation")
+    scale: str = Field(default="medium", description="Scale: small, medium, large")
+
+
+class GeneratedVendorSelection(BaseModel):
+    """A vendor selected for a fabric plane"""
+    plane_type: str
+    vendor: str
+    display_name: str
+    confidence: float = Field(..., description="Selection confidence based on industry weight")
+
+
+class FabricGenerateResponse(BaseModel):
+    """Response for fabric configuration generation"""
+    industry: str
+    seed: int
+    scale: str
+    fabric_config: list[GeneratedVendorSelection]
+    deterministic: bool = Field(default=True, description="True = same seed+industry always produces same config")

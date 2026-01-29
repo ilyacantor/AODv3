@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from .health import router as health_router
 from .farm import router as farm_router
+from .fabric import router as fabric_router
 from .runs import router as runs_router
 from .catalog import router as catalog_router
 from .findings import router as findings_router
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api")
 
 router.include_router(health_router, tags=["health"])
 router.include_router(farm_router, tags=["farm"])
+router.include_router(fabric_router, tags=["fabric"])
 router.include_router(runs_router, tags=["runs"])
 router.include_router(catalog_router, tags=["catalog"])
 router.include_router(findings_router, tags=["findings"])

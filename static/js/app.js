@@ -1449,13 +1449,23 @@
                 
                 const data = await response.json();
                 const candidates = data.candidates || [];
+                const farmFabricPlanes = data.fabric_planes || [];
+                const farmSORs = data.systems_of_record || [];
+                
+                window.farmFabricPlanes = farmFabricPlanes;
+                window.farmSORs = farmSORs;
                 
                 const totalCount = candidates.length;
-                const fabricCount = candidates.filter(c => c.connected_via_plane).length;
-                const sorCount = candidates.filter(c => c.sor_tagging && c.sor_tagging.domain).length;
+                const fabricCount = farmFabricPlanes.length;
+                const sorCount = farmSORs.length;
                 const findingsCount = candidates.filter(c => c.findings && c.findings.length > 0).length;
                 
-                const fabricCounts = countFabricPlaneTypes(candidates);
+                const fabricCounts = {
+                    ipaas: farmFabricPlanes.filter(p => p.plane_type === 'ipaas').length,
+                    api_gateway: farmFabricPlanes.filter(p => p.plane_type === 'api_gateway').length,
+                    warehouse: farmFabricPlanes.filter(p => p.plane_type === 'data_warehouse').length,
+                    event_bus: farmFabricPlanes.filter(p => p.plane_type === 'event_bus').length
+                };
                 
                 document.getElementById('handoffTotalCount').textContent = totalCount;
                 document.getElementById('handoffFabricCount').textContent = fabricCount;
@@ -1470,9 +1480,12 @@
                 const fabricBreakdown = document.getElementById('fabricPlanesBreakdown');
                 if (fabricCount > 0) {
                     fabricBreakdown.classList.remove('hidden');
+                    renderFarmFabricPlanes(farmFabricPlanes);
                 } else {
                     fabricBreakdown.classList.add('hidden');
                 }
+                
+                renderFarmSORs(farmSORs);
                 
                 labelEl.textContent = `${totalCount} candidates from ${runId.substring(0, 16)}...`;
                 
@@ -1524,6 +1537,56 @@
             }
             
             return counts;
+        }
+        
+        function renderFarmFabricPlanes(planes) {
+            const container = document.getElementById('farmFabricPlanesContainer');
+            if (!container) return;
+            
+            if (!planes || planes.length === 0) {
+                container.innerHTML = '<div class="empty-state">No fabric planes detected</div>';
+                return;
+            }
+            
+            const planeTypeLabels = {
+                'ipaas': 'iPaaS',
+                'api_gateway': 'API Gateway',
+                'data_warehouse': 'Data Warehouse',
+                'event_bus': 'Event Bus'
+            };
+            
+            const html = planes.map(p => `
+                <div class="fabric-plane-chip">
+                    <span class="plane-type">${planeTypeLabels[p.plane_type] || p.plane_type}</span>
+                    <span class="plane-vendor">${p.vendor.replace(/_/g, ' ')}</span>
+                    ${p.is_healthy ? '<span class="health-badge healthy">Healthy</span>' : '<span class="health-badge unhealthy">Degraded</span>'}
+                    <span class="source-badge">${p.source}</span>
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
+        }
+        
+        function renderFarmSORs(sors) {
+            const container = document.getElementById('farmSORsContainer');
+            if (!container) return;
+            
+            if (!sors || sors.length === 0) {
+                container.innerHTML = '<div class="empty-state">No Systems of Record detected</div>';
+                return;
+            }
+            
+            const html = sors.map(s => `
+                <div class="sor-chip">
+                    <span class="sor-domain">${s.domain.toUpperCase()}</span>
+                    <span class="sor-name">${s.sor_name}</span>
+                    <span class="sor-type">${s.sor_type}</span>
+                    <span class="confidence-badge ${s.confidence}">${s.confidence}</span>
+                    <span class="source-badge">${s.source}</span>
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
         }
         
         function filterByFabricPlane(planeType) {

@@ -161,17 +161,38 @@ async def get_aam_manifest(
     )
 
 
+class FabricPlaneSummary(BaseModel):
+    """Summary of a fabric plane from Farm's authoritative data"""
+    plane_type: str
+    vendor: str
+    is_healthy: bool = True
+    source: str = "farm"
+
+
+class SORSummary(BaseModel):
+    """Summary of a System of Record from Farm's authoritative data"""
+    domain: str
+    sor_name: str
+    sor_type: str
+    confidence: str = "high"
+    source: str = "farm"
+
+
 class AAMCandidatesResponse(BaseModel):
     """
     Response for AAM candidates export.
     
     Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
     provided for clarity in the new DiscoveryScan terminology.
+    
+    Includes Farm's authoritative fabric_planes and systems_of_record data.
     """
     run_id: str
     scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
     candidates: List[ConnectionCandidate]
     count: int
+    fabric_planes: List[FabricPlaneSummary] = Field(default_factory=list, description="Farm's authoritative fabric planes")
+    systems_of_record: List[SORSummary] = Field(default_factory=list, description="Farm's authoritative Systems of Record")
 
 
 def infer_category(asset) -> Optional[str]:
@@ -277,6 +298,7 @@ async def export_aam_candidates(
     AOD emits ConnectionCandidates to express connection INTENT + EVIDENCE.
     AOD does NOT decide how to connect - AAM handles connectivity.
     
+    Uses Farm's authoritative fabric_planes and sors data when available.
     This endpoint is idempotent and non-blocking.
     """
     db = await get_db_direct()
@@ -284,6 +306,22 @@ async def export_aam_candidates(
     run = await db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    input_meta = run.input_meta or {}
+    farm_sors = input_meta.get("sors", [])
+    farm_fabric_planes = input_meta.get("fabric_planes", [])
+    
+    farm_sor_by_name: dict[str, dict] = {}
+    for sor in farm_sors:
+        sor_name = sor.get("sor_name", "").lower()
+        if sor_name:
+            farm_sor_by_name[sor_name] = sor
+    
+    farm_fabric_by_vendor: dict[str, dict] = {}
+    for plane in farm_fabric_planes:
+        vendor = plane.get("vendor", "").lower()
+        if vendor:
+            farm_fabric_by_vendor[vendor] = plane
     
     all_assets = await db.get_assets_by_run(run_id)
     all_findings = await db.get_findings_by_run(run_id)
@@ -319,7 +357,17 @@ async def export_aam_candidates(
         ]
         
         thin_sor = None
-        if asset.sor_tagging and asset.sor_tagging.likelihood != "none":
+        asset_name_lower = asset.name.lower() if asset.name else ""
+        asset_vendor_lower = asset.vendor.lower() if asset.vendor else ""
+        
+        if asset_name_lower in farm_sor_by_name:
+            farm_sor = farm_sor_by_name[asset_name_lower]
+            thin_sor = CandidateSORTagging(
+                domain=farm_sor.get("domain"),
+                confidence=farm_sor.get("confidence", "high"),
+                evidence=[f"Farm-designated {farm_sor.get('domain')} SOR"]
+            )
+        elif asset.sor_tagging and asset.sor_tagging.likelihood != "none":
             thin_sor = CandidateSORTagging(
                 domain=asset.sor_tagging.domain,
                 confidence=asset.sor_tagging.likelihood,
@@ -327,7 +375,11 @@ async def export_aam_candidates(
             )
         
         connected_via = None
-        if asset.fabric_plane_tag:
+        if asset_vendor_lower in farm_fabric_by_vendor:
+            plane = farm_fabric_by_vendor[asset_vendor_lower]
+            vendor_display = plane.get("vendor", "").replace("_", " ").title()
+            connected_via = f"Connect via {vendor_display}"
+        elif asset.fabric_plane_tag:
             vendor_display = asset.fabric_plane_tag.controller_vendor.replace("_", " ").title()
             connected_via = f"Connect via {vendor_display}"
         
@@ -354,9 +406,32 @@ async def export_aam_candidates(
     
     candidates.sort(key=lambda c: c.priority_score or 0, reverse=True)
     
+    fabric_plane_summaries = [
+        FabricPlaneSummary(
+            plane_type=p.get("plane_type", "unknown"),
+            vendor=p.get("vendor", "unknown"),
+            is_healthy=p.get("is_healthy", True),
+            source="farm"
+        )
+        for p in farm_fabric_planes
+    ]
+    
+    sor_summaries = [
+        SORSummary(
+            domain=s.get("domain", "unknown"),
+            sor_name=s.get("sor_name", "unknown"),
+            sor_type=s.get("sor_type", "unknown"),
+            confidence=s.get("confidence", "high"),
+            source="farm"
+        )
+        for s in farm_sors
+    ]
+    
     logger.info("handoff.aam_candidates.exported", extra={
         "run_id": run_id,
         "candidate_count": len(candidates),
+        "fabric_plane_count": len(fabric_plane_summaries),
+        "sor_count": len(sor_summaries),
         "status_filter": status_filter or "active"
     })
     
@@ -364,7 +439,9 @@ async def export_aam_candidates(
         run_id=run_id,
         scan_session_id=run_id,
         candidates=candidates,
-        count=len(candidates)
+        count=len(candidates),
+        fabric_planes=fabric_plane_summaries,
+        systems_of_record=sor_summaries
     )
 
 

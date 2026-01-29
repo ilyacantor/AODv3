@@ -1515,3 +1515,98 @@ main { padding: 2rem; }
     flex-direction: column;
     height: calc(100vh - 56px);
 }
+
+/* Farm Metadata Display */
+.farm-data-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.fabric-plane-chip, .sor-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+}
+.sor-chip {
+    background: rgba(168, 85, 247, 0.1);
+    border-color: rgba(168, 85, 247, 0.3);
+}
+.fabric-plane-chip .plane-type {
+    color: var(--cyan-400);
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.fabric-plane-chip .plane-vendor {
+    color: white;
+    text-transform: capitalize;
+}
+.sor-chip .sor-domain {
+    color: var(--purple-400);
+    font-weight: 600;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+}
+.sor-chip .sor-name {
+    color: white;
+    font-weight: 500;
+}
+.sor-chip .sor-type {
+    color: var(--slate-400);
+    font-size: 0.7rem;
+}
+.health-badge {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.health-badge.healthy {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--green-400);
+}
+.health-badge.unhealthy {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--red-400);
+}
+.confidence-badge {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.confidence-badge.high {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--green-400);
+}
+.confidence-badge.medium {
+    background: rgba(251, 191, 36, 0.2);
+    color: var(--amber-400);
+}
+.confidence-badge.low {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--slate-400);
+}
+.source-badge {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--cyan-400);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.source-badge.farm {
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--cyan-400);
+}

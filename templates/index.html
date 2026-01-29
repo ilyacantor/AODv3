@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=21">
+    <link rel="stylesheet" href="/static/css/main.css?v=22">
 </head>
 <body>
     <header>
@@ -516,6 +516,27 @@
                 </div>
             </div>
             
+            <div class="farm-metadata-section" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
+                <div class="section">
+                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
+                        <span style="color:var(--cyan-400);">Fabric Planes</span>
+                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
+                    </h3>
+                    <div id="farmFabricPlanesContainer" class="farm-data-container">
+                        <div class="empty-state">Load candidates to see fabric planes</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
+                        <span style="color:var(--purple-400);">Systems of Record</span>
+                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
+                    </h3>
+                    <div id="farmSORsContainer" class="farm-data-container">
+                        <div class="empty-state">Load candidates to see SORs</div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="section" style="margin-top:1.5rem;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
                     <h2 class="section-title" style="margin-bottom:0;">Connection Candidates</h2>
@@ -812,6 +833,6 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=34"></script>
+    <script src="/static/js/app.js?v=35"></script>
 </body>
 </html>

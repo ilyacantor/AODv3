@@ -1599,10 +1599,30 @@
             if (activeItem) activeItem.classList.add('active');
             
             const planeNames = { ipaas: 'iPaaS', api_gateway: 'API Gateway', warehouse: 'Warehouse', event_bus: 'Event Bus' };
-            document.getElementById('fabricFilterLabel').textContent = `Filtering: ${planeNames[planeType]}`;
+            const planeTypeMapping = { warehouse: 'data_warehouse' };
+            const farmPlaneType = planeTypeMapping[planeType] || planeType;
+            
+            const farmPlanes = window.farmFabricPlanes || [];
+            const matchingPlanes = farmPlanes.filter(p => p.plane_type === farmPlaneType);
+            const vendorPatterns = matchingPlanes.map(p => p.vendor.toLowerCase().replace(/_/g, ' '));
+            
+            const filtered = handoffCandidatesFullData.filter(c => {
+                const candidateVendor = (c.vendor_name || '').toLowerCase();
+                const candidateName = (c.display_name || '').toLowerCase();
+                const candidateKey = (c.asset_key || '').toLowerCase();
+                
+                return vendorPatterns.some(pattern => 
+                    candidateVendor.includes(pattern) || 
+                    candidateName.includes(pattern) ||
+                    candidateKey.includes(pattern) ||
+                    pattern.includes(candidateVendor)
+                );
+            });
+            
+            const vendorLabel = matchingPlanes.map(p => p.vendor.replace(/_/g, ' ')).join(', ');
+            document.getElementById('fabricFilterLabel').textContent = `Filtering: ${planeNames[planeType]} (${vendorLabel})`;
             document.getElementById('fabricFilterActive').classList.remove('hidden');
             
-            const filtered = handoffCandidatesFullData.filter(c => getFabricPlaneType(c) === planeType);
             renderHandoffCandidates(filtered, true);
             
             document.getElementById('handoffCandidateLabel').textContent = `${filtered.length} ${planeNames[planeType]} candidates`;

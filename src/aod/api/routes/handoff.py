@@ -450,11 +450,11 @@ async def export_aam_candidates(
 class AAMExportCandidate(BaseModel):
     """Candidate format for AAM receive endpoint"""
     asset_key: str
-    vendor_name: Optional[str] = None
+    vendor_name: str = "unknown"
     display_name: str
-    category: Optional[str] = None
+    category: str = "other"
     governance_status: str
-    known_endpoints: Optional[List[str]] = None
+    known_endpoints: List[str] = []
     execution_allowed: bool = True
     action_type: str = "provision"
     aod_run_id: str
@@ -536,11 +536,11 @@ async def export_to_aam(
         
         aam_candidate = AAMExportCandidate(
             asset_key=asset_key,
-            vendor_name=asset.vendor,
+            vendor_name=asset.vendor or "unknown",
             display_name=asset.name,
-            category=infer_category(asset),
+            category=infer_category(asset) or "other",
             governance_status=map_governance_status(asset.provisioning_status),
-            known_endpoints=known_endpoints if known_endpoints else None,
+            known_endpoints=known_endpoints,
             execution_allowed=execution_allowed,
             action_type=action_type,
             aod_run_id=run_id,

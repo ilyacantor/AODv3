@@ -10,6 +10,13 @@
         let farmWakingToast = null;
         let farmWakeCheckInterval = null;
         
+        function toggleUserGuide(guideId) {
+            const guide = document.getElementById(guideId);
+            if (guide) {
+                guide.classList.toggle('expanded');
+            }
+        }
+        
         function showToast(message, type = 'error', persistent = false) {
             const existing = document.getElementById('app-toast');
             if (existing) existing.remove();

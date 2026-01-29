@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=19">
+    <link rel="stylesheet" href="/static/css/main.css?v=20">
 </head>
 <body>
     <header>
@@ -47,6 +47,47 @@
     
     <div id="discoveryTabContent" class="main-tab-content active">
     <main class="container">
+        <div class="user-guide" id="consoleGuide">
+            <div class="user-guide-header" onclick="toggleUserGuide('consoleGuide')">
+                <span class="user-guide-icon">▶</span>
+                <span>User Guide: Console</span>
+            </div>
+            <div class="user-guide-content">
+                <h4>What This Tab Does</h4>
+                <p>The Console is your command center for running asset discovery. Here you fetch data from various sources and process it through AOD's discovery engine to build a complete inventory of your organization's software assets.</p>
+                
+                <h4>How Discovery Works</h4>
+                <p>AOD collects signals from multiple sources — identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories. It then correlates these signals to identify unique applications, even when they're named differently across sources.</p>
+                
+                <h4>Key Concepts</h4>
+                <ul>
+                    <li><strong>Tenant:</strong> Your organization or business unit. Each tenant has its own isolated data.</li>
+                    <li><strong>Snapshot:</strong> A point-in-time collection of discovery data from Farm (test data) or production sources.</li>
+                    <li><strong>Discovery Run:</strong> A single execution of the discovery pipeline that processes a snapshot into cataloged assets.</li>
+                </ul>
+                
+                <h4>Lifecycle Metrics</h4>
+                <ul>
+                    <li><strong>Ingested:</strong> Raw evidence collected from discovery sources (DNS, network, IdP, etc).</li>
+                    <li><strong>Validated:</strong> Observations that passed format checks and are ready for processing.</li>
+                    <li><strong>Rejected:</strong> Observations that failed validation — click to see why.</li>
+                    <li><strong>Cataloged:</strong> Final confirmed assets admitted to your catalog.</li>
+                </ul>
+                
+                <h4>Classifications</h4>
+                <ul>
+                    <li><strong>Shadow:</strong> Assets in use but NOT governed — no SSO, not in CMDB. These are security blind spots.</li>
+                    <li><strong>Zombie:</strong> Assets that are governed but inactive for 90+ days — potential cost savings.</li>
+                    <li><strong>Security Risks:</strong> Identity gaps, shadow spending, and data conflicts requiring attention.</li>
+                    <li><strong>Governance:</strong> CMDB coverage gaps, ownership issues, and duplicate records.</li>
+                </ul>
+                
+                <div class="guide-tip">
+                    <strong>Tip:</strong> Click any metric card to drill down and see the specific assets that make up that count.
+                </div>
+            </div>
+        </div>
+        
         <div class="section-row">
         <div class="section compact">
             <h2 class="section-title">Fetch from Farm</h2>
@@ -183,6 +224,45 @@
     
     <div id="triageTabContent" class="main-tab-content">
         <main class="container">
+            <div class="user-guide" id="triageGuide">
+                <div class="user-guide-header" onclick="toggleUserGuide('triageGuide')">
+                    <span class="user-guide-icon">▶</span>
+                    <span>User Guide: Triage</span>
+                </div>
+                <div class="user-guide-content">
+                    <h4>What This Tab Does</h4>
+                    <p>The Triage console is where you make decisions about discovered assets. AOD surfaces issues that need human judgment before assets can be safely connected to your integration platform (AAM). Think of it as a security checkpoint.</p>
+                    
+                    <h4>The Three Workqueues</h4>
+                    <ul>
+                        <li><strong>Blocking — Cannot Connect:</strong> Critical issues that prevent automatic connection. These assets have identity gaps (users accessing without SSO), unaccounted spending, or conflicting data from multiple sources. AAM will not connect these until resolved.</li>
+                        <li><strong>Judgment Required:</strong> Assets that could connect but need human review first. Includes zombies (inactive but still licensed), duplicates, and ambiguous classifications. You decide: keep, retire, or investigate further.</li>
+                        <li><strong>Informational — Non-Blocking:</strong> Minor issues that don't prevent connection but should be acknowledged. CMDB gaps, missing ownership, governance hygiene items. These can be batch-acknowledged.</li>
+                    </ul>
+                    
+                    <h4>Available Actions</h4>
+                    <ul>
+                        <li><strong>Sanction:</strong> Approve a shadow IT asset for official use. This transitions it from "ungoverned" to "approved" status, allowing AAM to connect.</li>
+                        <li><strong>Ban:</strong> Explicitly block an asset. Users should stop using it, and AAM will never connect to it. Use for security risks or policy violations.</li>
+                        <li><strong>Deprovision:</strong> Retire a zombie asset. Confirms it's no longer needed and can be removed from licenses and access lists.</li>
+                        <li><strong>Assign:</strong> Route an item to a specific team member for investigation. Useful when you need more information before deciding.</li>
+                        <li><strong>Defer:</strong> Postpone a decision for a specified number of days. The item will reappear after the deferral period.</li>
+                        <li><strong>Acknowledge:</strong> Mark informational items as seen. Confirms you're aware of the issue without taking action.</li>
+                    </ul>
+                    
+                    <h4>How Triage Affects AAM</h4>
+                    <p>Every asset AOD discovers is sent to AAM (Adaptive API Mesh) as a "Connection Candidate." However, assets with blocking findings are flagged as <strong>inventory_only</strong> — AAM receives them for visibility but will not attempt to connect. Once you resolve the blocking issue (Sanction, Ban, or Override), the asset becomes <strong>provision-ready</strong>.</p>
+                    
+                    <div class="guide-warning">
+                        <strong>Important:</strong> Triage actions are run-scoped. Each discovery run creates a fresh set of assets. Actions taken on one run do not automatically carry forward to future runs.
+                    </div>
+                    
+                    <div class="guide-tip">
+                        <strong>Tip:</strong> Use the batch "Acknowledge Selected" feature in the Informational section to quickly clear low-priority items.
+                    </div>
+                </div>
+            </div>
+            
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Gatekeeper Console</h2>
@@ -256,9 +336,47 @@
     </div>
     
     <div id="policyTabContent" class="main-tab-content">
+        <div style="padding: 1rem 2rem 0 2rem;">
+            <div class="user-guide" id="policyGuide">
+                <div class="user-guide-header" onclick="toggleUserGuide('policyGuide')">
+                    <span class="user-guide-icon">▶</span>
+                    <span>User Guide: Policy</span>
+                </div>
+                <div class="user-guide-content">
+                    <h4>What This Tab Does</h4>
+                    <p>The Policy Switchboard controls how AOD classifies assets and generates findings. These rules determine what gets flagged as Shadow IT, when an asset is considered a Zombie, and what issues trigger blocking vs. informational alerts.</p>
+                    
+                    <h4>Policy Categories</h4>
+                    <ul>
+                        <li><strong>Governance Rules:</strong> Define the "Governance Trinity" — what qualifies an asset as governed (CMDB presence, IdP/SSO validation, vendor lifecycle control).</li>
+                        <li><strong>Activity Thresholds:</strong> Configure the inactivity window for zombie detection (default: 90 days). Assets governed but inactive beyond this threshold are flagged as zombies.</li>
+                        <li><strong>Finance Rules:</strong> Set thresholds for finance tracking. Assets with spending above the threshold but no governance are flagged as shadow IT spend risks.</li>
+                        <li><strong>Finding Severity:</strong> Control which findings are blocking (Red) vs. review (Yellow) vs. informational (Green). This directly affects AAM execution signals.</li>
+                    </ul>
+                    
+                    <h4>IdP Governance Policy</h4>
+                    <p>A critical setting that controls how SSO matches determine governance:</p>
+                    <ul>
+                        <li><strong>Strict Mode:</strong> Assets must have CMDB presence AND IdP match to be governed. Catches more shadow IT but may flag legitimate apps.</li>
+                        <li><strong>Loose Mode:</strong> IdP match alone is sufficient for governance. Reduces false positives but may miss shadow IT that's been added to SSO without proper approval.</li>
+                    </ul>
+                    
+                    <h4>Custom Exclusions</h4>
+                    <p>Specify domains or patterns that should be excluded from discovery entirely. Useful for internal infrastructure, development environments, or known-good systems that don't need governance tracking.</p>
+                    
+                    <h4>Policy Manifest</h4>
+                    <p>All policy settings are compiled into a versioned manifest that's exported to AAM. This ensures AAM applies the same governance rules when making connection decisions. Changes to policy take effect on the next discovery run.</p>
+                    
+                    <div class="guide-warning">
+                        <strong>Caution:</strong> Changing policy settings affects future discovery runs, not historical data. If you change the zombie threshold from 90 to 60 days, you'll need to re-run discovery to see updated classifications.
+                    </div>
+                </div>
+            </div>
+        </div>
         <iframe 
             id="policyIframe"
             class="overview-iframe"
+            style="height: calc(100% - 100px);"
             title="Policy Switchboard"
             src="/static/policy-switchboard.html"
         ></iframe>
@@ -266,6 +384,49 @@
     
     <div id="handoffTabContent" class="main-tab-content">
         <main style="padding:2rem;">
+            <div class="user-guide" id="handoffGuide">
+                <div class="user-guide-header" onclick="toggleUserGuide('handoffGuide')">
+                    <span class="user-guide-icon">▶</span>
+                    <span>User Guide: Handoff</span>
+                </div>
+                <div class="user-guide-content">
+                    <h4>What This Tab Does</h4>
+                    <p>The Handoff tab is where AOD transfers its discovery results to AAM (Adaptive API Mesh). Every discovered asset becomes a "Connection Candidate" that AAM will use to establish integrations. This is the bridge between knowing what exists and actually connecting to it.</p>
+                    
+                    <h4>Understanding Connection Candidates</h4>
+                    <p>Each candidate represents a single discovered asset with all the information AAM needs to connect:</p>
+                    <ul>
+                        <li><strong>Asset Key:</strong> The canonical identifier (usually the primary domain)</li>
+                        <li><strong>Governance Status:</strong> Governed, Shadow, Zombie, or Edge</li>
+                        <li><strong>Execution Signal:</strong> Whether AAM should auto-connect or wait for human approval</li>
+                        <li><strong>Findings:</strong> Any issues discovered during triage</li>
+                        <li><strong>SOR Tagging:</strong> Whether this asset is a System of Record for a data domain</li>
+                    </ul>
+                    
+                    <h4>Fabric Planes</h4>
+                    <p>AOD identifies "Fabric Planes" — integration motherships that aggregate many other applications. Instead of connecting to 500 individual apps, AAM can connect to 3-4 fabric planes that already have access to everything:</p>
+                    <ul>
+                        <li><strong>iPaaS:</strong> Integration platforms like MuleSoft, Workato, Tray.io</li>
+                        <li><strong>API Gateway:</strong> API management platforms like Kong, Apigee, AWS API Gateway</li>
+                        <li><strong>Data Warehouse:</strong> Analytics platforms like Snowflake, BigQuery, Databricks</li>
+                        <li><strong>Event Bus:</strong> Streaming platforms like Kafka, AWS EventBridge, Azure Event Hubs</li>
+                    </ul>
+                    
+                    <h4>Execution Signals</h4>
+                    <ul>
+                        <li><strong>provision (green):</strong> No blocking issues. AAM can auto-connect this asset.</li>
+                        <li><strong>inventory_only (amber):</strong> Blocking findings exist. AAM receives this for visibility but will not connect until triage is resolved.</li>
+                    </ul>
+                    
+                    <h4>Exporting to AAM</h4>
+                    <p>Click "Export to AAM" to send all connection candidates for the selected run. AAM receives the complete inventory — both provision-ready and inventory-only candidates. AAM uses the execution signals to determine which assets to connect automatically vs. which to hold for human review.</p>
+                    
+                    <div class="guide-tip">
+                        <strong>Tip:</strong> Use the status filter to see only candidates that need attention before export.
+                    </div>
+                </div>
+            </div>
+            
             <div class="section-row">
                 <div class="section compact">
                     <h2 class="section-title">Select Run</h2>
@@ -634,6 +795,6 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=32"></script>
+    <script src="/static/js/app.js?v=33"></script>
 </body>
 </html>

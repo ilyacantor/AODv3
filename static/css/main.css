@@ -1433,31 +1433,38 @@ main { padding: 2rem; }
 
 /* User Guide Styles */
 .user-guide {
-    margin-bottom: 1rem;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid var(--slate-700);
-    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.06) 0%, rgba(168, 85, 247, 0.04) 100%);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    border-radius: 10px;
     overflow: hidden;
+    box-shadow: 0 2px 12px rgba(6, 182, 212, 0.1);
 }
 .user-guide-header {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
     cursor: pointer;
-    color: var(--slate-400);
-    font-size: 0.75rem;
-    font-weight: 500;
+    color: var(--cyan-300);
+    font-size: 0.85rem;
+    font-weight: 600;
     transition: all 0.2s ease;
-    background: rgba(30, 41, 59, 0.3);
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
+    letter-spacing: 0.02em;
+}
+.user-guide-header::before {
+    content: '📘';
+    font-size: 1rem;
 }
 .user-guide-header:hover {
-    background: rgba(30, 41, 59, 0.6);
-    color: var(--cyan-400);
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.18) 0%, rgba(168, 85, 247, 0.08) 100%);
+    color: var(--cyan-200);
 }
 .user-guide-icon {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     transition: transform 0.2s ease;
+    color: var(--cyan-400);
 }
 .user-guide.expanded .user-guide-icon {
     transform: rotate(90deg);

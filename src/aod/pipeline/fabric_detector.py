@@ -154,16 +154,142 @@ def detect_fabric_planes(
     return list(detected_planes.values()), asset_plane_tags
 
 
+def _infer_downstream_fabric_tags(
+    assets: list[Asset],
+    detected_planes: list[FabricPlane]
+) -> dict[str, FabricPlaneTag]:
+    """
+    Infer which fabric plane manages non-plane assets.
+    
+    Heuristic: If a fabric plane is detected, assume all assets of compatible
+    type flow through that plane.
+    
+    Categories mapped to fabric planes:
+    - CRM, ERP, Finance, HRIS → iPaaS (integration flows)
+    - API, Gateway → API Gateway
+    - Data, Analytics, BI → Data Warehouse
+    - Messaging, Stream → Event Bus
+    """
+    downstream_tags: dict[str, FabricPlaneTag] = {}
+    
+    # Build map of available planes by type
+    planes_by_type: dict[FabricPlaneType, FabricPlane] = {}
+    for plane in detected_planes:
+        if plane.plane_type not in planes_by_type:
+            planes_by_type[plane.plane_type] = plane
+    
+    # Map asset categories to fabric plane types
+    category_to_plane: dict[str, FabricPlaneType] = {
+        "crm": FabricPlaneType.IPAAS,
+        "erp": FabricPlaneType.IPAAS,
+        "finance": FabricPlaneType.IPAAS,
+        "hcm": FabricPlaneType.IPAAS,
+        "hris": FabricPlaneType.IPAAS,
+        "itsm": FabricPlaneType.IPAAS,
+        "marketing": FabricPlaneType.IPAAS,
+        "sales": FabricPlaneType.IPAAS,
+        
+        "api": FabricPlaneType.API_GATEWAY,
+        "gateway": FabricPlaneType.API_GATEWAY,
+        "rest": FabricPlaneType.API_GATEWAY,
+        "graphql": FabricPlaneType.API_GATEWAY,
+        
+        "data": FabricPlaneType.DATA_WAREHOUSE,
+        "analytics": FabricPlaneType.DATA_WAREHOUSE,
+        "bi": FabricPlaneType.DATA_WAREHOUSE,
+        "reporting": FabricPlaneType.DATA_WAREHOUSE,
+        "warehouse": FabricPlaneType.DATA_WAREHOUSE,
+        
+        "messaging": FabricPlaneType.EVENT_BUS,
+        "stream": FabricPlaneType.EVENT_BUS,
+        "queue": FabricPlaneType.EVENT_BUS,
+        "events": FabricPlaneType.EVENT_BUS,
+    }
+    
+    for asset in assets:
+        # Skip fabric planes themselves (already tagged)
+        asset_id = str(asset.asset_id)
+        if asset.fabric_plane_tag:
+            continue
+        
+        # Infer category from vendor/name
+        vendor_lower = (asset.vendor or "").lower()
+        name_lower = (asset.name or "").lower()
+        combined = f"{vendor_lower} {name_lower}"
+        
+        inferred_category = None
+        for category_key in category_to_plane.keys():
+            if category_key in combined:
+                inferred_category = category_key
+                break
+        
+        # Default: if no category match, assume iPaaS (most common)
+        if not inferred_category and planes_by_type.get(FabricPlaneType.IPAAS):
+            inferred_category = "crm"  # Force iPaaS for unknown
+        
+        if inferred_category:
+            plane_type = category_to_plane[inferred_category]
+            plane = planes_by_type.get(plane_type)
+            
+            if plane:
+                downstream_tags[asset_id] = FabricPlaneTag(
+                    plane_type=plane.plane_type,
+                    controller_vendor=plane.vendor,
+                    controller_domain=plane.domain,
+                    evidence=[f"Inferred {inferred_category} asset routes through {plane.vendor}"],
+                    confidence=0.7
+                )
+                
+                logger.debug("fabric_detector.downstream_tagged", extra={
+                    "asset": asset.name,
+                    "category": inferred_category,
+                    "plane_vendor": plane.vendor,
+                    "plane_type": plane.plane_type.value
+                })
+    
+    logger.info("fabric_detector.downstream_inference", extra={
+        "assets_tagged": len(downstream_tags),
+        "planes_available": len(planes_by_type)
+    })
+    
+    return downstream_tags
+
+
 def apply_fabric_plane_tags(
     assets: list[Asset],
     asset_plane_tags: dict[str, FabricPlaneTag]
 ) -> list[Asset]:
     """
     Apply fabric plane tags to assets.
+    
+    NEW: Also infers tags for downstream assets based on detected planes.
     """
+    # First pass: tag fabric planes themselves
+    detected_planes: list[FabricPlane] = []
     for asset in assets:
         asset_id = str(asset.asset_id)
         if asset_id in asset_plane_tags:
             asset.fabric_plane_tag = asset_plane_tags[asset_id]
+            # Build list of detected planes for inference
+            tag = asset_plane_tags[asset_id]
+            plane_id = f"{tag.plane_type.value}:{tag.controller_vendor}"
+            if not any(p.plane_id == plane_id for p in detected_planes):
+                detected_planes.append(FabricPlane(
+                    plane_id=plane_id,
+                    plane_type=tag.plane_type,
+                    vendor=tag.controller_vendor,
+                    display_name=asset.name,
+                    domain=tag.controller_domain,
+                    managed_asset_count=0,
+                    confidence=tag.confidence
+                ))
+    
+    # Second pass: infer downstream tags
+    downstream_tags = _infer_downstream_fabric_tags(assets, detected_planes)
+    
+    for asset in assets:
+        asset_id = str(asset.asset_id)
+        if asset_id in downstream_tags and not asset.fabric_plane_tag:
+            asset.fabric_plane_tag = downstream_tags[asset_id]
     
     return assets

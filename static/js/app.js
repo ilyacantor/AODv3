@@ -1653,16 +1653,15 @@
             const vendorPatterns = matchingPlanes.map(p => p.vendor.toLowerCase().replace(/_/g, ' '));
             
             const filtered = handoffCandidatesFullData.filter(c => {
-                const candidateVendor = (c.vendor_name || '').toLowerCase();
-                const candidateName = (c.display_name || '').toLowerCase();
-                const candidateKey = (c.asset_key || '').toLowerCase();
+                const connectedVia = (c.connected_via_plane || '').toLowerCase();
+                const fabricTag = c.fabric_plane_tag;
+                const tagVendor = fabricTag ? (fabricTag.controller_vendor || '').toLowerCase() : '';
+                const tagType = fabricTag ? (fabricTag.plane_type || '').toLowerCase() : '';
                 
                 return vendorPatterns.some(pattern => 
-                    candidateVendor.includes(pattern) || 
-                    candidateName.includes(pattern) ||
-                    candidateKey.includes(pattern) ||
-                    pattern.includes(candidateVendor)
-                );
+                    connectedVia.includes(pattern) || 
+                    tagVendor.includes(pattern)
+                ) || tagType === farmPlaneType;
             });
             
             const vendorLabel = matchingPlanes.map(p => p.vendor.replace(/_/g, ' ')).join(', ');

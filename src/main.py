@@ -99,9 +99,13 @@ app.include_router(router, dependencies=[Depends(verify_api_key)])
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+if CONFIG_DIR.exists():
+    app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
 
 
 @app.on_event("startup")

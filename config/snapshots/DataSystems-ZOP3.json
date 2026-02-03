@@ -1,0 +1,112 @@
+{
+  "meta": {
+    "tenant_id": "DataSystems-ZOP3",
+    "run_id": "fallback_snapshot",
+    "seed": 42,
+    "generated_at": "2026-02-01T00:00:00Z",
+    "profile": "regulated_finance",
+    "schema_version": "farm.v1",
+    "snapshot_fingerprint": "fallback_static_001"
+  },
+  "planes": {
+    "discovery": {
+      "observations": [
+        {"observation_id": "d001", "name": "Salesforce", "domain": "salesforce.com", "vendor": "Salesforce", "source": "browser_telemetry"},
+        {"observation_id": "d002", "name": "Slack", "domain": "slack.com", "vendor": "Slack", "source": "network"},
+        {"observation_id": "d003", "name": "Notion", "domain": "notion.so", "vendor": "Notion", "source": "browser_telemetry"},
+        {"observation_id": "d004", "name": "Figma", "domain": "figma.com", "vendor": "Figma", "source": "browser_telemetry"},
+        {"observation_id": "d005", "name": "GitHub", "domain": "github.com", "vendor": "GitHub", "source": "network"},
+        {"observation_id": "d006", "name": "Jira", "domain": "atlassian.net", "vendor": "Atlassian", "source": "browser_telemetry"},
+        {"observation_id": "d007", "name": "Confluence", "domain": "confluence.atlassian.com", "vendor": "Atlassian", "source": "browser_telemetry"},
+        {"observation_id": "d008", "name": "Dropbox", "domain": "dropbox.com", "vendor": "Dropbox", "source": "network"},
+        {"observation_id": "d009", "name": "Box", "domain": "box.com", "vendor": "Box", "source": "network"},
+        {"observation_id": "d010", "name": "Zoom", "domain": "zoom.us", "vendor": "Zoom", "source": "browser_telemetry"}
+      ]
+    },
+    "idp": {
+      "objects": [
+        {"idp_id": "idp001", "name": "Salesforce", "idp_type": "app", "domain": "salesforce.com", "has_sso": true, "has_scim": true},
+        {"idp_id": "idp002", "name": "Slack", "idp_type": "app", "domain": "slack.com", "has_sso": true, "has_scim": false},
+        {"idp_id": "idp003", "name": "GitHub", "idp_type": "app", "domain": "github.com", "has_sso": true, "has_scim": true},
+        {"idp_id": "idp004", "name": "Jira", "idp_type": "app", "domain": "atlassian.net", "has_sso": true, "has_scim": false},
+        {"idp_id": "idp005", "name": "Okta", "idp_type": "idp", "domain": "okta.com", "has_sso": true, "has_scim": true},
+        {"idp_id": "idp006", "name": "Office365", "idp_type": "app", "domain": "office.com", "has_sso": true, "has_scim": true},
+        {"idp_id": "idp007", "name": "Workday", "idp_type": "app", "domain": "workday.com", "has_sso": true, "has_scim": true},
+        {"idp_id": "idp008", "name": "ServiceNow", "idp_type": "app", "domain": "servicenow.com", "has_sso": true, "has_scim": false}
+      ]
+    },
+    "cmdb": {
+      "cis": [
+        {"ci_id": "ci001", "name": "Salesforce CRM", "ci_type": "SaaS", "lifecycle": "Production", "environment": "prod", "owner": "Sales Ops", "domain": "salesforce.com"},
+        {"ci_id": "ci002", "name": "SAP ERP", "ci_type": "ERP", "lifecycle": "Production", "environment": "prod", "owner": "Finance", "domain": "sap.com"},
+        {"ci_id": "ci003", "name": "Workday HCM", "ci_type": "HCM", "lifecycle": "Production", "environment": "prod", "owner": "HR", "domain": "workday.com"},
+        {"ci_id": "ci004", "name": "ServiceNow ITSM", "ci_type": "ITSM", "lifecycle": "Production", "environment": "prod", "owner": "IT Ops", "domain": "servicenow.com"},
+        {"ci_id": "ci005", "name": "Snowflake DW", "ci_type": "Data Warehouse", "lifecycle": "Production", "environment": "prod", "owner": "Data Team", "domain": "snowflake.com"},
+        {"ci_id": "ci006", "name": "MuleSoft API", "ci_type": "iPaaS", "lifecycle": "Production", "environment": "prod", "owner": "Integration", "domain": "mulesoft.com"}
+      ]
+    },
+    "cloud": {
+      "resources": [
+        {"resource_id": "aws001", "name": "prod-api-gateway", "resource_type": "API Gateway", "provider": "aws", "environment": "prod"},
+        {"resource_id": "aws002", "name": "prod-lambda-auth", "resource_type": "Lambda", "provider": "aws", "environment": "prod"},
+        {"resource_id": "aws003", "name": "prod-rds-main", "resource_type": "RDS", "provider": "aws", "environment": "prod"},
+        {"resource_id": "gcp001", "name": "analytics-bq", "resource_type": "BigQuery", "provider": "gcp", "environment": "prod"},
+        {"resource_id": "azure001", "name": "blob-storage", "resource_type": "Storage", "provider": "azure", "environment": "prod"}
+      ]
+    },
+    "endpoint": {
+      "devices": [
+        {"device_id": "ep001", "hostname": "laptop-001", "os": "macOS"},
+        {"device_id": "ep002", "hostname": "laptop-002", "os": "Windows"},
+        {"device_id": "ep003", "hostname": "desktop-001", "os": "Windows"}
+      ],
+      "installed_apps": [
+        {"app_id": "app001", "name": "Slack", "version": "4.35.0", "device_id": "ep001"},
+        {"app_id": "app002", "name": "Zoom", "version": "5.17.0", "device_id": "ep001"},
+        {"app_id": "app003", "name": "VSCode", "version": "1.85.0", "device_id": "ep001"},
+        {"app_id": "app004", "name": "Chrome", "version": "120.0", "device_id": "ep002"}
+      ]
+    },
+    "network": {
+      "dns": [
+        {"record_id": "dns001", "domain": "salesforce.com", "record_type": "A"},
+        {"record_id": "dns002", "domain": "slack.com", "record_type": "A"},
+        {"record_id": "dns003", "domain": "notion.so", "record_type": "A"}
+      ],
+      "proxy": [
+        {"log_id": "proxy001", "domain": "dropbox.com", "bytes_transferred": 1500000},
+        {"log_id": "proxy002", "domain": "box.com", "bytes_transferred": 800000}
+      ],
+      "certs": [
+        {"cert_id": "cert001", "domain": "*.internal.company.com", "issuer": "DigiCert"}
+      ]
+    },
+    "finance": {
+      "vendors": [
+        {"vendor_id": "v001", "vendor_name": "Salesforce", "annual_spend": 250000},
+        {"vendor_id": "v002", "vendor_name": "SAP", "annual_spend": 500000},
+        {"vendor_id": "v003", "vendor_name": "Workday", "annual_spend": 180000},
+        {"vendor_id": "v004", "vendor_name": "Snowflake", "annual_spend": 120000}
+      ],
+      "contracts": [
+        {"contract_id": "c001", "vendor_name": "Salesforce", "start_date": "2024-01-01", "end_date": "2026-12-31"},
+        {"contract_id": "c002", "vendor_name": "SAP", "start_date": "2023-06-01", "end_date": "2028-05-31"}
+      ],
+      "transactions": []
+    }
+  },
+  "fabric_planes": [
+    {"vendor": "mulesoft", "is_healthy": true, "plane_type": "ipaas"},
+    {"vendor": "snowflake", "is_healthy": true, "plane_type": "data_warehouse"},
+    {"vendor": "kong", "is_healthy": true, "plane_type": "api_gateway"},
+    {"vendor": "kafka", "is_healthy": true, "plane_type": "event_bus"}
+  ],
+  "sors": [
+    {"domain": "crm", "sor_name": "Salesforce", "sor_type": "saas", "confidence": "high"},
+    {"domain": "erp", "sor_name": "SAP", "sor_type": "erp", "confidence": "high"},
+    {"domain": "hr", "sor_name": "Workday", "sor_type": "saas", "confidence": "high"},
+    {"domain": "finance", "sor_name": "SAP", "sor_type": "erp", "confidence": "high"},
+    {"domain": "identity", "sor_name": "Okta", "sor_type": "idp", "confidence": "high"},
+    {"domain": "cmdb", "sor_name": "ServiceNow", "sor_type": "itsm", "confidence": "high"}
+  ]
+}

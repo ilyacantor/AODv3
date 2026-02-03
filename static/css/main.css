@@ -1617,3 +1617,114 @@ main { padding: 2rem; }
     background: rgba(6, 182, 212, 0.15);
     color: var(--cyan-400);
 }
+
+/* Farm Toggle */
+.farm-toggle {
+    display: flex;
+    align-items: center;
+}
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--slate-400);
+    cursor: pointer;
+}
+.toggle-switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--slate-600);
+    border-radius: 22px;
+    transition: 0.3s;
+}
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background: var(--slate-300);
+    border-radius: 50%;
+    transition: 0.3s;
+}
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--cyan-600);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+    background: white;
+}
+.toggle-live-label {
+    color: var(--slate-500);
+    transition: color 0.3s;
+}
+.toggle-switch input:checked ~ .toggle-live-label,
+.farm-toggle:has(input:checked) .toggle-live-label {
+    color: var(--cyan-400);
+}
+
+/* Observation Planes Grid */
+.observation-planes-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+@media (max-width: 768px) {
+    .observation-planes-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+.observation-plane-card {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid var(--slate-700);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+    transition: all 0.2s ease;
+    cursor: default;
+}
+.observation-plane-card:hover {
+    border-color: var(--cyan-600);
+    background: rgba(30, 41, 59, 0.8);
+}
+.observation-plane-card.has-data {
+    border-color: var(--cyan-700);
+}
+.plane-icon {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+.plane-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--slate-300);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.plane-count {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--cyan-400);
+    margin: 0.25rem 0;
+}
+.plane-sublabel {
+    font-size: 0.6rem;
+    color: var(--slate-500);
+}

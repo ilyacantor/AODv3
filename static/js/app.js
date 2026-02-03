@@ -10,6 +10,52 @@
         let farmWakingToast = null;
         let farmWakeCheckInterval = null;
         
+        window.farmLiveMode = false;
+        let cachedFallbackSnapshot = null;
+        
+        async function loadFallbackSnapshot() {
+            try {
+                const response = await fetch('/config/snapshots/DataSystems-ZOP3.json');
+                if (!response.ok) throw new Error('Failed to load fallback snapshot');
+                cachedFallbackSnapshot = await response.json();
+                return cachedFallbackSnapshot;
+            } catch (e) {
+                console.error('Failed to load fallback snapshot:', e);
+                return null;
+            }
+        }
+        
+        function loadObservationPlaneCounts(snapshotData) {
+            if (!snapshotData || !snapshotData.planes) {
+                document.getElementById('planeCountDiscovery').textContent = '-';
+                document.getElementById('planeCountIdp').textContent = '-';
+                document.getElementById('planeCountCmdb').textContent = '-';
+                document.getElementById('planeCountCloud').textContent = '-';
+                document.getElementById('planeCountEndpoint').textContent = '-';
+                document.getElementById('planeCountNetwork').textContent = '-';
+                document.getElementById('planeCountFinance').textContent = '-';
+                return;
+            }
+            
+            const planes = snapshotData.planes;
+            
+            const discoveryCount = planes.discovery?.observations?.length || 0;
+            const idpCount = planes.idp?.objects?.length || 0;
+            const cmdbCount = planes.cmdb?.cis?.length || 0;
+            const cloudCount = planes.cloud?.resources?.length || 0;
+            const endpointCount = (planes.endpoint?.devices?.length || 0) + (planes.endpoint?.installed_apps?.length || 0);
+            const networkCount = (planes.network?.dns?.length || 0) + (planes.network?.proxy?.length || 0) + (planes.network?.certs?.length || 0);
+            const financeCount = (planes.finance?.vendors?.length || 0) + (planes.finance?.contracts?.length || 0);
+            
+            document.getElementById('planeCountDiscovery').textContent = discoveryCount;
+            document.getElementById('planeCountIdp').textContent = idpCount;
+            document.getElementById('planeCountCmdb').textContent = cmdbCount;
+            document.getElementById('planeCountCloud').textContent = cloudCount;
+            document.getElementById('planeCountEndpoint').textContent = endpointCount;
+            document.getElementById('planeCountNetwork').textContent = networkCount;
+            document.getElementById('planeCountFinance').textContent = financeCount;
+        }
+        
         function toggleUserGuide(guideId) {
             const guide = document.getElementById(guideId);
             if (guide) {
@@ -2848,30 +2894,21 @@
             } catch { dot.classList.add('error'); text.textContent = 'Offline'; }
         }
         
-        async function loadTenants() {
-            const select = document.getElementById('tenantSelect');
-            const snapshotSelect = document.getElementById('snapshotSelect');
+        async function populateTenantsFromFarm() {
+            if (!window.farmLiveMode) return;
             
-            select.disabled = true;
-            snapshotSelect.disabled = true;
-            snapshotSelect.innerHTML = '<option value="">Select a tenant first</option>';
+            const select = document.getElementById('tenantSelect');
             
             try {
-                // Fetch tenants and all snapshots to find the most recent
-                const [tenantsRes, snapshotsRes] = await Promise.all([
-                    fetch('/api/farm/tenants'),
-                    fetch('/api/farm/all-snapshots')
-                ]);
-                
-                // Parse JSON safely - Farm may return HTML/empty during cold start
+                const tenantsRes = await fetch('/api/farm/tenants');
                 let tenantsData;
                 try {
                     tenantsData = await tenantsRes.json();
                 } catch (parseErr) {
-                    throw new Error('Farm unavailable');
+                    console.warn('Farm unavailable for tenant list');
+                    return;
                 }
                 
-                // Check for Farm waking/down errors - be very thorough
                 const errorStr = JSON.stringify(tenantsData).toUpperCase();
                 const isFarmWaking = !tenantsRes.ok ||
                     tenantsData.ok === false || 
@@ -2879,109 +2916,38 @@
                     errorStr.includes('FARM_WAKING') ||
                     errorStr.includes('UNAVAILABLE');
                 if (isFarmWaking && !tenantsData.tenants) {
-                    throw new Error('Farm unavailable');
+                    console.warn('Farm unavailable');
+                    return;
                 }
-                if (!tenantsRes.ok && !tenantsData.tenants) {
-                    throw new Error('Farm unavailable');
-                }
+                
                 const tenants = tenantsData.tenants || [];
+                const existingOptions = Array.from(select.options).map(o => o.value);
                 
-                // Find tenant with most recent snapshot
-                let latestTenantId = tenants[0] || '';
-                if (snapshotsRes.ok) {
-                    try {
-                        const allSnapshots = await snapshotsRes.json();
-                        if (Array.isArray(allSnapshots) && allSnapshots.length > 0) {
-                            // Farm returns most recent first
-                            latestTenantId = allSnapshots[0].tenant_id || latestTenantId;
-                        }
-                    } catch (e) {
-                        console.warn('Could not parse all-snapshots response', e);
+                tenants.forEach(t => {
+                    if (!existingOptions.includes(t) && t !== 'DataSystems-ZOP3') {
+                        const opt = document.createElement('option');
+                        opt.value = t;
+                        opt.textContent = t;
+                        select.appendChild(opt);
                     }
-                }
-                
-                if (tenants.length === 0) {
-                    select.innerHTML = '<option value="">No tenants found in Farm</option>';
-                    select.disabled = true;
-                } else {
-                    select.innerHTML = tenants.map(t => {
-                        const isLatest = t === latestTenantId;
-                        return `<option value="${t}"${isLatest ? ' selected' : ''}>${isLatest ? '★ ' : ''}${t}${isLatest ? ' (Latest)' : ''}</option>`;
-                    }).join('');
-                    select.value = latestTenantId;
-                    select.disabled = false;
-                    loadSnapshots();
-                }
+                });
             } catch (e) {
-                select.innerHTML = '<option value="">—</option>';
-                select.disabled = true;
-                showFarmWakingToast();
+                console.warn('Could not fetch Farm tenants:', e);
             }
         }
         
-        async function loadSnapshots() {
+        async function handleTenantChange() {
             const tenantId = document.getElementById('tenantSelect').value;
-            const select = document.getElementById('snapshotSelect');
             
-            if (!tenantId) {
-                select.innerHTML = '<option value="">Select a tenant first</option>';
-                select.disabled = true;
-                return;
-            }
-            
-            select.disabled = true;
-            select.innerHTML = '<option value="">Loading snapshots...</option>';
-            
-            try {
-                const url = `/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`;
-                const r = await fetch(url);
-                
-                // Parse JSON safely - Farm may return HTML/empty during cold start
-                let data;
-                try {
-                    data = await r.json();
-                } catch (parseErr) {
-                    throw new Error('Farm unavailable');
+            if (tenantId === 'DataSystems-ZOP3') {
+                if (!cachedFallbackSnapshot) {
+                    await loadFallbackSnapshot();
                 }
-                
-                // Check for Farm waking/down errors - be very thorough
-                const errorStr = JSON.stringify(data).toUpperCase();
-                const isFarmWaking = !r.ok ||
-                    data.ok === false || 
-                    data.error === 'FARM_WAKING_OR_DOWN' ||
-                    errorStr.includes('FARM_WAKING') ||
-                    errorStr.includes('UNAVAILABLE');
-                if (isFarmWaking && !data.snapshots) {
-                    throw new Error('Farm unavailable');
-                }
-                if (!r.ok && !data.snapshots) {
-                    throw new Error('Farm unavailable');
-                }
-                loadedSnapshots = data.snapshots || [];
-                
-                if (loadedSnapshots.length === 0) {
-                    select.innerHTML = '<option value="">No snapshots found for this tenant</option>';
-                    select.disabled = true;
-                } else {
-                    // Farm returns snapshots with most recent first - preserve that order
-                    select.innerHTML = loadedSnapshots.map((s, i) => {
-                        const id = s.snapshot_id || s.id || 'unknown';
-                        const created = s.created_at ? new Date(s.created_at).toLocaleString() : '';
-                        const profile = (s.enterprise_profile && s.realism_profile) 
-                            ? `${s.enterprise_profile}/${s.realism_profile}` 
-                            : '';
-                        let label = id;
-                        if (profile) label += ` — ${profile}`;
-                        if (created) label += ` — ${created}`;
-                        if (i === 0) label = `★ ${label} (Latest)`;
-                        return `<option value="${id}"${i === 0 ? ' selected' : ''}>${label}</option>`;
-                    }).join('');
-                    select.disabled = false;
-                    select.value = loadedSnapshots[0]?.snapshot_id || loadedSnapshots[0]?.id || '';
-                }
-            } catch (e) {
-                select.innerHTML = '<option value="">—</option>';
-                select.disabled = true;
+                loadObservationPlaneCounts(cachedFallbackSnapshot);
+            } else if (window.farmLiveMode) {
+                loadObservationPlaneCounts(null);
+            } else {
+                loadObservationPlaneCounts(cachedFallbackSnapshot);
             }
         }
         
@@ -3273,13 +3239,25 @@
             }
         }
         
-        document.getElementById('tenantSelect').addEventListener('change', loadSnapshots);
+        document.getElementById('tenantSelect').addEventListener('change', handleTenantChange);
         
-        document.getElementById('advancedToggle').addEventListener('click', () => {
-            const content = document.getElementById('advancedContent');
-            const icon = document.getElementById('advancedIcon');
-            content.classList.toggle('hidden');
-            icon.classList.toggle('open');
+        document.getElementById('farmConnectionToggle').addEventListener('change', async (e) => {
+            window.farmLiveMode = e.target.checked;
+            const farmRefreshSection = document.getElementById('farmRefreshSection');
+            
+            if (window.farmLiveMode) {
+                farmRefreshSection.classList.remove('hidden');
+                await populateTenantsFromFarm();
+            } else {
+                farmRefreshSection.classList.add('hidden');
+            }
+        });
+        
+        document.getElementById('refreshFromFarmBtn')?.addEventListener('click', async () => {
+            if (window.farmLiveMode) {
+                await populateTenantsFromFarm();
+                showToast('Refreshed from Farm', 'success');
+            }
         });
         
         document.getElementById('clearAllRuns').addEventListener('click', async () => {
@@ -3308,9 +3286,6 @@
         
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {
             const tenantId = document.getElementById('tenantSelect').value;
-            const snapshotSelect = document.getElementById('snapshotSelect').value;
-            const snapshotManual = document.getElementById('snapshotIdManual').value.trim();
-            const snapshotId = snapshotManual || snapshotSelect;
             
             hideOutcome();
             
@@ -3318,33 +3293,71 @@
                 showToast('Please select a Tenant', 'error');
                 return; 
             }
-            if (!snapshotId) { 
-                showToast('Please select a snapshot', 'error');
-                return; 
-            }
             
             const btn = document.getElementById('fetchFromFarm'); 
             btn.disabled = true; 
-            btn.textContent = 'Fetching...';
+            btn.textContent = 'Running Discovery...';
             
             try {
-                const r = await fetch('/api/runs/from-farm', { 
+                let snapshotData = cachedFallbackSnapshot;
+                
+                if (tenantId === 'DataSystems-ZOP3' && cachedFallbackSnapshot) {
+                    snapshotData = cachedFallbackSnapshot;
+                } else if (window.farmLiveMode) {
+                    const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                    const snapshotsData = await snapshotsRes.json();
+                    if (snapshotsData.snapshots && snapshotsData.snapshots.length > 0) {
+                        const latestSnapshot = snapshotsData.snapshots[0];
+                        const snapshotId = latestSnapshot.snapshot_id || latestSnapshot.id;
+                        
+                        const r = await fetch('/api/runs/from-farm', { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
+                        });
+                        
+                        const result = await r.json();
+                        
+                        if (!r.ok) {
+                            const errorDetail = result.detail || 'Farm fetch failed';
+                            if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
+                                showOutcome('upstream_error', errorDetail);
+                            } else if (errorDetail.includes('INVALID_INPUT_CONTRACT') || errorDetail.includes('INVALID_SNAPSHOT')) {
+                                showOutcome('invalid_snapshot', errorDetail);
+                            } else {
+                                showOutcome('failed', errorDetail);
+                            }
+                            return;
+                        }
+                        
+                        showOutcome(result.status, result.message);
+                        currentRunId = result.run_id; 
+                        await loadRuns();
+                        await selectRun(result.run_id);
+                        return;
+                    } else {
+                        showToast('No snapshots found for this tenant', 'error');
+                        return;
+                    }
+                } else {
+                    snapshotData = cachedFallbackSnapshot;
+                }
+                
+                if (snapshotData.meta) {
+                    snapshotData.meta.tenant_id = tenantId;
+                }
+                
+                const r = await fetch('/api/runs/json', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
+                    body: JSON.stringify(snapshotData) 
                 });
                 
                 const result = await r.json();
                 
                 if (!r.ok) {
-                    const errorDetail = result.detail || 'Farm fetch failed';
-                    if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
-                        showOutcome('upstream_error', errorDetail);
-                    } else if (errorDetail.includes('INVALID_INPUT_CONTRACT') || errorDetail.includes('INVALID_SNAPSHOT')) {
-                        showOutcome('invalid_snapshot', errorDetail);
-                    } else {
-                        showOutcome('failed', errorDetail);
-                    }
+                    const errorDetail = result.detail || 'Discovery failed';
+                    showOutcome('failed', errorDetail);
                     return;
                 }
                 
@@ -3356,7 +3369,7 @@
                 showOutcome('upstream_error', e.message);
             } finally { 
                 btn.disabled = false; 
-                btn.textContent = 'Fetch & Run Discovery'; 
+                btn.textContent = 'Run Discovery'; 
             }
         });
         
@@ -3364,21 +3377,6 @@
             const goToFarmBtn = document.getElementById('goToFarmBtn');
             if (goToFarmBtn) {
                 goToFarmBtn.addEventListener('click', async () => {
-                    try {
-                        const r = await fetch('/api/farm/url');
-                        const data = await r.json();
-                        if (data.farm_url) {
-                            window.open(data.farm_url, 'aos_farm');
-                        }
-                    } catch (e) {
-                        console.error('Failed to get Farm URL:', e);
-                    }
-                });
-            }
-            
-            const goToFarmSnapshotBtn = document.getElementById('goToFarmSnapshotBtn');
-            if (goToFarmSnapshotBtn) {
-                goToFarmSnapshotBtn.addEventListener('click', async () => {
                     try {
                         const r = await fetch('/api/farm/url');
                         const data = await r.json();
@@ -3444,7 +3442,12 @@
         
         checkHealth(); 
         loadRuns(true);
-        loadTenants();
+        
+        (async function initConsoleTab() {
+            await loadFallbackSnapshot();
+            loadObservationPlaneCounts(cachedFallbackSnapshot);
+        })();
+        
         setInterval(checkHealth, 30000);
         
         if (typeof TourManager !== 'undefined') {
@@ -3457,9 +3460,13 @@
         
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                loadTenants();
-                showToast('Tenants refreshed', 'success');
+            refreshBtn.addEventListener('click', async () => {
+                await loadFallbackSnapshot();
+                loadObservationPlaneCounts(cachedFallbackSnapshot);
+                if (window.farmLiveMode) {
+                    await populateTenantsFromFarm();
+                }
+                showToast('Data refreshed', 'success');
             });
         }
         

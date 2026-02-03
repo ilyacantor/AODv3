@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=23">
+    <link rel="stylesheet" href="/static/css/main.css?v=24">
 </head>
 <body>
     <header>
@@ -90,41 +90,78 @@
         
         <div class="section-row">
         <div class="section compact">
-            <h2 class="section-title">Fetch from Farm</h2>
-            <button class="btn btn-secondary" id="goToFarmSnapshotBtn" style="width: 100%; margin-bottom: 1rem;">Go to Farm to Generate New Snapshot →</button>
-                        
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                <h2 class="section-title" style="margin:0;">Observation Sources</h2>
+                <div class="farm-toggle">
+                    <label class="toggle-label" for="farmConnectionToggle">
+                        <span id="farmToggleLabel">Cached</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="farmConnectionToggle">
+                            <span class="toggle-slider"></span>
+                        </div>
+                        <span id="farmToggleLabelLive" class="toggle-live-label">Farm Live</span>
+                    </label>
+                </div>
+            </div>
+            
             <div class="form-group">
                 <label class="form-label">Tenant</label>
-                <select class="form-select" id="tenantSelect" disabled>
-                    <option value="">Loading tenants...</option>
+                <select class="form-select" id="tenantSelect">
+                    <option value="DataSystems-ZOP3">★ DataSystems-ZOP3 (Latest)</option>
                 </select>
             </div>
             
-            <div class="snapshot-picker" id="snapshotPicker">
-                <div class="form-group">
-                    <label class="form-label">Select Snapshot</label>
-                    <select class="form-select" id="snapshotSelect" disabled>
-                        <option value="">Select a tenant first</option>
-                    </select>
+            <div id="observationPlanesGrid" class="observation-planes-grid">
+                <div class="observation-plane-card" data-plane="discovery">
+                    <div class="plane-icon">🔍</div>
+                    <div class="plane-name">Discovery</div>
+                    <div class="plane-count" id="planeCountDiscovery">-</div>
+                    <div class="plane-sublabel">observations</div>
+                </div>
+                <div class="observation-plane-card" data-plane="idp">
+                    <div class="plane-icon">🔐</div>
+                    <div class="plane-name">IdP</div>
+                    <div class="plane-count" id="planeCountIdp">-</div>
+                    <div class="plane-sublabel">objects</div>
+                </div>
+                <div class="observation-plane-card" data-plane="cmdb">
+                    <div class="plane-icon">📋</div>
+                    <div class="plane-name">CMDB</div>
+                    <div class="plane-count" id="planeCountCmdb">-</div>
+                    <div class="plane-sublabel">config items</div>
+                </div>
+                <div class="observation-plane-card" data-plane="cloud">
+                    <div class="plane-icon">☁️</div>
+                    <div class="plane-name">Cloud</div>
+                    <div class="plane-count" id="planeCountCloud">-</div>
+                    <div class="plane-sublabel">resources</div>
+                </div>
+                <div class="observation-plane-card" data-plane="endpoint">
+                    <div class="plane-icon">💻</div>
+                    <div class="plane-name">Endpoint</div>
+                    <div class="plane-count" id="planeCountEndpoint">-</div>
+                    <div class="plane-sublabel">devices/apps</div>
+                </div>
+                <div class="observation-plane-card" data-plane="network">
+                    <div class="plane-icon">🌐</div>
+                    <div class="plane-name">Network</div>
+                    <div class="plane-count" id="planeCountNetwork">-</div>
+                    <div class="plane-sublabel">records</div>
+                </div>
+                <div class="observation-plane-card" data-plane="finance">
+                    <div class="plane-icon">💰</div>
+                    <div class="plane-name">Finance</div>
+                    <div class="plane-count" id="planeCountFinance">-</div>
+                    <div class="plane-sublabel">vendors/contracts</div>
                 </div>
             </div>
             
-            <div class="collapsible">
-                <div class="collapsible-header" id="advancedToggle">
-                    <span class="collapsible-icon" id="advancedIcon">&#9654;</span>
-                    <span>Advanced: Manual Snapshot ID</span>
-                </div>
-                <div class="collapsible-content hidden" id="advancedContent">
-                    <div class="form-group">
-                        <label class="form-label">Snapshot ID (manual entry)</label>
-                        <input type="text" class="form-input" id="snapshotIdManual" placeholder="snapshot-123">
-                    </div>
-                </div>
+            <div id="farmRefreshSection" class="hidden" style="margin-top:1rem;">
+                <button class="btn btn-secondary" id="refreshFromFarmBtn" style="width:100%;">↻ Refresh from Farm</button>
             </div>
             
-            
-            <div class="button-row">
-                <button class="btn btn-primary" id="fetchFromFarm">Fetch & Run Discovery</button>
+            <div class="button-row" style="margin-top:1rem;">
+                <button class="btn btn-primary" id="fetchFromFarm">Run Discovery</button>
             </div>
         </div>
         
@@ -833,6 +870,6 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=37"></script>
+    <script src="/static/js/app.js?v=38"></script>
 </body>
 </html>

@@ -179,6 +179,8 @@ config/
 
 ## Recent Changes
 
+- **2026-02-03**: Console redesign - Farm toggle (Cached/Live), observation planes grid with 7 plane types and counts, removed deprecated snapshot selectors
+- **2026-02-03**: Fallback snapshot - Static DataSystems-ZOP3 snapshot at config/snapshots/ for instant page loads without Farm
 - **2026-01-29**: AAM export integration - New `/api/handoff/aam/export` endpoint POSTs candidates to AAM's receive endpoint
 - **2026-01-29**: Farm authoritative data fix - Handoff candidates now use Farm's fabric_planes and sors data, not computed values
 - **2026-01-29**: Handoff tab displays Farm's fabric planes and SORs in dedicated sections with source badges

@@ -3299,7 +3299,11 @@
             btn.textContent = 'Running Discovery...';
             
             try {
-                let snapshotData = cachedFallbackSnapshot;
+                let snapshotData = null;
+                
+                if (!cachedFallbackSnapshot) {
+                    await loadFallbackSnapshot();
+                }
                 
                 if (tenantId === 'DataSystems-ZOP3' && cachedFallbackSnapshot) {
                     snapshotData = cachedFallbackSnapshot;
@@ -3341,6 +3345,11 @@
                     }
                 } else {
                     snapshotData = cachedFallbackSnapshot;
+                }
+                
+                if (!snapshotData) {
+                    showToast('No snapshot data available. Please try again.', 'error');
+                    return;
                 }
                 
                 if (snapshotData.meta) {

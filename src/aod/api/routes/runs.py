@@ -81,14 +81,21 @@ async def create_run_json(snapshot: dict[str, Any]):
     """
     Create a new discovery run from JSON body.
     
-    Accepts a snapshot JSON object directly.
+    Accepts a snapshot JSON object directly (Farm format or normalized).
+    Automatically normalizes Farm-format snapshots.
     Returns run_id + summary counts.
     """
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()
 
     db = await get_db_direct()
-    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=started_at)
+    result = await execute_pipeline(
+        snapshot, 
+        db, 
+        run_id=run_id, 
+        started_at=started_at,
+        provenance={"source": "farm"}
+    )
     
     if not result.success:
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:

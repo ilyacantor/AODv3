@@ -66,6 +66,8 @@ async def get_catalog(
                 "provisioning_status": a.provisioning_status.value,
                 "owner": a.owner,
                 "has_critical_gap": a.has_critical_gap,
+                "fabric_plane_tag": a.fabric_plane_tag.model_dump() if a.fabric_plane_tag else None,
+                "sor_tagging": a.sor_tagging.model_dump() if a.sor_tagging else None,
                 "created_at": a.created_at.isoformat()
             }
             for a in assets

@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from ..models.input_contracts import Snapshot, Observation
 from ..models.output_contracts import (
-    Asset, Artifact, Finding, RunLog, RunStatus, RunCounts, PipelineStageTimings
+    Asset, Artifact, Finding, Pipe, RunLog, RunStatus, RunCounts, PipelineStageTimings
 )
 from ..db.database import Database
 from ..core.policy import PolicyEngine, get_current_config
@@ -42,7 +42,7 @@ from .admission import (
 )
 from .vendor_inference import extract_registered_domain
 from .artifact_handler import handle_artifacts
-from .fabric_detector import detect_fabric_planes, apply_fabric_plane_tags
+from .fabric_detector import detect_fabric_planes_evidence_based, apply_fabric_plane_tags
 from .preset_inference import infer_preset
 from .findings_engine import generate_findings
 from .deterministic_ids import deterministic_uuid
@@ -261,6 +261,7 @@ class EphemeralPipelineResult:
     assets: list[Asset] = field(default_factory=list)
     rejections: list[dict] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
+    pipes: list[Pipe] = field(default_factory=list)
     snapshot_as_of: datetime | None = None
     error: str = ""
     stage1_metrics: dict[str, Any] = field(default_factory=dict)
@@ -461,9 +462,10 @@ def run_pipeline_ephemeral(
         # Propagates governance to all assets in the same vendor domain set
         assets = propagate_vendor_governance_farm_style(assets, logger)
         
-        # Stage 4: Fabric Plane Detection
-        # Identify Control Planes (motherships) - AAM connects to Fabric Planes, not apps
-        fabric_planes, asset_plane_tags = detect_fabric_planes(assets)
+        # Stage 4: Evidence-Based Fabric Plane Detection (Feb 2026 Blueprint)
+        # Three-phase: Observation harvest -> Direct crawl -> Reconciliation
+        # Returns fabric planes, asset tags, and pipes (SOR-to-plane routing)
+        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(snapshot, assets)
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
         
         # Stage 5: Enterprise Preset Inference
@@ -495,6 +497,7 @@ def run_pipeline_ephemeral(
             assets=assets,
             rejections=rejections,
             findings=findings,
+            pipes=pipes,
             snapshot_as_of=snapshot_as_of,
             stage1_metrics=stage1_metrics
         )

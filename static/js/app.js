@@ -1391,6 +1391,7 @@
             const exportBtn = document.getElementById('exportToAAMBtn');
             const auditBtn = document.getElementById('viewFabricAuditBtn');
             const closeAuditBtn = document.getElementById('closeFabricAuditBtn');
+            const downloadAuditBtn = document.getElementById('downloadAuditReportBtn');
 
             if (!handoffSelect) {
                 console.error('Handoff tab elements not found');
@@ -1414,6 +1415,13 @@
 
             if (closeAuditBtn) {
                 closeAuditBtn.addEventListener('click', hideFabricAudit);
+            }
+
+            if (downloadAuditBtn) {
+                downloadAuditBtn.addEventListener('click', () => {
+                    const runId = handoffSelect.value;
+                    if (runId) downloadAuditReport(runId);
+                });
             }
 
             handoffStatusFilter.addEventListener('change', () => {
@@ -2054,7 +2062,170 @@
             if (candidatesSection) candidatesSection.style.display = '';
             if (farmMetadata) farmMetadata.style.display = '';
         }
-        
+
+        async function downloadAuditReport(runId) {
+            const downloadBtn = document.getElementById('downloadAuditReportBtn');
+            if (downloadBtn) {
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = 'Generating...';
+            }
+
+            try {
+                const response = await fetch(`/api/handoff/fabric-allocation-audit/${runId}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch audit: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const summary = data.summary || {};
+                const decisions = data.decisions || [];
+                const timestamp = new Date().toISOString().split('T')[0];
+
+                // Generate Plain English Report
+                let plainEnglish = `FABRIC ALLOCATION AUDIT REPORT
+Generated: ${new Date().toLocaleString()}
+Run ID: ${runId}
+
+═══════════════════════════════════════════════════════════════════════════════
+EXECUTIVE SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+Total Assets Scanned: ${summary.total_assets_scanned || 0}
+
+ROUTING BREAKDOWN:
+  • Tier 1 (Direct Crawl):    ${summary.routed_tier_1 || 0} assets
+    These were found directly in fabric plane admin APIs (Workato recipes,
+    Kong services, Snowflake schemas). Highest confidence evidence.
+
+  • Tier 2 (Observed):        ${summary.routed_tier_2 || 0} assets
+    These have documented evidence from CMDB, network traffic, or cloud
+    resource associations. Strong evidence but not directly verified.
+
+  • Tier 3 (Inferred):        ${summary.routed_tier_3 || 0} assets
+    These are inferred from indirect signals. Lower confidence, may need
+    manual verification.
+
+  • Not Routed:               ${summary.not_routed || 0} assets
+    No fabric plane routing evidence found. These assets may use direct
+    point-to-point connections or unmanaged integrations.
+
+ISSUES DETECTED:
+  • Shadow Assets:            ${summary.shadow_detected || 0}
+    Found in fabric planes but NOT in IdP/CMDB. These are governance gaps.
+
+  • Contradictions:           ${summary.contradictions_flagged || 0}
+    Conflicting evidence from different sources. Requires investigation.
+
+  • Multi-Plane SORs:         ${summary.multi_plane_sors || 0}
+    Assets routed through multiple fabric planes simultaneously.
+
+═══════════════════════════════════════════════════════════════════════════════
+ALLOCATION DECISIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+                // Group decisions by type
+                const routed = decisions.filter(d => d.decision === 'Routed');
+                const notRouted = decisions.filter(d => d.decision === 'Not Routed');
+                const shadow = decisions.filter(d => d.decision === 'Shadow Detected');
+                const contradicted = decisions.filter(d => d.decision === 'Contradicted');
+
+                if (routed.length > 0) {
+                    plainEnglish += `\n--- ROUTED ASSETS (${routed.length}) ---\n\n`;
+                    routed.forEach(d => {
+                        plainEnglish += `  ${d.asset_name}\n`;
+                        plainEnglish += `    → ${d.plane_assigned || 'Unknown'} | ${d.evidence_tier || 'N/A'} | ${d.confidence ? (d.confidence * 100).toFixed(0) + '%' : 'N/A'}\n`;
+                        plainEnglish += `    ${d.rationale}\n\n`;
+                    });
+                }
+
+                if (shadow.length > 0) {
+                    plainEnglish += `\n--- SHADOW ASSETS (${shadow.length}) ---\n`;
+                    plainEnglish += `These assets are routing through fabric planes but are NOT governed.\n\n`;
+                    shadow.forEach(d => {
+                        plainEnglish += `  ⚠ ${d.asset_name}\n`;
+                        plainEnglish += `    → ${d.plane_assigned || 'Unknown'} | ${d.evidence_tier || 'N/A'}\n`;
+                        plainEnglish += `    ${d.rationale}\n\n`;
+                    });
+                }
+
+                if (contradicted.length > 0) {
+                    plainEnglish += `\n--- CONTRADICTIONS (${contradicted.length}) ---\n`;
+                    plainEnglish += `These assets have conflicting evidence. Manual review required.\n\n`;
+                    contradicted.forEach(d => {
+                        plainEnglish += `  ✗ ${d.asset_name}\n`;
+                        plainEnglish += `    → ${d.plane_assigned || 'Unknown'}\n`;
+                        plainEnglish += `    ${d.rationale}\n\n`;
+                    });
+                }
+
+                if (notRouted.length > 0) {
+                    plainEnglish += `\n--- NOT ROUTED (${notRouted.length}) ---\n`;
+                    plainEnglish += `No fabric plane evidence found for these assets.\n\n`;
+                    notRouted.forEach(d => {
+                        plainEnglish += `  - ${d.asset_name}\n`;
+                    });
+                }
+
+                // Generate Technical Report (JSON)
+                const technicalReport = {
+                    report_type: 'fabric_allocation_audit',
+                    generated_at: new Date().toISOString(),
+                    run_id: runId,
+                    summary: summary,
+                    decisions: decisions,
+                    methodology: {
+                        tier_1: {
+                            name: 'Direct Crawl',
+                            confidence_range: '0.90 - 0.95',
+                            description: 'Evidence obtained directly from fabric plane admin APIs'
+                        },
+                        tier_2: {
+                            name: 'Observed',
+                            confidence_range: '0.60 - 0.89',
+                            description: 'Evidence from CMDB, network traffic, or cloud resources'
+                        },
+                        tier_3: {
+                            name: 'Inferred',
+                            confidence_range: '0.30 - 0.59',
+                            description: 'Evidence inferred from indirect signals'
+                        }
+                    }
+                };
+
+                // Combine both reports
+                const fullReport = `${plainEnglish}
+
+═══════════════════════════════════════════════════════════════════════════════
+TECHNICAL DETAILS (JSON)
+═══════════════════════════════════════════════════════════════════════════════
+
+${JSON.stringify(technicalReport, null, 2)}
+`;
+
+                // Create and download file
+                const blob = new Blob([fullReport], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `fabric-audit-${runId.substring(0, 8)}-${timestamp}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast('Audit report downloaded', 'success');
+            } catch (err) {
+                console.error('Failed to download audit report:', err);
+                showToast(`Download failed: ${err.message}`, 'error');
+            } finally {
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = 'Download Report';
+                }
+            }
+        }
+
         function showDecisionDetail(assetKey) {
                 const t = decisionTracesCache[assetKey];
                 if (!t) return;

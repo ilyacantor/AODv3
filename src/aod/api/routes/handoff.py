@@ -344,7 +344,7 @@ def build_pipe_evidence_for_asset(asset) -> tuple[list[CandidatePipeEvidence], O
         tag = asset.fabric_plane_tag
         pipe_evidence = CandidatePipeEvidence(
             pipe_id=f"legacy_{asset.asset_id}",
-            fabric_plane_type=tag.fabric_plane_type if hasattr(tag, 'fabric_plane_type') else 'ipaas',
+            fabric_plane_type=tag.plane_type.value if hasattr(tag, 'plane_type') and tag.plane_type else None,
             fabric_plane_vendor=tag.controller_vendor if hasattr(tag, 'controller_vendor') else None,
             modality='api',
             evidence_tier='tier_3_inferred',  # Legacy = Tier 3

@@ -219,7 +219,7 @@ class SORTagging(BaseModel):
 class FabricPlaneType(str, Enum):
     """
     Types of Fabric Control Planes.
-    
+
     AAM connects ONLY to Fabric Planes that aggregate data.
     Direct app connections only in "Preset 6 (Scrappy)" mode.
     """
@@ -228,7 +228,234 @@ class FabricPlaneType(str, Enum):
     EVENT_BUS = "event_bus"       # Kafka, EventBridge - streaming backbone
     DATA_WAREHOUSE = "warehouse"  # Snowflake, BigQuery - source of truth storage
     DIRECT = "direct"             # Direct app connection (Preset 6 only)
+    UNMANAGED = "unmanaged"       # Direct point-to-point connection bypassing all planes
     UNKNOWN = "unknown"
+
+
+# ==============================================================================
+# EVIDENCE-BASED FABRIC CLASSIFICATION (Feb 2026 Blueprint)
+# ==============================================================================
+
+class EvidenceTier(str, Enum):
+    """
+    Evidence tier for fabric plane classification.
+
+    Determines confidence level based on how the routing evidence was obtained.
+    Higher tiers = more reliable evidence = higher confidence.
+    """
+    TIER_1_DIRECT = "tier_1_direct"      # Direct plane crawl - authoritative (0.95)
+    TIER_2_OBSERVED = "tier_2_observed"  # Observation plane signals (0.70-0.90)
+    TIER_3_INFERRED = "tier_3_inferred"  # Category-based heuristic (0.30-0.50)
+
+
+class EvidenceSourcePlane(str, Enum):
+    """
+    Source plane that provided the fabric routing evidence.
+    """
+    CLOUD = "cloud"           # Cloud resource inventory (AWS, Azure, GCP)
+    NETWORK = "network"       # Network flow/traffic patterns
+    CMDB = "cmdb"            # CMDB dependency records
+    FINANCE = "finance"       # Financial/contract records
+    IDP = "idp"              # Identity provider OAuth grants
+    ENDPOINT = "endpoint"     # Endpoint installed software
+    DIRECT_CRAWL = "direct_crawl"  # Direct fabric plane API crawl
+
+
+class ClassificationMethod(str, Enum):
+    """
+    How the fabric plane assignment was determined.
+    """
+    DIRECT_CRAWL = "direct_crawl"      # Found via plane catalog crawl
+    OBSERVED = "observed"              # Observed via observation plane signals
+    INFERRED = "inferred"              # Inferred from asset category (legacy, demoted)
+
+
+class PipeGovernanceStatus(str, Enum):
+    """
+    Governance status for a pipe connection.
+    """
+    SANCTIONED = "sanctioned"       # Approved, managed connection
+    UNDER_REVIEW = "under_review"   # Pending governance review
+    SHADOW = "shadow"               # Unapproved/unknown connection
+    UNKNOWN = "unknown"             # Status not determined
+
+
+class DriftStatus(str, Enum):
+    """
+    Schema/connectivity drift status for a pipe.
+    """
+    OK = "ok"                # No drift detected
+    DETECTED = "detected"    # Drift detected, not yet addressed
+    OPEN = "open"           # Known drift, under investigation
+
+
+class ConnectivityModality(str, Enum):
+    """
+    How data flows through the pipe.
+
+    Determines the integration pattern for AAM connection strategy.
+    """
+    CONTROL_PLANE = "control_plane"          # iPaaS recipes, orchestrated flows
+    DECLARED_INTERFACE = "declared_interface" # API Gateway routes, managed APIs
+    PASSIVE_SUBSCRIPTION = "passive_subscription"  # Event bus topics, streams
+    MINIMAL_TEE = "minimal_tee"              # One additional sink on existing flow
+    DIRECT_P2P = "direct_p2p"                # Direct point-to-point (unmanaged)
+
+
+class FabricRoutingEvidence(BaseModel):
+    """
+    Individual evidence record for fabric plane routing.
+
+    Each piece of evidence that contributes to determining which fabric plane
+    a pipe routes through. Evidence from multiple sources is aggregated
+    to compute composite confidence.
+
+    PRINCIPLE: A pipe's fabric plane is determined by the evidence of how AOD
+    discovered or observed the connection — never by inferring from asset type.
+    """
+    evidence_id: str = Field(description="Unique evidence identifier")
+    source_plane: EvidenceSourcePlane = Field(description="Which observation plane provided this")
+    signal_type: str = Field(description="Type of signal: network_flow_to_kong, cmdb_dependency, etc.")
+    signal_detail: str = Field(description="Raw evidence: IP, hostname, record ID, etc.")
+    confidence: float = Field(ge=0.0, le=1.0, description="Individual signal confidence")
+    timestamp: datetime = Field(description="When this evidence was collected")
+    fabric_plane_type: Optional[FabricPlaneType] = Field(
+        default=None,
+        description="Fabric plane indicated by this evidence"
+    )
+    fabric_plane_vendor: Optional[str] = Field(
+        default=None,
+        description="Specific vendor if identifiable (kong, workato, snowflake)"
+    )
+    raw_data: Optional[dict] = Field(
+        default=None,
+        description="Raw signal data for debugging/audit"
+    )
+
+
+class Pipe(BaseModel):
+    """
+    A data pipe connecting systems through a fabric plane.
+
+    CORE PRINCIPLE: A pipe's fabric plane is determined by evidence of how AOD
+    discovered the connection — not by asset category inference.
+
+    One SOR can have multiple pipes through different fabric planes simultaneously.
+    Example: Salesforce might have:
+    - iPaaS pipe (Workato recipe syncing Opportunities)
+    - API Gateway pipe (Kong proxying REST API)
+    - Data Warehouse pipe (Snowflake landing table with nightly extracts)
+
+    Each of these is a DISTINCT pipe record with different fabric plane assignments.
+    """
+    pipe_id: str = Field(description="Unique pipe identifier")
+    name: str = Field(description="Human-readable name encoding routing path")
+    source_system: str = Field(description="SOR at the data-producing end")
+    target_system: Optional[str] = Field(
+        default=None,
+        description="SOR at the data-consuming end (if known)"
+    )
+
+    # Fabric plane assignment
+    fabric_plane: FabricPlaneType = Field(description="Assigned fabric plane type")
+    fabric_plane_instance: Optional[str] = Field(
+        default=None,
+        description="Specific instance: 'Kong Production', 'Workato Org 1'"
+    )
+
+    # Connectivity modality
+    modality: ConnectivityModality = Field(
+        default=ConnectivityModality.CONTROL_PLANE,
+        description="How data flows through this pipe"
+    )
+
+    # Evidence-based classification
+    classification_method: ClassificationMethod = Field(
+        description="How this classification was determined"
+    )
+    classification_evidence: List[FabricRoutingEvidence] = Field(
+        default_factory=list,
+        description="All evidence records supporting this classification"
+    )
+    classification_confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="Composite confidence computed from evidence"
+    )
+    evidence_tier: EvidenceTier = Field(
+        description="Highest evidence tier supporting this classification"
+    )
+
+    # Governance
+    governance_status: PipeGovernanceStatus = Field(
+        default=PipeGovernanceStatus.UNKNOWN
+    )
+
+    # Schema and drift
+    entity_scope: List[str] = Field(
+        default_factory=list,
+        description="Business entities flowing through this pipe"
+    )
+    trust_labels: int = Field(default=0, description="Count of applied trust labels")
+    drift_status: DriftStatus = Field(default=DriftStatus.OK)
+
+    # Ownership
+    owner: Optional[str] = Field(default=None, description="Team/vendor ownership")
+
+    # Metadata
+    discovered_at: datetime = Field(default_factory=now_pst)
+    last_validated_at: Optional[datetime] = None
+
+    # Contradiction tracking
+    has_contradictions: bool = Field(
+        default=False,
+        description="True if evidence sources disagree"
+    )
+    contradiction_detail: Optional[str] = Field(
+        default=None,
+        description="Description of contradicting evidence"
+    )
+
+
+class FabricPlaneRegistry(BaseModel):
+    """
+    Registry of confirmed fabric planes in the environment.
+
+    Phase 1 output: After processing observation planes, AOD builds this
+    registry of known fabric planes with their evidence sources.
+    """
+    planes: List["FabricPlane"] = Field(default_factory=list)
+    shadow_plane_candidates: List["FabricPlane"] = Field(
+        default_factory=list,
+        description="Planes detected but not in Finance/official inventory"
+    )
+    evidence_summary: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Count of evidence by source plane"
+    )
+    generated_at: datetime = Field(default_factory=now_pst)
+
+
+class RoutingEvidenceTable(BaseModel):
+    """
+    Per-asset collection of all fabric routing signals.
+
+    Phase 1 output: Aggregates all evidence indicating how each asset
+    connects to fabric planes.
+    """
+    asset_key: str = Field(description="Asset identifier (domain/vendor)")
+    evidence: List[FabricRoutingEvidence] = Field(default_factory=list)
+    inferred_planes: List[FabricPlaneType] = Field(
+        default_factory=list,
+        description="Fabric planes suggested by evidence"
+    )
+    highest_confidence: float = Field(
+        default=0.0,
+        description="Max confidence from any single evidence"
+    )
+    evidence_count_by_plane: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Evidence count per observation plane"
+    )
 
 
 class EnterprisePreset(str, Enum):
@@ -305,6 +532,59 @@ class CandidateSORTagging(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
+class CandidatePipeEvidence(BaseModel):
+    """
+    Evidence for a fabric plane pipe connection.
+
+    Included in ConnectionCandidate to provide AAM with:
+    1. Which fabric plane the asset connects through
+    2. Confidence level and evidence tier
+    3. Supporting evidence for audit trail
+    """
+    pipe_id: str = Field(description="Unique pipe identifier")
+    fabric_plane_type: str = Field(description="Plane type: ipaas, api_gateway, event_bus, data_warehouse, unmanaged")
+    fabric_plane_vendor: Optional[str] = Field(default=None, description="Vendor: workato, kong, snowflake, etc.")
+    modality: str = Field(default="api", description="Connection modality: api, db, file, event")
+
+    # Classification details
+    evidence_tier: str = Field(description="Tier: tier_1_direct, tier_2_observed, tier_3_inferred")
+    classification_confidence: float = Field(description="Confidence score 0.0-1.0")
+    classification_method: str = Field(description="Method: direct_crawl, evidence_based, inferred")
+
+    # Evidence chain (thin summary for handoff)
+    evidence_sources: list[str] = Field(default_factory=list, description="Sources: network, cloud, finance, cmdb, idp, direct_crawl")
+    evidence_count: int = Field(default=0, description="Total evidence pieces supporting this classification")
+    top_evidence: list[str] = Field(default_factory=list, description="Top 3 evidence signals for this pipe")
+
+    # Governance
+    governance_status: str = Field(default="known", description="Pipe governance: governed, known, shadow, investigation_needed")
+    has_contradictions: bool = Field(default=False, description="Whether conflicting evidence exists")
+    contradiction_note: Optional[str] = Field(default=None, description="Brief note if contradictions exist")
+
+
+class CandidateFabricPlaneSummary(BaseModel):
+    """
+    Summary of fabric plane classification for AAM handoff.
+
+    Provides AAM with complete fabric plane context for the asset.
+    """
+    primary_plane: Optional[str] = Field(default=None, description="Primary fabric plane type")
+    primary_vendor: Optional[str] = Field(default=None, description="Primary fabric plane vendor")
+    primary_confidence: float = Field(default=0.0, description="Confidence in primary classification")
+
+    # Multi-plane support
+    all_planes: list[str] = Field(default_factory=list, description="All planes this asset connects through")
+    is_multi_plane: bool = Field(default=False, description="True if asset routes through multiple planes")
+
+    # Evidence summary
+    total_evidence_count: int = Field(default=0, description="Total evidence across all planes")
+    evidence_tier: str = Field(default="tier_3_inferred", description="Highest tier evidence available")
+
+    # Flags
+    has_shadow_plane: bool = Field(default=False, description="True if unauthorized plane detected")
+    needs_investigation: bool = Field(default=False, description="True if classification needs review")
+
+
 class ConnectionCandidate(BaseModel):
     """
     Connection candidate for AAM (Adaptive API Mesh).
@@ -337,6 +617,16 @@ class ConnectionCandidate(BaseModel):
     connected_via_plane: Optional[str] = Field(default=None, description="Fabric plane connection: 'Connect via MuleSoft', etc.")
     execution_allowed: bool = Field(default=True, description="Whether AAM should auto-provision. False if blocking findings exist.")
     action_type: str = Field(default="provision", description="Execution intent: 'provision' (clear) or 'inventory_only' (blocked)")
+
+    # Enhanced fabric plane classification (Sprint 5)
+    pipes: list[CandidatePipeEvidence] = Field(
+        default_factory=list,
+        description="Fabric plane pipes for this asset with evidence chain"
+    )
+    fabric_plane_summary: Optional[CandidateFabricPlaneSummary] = Field(
+        default=None,
+        description="Summary of fabric plane classification"
+    )
 
 
 class Asset(BaseModel):

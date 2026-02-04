@@ -30,6 +30,8 @@ from src.aod.models.output_contracts import (
     ConnectionCandidate,
     CandidateFinding,
     CandidateSORTagging,
+    CandidatePipeEvidence,
+    CandidateFabricPlaneSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -272,21 +274,117 @@ def calculate_priority_score(asset, findings: List) -> float:
 def determine_execution_flags(findings: list) -> tuple[bool, str]:
     """
     Determine execution flags based on findings.
-    
+
     Returns:
         tuple: (execution_allowed, action_type)
         - execution_allowed: False if any critical/blocking findings exist
         - action_type: "inventory_only" if blocked, "provision" if clear
-    
+
     Logic:
         - CRITICAL severity findings = blocking → execution_allowed=False
         - No critical findings = clear → execution_allowed=True
     """
     has_blocking = any(f.severity.value == "critical" for f in findings)
-    
+
     if has_blocking:
         return (False, "inventory_only")
     return (True, "provision")
+
+
+def build_pipe_evidence_for_asset(asset) -> tuple[list[CandidatePipeEvidence], Optional[CandidateFabricPlaneSummary]]:
+    """
+    Build pipe evidence from asset's fabric plane data.
+
+    Extracts evidence-based fabric plane classification from asset.pipes
+    and asset.fabric_plane_tag to provide AAM with full context.
+
+    Returns:
+        tuple: (pipes list, fabric_plane_summary)
+    """
+    pipes: list[CandidatePipeEvidence] = []
+
+    # Check if asset has pipes from reconciliation
+    if hasattr(asset, 'pipes') and asset.pipes:
+        for pipe in asset.pipes:
+            # Extract evidence sources
+            evidence_sources = []
+            if hasattr(pipe, 'classification_evidence') and pipe.classification_evidence:
+                evidence_sources = list(set(
+                    e.source_plane.value if hasattr(e, 'source_plane') else str(e.get('source_plane', 'unknown'))
+                    for e in pipe.classification_evidence[:10]
+                ))
+
+            # Build top evidence descriptions
+            top_evidence = []
+            if hasattr(pipe, 'classification_evidence') and pipe.classification_evidence:
+                for e in pipe.classification_evidence[:3]:
+                    detail = e.signal_detail if hasattr(e, 'signal_detail') else e.get('signal_detail', '')
+                    if detail:
+                        top_evidence.append(detail[:100])
+
+            pipe_evidence = CandidatePipeEvidence(
+                pipe_id=pipe.pipe_id if hasattr(pipe, 'pipe_id') else str(pipe.get('pipe_id', 'unknown')),
+                fabric_plane_type=pipe.fabric_plane.value if hasattr(pipe.fabric_plane, 'value') else str(pipe.fabric_plane),
+                fabric_plane_vendor=pipe.fabric_plane_instance if hasattr(pipe, 'fabric_plane_instance') else None,
+                modality=pipe.modality.value if hasattr(pipe.modality, 'value') else str(pipe.modality),
+                evidence_tier=pipe.evidence_tier.value if hasattr(pipe.evidence_tier, 'value') else str(pipe.evidence_tier),
+                classification_confidence=pipe.classification_confidence if hasattr(pipe, 'classification_confidence') else 0.5,
+                classification_method=pipe.classification_method.value if hasattr(pipe.classification_method, 'value') else 'inferred',
+                evidence_sources=evidence_sources,
+                evidence_count=len(pipe.classification_evidence) if hasattr(pipe, 'classification_evidence') else 0,
+                top_evidence=top_evidence,
+                governance_status=pipe.governance_status.value if hasattr(pipe.governance_status, 'value') else 'known',
+                has_contradictions=pipe.has_contradictions if hasattr(pipe, 'has_contradictions') else False,
+                contradiction_note=pipe.contradiction_detail if hasattr(pipe, 'contradiction_detail') else None
+            )
+            pipes.append(pipe_evidence)
+
+    # If no pipes but has fabric_plane_tag, create legacy pipe
+    elif hasattr(asset, 'fabric_plane_tag') and asset.fabric_plane_tag:
+        tag = asset.fabric_plane_tag
+        pipe_evidence = CandidatePipeEvidence(
+            pipe_id=f"legacy_{asset.asset_id}",
+            fabric_plane_type=tag.fabric_plane_type if hasattr(tag, 'fabric_plane_type') else 'ipaas',
+            fabric_plane_vendor=tag.controller_vendor if hasattr(tag, 'controller_vendor') else None,
+            modality='api',
+            evidence_tier='tier_3_inferred',  # Legacy = Tier 3
+            classification_confidence=0.40,  # Demoted confidence
+            classification_method='inferred',
+            evidence_sources=['legacy_inference'],
+            evidence_count=1,
+            top_evidence=[f"Legacy inference from fabric_plane_tag: {tag.controller_vendor}"],
+            governance_status='known',
+            has_contradictions=False
+        )
+        pipes.append(pipe_evidence)
+
+    # Build summary
+    summary = None
+    if pipes:
+        # Sort by confidence to get primary
+        sorted_pipes = sorted(pipes, key=lambda p: p.classification_confidence, reverse=True)
+        primary = sorted_pipes[0]
+
+        # Get all unique plane types
+        all_planes = list(set(p.fabric_plane_type for p in pipes))
+
+        # Determine highest tier
+        tier_order = {'tier_1_direct': 1, 'tier_2_observed': 2, 'tier_3_inferred': 3}
+        highest_tier = min(pipes, key=lambda p: tier_order.get(p.evidence_tier, 3)).evidence_tier
+
+        summary = CandidateFabricPlaneSummary(
+            primary_plane=primary.fabric_plane_type,
+            primary_vendor=primary.fabric_plane_vendor,
+            primary_confidence=primary.classification_confidence,
+            all_planes=all_planes,
+            is_multi_plane=len(all_planes) > 1,
+            total_evidence_count=sum(p.evidence_count for p in pipes),
+            evidence_tier=highest_tier,
+            has_shadow_plane=any(p.governance_status == 'shadow' for p in pipes),
+            needs_investigation=any(p.has_contradictions or p.governance_status == 'investigation_needed' for p in pipes)
+        )
+
+    return pipes, summary
 
 
 @router.post("/aam/candidates", response_model=AAMCandidatesResponse)
@@ -386,7 +484,15 @@ async def export_aam_candidates(
             connected_via = f"Connect via {vendor_display}"
         
         execution_allowed, action_type = determine_execution_flags(asset_findings)
-        
+
+        # Build evidence-based pipe data (Sprint 5 enhancement)
+        asset_pipes, fabric_summary = build_pipe_evidence_for_asset(asset)
+
+        # Update connected_via from pipe evidence if available
+        if fabric_summary and fabric_summary.primary_vendor:
+            vendor_display = fabric_summary.primary_vendor.replace("_", " ").title()
+            connected_via = f"Connect via {vendor_display}"
+
         candidate = ConnectionCandidate(
             asset_key=asset_key,
             vendor_name=asset.vendor,
@@ -402,7 +508,10 @@ async def export_aam_candidates(
             priority_score=calculate_priority_score(asset, asset_findings),
             connected_via_plane=connected_via,
             execution_allowed=execution_allowed,
-            action_type=action_type
+            action_type=action_type,
+            # Evidence-based fabric plane data (Sprint 5)
+            pipes=asset_pipes,
+            fabric_plane_summary=fabric_summary
         )
         candidates.append(candidate)
     

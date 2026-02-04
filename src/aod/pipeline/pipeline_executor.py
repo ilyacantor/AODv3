@@ -49,8 +49,13 @@ from .deterministic_ids import deterministic_uuid
 from .asset_identity import late_bind_and_merge_assets
 from .sor_scoring import score_sor
 from ..models.output_contracts import SORTagging
+from .debug_fabric_trace import FabricRoutingTracer
+from .evidence_collectors import collect_all_evidence
 
 logger = logging.getLogger(__name__)
+
+# Debug trace target - set to asset name to trace, or None to disable
+DEBUG_TRACE_TARGET = "salesforce"
 
 # Note: MAX_OBSERVATION_SAMPLES removed - use get_current_config().query_limits.max_observation_samples
 
@@ -366,17 +371,34 @@ def run_pipeline_ephemeral(
             fallback_tenant_id=tenant_id,
             snapshot_id=snapshot_id
         )
-        
+
+        # Debug trace: Initialize tracer if target is set
+        tracer = None
+        if DEBUG_TRACE_TARGET:
+            tracer = FabricRoutingTracer(DEBUG_TRACE_TARGET)
+            tracer.trace_cmdb_ingestion(snapshot)
+            logger.info(f"[DEBUG TRACE] Stage 1 (CMDB Ingestion) for '{DEBUG_TRACE_TARGET}' complete")
+
         observations = snapshot.planes.discovery.observations
         
         candidates, _ = normalize_observations(observations)
-        
+
+        # Debug trace: Stage 2 - Normalization
+        if tracer:
+            tracer.trace_normalization(candidates)
+            logger.info(f"[DEBUG TRACE] Stage 2 (Normalization) for '{DEBUG_TRACE_TARGET}' complete")
+
         indexes = build_plane_indexes(snapshot.planes)
         
         idp_activity_map = build_idp_activity_map(indexes.idp.records)
         
         correlations = correlate_entities_to_planes(candidates, indexes)
-        
+
+        # Debug trace: Stage 3 - Correlation
+        if tracer:
+            tracer.trace_correlation(correlations, indexes)
+            logger.info(f"[DEBUG TRACE] Stage 3 (Correlation) for '{DEBUG_TRACE_TARGET}' complete")
+
         filtered_candidates, artifacts = handle_artifacts(candidates, tenant_id, run_id, snapshot_id)
         
         correlation_by_entity_id = {c.entity.entity_id: c for c in correlations}
@@ -465,9 +487,27 @@ def run_pipeline_ephemeral(
         # Stage 4: Evidence-Based Fabric Plane Detection (Feb 2026 Blueprint)
         # Three-phase: Observation harvest -> Direct crawl -> Reconciliation
         # Returns fabric planes, asset tags, and pipes (SOR-to-plane routing)
+
+        # Debug trace: Stage 4 - Evidence Collection (run before detect to capture evidence)
+        evidence_result_for_trace = None
+        if tracer:
+            evidence_result_for_trace = collect_all_evidence(snapshot)
+            tracer.trace_evidence_collection(snapshot.planes, evidence_result_for_trace)
+            logger.info(f"[DEBUG TRACE] Stage 4 (Evidence Collection) for '{DEBUG_TRACE_TARGET}' complete")
+
         fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(snapshot, assets)
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
-        
+
+        # Debug trace: Stage 5 - Fabric Plane Tagging
+        if tracer:
+            tracer.trace_fabric_tagging(assets)
+            logger.info(f"[DEBUG TRACE] Stage 5 (Fabric Tagging) for '{DEBUG_TRACE_TARGET}' complete")
+            # Print the full trace report
+            print("\n" + "=" * 80)
+            print("DEBUG FABRIC ROUTING TRACE OUTPUT")
+            print("=" * 80)
+            tracer.print_report()
+
         # Stage 5: Enterprise Preset Inference
         # Determine organizational integration pattern for AAM connection strategy
         preset_context = infer_preset(assets, fabric_planes)

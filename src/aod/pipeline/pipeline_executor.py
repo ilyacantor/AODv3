@@ -55,7 +55,7 @@ from .evidence_collectors import collect_all_evidence
 logger = logging.getLogger(__name__)
 
 # Debug trace target - set to asset name to trace, or None to disable
-DEBUG_TRACE_TARGET = "salesforce"
+DEBUG_TRACE_TARGET = "Salesforce"
 
 # Note: MAX_OBSERVATION_SAMPLES removed - use get_current_config().query_limits.max_observation_samples
 

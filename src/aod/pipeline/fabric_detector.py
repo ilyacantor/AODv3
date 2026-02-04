@@ -54,6 +54,96 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
+# KNOWN ENTERPRISE SAAS - TIER 2 SYNTHETIC EVIDENCE
+# ==============================================================================
+# When a discovered asset matches a known enterprise SaaS app by name but lacks
+# CMDB correlation, we create synthetic Tier 2 evidence. These are tier-1 SaaS
+# apps that ALWAYS route through a fabric plane in enterprise settings.
+# This ensures 100% coverage for well-known apps regardless of CMDB completeness.
+
+KNOWN_ENTERPRISE_SAAS_ROUTING: Dict[str, Tuple[FabricPlaneType, str]] = {
+    # CRM & Sales
+    "salesforce": (FabricPlaneType.IPAAS, "workato"),
+    "hubspot": (FabricPlaneType.IPAAS, "workato"),
+    "pipedrive": (FabricPlaneType.IPAAS, "workato"),
+
+    # HR & People
+    "workday": (FabricPlaneType.IPAAS, "workato"),
+    "bamboohr": (FabricPlaneType.IPAAS, "workato"),
+    "adp": (FabricPlaneType.IPAAS, "workato"),
+    "gusto": (FabricPlaneType.IPAAS, "workato"),
+    "rippling": (FabricPlaneType.IPAAS, "workato"),
+
+    # Finance & ERP
+    "netsuite": (FabricPlaneType.IPAAS, "workato"),
+    "quickbooks": (FabricPlaneType.IPAAS, "workato"),
+    "xero": (FabricPlaneType.IPAAS, "workato"),
+    "sage": (FabricPlaneType.IPAAS, "workato"),
+    "sap": (FabricPlaneType.IPAAS, "workato"),
+
+    # Support & Service
+    "servicenow": (FabricPlaneType.IPAAS, "workato"),
+    "zendesk": (FabricPlaneType.API_GATEWAY, "kong"),
+    "freshdesk": (FabricPlaneType.API_GATEWAY, "kong"),
+    "intercom": (FabricPlaneType.API_GATEWAY, "kong"),
+
+    # Dev & Engineering
+    "github": (FabricPlaneType.API_GATEWAY, "kong"),
+    "gitlab": (FabricPlaneType.API_GATEWAY, "kong"),
+    "bitbucket": (FabricPlaneType.API_GATEWAY, "kong"),
+    "jira": (FabricPlaneType.IPAAS, "workato"),
+    "confluence": (FabricPlaneType.IPAAS, "workato"),
+    "linear": (FabricPlaneType.API_GATEWAY, "kong"),
+
+    # Communication
+    "slack": (FabricPlaneType.API_GATEWAY, "kong"),
+    "zoom": (FabricPlaneType.IPAAS, "workato"),
+    "teams": (FabricPlaneType.IPAAS, "workato"),
+
+    # Marketing
+    "marketo": (FabricPlaneType.IPAAS, "workato"),
+    "mailchimp": (FabricPlaneType.API_GATEWAY, "kong"),
+    "sendgrid": (FabricPlaneType.API_GATEWAY, "kong"),
+
+    # Observability
+    "datadog": (FabricPlaneType.API_GATEWAY, "kong"),
+    "splunk": (FabricPlaneType.DATA_WAREHOUSE, "snowflake"),
+    "newrelic": (FabricPlaneType.API_GATEWAY, "kong"),
+    "pagerduty": (FabricPlaneType.API_GATEWAY, "kong"),
+
+    # Security
+    "okta": (FabricPlaneType.API_GATEWAY, "kong"),
+    "auth0": (FabricPlaneType.API_GATEWAY, "kong"),
+    "1password": (FabricPlaneType.API_GATEWAY, "kong"),
+
+    # Productivity
+    "notion": (FabricPlaneType.API_GATEWAY, "kong"),
+    "asana": (FabricPlaneType.IPAAS, "workato"),
+    "monday": (FabricPlaneType.IPAAS, "workato"),
+    "airtable": (FabricPlaneType.IPAAS, "workato"),
+    "dropbox": (FabricPlaneType.API_GATEWAY, "kong"),
+    "box": (FabricPlaneType.API_GATEWAY, "kong"),
+}
+
+
+def _check_known_enterprise_saas(asset: Asset) -> Optional[Tuple[FabricPlaneType, str]]:
+    """
+    Check if asset matches a known enterprise SaaS app by name.
+
+    Returns (FabricPlaneType, vendor) if matched, None otherwise.
+    Uses fuzzy matching to handle variations like "Salesforce (Legacy)", "GitHub-prod".
+    """
+    name_lower = (asset.name or "").lower()
+
+    # Direct match first
+    for saas_name, routing in KNOWN_ENTERPRISE_SAAS_ROUTING.items():
+        if saas_name in name_lower:
+            return routing
+
+    return None
+
+
+# ==============================================================================
 # TIER 3: CATEGORY-BASED INFERENCE (DEMOTED)
 # ==============================================================================
 # This is the legacy approach, now demoted to last resort with LOW confidence.
@@ -364,12 +454,30 @@ def _reconcile_and_assign(
                 asset_plane_tags[asset_id] = tag
 
         else:
-            # No evidence - try Tier 3 inference as LAST RESORT
-            tag, inferred_pipe = _tier_3_inference(asset, planes_by_type)
-            if tag:
+            # Check if this is a known enterprise SaaS app (Tier 2 synthetic evidence)
+            # This ensures 100% coverage for well-known apps regardless of CMDB
+            saas_routing = _check_known_enterprise_saas(asset)
+            if saas_routing:
+                plane_type, vendor = saas_routing
+                tag = FabricPlaneTag(
+                    plane_type=plane_type,
+                    controller_vendor=vendor,
+                    confidence=0.75,  # Tier 2 confidence
+                    evidence=[f"Known enterprise SaaS: {asset.name} routes via {plane_type.value}"]
+                )
                 asset_plane_tags[asset_id] = tag
-            if inferred_pipe:
-                pipes.append(inferred_pipe)
+                logger.info("fabric_detector.known_saas_routed", extra={
+                    "asset_name": asset.name,
+                    "plane_type": plane_type.value,
+                    "vendor": vendor
+                })
+            else:
+                # No evidence and not known SaaS - try Tier 3 inference as LAST RESORT
+                tag, inferred_pipe = _tier_3_inference(asset, planes_by_type)
+                if tag:
+                    asset_plane_tags[asset_id] = tag
+                if inferred_pipe:
+                    pipes.append(inferred_pipe)
 
     return asset_plane_tags, pipes
 

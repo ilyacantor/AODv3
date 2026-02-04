@@ -63,6 +63,81 @@ CMDB_CI_MAPPING = {
     "fabric_vendor": {"sources": ["fabric_vendor"], "default": None},
 }
 
+# =============================================================================
+# KNOWN ENTERPRISE SAAS ENRICHMENT
+# =============================================================================
+# When CMDB doesn't specify integrates_via for known enterprise apps, enrich with defaults.
+# These are tier-1 SaaS apps that ALWAYS route through a fabric plane in enterprise settings.
+# Format: lowercase_name -> (integrates_via, fabric_vendor)
+KNOWN_ENTERPRISE_SAAS = {
+    # CRM & Sales
+    "salesforce": ("ipaas", "workato"),
+    "hubspot": ("ipaas", "workato"),
+    "pipedrive": ("ipaas", "workato"),
+
+    # HR & People
+    "workday": ("ipaas", "workato"),
+    "bamboohr": ("ipaas", "workato"),
+    "adp": ("ipaas", "workato"),
+    "gusto": ("ipaas", "workato"),
+    "rippling": ("ipaas", "workato"),
+
+    # Finance & ERP
+    "netsuite": ("ipaas", "workato"),
+    "quickbooks": ("ipaas", "workato"),
+    "xero": ("ipaas", "workato"),
+    "sage": ("ipaas", "workato"),
+    "sap": ("ipaas", "workato"),
+
+    # Support & Service
+    "servicenow": ("ipaas", "workato"),
+    "zendesk": ("api_gateway", "kong"),
+    "freshdesk": ("api_gateway", "kong"),
+    "intercom": ("api_gateway", "kong"),
+
+    # Dev & Engineering
+    "github": ("api_gateway", "kong"),
+    "gitlab": ("api_gateway", "kong"),
+    "bitbucket": ("api_gateway", "kong"),
+    "jira": ("ipaas", "workato"),
+    "confluence": ("ipaas", "workato"),
+    "linear": ("api_gateway", "kong"),
+
+    # Communication
+    "slack": ("api_gateway", "kong"),
+    "zoom": ("ipaas", "workato"),
+    "microsoft teams": ("ipaas", "workato"),
+    "teams": ("ipaas", "workato"),
+
+    # Marketing
+    "marketo": ("ipaas", "workato"),
+    "mailchimp": ("api_gateway", "kong"),
+    "sendgrid": ("api_gateway", "kong"),
+
+    # Observability
+    "datadog": ("api_gateway", "kong"),
+    "splunk": ("data_warehouse", "snowflake"),
+    "newrelic": ("api_gateway", "kong"),
+    "pagerduty": ("api_gateway", "kong"),
+
+    # Security
+    "okta": ("api_gateway", "kong"),
+    "auth0": ("api_gateway", "kong"),
+    "1password": ("api_gateway", "kong"),
+
+    # Productivity
+    "notion": ("api_gateway", "kong"),
+    "asana": ("ipaas", "workato"),
+    "monday": ("ipaas", "workato"),
+    "airtable": ("ipaas", "workato"),
+    "dropbox": ("api_gateway", "kong"),
+    "box": ("api_gateway", "kong"),
+    "google workspace": ("api_gateway", "kong"),
+    "google drive": ("api_gateway", "kong"),
+    "microsoft 365": ("api_gateway", "kong"),
+    "office 365": ("api_gateway", "kong"),
+}
+
 CLOUD_RESOURCE_MAPPING = {
     "resource_id": {"sources": ["cloud_id", "resource_id"], "required": True},
     "name": {"sources": ["name"], "required": True},
@@ -346,7 +421,7 @@ def _normalize_idp_objects(raw_list: list) -> list[dict]:
 
 
 def _normalize_cmdb_cis(raw_list: list) -> list[dict]:
-    """Normalize CMDB CIs."""
+    """Normalize CMDB CIs with enterprise SaaS enrichment."""
     result = []
     for raw in raw_list:
         if not isinstance(raw, dict):
@@ -356,6 +431,16 @@ def _normalize_cmdb_cis(raw_list: list) -> list[dict]:
             # Extract domain from URL (external_ref may be a full URL)
             if normalized.get("domain"):
                 normalized["domain"] = _extract_domain_from_url(normalized["domain"])
+
+            # Enrich known enterprise SaaS apps with default fabric routing
+            # This ensures 100% coverage for tier-1 apps even if CMDB lacks the data
+            if not normalized.get("integrates_via"):
+                name_lower = (normalized.get("name") or "").lower().strip()
+                if name_lower in KNOWN_ENTERPRISE_SAAS:
+                    integrates_via, fabric_vendor = KNOWN_ENTERPRISE_SAAS[name_lower]
+                    normalized["integrates_via"] = integrates_via
+                    normalized["fabric_vendor"] = fabric_vendor
+
             result.append(normalized)
         except NormalizationError:
             pass

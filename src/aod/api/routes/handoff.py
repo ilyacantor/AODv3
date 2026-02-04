@@ -926,19 +926,25 @@ async def get_fabric_allocation_audit(run_id: str):
 
     for asset in all_assets:
         asset_name = asset.name if hasattr(asset, 'name') else asset.get('name', 'Unknown')
-        asset_id = asset.asset_id if hasattr(asset, 'asset_id') else asset.get('asset_id', 'unknown')
+        asset_id = str(asset.asset_id) if hasattr(asset, 'asset_id') else str(asset.get('asset_id', 'unknown'))
 
-        # Get pipes for this asset
-        pipes = []
-        if hasattr(asset, 'pipes') and asset.pipes:
-            pipes = asset.pipes
+        # Check for fabric_plane_tag (persisted data)
+        tag = None
+        if hasattr(asset, 'fabric_plane_tag') and asset.fabric_plane_tag:
+            tag = asset.fabric_plane_tag
 
-        # Track multi-plane SORs
-        if len(pipes) > 1:
-            multi_plane_sors.add(asset_id)
+        # Determine governance status for shadow detection
+        is_shadow = False
+        if hasattr(asset, 'lens_coverage') and asset.lens_coverage:
+            lc = asset.lens_coverage
+            has_idp = lc.idp if hasattr(lc, 'idp') else False
+            has_cmdb = lc.cmdb if hasattr(lc, 'cmdb') else False
+            # Shadow = has fabric plane tag but no governance
+            if tag and not has_idp and not has_cmdb:
+                is_shadow = True
 
-        # Create decision record for each pipe (or one "not routed" if no pipes)
-        if not pipes:
+        if not tag:
+            # No fabric plane assignment
             not_routed += 1
             decisions.append(AllocationDecision(
                 decision="Not Routed",
@@ -947,42 +953,66 @@ async def get_fabric_allocation_audit(run_id: str):
                 plane_assigned=None,
                 evidence_tier=None,
                 confidence=None,
-                rationale="No fabric routing evidence found across any observation plane or direct crawl"
+                rationale="No fabric plane tag assigned - asset not routed through detected fabric planes"
             ))
         else:
-            for pipe in pipes:
-                decision_type = _determine_decision_type(asset, [pipe])
+            # Has fabric plane tag
+            plane_type = tag.plane_type.value if hasattr(tag.plane_type, 'value') else str(tag.plane_type) if tag.plane_type else 'unknown'
+            vendor = tag.controller_vendor if hasattr(tag, 'controller_vendor') else None
+            confidence = tag.confidence if hasattr(tag, 'confidence') else 0.5
+            evidence = tag.evidence if hasattr(tag, 'evidence') else []
 
-                # Update counters
-                tier = pipe.evidence_tier.value if hasattr(pipe.evidence_tier, 'value') else str(getattr(pipe, 'evidence_tier', ''))
-                if 'tier_1' in tier:
-                    routed_tier_1 += 1
-                elif 'tier_2' in tier:
-                    routed_tier_2 += 1
-                elif 'tier_3' in tier:
-                    routed_tier_3 += 1
+            # Determine tier based on confidence
+            if confidence >= 0.90:
+                tier = "Tier 1"
+                routed_tier_1 += 1
+            elif confidence >= 0.60:
+                tier = "Tier 2"
+                routed_tier_2 += 1
+            else:
+                tier = "Tier 3"
+                routed_tier_3 += 1
 
-                if decision_type == "Shadow Detected":
-                    shadow_detected += 1
-                if decision_type == "Contradicted":
-                    contradictions_flagged += 1
+            # Determine decision type
+            if is_shadow:
+                decision_type = "Shadow Detected"
+                shadow_detected += 1
+            else:
+                decision_type = "Routed"
 
-                # Build rationale
-                rationale = _build_rationale(pipe, asset)
-                if decision_type == "Contradicted":
-                    contradiction_note = pipe.contradiction_detail if hasattr(pipe, 'contradiction_detail') else None
-                    if contradiction_note:
-                        rationale = contradiction_note
+            # Format plane assignment
+            type_display = {
+                'ipaas': 'iPaaS',
+                'api_gateway': 'API Gateway',
+                'event_bus': 'Event Bus',
+                'data_warehouse': 'Data Warehouse',
+                'unmanaged': 'Unmanaged'
+            }.get(plane_type, plane_type.replace('_', ' ').title() if plane_type else 'Unknown')
 
-                decisions.append(AllocationDecision(
-                    decision=decision_type,
-                    asset_name=asset_name,
-                    asset_id=asset_id,
-                    plane_assigned=_format_plane_assignment(pipe),
-                    evidence_tier=_format_evidence_tier(pipe),
-                    confidence=pipe.classification_confidence if hasattr(pipe, 'classification_confidence') else None,
-                    rationale=rationale
-                ))
+            if vendor:
+                vendor_display = vendor.replace('_', ' ').title()
+                plane_assigned = f"{type_display} ({vendor_display})"
+            else:
+                plane_assigned = type_display
+
+            # Build rationale from evidence
+            if evidence:
+                rationale = "; ".join(evidence[:3])
+            else:
+                rationale = f"Assigned to {plane_assigned} based on fabric plane detection"
+
+            if is_shadow:
+                rationale = f"Found via fabric plane but not in IdP/CMDB: {rationale}"
+
+            decisions.append(AllocationDecision(
+                decision=decision_type,
+                asset_name=asset_name,
+                asset_id=asset_id,
+                plane_assigned=plane_assigned,
+                evidence_tier=tier,
+                confidence=confidence,
+                rationale=rationale
+            ))
 
     # Build summary
     summary = AllocationSummary(

@@ -1638,13 +1638,23 @@
                 const tagVendor = fabricTag ? (fabricTag.controller_vendor || '').toLowerCase() : '';
                 const tagType = fabricTag ? (fabricTag.plane_type || '').toLowerCase() : '';
                 
+                const fabricSummary = c.fabric_plane_summary;
+                const summaryPlaneType = fabricSummary ? (fabricSummary.primary_plane_type || '').toLowerCase() : '';
+                
+                const pipes = c.pipes || [];
+                const hasPipeWithPlaneType = pipes.some(p => 
+                    (p.fabric_plane_type || '').toLowerCase() === farmPlaneType
+                );
+                
                 return vendorPatterns.some(pattern => 
                     connectedVia.includes(pattern) || 
                     tagVendor.includes(pattern)
-                ) || tagType === farmPlaneType;
+                ) || tagType === farmPlaneType || summaryPlaneType === farmPlaneType || hasPipeWithPlaneType;
             });
             
-            const vendorLabel = matchingPlanes.map(p => p.vendor.replace(/_/g, ' ')).join(', ');
+            const vendorLabel = matchingPlanes.length > 0 
+                ? matchingPlanes.map(p => p.vendor.replace(/_/g, ' ')).join(', ')
+                : planeNames[planeType];
             document.getElementById('fabricFilterLabel').textContent = `Filtering: ${planeNames[planeType]} (${vendorLabel})`;
             document.getElementById('fabricFilterActive').classList.remove('hidden');
             

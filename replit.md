@@ -179,6 +179,8 @@ config/
 
 ## Recent Changes
 
+- **2026-02-04**: Documentation consolidation - Created master `docs/AOD_EVIDENCE_DISCOVERY.md` consolidating all discovery logic; updated all User Guides with 3-tier evidence system; archived deprecated docs to `docs/archive/`
+- **2026-02-04**: Evidence collector fixes - Fixed proxy log bytes_transferred filter (was filtering all logs); fixed Tier 3 category matching to use word boundaries (prevents "bi" matching "Big*")
 - **2026-02-04**: Removed static fallback snapshot - AOD now requires Farm Live mode for all discovery runs; no cached/static data
 - **2026-02-03**: Console redesign - Farm toggle (Cached/Live), observation planes grid with 7 plane types and counts, removed deprecated snapshot selectors
 - **2026-01-29**: AAM export integration - New `/api/handoff/aam/export` endpoint POSTs candidates to AAM's receive endpoint

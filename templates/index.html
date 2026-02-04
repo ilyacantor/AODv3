@@ -534,7 +534,8 @@
                         <span id="fabricFilterLabel">Showing: All</span>
                         <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
                     </div>
-                    <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
+                    <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem;">
+                        <button class="btn btn-secondary" id="viewFabricAuditBtn" disabled>View Fabric Allocation Audit</button>
                         <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
                     </div>
                 </div>
@@ -576,6 +577,71 @@
                         <button class="btn btn-back" id="handoffDrillBack">← Back to List</button>
                     </div>
                     <div id="handoffDrillContent"></div>
+                </div>
+            </div>
+
+            <!-- Fabric Allocation Audit Panel -->
+            <div id="fabricAuditPanel" class="section hidden" style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h2 class="section-title" style="margin-bottom:0;">Fabric Allocation Audit Trail</h2>
+                    <button class="btn btn-back" id="closeFabricAuditBtn">← Back to Candidates</button>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditTotalScanned">-</div>
+                        <div class="stat-label">Total Scanned</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier1" style="color:var(--green-400);">-</div>
+                        <div class="stat-label">Tier 1 (Direct)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier2" style="color:var(--cyan-400);">-</div>
+                        <div class="stat-label">Tier 2 (Observed)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier3" style="color:var(--amber-400);">-</div>
+                        <div class="stat-label">Tier 3 (Inferred)</div>
+                    </div>
+                </div>
+                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditNotRouted" style="color:var(--gray-400);">-</div>
+                        <div class="stat-label">Not Routed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditShadow" style="color:var(--purple-400);">-</div>
+                        <div class="stat-label">Shadow Detected</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditContradictions" style="color:var(--red-400);">-</div>
+                        <div class="stat-label">Contradictions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditMultiPlane" style="color:var(--blue-400);">-</div>
+                        <div class="stat-label">Multi-Plane SORs</div>
+                    </div>
+                </div>
+
+                <!-- Decisions Table -->
+                <div class="table-container" style="max-height:500px;overflow-y:auto;">
+                    <table class="data-table" id="fabricAuditTable">
+                        <thead>
+                            <tr>
+                                <th style="width:120px;">Decision</th>
+                                <th style="width:180px;">Asset</th>
+                                <th style="width:180px;">Plane Assigned</th>
+                                <th style="width:80px;">Tier</th>
+                                <th style="width:80px;">Confidence</th>
+                                <th>Rationale</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fabricAuditTableBody">
+                            <tr><td colspan="6" class="empty-state">Loading audit data...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </main>

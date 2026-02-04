@@ -1389,27 +1389,40 @@
             const handoffSelect = document.getElementById('handoffRunSelect');
             const handoffStatusFilter = document.getElementById('handoffStatusFilter');
             const exportBtn = document.getElementById('exportToAAMBtn');
-            
+            const auditBtn = document.getElementById('viewFabricAuditBtn');
+            const closeAuditBtn = document.getElementById('closeFabricAuditBtn');
+
             if (!handoffSelect) {
                 console.error('Handoff tab elements not found');
                 return;
             }
-            
+
             handoffSelect.addEventListener('change', () => {
                 const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
                 if (runId) loadHandoffCandidates(runId, statusFilter);
             });
-            
+
             exportBtn.addEventListener('click', exportToAAM);
-            
+
+            if (auditBtn) {
+                auditBtn.addEventListener('click', () => {
+                    const runId = handoffSelect.value;
+                    if (runId) loadFabricAudit(runId);
+                });
+            }
+
+            if (closeAuditBtn) {
+                closeAuditBtn.addEventListener('click', hideFabricAudit);
+            }
+
             handoffStatusFilter.addEventListener('change', () => {
                 hideHandoffDrill();
                 const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
                 if (runId) loadHandoffCandidates(runId, statusFilter);
             });
-            
+
             const backBtn = document.getElementById('handoffDrillBack');
             if (backBtn) {
                 backBtn.addEventListener('click', hideHandoffDrill);
@@ -1459,9 +1472,11 @@
             const container = document.getElementById('handoffCandidatesContainer');
             const labelEl = document.getElementById('handoffCandidateLabel');
             const exportBtn = document.getElementById('exportToAAMBtn');
-            
+            const auditBtn = document.getElementById('viewFabricAuditBtn');
+
             container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading candidates...</div>';
             exportBtn.disabled = true;
+            if (auditBtn) auditBtn.disabled = true;
             
             try {
                 const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
@@ -1517,8 +1532,9 @@
                 
                 if (totalCount > 0) {
                     exportBtn.disabled = false;
+                    if (auditBtn) auditBtn.disabled = false;
                 }
-                
+
                 renderHandoffCandidates(candidates);
             } catch (err) {
                 console.error('Failed to load handoff candidates:', err);
@@ -1911,27 +1927,27 @@
             const runId = document.getElementById('handoffRunSelect').value;
             const statusFilter = document.getElementById('handoffStatusFilter').value;
             const exportBtn = document.getElementById('exportToAAMBtn');
-            
+
             if (!runId) {
                 showToast('Please select a snapshot first', 'error');
                 return;
             }
-            
+
             exportBtn.disabled = true;
             exportBtn.textContent = 'Exporting...';
-            
+
             try {
                 const response = await fetch(`/api/handoff/aam/export?run_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.detail || `Export failed: ${response.status}`);
                 }
-                
+
                 showToast(`Exported ${data.candidates_sent} candidates to AAM`, 'success');
                 console.log('AAM export response:', data);
             } catch (err) {
@@ -1941,6 +1957,102 @@
                 exportBtn.disabled = false;
                 exportBtn.textContent = 'Export to AAM';
             }
+        }
+
+        async function loadFabricAudit(runId) {
+            const auditPanel = document.getElementById('fabricAuditPanel');
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
+            const farmMetadata = document.querySelector('.farm-metadata-section');
+            const tableBody = document.getElementById('fabricAuditTableBody');
+
+            if (!auditPanel || !tableBody) {
+                console.error('Fabric audit elements not found');
+                return;
+            }
+
+            // Show audit panel, hide other sections
+            auditPanel.classList.remove('hidden');
+            if (candidatesSection) candidatesSection.style.display = 'none';
+            if (farmMetadata) farmMetadata.style.display = 'none';
+
+            tableBody.innerHTML = '<tr><td colspan="6" class="loading"><div class="spinner"></div> Loading audit data...</td></tr>';
+
+            try {
+                const response = await fetch(`/api/handoff/fabric-allocation-audit/${runId}`);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load audit: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const summary = data.summary || {};
+                const decisions = data.decisions || [];
+
+                // Update summary stats
+                document.getElementById('auditTotalScanned').textContent = summary.total_assets_scanned || 0;
+                document.getElementById('auditRoutedTier1').textContent = summary.routed_tier_1 || 0;
+                document.getElementById('auditRoutedTier2').textContent = summary.routed_tier_2 || 0;
+                document.getElementById('auditRoutedTier3').textContent = summary.routed_tier_3 || 0;
+                document.getElementById('auditNotRouted').textContent = summary.not_routed || 0;
+                document.getElementById('auditShadow').textContent = summary.shadow_detected || 0;
+                document.getElementById('auditContradictions').textContent = summary.contradictions_flagged || 0;
+                document.getElementById('auditMultiPlane').textContent = summary.multi_plane_sors || 0;
+
+                // Render decisions table
+                if (decisions.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="6" class="empty-state">No allocation decisions found</td></tr>';
+                    return;
+                }
+
+                tableBody.innerHTML = decisions.map(d => {
+                    const decisionClass = {
+                        'Routed': 'decision-routed',
+                        'Not Routed': 'decision-not-routed',
+                        'Shadow Detected': 'decision-shadow',
+                        'Contradicted': 'decision-contradicted'
+                    }[d.decision] || '';
+
+                    const decisionColor = {
+                        'Routed': 'var(--green-400)',
+                        'Not Routed': 'var(--gray-400)',
+                        'Shadow Detected': 'var(--purple-400)',
+                        'Contradicted': 'var(--red-400)'
+                    }[d.decision] || 'var(--slate-400)';
+
+                    const tierColor = {
+                        'Tier 1': 'var(--green-400)',
+                        'Tier 2': 'var(--cyan-400)',
+                        'Tier 3': 'var(--amber-400)'
+                    }[d.evidence_tier] || 'var(--gray-400)';
+
+                    const confidence = d.confidence !== null ? (d.confidence * 100).toFixed(0) + '%' : '—';
+
+                    return `
+                        <tr class="${decisionClass}">
+                            <td><span style="color:${decisionColor};font-weight:500;">${d.decision}</span></td>
+                            <td style="font-weight:500;">${d.asset_name}</td>
+                            <td>${d.plane_assigned || '—'}</td>
+                            <td><span style="color:${tierColor};">${d.evidence_tier || '—'}</span></td>
+                            <td>${confidence}</td>
+                            <td style="font-size:0.8rem;color:var(--slate-300);">${d.rationale}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error('Failed to load fabric audit:', err);
+                tableBody.innerHTML = `<tr><td colspan="6" class="error-message">Failed to load audit: ${err.message}</td></tr>`;
+            }
+        }
+
+        function hideFabricAudit() {
+            const auditPanel = document.getElementById('fabricAuditPanel');
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
+            const farmMetadata = document.querySelector('.farm-metadata-section');
+
+            if (auditPanel) auditPanel.classList.add('hidden');
+            if (candidatesSection) candidatesSection.style.display = '';
+            if (farmMetadata) farmMetadata.style.display = '';
         }
         
         function showDecisionDetail(assetKey) {

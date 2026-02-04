@@ -15,7 +15,7 @@ Contradictions don't necessarily mean errors - they can indicate:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -130,9 +130,6 @@ class ContradictionDetector:
         """
         analysis = ContradictionAnalysis(asset_key=asset_key)
 
-        if len(evidence) < 2:
-            return analysis  # Need at least 2 pieces to contradict
-
         # Group evidence by plane
         by_plane: Dict[FabricPlaneType, List[FabricRoutingEvidence]] = {}
         for e in evidence:
@@ -141,23 +138,25 @@ class ContradictionDetector:
                     by_plane[e.fabric_plane_type] = []
                 by_plane[e.fabric_plane_type].append(e)
 
-        # Check for plane conflicts
-        if len(by_plane) > 1:
-            contradictions = self._check_plane_conflicts(asset_key, by_plane)
-            analysis.contradictions.extend(contradictions)
-
-        # Check for phase mismatch
+        # Check for phase mismatch (can happen even with single evidence)
         if phase_2_planes:
             contradictions = self._check_phase_mismatch(
                 asset_key, by_plane, phase_2_planes
             )
             analysis.contradictions.extend(contradictions)
 
-        # Check for stale evidence conflicts
-        contradictions = self._check_stale_conflicts(asset_key, evidence)
-        analysis.contradictions.extend(contradictions)
+        # Plane conflicts and stale checks need at least 2 evidence pieces
+        if len(evidence) >= 2:
+            # Check for plane conflicts
+            if len(by_plane) > 1:
+                contradictions = self._check_plane_conflicts(asset_key, by_plane)
+                analysis.contradictions.extend(contradictions)
 
-        # Summarize
+            # Check for stale evidence conflicts
+            contradictions = self._check_stale_conflicts(asset_key, evidence)
+            analysis.contradictions.extend(contradictions)
+
+        # Finalize analysis
         analysis.total_contradictions = len(analysis.contradictions)
         analysis.has_critical = any(
             c.severity == ContradictionSeverity.CRITICAL
@@ -194,6 +193,21 @@ class ContradictionDetector:
             for plane_b in planes[i + 1:]:
                 evidence_a = by_plane[plane_a]
                 evidence_b = by_plane[plane_b]
+
+                # Check if BOTH have Tier 1 evidence - that's legitimate multi-plane
+                # support, NOT a contradiction (one SOR can connect through multiple planes)
+                tier_1_a = any(
+                    e.source_plane == EvidenceSourcePlane.DIRECT_CRAWL
+                    for e in evidence_a
+                )
+                tier_1_b = any(
+                    e.source_plane == EvidenceSourcePlane.DIRECT_CRAWL
+                    for e in evidence_b
+                )
+
+                # Both confirmed via direct crawl = valid multi-plane, skip
+                if tier_1_a and tier_1_b:
+                    continue
 
                 # Determine severity
                 severity = self._assess_plane_conflict_severity(
@@ -283,12 +297,21 @@ class ContradictionDetector:
     ) -> List[Contradiction]:
         """Check for conflicts between old and new evidence."""
         contradictions = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stale_threshold = now - timedelta(days=self.stale_threshold_days)
 
+        def is_recent(ts: datetime) -> bool:
+            """Check if timestamp is recent (after threshold)."""
+            if ts is None:
+                return False
+            # Handle timezone-naive timestamps by treating as UTC
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            return ts > stale_threshold
+
         # Split by recency
-        recent = [e for e in evidence if e.timestamp and e.timestamp > stale_threshold]
-        stale = [e for e in evidence if e.timestamp and e.timestamp <= stale_threshold]
+        recent = [e for e in evidence if is_recent(e.timestamp)]
+        stale = [e for e in evidence if e.timestamp and not is_recent(e.timestamp)]
 
         if not recent or not stale:
             return contradictions
@@ -347,11 +370,11 @@ class ContradictionDetector:
         if tier_1_a or tier_1_b:
             return ContradictionSeverity.HIGH
 
-        # Both have high confidence Tier 2 = MEDIUM
+        # Both have reasonable confidence Tier 2 = MEDIUM
         max_conf_a = max((e.confidence for e in evidence_a), default=0)
         max_conf_b = max((e.confidence for e in evidence_b), default=0)
 
-        if max_conf_a >= 0.80 and max_conf_b >= 0.80:
+        if max_conf_a >= 0.70 and max_conf_b >= 0.70:
             return ContradictionSeverity.MEDIUM
 
         # Otherwise LOW

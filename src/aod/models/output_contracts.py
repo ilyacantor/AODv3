@@ -266,6 +266,7 @@ class ClassificationMethod(str, Enum):
     How the fabric plane assignment was determined.
     """
     DIRECT_CRAWL = "direct_crawl"      # Found via plane catalog crawl
+    EVIDENCE_BASED = "evidence_based"  # Multiple evidence sources combined
     OBSERVED = "observed"              # Observed via observation plane signals
     INFERRED = "inferred"              # Inferred from asset category (legacy, demoted)
 
@@ -274,10 +275,13 @@ class PipeGovernanceStatus(str, Enum):
     """
     Governance status for a pipe connection.
     """
-    SANCTIONED = "sanctioned"       # Approved, managed connection
-    UNDER_REVIEW = "under_review"   # Pending governance review
-    SHADOW = "shadow"               # Unapproved/unknown connection
-    UNKNOWN = "unknown"             # Status not determined
+    SANCTIONED = "sanctioned"           # Approved, managed connection
+    GOVERNED = "governed"               # Confirmed via fabric plane crawl
+    KNOWN = "known"                     # High confidence evidence
+    UNDER_REVIEW = "under_review"       # Pending governance review
+    INVESTIGATION_NEEDED = "investigation_needed"  # Needs manual investigation
+    SHADOW = "shadow"                   # Unapproved/unknown connection
+    UNKNOWN = "unknown"                 # Status not determined
 
 
 class DriftStatus(str, Enum):
@@ -295,6 +299,10 @@ class ConnectivityModality(str, Enum):
 
     Determines the integration pattern for AAM connection strategy.
     """
+    API = "api"                              # Direct API calls (REST, GraphQL, SOAP)
+    DB = "db"                                # Database connection (SQL, query)
+    FILE = "file"                            # File-based transfer (S3, SFTP)
+    STREAM = "stream"                        # Event streaming (Kafka, Kinesis)
     CONTROL_PLANE = "control_plane"          # iPaaS recipes, orchestrated flows
     DECLARED_INTERFACE = "declared_interface" # API Gateway routes, managed APIs
     PASSIVE_SUBSCRIPTION = "passive_subscription"  # Event bus topics, streams

@@ -238,8 +238,16 @@ class CompositeConfidenceCalculator:
         evidence_list: List[FabricRoutingEvidence]
     ) -> tuple[float, Optional[datetime], Optional[datetime]]:
         """Calculate recency factor based on evidence age."""
-        now = datetime.utcnow()
-        timestamps = [e.timestamp for e in evidence_list if e.timestamp]
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+
+        def normalize_timestamp(ts: datetime) -> datetime:
+            """Ensure timestamp is timezone-aware (UTC)."""
+            if ts.tzinfo is None:
+                return ts.replace(tzinfo=timezone.utc)
+            return ts
+
+        timestamps = [normalize_timestamp(e.timestamp) for e in evidence_list if e.timestamp]
 
         if not timestamps:
             return 0.85, None, None  # Default if no timestamps
@@ -248,7 +256,7 @@ class CompositeConfidenceCalculator:
         newest = max(timestamps)
 
         # Use newest evidence for recency calculation
-        days_old = (now - newest).days if newest.tzinfo is None else (now.replace(tzinfo=newest.tzinfo) - newest).days
+        days_old = (now - newest).days
 
         # Find applicable threshold
         for threshold_days, factor in sorted(RECENCY_THRESHOLDS.items()):

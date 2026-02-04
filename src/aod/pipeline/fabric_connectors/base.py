@@ -120,7 +120,7 @@ class CrawledPipe:
     target_identifier: Optional[str] = None  # Where the plane routes TO (downstream)
 
     # Modality
-    modality: ConnectivityModality = ConnectivityModality.API
+    modality: ConnectivityModality = ConnectivityModality.DIRECT_P2P
 
     # Status
     is_active: bool = True
@@ -178,6 +178,10 @@ class DirectCrawlResult:
         raw_data: Optional[dict] = None
     ) -> FabricRoutingEvidence:
         """Helper to create Tier 1 evidence from crawl data."""
+        # Include asset_key in raw_data for reconciliation
+        raw_data_with_key = dict(raw_data) if raw_data else {}
+        raw_data_with_key["asset_key"] = asset_key
+
         evidence = FabricRoutingEvidence(
             evidence_id=f"dc_{self.vendor}_{len(self.evidence)}",
             source_plane=EvidenceSourcePlane.DIRECT_CRAWL,
@@ -187,7 +191,7 @@ class DirectCrawlResult:
             timestamp=self.crawl_started_at,
             fabric_plane_type=self.plane_type,
             fabric_plane_vendor=self.vendor,
-            raw_data=raw_data or {}
+            raw_data=raw_data_with_key
         )
         self.evidence.append(evidence)
         return evidence

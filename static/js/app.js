@@ -11,19 +11,6 @@
         let farmWakeCheckInterval = null;
         
         window.farmLiveMode = false;
-        let cachedFallbackSnapshot = null;
-        
-        async function loadFallbackSnapshot() {
-            try {
-                const response = await fetch('/config/snapshots/DataSystems-ZOP3.json');
-                if (!response.ok) throw new Error('Failed to load fallback snapshot');
-                cachedFallbackSnapshot = await response.json();
-                return cachedFallbackSnapshot;
-            } catch (e) {
-                console.error('Failed to load fallback snapshot:', e);
-                return null;
-            }
-        }
         
         function loadObservationPlaneCounts(snapshotData) {
             if (!snapshotData || !snapshotData.planes) {
@@ -2923,7 +2910,7 @@
                 const existingOptions = Array.from(select.options).map(o => o.value);
                 
                 tenants.forEach(t => {
-                    if (!existingOptions.includes(t) && t !== 'DataSystems-ZOP3') {
+                    if (!existingOptions.includes(t)) {
                         const opt = document.createElement('option');
                         opt.value = t;
                         opt.textContent = t;
@@ -2938,16 +2925,26 @@
         async function handleTenantChange() {
             const tenantId = document.getElementById('tenantSelect').value;
             
-            if (tenantId === 'DataSystems-ZOP3') {
-                if (!cachedFallbackSnapshot) {
-                    await loadFallbackSnapshot();
+            if (window.farmLiveMode && tenantId) {
+                try {
+                    const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                    if (snapshotsRes.ok) {
+                        const snapshotsData = await snapshotsRes.json();
+                        if (snapshotsData.snapshots && snapshotsData.snapshots.length > 0) {
+                            const latestSnapshot = snapshotsData.snapshots[0];
+                            const snapshotRes = await fetch(`/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantId)}&snapshot_id=${encodeURIComponent(latestSnapshot.snapshot_id)}`);
+                            if (snapshotRes.ok) {
+                                const snapshotData = await snapshotRes.json();
+                                loadObservationPlaneCounts(snapshotData);
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not load snapshot for tenant:', e);
                 }
-                loadObservationPlaneCounts(cachedFallbackSnapshot);
-            } else if (window.farmLiveMode) {
-                loadObservationPlaneCounts(null);
-            } else {
-                loadObservationPlaneCounts(cachedFallbackSnapshot);
             }
+            loadObservationPlaneCounts(null);
         }
         
         function updateTimingDisplay(runs) {
@@ -3298,74 +3295,39 @@
             btn.textContent = 'Running Discovery...';
             
             try {
-                let snapshotData = null;
-                
-                if (!cachedFallbackSnapshot) {
-                    await loadFallbackSnapshot();
-                }
-                
-                if (tenantId === 'DataSystems-ZOP3' && cachedFallbackSnapshot) {
-                    snapshotData = cachedFallbackSnapshot;
-                } else if (window.farmLiveMode) {
-                    const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
-                    const snapshotsData = await snapshotsRes.json();
-                    if (snapshotsData.snapshots && snapshotsData.snapshots.length > 0) {
-                        const latestSnapshot = snapshotsData.snapshots[0];
-                        const snapshotId = latestSnapshot.snapshot_id || latestSnapshot.id;
-                        
-                        const r = await fetch('/api/runs/from-farm', { 
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
-                            body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
-                        });
-                        
-                        const result = await r.json();
-                        
-                        if (!r.ok) {
-                            const errorDetail = result.detail || 'Farm fetch failed';
-                            if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
-                                showOutcome('upstream_error', errorDetail);
-                            } else if (errorDetail.includes('INVALID_INPUT_CONTRACT') || errorDetail.includes('INVALID_SNAPSHOT')) {
-                                showOutcome('invalid_snapshot', errorDetail);
-                            } else {
-                                showOutcome('failed', errorDetail);
-                            }
-                            return;
-                        }
-                        
-                        showOutcome(result.status, result.message);
-                        currentRunId = result.run_id; 
-                        await loadRuns();
-                        await selectRun(result.run_id);
-                        return;
-                    } else {
-                        showToast('No snapshots found for this tenant', 'error');
-                        return;
-                    }
-                } else {
-                    snapshotData = cachedFallbackSnapshot;
-                }
-                
-                if (!snapshotData) {
-                    showToast('No snapshot data available. Please try again.', 'error');
+                if (!window.farmLiveMode) {
+                    showToast('Please switch to Farm Live mode to fetch snapshots', 'error');
                     return;
                 }
                 
-                if (snapshotData.meta) {
-                    snapshotData.meta.tenant_id = tenantId;
+                const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                const snapshotsData = await snapshotsRes.json();
+                
+                if (!snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
+                    showToast('No snapshots found for this tenant', 'error');
+                    return;
                 }
                 
-                const r = await fetch('/api/runs/json', { 
+                const latestSnapshot = snapshotsData.snapshots[0];
+                const snapshotId = latestSnapshot.snapshot_id || latestSnapshot.id;
+                
+                const r = await fetch('/api/runs/from-farm', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify(snapshotData) 
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
                 });
                 
                 const result = await r.json();
                 
                 if (!r.ok) {
-                    const errorDetail = result.detail || 'Discovery failed';
-                    showOutcome('failed', errorDetail);
+                    const errorDetail = result.detail || 'Farm fetch failed';
+                    if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
+                        showOutcome('upstream_error', errorDetail);
+                    } else if (errorDetail.includes('INVALID_INPUT_CONTRACT') || errorDetail.includes('INVALID_SNAPSHOT')) {
+                        showOutcome('invalid_snapshot', errorDetail);
+                    } else {
+                        showOutcome('failed', errorDetail);
+                    }
                     return;
                 }
                 
@@ -3452,8 +3414,7 @@
         loadRuns(true);
         
         (async function initConsoleTab() {
-            await loadFallbackSnapshot();
-            loadObservationPlaneCounts(cachedFallbackSnapshot);
+            loadObservationPlaneCounts(null);
         })();
         
         setInterval(checkHealth, 30000);
@@ -3469,10 +3430,9 @@
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
-                await loadFallbackSnapshot();
-                loadObservationPlaneCounts(cachedFallbackSnapshot);
                 if (window.farmLiveMode) {
                     await populateTenantsFromFarm();
+                    await handleTenantChange();
                 }
                 showToast('Data refreshed', 'success');
             });

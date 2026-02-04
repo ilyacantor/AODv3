@@ -31,6 +31,7 @@ from ...models.input_contracts import Planes, ProxyLog, DNSRecord, Certificate
 from ...models.output_contracts import (
     FabricPlaneType,
     EvidenceSourcePlane,
+    EvidenceLeadType,
 )
 from .base import EvidenceCollector, EvidenceCollectionResult, CONFIDENCE_SCORES
 
@@ -304,6 +305,25 @@ class NetworkEvidenceCollector(EvidenceCollector):
         # Asset key is the source of the traffic (what's connecting TO the plane)
         asset_key = source_identifier
         result.add_evidence(asset_key, evidence)
+
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=source_identifier,
+            asset_name=source_identifier,
+            asset_domain=destination,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=vendor,
+            evidence_type=EvidenceLeadType.NETWORK_FLOW,
+            evidence_detail=f"Network traffic from {source_identifier} to {destination} suggests routing via {vendor} {plane_type.value}",
+            confidence=confidence,
+            raw_data={
+                "destination": destination,
+                "source": source_identifier,
+                "signal_type": signal_type,
+                **extra_data
+            }
+        )
+        result.add_evidence_lead(lead)
 
         # Also register the fabric plane if confident enough
         if confidence >= 0.80:

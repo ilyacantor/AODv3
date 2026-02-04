@@ -30,6 +30,7 @@ from ...models.input_contracts import Planes, CMDBConfigItem
 from ...models.output_contracts import (
     FabricPlaneType,
     EvidenceSourcePlane,
+    EvidenceLeadType,
 )
 from .base import EvidenceCollector, EvidenceCollectionResult, CONFIDENCE_SCORES
 
@@ -285,6 +286,26 @@ class CMDBEvidenceCollector(EvidenceCollector):
         asset_key = ci.domain or ci.name
         result.add_evidence(asset_key, evidence)
 
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=ci.ci_id,
+            asset_name=ci.name,
+            asset_domain=ci.domain,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=fabric_vendor,
+            evidence_type=EvidenceLeadType.CMDB_DEPENDENCY,
+            evidence_detail=f"CMDB declares '{ci.name}' integrates via {plane_type.value}"
+                          f"{' (' + fabric_vendor + ')' if fabric_vendor else ''}",
+            confidence=confidence,
+            raw_data={
+                "ci_id": ci.ci_id,
+                "ci_name": ci.name,
+                "integrates_via": integrates_via,
+                "fabric_vendor": fabric_vendor
+            }
+        )
+        result.add_evidence_lead(lead)
+
         # Register plane if vendor identified
         if fabric_vendor:
             plane = self._create_fabric_plane(
@@ -430,6 +451,24 @@ class CMDBEvidenceCollector(EvidenceCollector):
         asset_key = ci.domain or ci.name
         result.add_evidence(asset_key, evidence)
 
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=ci.ci_id,
+            asset_name=ci.name,
+            asset_domain=ci.domain,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=plane_vendor,
+            evidence_type=EvidenceLeadType.CMDB_DEPENDENCY,
+            evidence_detail=f"CMDB CI '{ci.name}' is {plane_type.value} infrastructure",
+            confidence=confidence,
+            raw_data={
+                "ci_id": ci.ci_id,
+                "ci_type": ci.ci_type,
+                "signal_type": signal_type
+            }
+        )
+        result.add_evidence_lead(lead)
+
         # Register plane if vendor identified
         if plane_vendor:
             plane = self._create_fabric_plane(
@@ -481,6 +520,24 @@ class CMDBEvidenceCollector(EvidenceCollector):
         # Asset key is the source CI (what routes through the plane)
         asset_key = ci.domain or ci.name
         result.add_evidence(asset_key, evidence)
+
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=ci.ci_id,
+            asset_name=ci.name,
+            asset_domain=ci.domain,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=plane_vendor,
+            evidence_type=EvidenceLeadType.CMDB_DEPENDENCY,
+            evidence_detail=f"CMDB dependency: '{ci.name}' → '{dependency_name}' indicates {plane_type.value} routing",
+            confidence=confidence,
+            raw_data={
+                "source_ci_id": ci.ci_id,
+                "dependency_name": dependency_name,
+                "dependency_type": dependency_type
+            }
+        )
+        result.add_evidence_lead(lead)
 
         logger.debug("cmdb_evidence.dependency_detected", extra={
             "ci_name": ci.name,

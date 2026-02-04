@@ -324,15 +324,20 @@ def detect_fabric_planes_evidence_based(
     """
     Evidence-based fabric plane detection (Feb 2026 Blueprint).
 
-    Three-phase discovery:
-    1. Observation Plane Harvest: Extract signals from Cloud, Network, Finance, etc.
-    2. Direct Plane Crawl: Query plane admin APIs (Kong, Workato, Snowflake)
-    3. Reconciliation: Cross-reference evidence, compute confidence, detect contradictions
+    RACI COMPLIANCE NOTE (Feb 2026):
+    - AOD owns: Fabric Plane IDENTIFICATION (detects planes exist)
+    - AOD owns: FabricPlaneTag assignment (which plane an asset routes via)
+    - AOD owns: Evidence Lead generation (hints for AAM)
+    - AAM owns: Pipe creation, direct plane crawl, connectivity
+
+    The Pipe return value is DEPRECATED and returns empty list for RACI compliance.
+    Pipe creation has been moved to AAM. Use evidence_leads from EvidenceCollectionResult
+    for connection hints that AAM can validate.
 
     Returns:
         - List of detected FabricPlane objects (the motherships)
         - Dict mapping asset_id -> FabricPlaneTag
-        - List of Pipe objects (SOR-to-plane connections with evidence)
+        - List[Pipe] - DEPRECATED: Always empty, preserved for API compatibility
     """
     logger.info("fabric_detector.evidence_based.start", extra={
         "asset_count": len(assets)
@@ -366,11 +371,15 @@ def detect_fabric_planes_evidence_based(
         "planes_detected": len(detected_planes),
         "shadow_planes": len(shadow_planes),
         "assets_tagged": len(asset_plane_tags),
-        "pipes_created": len(pipes),
-        "total_evidence": evidence_result.total_evidence_count
+        "pipes_created": 0,  # RACI: Pipe creation moved to AAM
+        "total_evidence": evidence_result.total_evidence_count,
+        "evidence_leads": evidence_result.evidence_lead_count
     })
 
-    return detected_planes, asset_plane_tags, pipes
+    # RACI Compliance: Return empty pipes list
+    # Pipe creation is AAM's responsibility, not AOD's
+    # Evidence leads in evidence_result capture the same information for AAM
+    return detected_planes, asset_plane_tags, []
 
 
 def _merge_direct_crawl_results(

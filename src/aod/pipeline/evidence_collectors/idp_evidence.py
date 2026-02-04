@@ -30,6 +30,7 @@ from ...models.input_contracts import Planes, IdPObject
 from ...models.output_contracts import (
     FabricPlaneType,
     EvidenceSourcePlane,
+    EvidenceLeadType,
 )
 from .base import EvidenceCollector, EvidenceCollectionResult, CONFIDENCE_SCORES
 
@@ -271,6 +272,24 @@ class IdPEvidenceCollector(EvidenceCollector):
         asset_key = idp_obj.domain or idp_obj.name
         result.add_evidence(asset_key, evidence)
 
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=idp_obj.idp_id,
+            asset_name=idp_obj.name,
+            asset_domain=idp_obj.domain,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=plane_vendor,
+            evidence_type=EvidenceLeadType.OAUTH_GRANT,
+            evidence_detail=f"IdP {auth_type} to {plane_vendor} {plane_type.value}",
+            confidence=confidence,
+            raw_data={
+                "idp_id": idp_obj.idp_id,
+                "idp_type": idp_obj.idp_type,
+                "is_service_auth": is_service_auth
+            }
+        )
+        result.add_evidence_lead(lead)
+
         # Register fabric plane
         plane = self._create_fabric_plane(
             plane_type=plane_type,
@@ -321,6 +340,24 @@ class IdPEvidenceCollector(EvidenceCollector):
         # Asset key is the SOURCE (what has the grant TO the fabric plane)
         asset_key = source_idp.domain or source_idp.name
         result.add_evidence(asset_key, evidence)
+
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=source_idp.idp_id,
+            asset_name=source_idp.name,
+            asset_domain=source_idp.domain,
+            suggested_plane_type=plane_type,
+            suggested_plane_product=plane_vendor,
+            evidence_type=EvidenceLeadType.OAUTH_GRANT,
+            evidence_detail=f"OAuth grant from '{source_idp.name}' to '{target_name}' suggests {plane_type.value} routing",
+            confidence=confidence,
+            raw_data={
+                "source_idp_id": source_idp.idp_id,
+                "target": target_name,
+                "scope": scope
+            }
+        )
+        result.add_evidence_lead(lead)
 
         logger.debug("idp_evidence.oauth_grant_detected", extra={
             "source": source_idp.name,

@@ -34,6 +34,7 @@ from ...models.input_contracts import Planes, Contract, Transaction, Vendor
 from ...models.output_contracts import (
     FabricPlaneType,
     EvidenceSourcePlane,
+    EvidenceLeadType,
 )
 from .base import EvidenceCollector, EvidenceCollectionResult, CONFIDENCE_SCORES
 
@@ -408,6 +409,26 @@ class FinanceEvidenceCollector(EvidenceCollector):
         # Asset key is the fabric plane itself (we're confirming its existence)
         asset_key = f"{plane_type.value}:{plane_vendor}"
         result.add_evidence(asset_key, evidence)
+
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        # Finance leads confirm plane EXISTENCE, not specific asset routing
+        lead = self._create_evidence_lead(
+            asset_id=identifier,
+            asset_name=f"{vendor_name} subscription",
+            suggested_plane_type=plane_type,
+            suggested_plane_product=plane_vendor,
+            evidence_type=EvidenceLeadType.FINANCE_SUBSCRIPTION,
+            evidence_detail=f"{'Shadow ' if is_shadow else ''}Finance subscription to {vendor_name}"
+                          f"{' (' + product_name + ')' if product_name else ''} confirms {plane_type.value} plane exists",
+            confidence=confidence,
+            raw_data={
+                "vendor": vendor_name,
+                "product": product_name,
+                "is_shadow": is_shadow,
+                **extra_data
+            }
+        )
+        result.add_evidence_lead(lead)
 
         # Register the fabric plane
         plane = self._create_fabric_plane(

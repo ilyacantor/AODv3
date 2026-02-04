@@ -20,6 +20,8 @@ from ...models.output_contracts import (
     FabricPlane,
     RoutingEvidenceTable,
     FabricPlaneRegistry,
+    EvidenceLead,
+    EvidenceLeadType,
     now_pst,
 )
 
@@ -51,9 +53,15 @@ class EvidenceCollectionResult:
 
     This is the Phase 1 output - used to feed Phase 2 (direct crawl)
     and Phase 3 (reconciliation).
+
+    RACI Compliance: AOD generates evidence and evidence_leads.
+    AAM validates evidence_leads via direct plane crawl.
     """
     # Per-asset evidence tables
     routing_evidence: Dict[str, RoutingEvidenceTable] = field(default_factory=dict)
+
+    # Evidence Leads for AAM (RACI Sprint) - connection hints for AAM to validate
+    evidence_leads: List[EvidenceLead] = field(default_factory=list)
 
     # Confirmed fabric planes (from all sources)
     fabric_plane_registry: FabricPlaneRegistry = field(
@@ -70,6 +78,7 @@ class EvidenceCollectionResult:
     total_evidence_count: int = 0
     evidence_by_source: Dict[str, int] = field(default_factory=dict)
     evidence_by_plane_type: Dict[str, int] = field(default_factory=dict)
+    evidence_lead_count: int = 0
 
     def add_evidence(
         self,
@@ -118,6 +127,16 @@ class EvidenceCollectionResult:
             existing = [p for p in self.fabric_plane_registry.planes if p.plane_id == plane.plane_id]
             if not existing:
                 self.fabric_plane_registry.planes.append(plane)
+
+    def add_evidence_lead(self, lead: EvidenceLead) -> None:
+        """
+        Add an evidence lead for AAM validation.
+
+        Evidence leads are connection hints that AAM will validate
+        against actual plane crawl results.
+        """
+        self.evidence_leads.append(lead)
+        self.evidence_lead_count += 1
 
 
 class EvidenceCollector(ABC):
@@ -192,6 +211,38 @@ class EvidenceCollector(ABC):
             managed_asset_count=0,
             evidence_refs=[],
             confidence=confidence
+        )
+
+    def _create_evidence_lead(
+        self,
+        asset_id: str,
+        asset_name: str,
+        suggested_plane_type: FabricPlaneType,
+        evidence_type: EvidenceLeadType,
+        evidence_detail: str,
+        confidence: float,
+        suggested_plane_product: Optional[str] = None,
+        asset_domain: Optional[str] = None,
+        raw_data: Optional[dict] = None
+    ) -> EvidenceLead:
+        """
+        Helper to create evidence lead records for AAM validation.
+
+        Evidence leads are connection hints that AOD generates from
+        observation plane data. AAM validates them via direct plane crawl.
+        """
+        return EvidenceLead(
+            lead_id=f"lead_{uuid4().hex[:12]}",
+            asset_id=asset_id,
+            asset_name=asset_name,
+            asset_domain=asset_domain,
+            suggested_plane_type=suggested_plane_type,
+            suggested_plane_product=suggested_plane_product,
+            evidence_source=self.source_plane,
+            evidence_type=evidence_type,
+            evidence_detail=evidence_detail,
+            confidence=confidence,
+            raw_data=raw_data
         )
 
 

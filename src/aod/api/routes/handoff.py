@@ -32,6 +32,9 @@ from src.aod.models.output_contracts import (
     CandidateSORTagging,
     CandidatePipeEvidence,
     CandidateFabricPlaneSummary,
+    EvidenceLead,
+    FabricPlaneRegistryEntry,
+    ConnectionCandidatePayload,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,11 +188,15 @@ class SORSummary(BaseModel):
 class AAMCandidatesResponse(BaseModel):
     """
     Response for AAM candidates export.
-    
+
     Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
     provided for clarity in the new DiscoveryScan terminology.
-    
+
     Includes Farm's authoritative fabric_planes and systems_of_record data.
+
+    RACI Compliance (Feb 2026):
+    - evidence_leads: Connection hints for AAM to validate via plane crawl
+    - fabric_plane_registry: Detected planes (AOD identifies, AAM connects)
     """
     run_id: str
     scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
@@ -197,6 +204,12 @@ class AAMCandidatesResponse(BaseModel):
     count: int
     fabric_planes: List[FabricPlaneSummary] = Field(default_factory=list, description="Farm's authoritative fabric planes")
     systems_of_record: List[SORSummary] = Field(default_factory=list, description="Farm's authoritative Systems of Record")
+
+    # RACI Sprint additions - Evidence Lead Export
+    evidence_leads: List[EvidenceLead] = Field(default_factory=list, description="Connection hints for AAM to validate")
+    fabric_plane_registry: List[FabricPlaneRegistryEntry] = Field(default_factory=list, description="Detected fabric planes")
+    enterprise_preset: str = Field(default="preset_unknown", description="Inferred org architecture pattern")
+    preset_confidence: float = Field(default=0.0, description="Preset inference confidence")
 
 
 def infer_category(asset) -> Optional[str]:

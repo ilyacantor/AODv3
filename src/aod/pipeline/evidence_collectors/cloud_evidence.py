@@ -29,6 +29,7 @@ from ...models.input_contracts import Planes, CloudResource
 from ...models.output_contracts import (
     FabricPlaneType,
     EvidenceSourcePlane,
+    EvidenceLeadType,
 )
 from .base import EvidenceCollector, EvidenceCollectionResult, CONFIDENCE_SCORES
 
@@ -243,6 +244,24 @@ class CloudEvidenceCollector(EvidenceCollector):
         # Asset key is the resource itself (fabric plane infrastructure)
         asset_key = resource.uri or resource.name or resource.resource_id
         result.add_evidence(asset_key, evidence)
+
+        # Generate EvidenceLead for AAM validation (RACI Sprint)
+        lead = self._create_evidence_lead(
+            asset_id=resource.resource_id,
+            asset_name=resource.name,
+            asset_domain=self._extract_domain(resource),
+            suggested_plane_type=plane_type,
+            suggested_plane_product=vendor,
+            evidence_type=EvidenceLeadType.CLOUD_RESOURCE,
+            evidence_detail=f"Cloud resource '{resource.name}' ({resource.resource_type}) indicates {plane_type.value} infrastructure",
+            confidence=confidence,
+            raw_data={
+                "resource_id": resource.resource_id,
+                "resource_type": resource.resource_type,
+                "provider": resource.provider
+            }
+        )
+        result.add_evidence_lead(lead)
 
         # Also register the detected fabric plane
         plane = self._create_fabric_plane(

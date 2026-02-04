@@ -271,6 +271,69 @@ class ClassificationMethod(str, Enum):
     INFERRED = "inferred"              # Inferred from asset category (legacy, demoted)
 
 
+class EvidenceLeadType(str, Enum):
+    """
+    What kind of connection hint this evidence lead represents.
+
+    AOD generates these from observation plane data.
+    AAM validates them against actual plane crawl results.
+    """
+    NETWORK_FLOW = "network_flow"           # Traffic observed to a plane endpoint
+    OAUTH_GRANT = "oauth_grant"             # IdP shows OAuth client authorized on a plane
+    CMDB_DEPENDENCY = "cmdb_dependency"     # CMDB says "App X integrates via MuleSoft"
+    FINANCE_SUBSCRIPTION = "finance_subscription"  # Finance shows iPaaS/gateway subscription
+    CLOUD_RESOURCE = "cloud_resource"       # Cloud inventory shows plane infrastructure
+
+
+class EvidenceLead(BaseModel):
+    """
+    A hint that an asset MAY connect through a specific fabric plane.
+
+    AOD generates these from observation plane data during discovery.
+    AAM validates them against actual plane crawl results.
+
+    This is the key handoff artifact for RACI compliance:
+    - AOD owns: generating evidence leads from observation planes
+    - AAM owns: validating leads via direct plane crawl
+    """
+    lead_id: str = Field(description="Unique evidence lead identifier")
+    asset_id: str = Field(description="Which discovered asset this hint is about")
+    asset_domain: Optional[str] = Field(default=None, description="Asset domain e.g. salesforce.com")
+    asset_name: str = Field(description="Asset display name")
+
+    # Suggested fabric plane routing
+    suggested_plane_type: FabricPlaneType = Field(description="Suggested fabric plane: IPAAS, API_GATEWAY, etc.")
+    suggested_plane_product: Optional[str] = Field(default=None, description="Suggested vendor: Workato, Kong, etc.")
+
+    # Evidence source
+    evidence_source: EvidenceSourcePlane = Field(description="Which observation plane produced this")
+    evidence_type: EvidenceLeadType = Field(description="What kind of signal")
+    evidence_detail: str = Field(description="Human-readable description of the signal")
+
+    # Confidence and timing
+    confidence: float = Field(ge=0.0, le=1.0, description="How strong the hint is (0.0-1.0)")
+    observed_at: datetime = Field(default_factory=now_pst, description="When the signal was observed")
+
+    # Raw data for debugging
+    raw_data: Optional[dict] = Field(default=None, description="Raw signal data for audit")
+
+
+class FabricPlaneRegistryEntry(BaseModel):
+    """
+    A detected fabric plane instance for the handoff registry.
+
+    AOD detects these planes exist via domain matching, cloud inventory, etc.
+    AAM connects to them to crawl their catalogs.
+    """
+    plane_type: FabricPlaneType = Field(description="IPAAS, API_GATEWAY, EVENT_BUS, DATA_WAREHOUSE")
+    product: str = Field(description="Workato, Kong, Snowflake, Kafka, etc.")
+    endpoint: Optional[str] = Field(default=None, description="Management API endpoint if known")
+    domain: Optional[str] = Field(default=None, description="Plane domain e.g. workato.com")
+    detection_evidence: List[str] = Field(default_factory=list, description="Why AOD thinks this plane exists")
+    is_shadow: bool = Field(default=False, description="True if not in CMDB/finance (rogue Zapier, etc.)")
+    confidence: float = Field(ge=0.0, le=1.0, default=0.0, description="Detection confidence")
+
+
 class PipeGovernanceStatus(str, Enum):
     """
     Governance status for a pipe connection.
@@ -635,6 +698,80 @@ class ConnectionCandidate(BaseModel):
         default=None,
         description="Summary of fabric plane classification"
     )
+
+    # Evidence leads for AAM validation (RACI Sprint)
+    evidence_leads: list["EvidenceLead"] = Field(
+        default_factory=list,
+        description="Connection hints for AAM to validate via plane crawl"
+    )
+
+
+class ConnectionCandidatePayload(BaseModel):
+    """
+    The full AOD → AAM handoff payload.
+
+    This is the complete data package that AOD sends to AAM for connection
+    provisioning. AAM receives the full inventory but AOD does NOT decide
+    how to connect - that's AAM's job.
+
+    RACI Compliance:
+    - AOD is A/R for: asset discovery, fabric plane identification, evidence lead generation
+    - AAM is A/R for: plane crawl, pipe creation, connection provisioning
+    """
+    run_id: str = Field(description="Discovery run identifier")
+    tenant_id: str = Field(description="Tenant identifier")
+    timestamp: datetime = Field(default_factory=now_pst, description="Handoff timestamp")
+
+    # Asset catalog — the discovered inventory
+    candidates: list[ConnectionCandidate] = Field(
+        default_factory=list,
+        description="Connection candidates with governance status and SOR scores"
+    )
+
+    # Fabric Plane Registry — detected planes (AOD identifies, AAM connects)
+    fabric_planes: list[FabricPlaneRegistryEntry] = Field(
+        default_factory=list,
+        description="Detected fabric plane instances"
+    )
+
+    # Enterprise Preset — inferred architecture type
+    enterprise_preset: str = Field(
+        default="preset_unknown",
+        description="Inferred org pattern: preset_8_ipaas, preset_11_warehouse, etc."
+    )
+    preset_confidence: float = Field(
+        default=0.0,
+        ge=0.0, le=1.0,
+        description="Confidence in preset inference"
+    )
+    preset_rationale: str = Field(
+        default="",
+        description="Why this preset was inferred"
+    )
+
+    # Evidence Leads — connection hints for AAM to validate
+    evidence_leads: list[EvidenceLead] = Field(
+        default_factory=list,
+        description="All evidence leads from observation planes"
+    )
+
+    # Findings — issues discovered during scan
+    findings: list[CandidateFinding] = Field(
+        default_factory=list,
+        description="Discovery findings (identity gaps, finance gaps, etc.)"
+    )
+
+    # Policy Manifest — governance rules for AAM to enforce
+    policy_manifest: dict = Field(
+        default_factory=dict,
+        description="Governance policies for AAM connection decisions"
+    )
+
+    # Statistics
+    total_assets: int = Field(default=0, description="Total assets discovered")
+    governed_count: int = Field(default=0, description="Assets with governed status")
+    shadow_count: int = Field(default=0, description="Shadow IT assets")
+    sor_count: int = Field(default=0, description="Identified Systems of Record")
 
 
 class Asset(BaseModel):

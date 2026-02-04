@@ -851,15 +851,17 @@ async def execute_pipeline(
         assets = propagate_vendor_governance_farm_style(assets, logger)
         timings['vendor_governance'] = time.perf_counter() - t_start
         
-        # Stage 4: Fabric Plane Detection
-        # Identify Control Planes (motherships) - AAM connects to Fabric Planes, not apps
+        # Stage 4: Evidence-Based Fabric Plane Detection (Feb 2026 Blueprint)
+        # Three-phase: Observation harvest -> Direct crawl -> Reconciliation
+        # Returns fabric planes, asset tags, and pipes (SOR-to-plane routing)
         t_start = time.perf_counter()
-        fabric_planes, asset_plane_tags = detect_fabric_planes(assets)
+        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(snapshot, assets)
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
         logger.info("fabric_detection.complete", extra={
             "run_id": run_id,
             "fabric_planes_count": len(fabric_planes),
             "asset_plane_tags_count": len(asset_plane_tags),
+            "pipes_count": len(pipes),
             "fabric_planes": [p.plane_id for p in fabric_planes]
         })
         timings['fabric_detection'] = time.perf_counter() - t_start

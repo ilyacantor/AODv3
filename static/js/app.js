@@ -10,7 +10,7 @@
         let farmWakingToast = null;
         let farmWakeCheckInterval = null;
         
-        window.farmLiveMode = false;
+        window.farmLiveMode = true;
         
         function loadObservationPlaneCounts(snapshotData) {
             if (!snapshotData || !snapshotData.planes) {
@@ -3237,23 +3237,9 @@
         
         document.getElementById('tenantSelect').addEventListener('change', handleTenantChange);
         
-        document.getElementById('farmConnectionToggle').addEventListener('change', async (e) => {
-            window.farmLiveMode = e.target.checked;
-            const farmRefreshSection = document.getElementById('farmRefreshSection');
-            
-            if (window.farmLiveMode) {
-                farmRefreshSection.classList.remove('hidden');
-                await populateTenantsFromFarm();
-            } else {
-                farmRefreshSection.classList.add('hidden');
-            }
-        });
-        
         document.getElementById('refreshFromFarmBtn')?.addEventListener('click', async () => {
-            if (window.farmLiveMode) {
-                await populateTenantsFromFarm();
-                showToast('Refreshed from Farm', 'success');
-            }
+            await populateTenantsFromFarm();
+            showToast('Refreshed from Farm', 'success');
         });
         
         document.getElementById('clearAllRuns').addEventListener('click', async () => {
@@ -3295,11 +3281,6 @@
             btn.textContent = 'Running Discovery...';
             
             try {
-                if (!window.farmLiveMode) {
-                    showToast('Please switch to Farm Live mode to fetch snapshots', 'error');
-                    return;
-                }
-                
                 const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
                 const snapshotsData = await snapshotsRes.json();
                 
@@ -3415,6 +3396,7 @@
         
         (async function initConsoleTab() {
             loadObservationPlaneCounts(null);
+            await populateTenantsFromFarm();
         })();
         
         setInterval(checkHealth, 30000);

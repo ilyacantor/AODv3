@@ -1618,7 +1618,19 @@ main { padding: 2rem; }
     color: var(--cyan-400);
 }
 
-/* Farm Toggle */
+/* Farm Live Badge */
+.farm-live-badge {
+    background: linear-gradient(135deg, var(--cyan-500), var(--cyan-400));
+    color: var(--slate-900);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Farm Toggle (legacy) */
 .farm-toggle {
     display: flex;
     align-items: center;

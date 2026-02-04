@@ -3237,11 +3237,6 @@
         
         document.getElementById('tenantSelect').addEventListener('change', handleTenantChange);
         
-        document.getElementById('refreshFromFarmBtn')?.addEventListener('click', async () => {
-            await populateTenantsFromFarm();
-            showToast('Refreshed from Farm', 'success');
-        });
-        
         document.getElementById('clearAllRuns').addEventListener('click', async () => {
             if (!confirm('Delete all discovery runs? This cannot be undone.')) return;
             const btn = document.getElementById('clearAllRuns');

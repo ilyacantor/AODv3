@@ -573,6 +573,7 @@ class AAMExportCandidate(BaseModel):
 class AAMExportRequest(BaseModel):
     """Request body for AAM /api/handoff/aod/receive"""
     run_id: str
+    snapshot_name: Optional[str] = None
     candidates: List[AAMExportCandidate]
 
 
@@ -659,6 +660,7 @@ async def export_to_aam(
     
     export_payload = AAMExportRequest(
         run_id=run_id,
+        snapshot_name=run.tenant_id,
         candidates=aam_candidates
     )
     

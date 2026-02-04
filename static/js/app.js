@@ -1388,19 +1388,12 @@
         function initHandoffTab() {
             const handoffSelect = document.getElementById('handoffRunSelect');
             const handoffStatusFilter = document.getElementById('handoffStatusFilter');
-            const loadBtn = document.getElementById('loadHandoffBtn');
             const exportBtn = document.getElementById('exportToAAMBtn');
             
-            if (!handoffSelect || !loadBtn) {
+            if (!handoffSelect) {
                 console.error('Handoff tab elements not found');
                 return;
             }
-            
-            loadBtn.addEventListener('click', () => {
-                const runId = handoffSelect.value;
-                const statusFilter = handoffStatusFilter.value;
-                if (runId) loadHandoffCandidates(runId, statusFilter);
-            });
             
             handoffSelect.addEventListener('change', () => {
                 const runId = handoffSelect.value;

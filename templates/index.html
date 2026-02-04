@@ -57,7 +57,14 @@
                 <p>The Console is your command center for running asset discovery. Here you fetch data from various sources and process it through AOD's discovery engine to build a complete inventory of your organization's software assets.</p>
                 
                 <h4>How Discovery Works</h4>
-                <p>AOD collects signals from multiple sources — identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories. It then correlates these signals to identify unique applications, even when they're named differently across sources.</p>
+                <p>AOD uses a <strong>3-Tier Evidence System</strong> to collect and rank signals from multiple sources — identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories. It then correlates these signals to identify unique applications and determine how they connect through fabric planes.</p>
+                
+                <h4>3-Tier Evidence Confidence</h4>
+                <ul>
+                    <li><strong>Tier 1 (0.95 confidence):</strong> Direct fabric plane catalog crawl — authoritative evidence from plane admin APIs (MuleSoft, Kong, Snowflake).</li>
+                    <li><strong>Tier 2 (0.70-0.90 confidence):</strong> Observation plane signals — network traffic, cloud inventory, finance records, OAuth grants.</li>
+                    <li><strong>Tier 3 (0.30-0.50 confidence):</strong> Category-based inference — last resort, explicitly flagged as hypothesis requiring investigation.</li>
+                </ul>
                 
                 <h4>Key Concepts</h4>
                 <ul>
@@ -273,12 +280,20 @@
                 </div>
                 <div class="user-guide-content">
                     <h4>What This Tab Does</h4>
-                    <p>The Triage console is where you make decisions about discovered assets. AOD surfaces issues that need human judgment before assets can be safely connected to your integration platform (AAM). Think of it as a security checkpoint.</p>
+                    <p>The Triage console is where you make decisions about discovered assets. AOD surfaces issues that need human judgment before assets can be safely connected to your integration platform (AAM). Think of it as a security checkpoint, with decisions informed by evidence confidence.</p>
+                    
+                    <h4>How Evidence Tiers Affect Triage</h4>
+                    <p>The 3-tier evidence system directly impacts which workqueue assets land in:</p>
+                    <ul>
+                        <li><strong>Tier 1 Evidence (0.95):</strong> High-confidence classifications rarely need triage. Direct fabric plane confirmation means AAM can auto-connect.</li>
+                        <li><strong>Tier 2 Evidence (0.70-0.90):</strong> Good confidence from observation planes. May route to "Judgment Required" for validation before connection.</li>
+                        <li><strong>Tier 3 Evidence (0.30-0.50):</strong> Low-confidence inferences always require human review. These appear in "Blocking" until validated.</li>
+                    </ul>
                     
                     <h4>The Three Workqueues</h4>
                     <ul>
-                        <li><strong>Blocking — Cannot Connect:</strong> Critical issues that prevent automatic connection. These assets have identity gaps (users accessing without SSO), unaccounted spending, or conflicting data from multiple sources. AAM will not connect these until resolved.</li>
-                        <li><strong>Judgment Required:</strong> Assets that could connect but need human review first. Includes zombies (inactive but still licensed), duplicates, and ambiguous classifications. You decide: keep, retire, or investigate further.</li>
+                        <li><strong>Blocking — Cannot Connect:</strong> Critical issues that prevent automatic connection. Includes assets with identity gaps, unaccounted spending, conflicting data, or Tier 3 evidence only. AAM will not connect these until resolved.</li>
+                        <li><strong>Judgment Required:</strong> Assets that could connect but need human review first. Includes zombies (inactive but still licensed), duplicates, ambiguous classifications, and assets with multiple conflicting pipes. You decide: keep, retire, or investigate further.</li>
                         <li><strong>Informational — Non-Blocking:</strong> Minor issues that don't prevent connection but should be acknowledged. CMDB gaps, missing ownership, governance hygiene items. These can be batch-acknowledged.</li>
                     </ul>
                     
@@ -386,7 +401,15 @@
                 </div>
                 <div class="user-guide-content">
                     <h4>What This Tab Does</h4>
-                    <p>The Policy Switchboard controls how AOD classifies assets and generates findings. These rules determine what gets flagged as Shadow IT, when an asset is considered a Zombie, and what issues trigger blocking vs. informational alerts.</p>
+                    <p>The Policy Switchboard controls how AOD classifies assets and generates findings. These rules determine what gets flagged as Shadow IT, when an asset is considered a Zombie, and what issues trigger blocking vs. informational alerts — all informed by evidence confidence thresholds.</p>
+                    
+                    <h4>Evidence Confidence Thresholds</h4>
+                    <p>Policy settings control the minimum confidence required for automatic classification:</p>
+                    <ul>
+                        <li><strong>Auto-Connect Threshold (default: 0.70):</strong> Fabric plane assignments at or above this confidence can auto-connect. Below this, assets route to triage.</li>
+                        <li><strong>Tier 3 Review Required:</strong> Any asset with only Tier 3 (inferred) evidence is automatically flagged for human review, regardless of other settings.</li>
+                        <li><strong>No Default to iPaaS:</strong> Unknown assets get NO fabric plane assignment — they are flagged for investigation rather than guessed.</li>
+                    </ul>
                     
                     <h4>Policy Categories</h4>
                     <ul>
@@ -433,20 +456,19 @@
                 </div>
                 <div class="user-guide-content">
                     <h4>What This Tab Does</h4>
-                    <p>The Handoff tab is where AOD transfers its discovery results to AAM (Adaptive API Mesh). Every discovered asset becomes a "Connection Candidate" that AAM will use to establish integrations. This is the bridge between knowing what exists and actually connecting to it.</p>
+                    <p>The Handoff tab is where AOD transfers its discovery results to AAM (Adaptive API Mesh). Every discovered asset becomes a "Connection Candidate" with one or more "Pipes" — connection routes through fabric planes, each with its own evidence and confidence score.</p>
                     
-                    <h4>Understanding Connection Candidates</h4>
-                    <p>Each candidate represents a single discovered asset with all the information AAM needs to connect:</p>
+                    <h4>The Pipes Model</h4>
+                    <p>Assets can have multiple connection routes ("pipes") through different fabric planes. Each pipe includes:</p>
                     <ul>
-                        <li><strong>Asset Key:</strong> The canonical identifier (usually the primary domain)</li>
-                        <li><strong>Governance Status:</strong> Governed, Shadow, Zombie, or Edge</li>
-                        <li><strong>Execution Signal:</strong> Whether AAM should auto-connect or wait for human approval</li>
-                        <li><strong>Findings:</strong> Any issues discovered during triage</li>
-                        <li><strong>SOR Tagging:</strong> Whether this asset is a System of Record for a data domain</li>
+                        <li><strong>Fabric Plane:</strong> The integration mothership (iPaaS, API Gateway, Warehouse, Event Bus)</li>
+                        <li><strong>Evidence Tier:</strong> How AOD discovered this connection (Tier 1 direct, Tier 2 observed, Tier 3 inferred)</li>
+                        <li><strong>Confidence Score:</strong> Composite confidence from 0.30 (hypothesis) to 0.95 (authoritative)</li>
+                        <li><strong>Evidence Trail:</strong> Attached records showing exactly what signals support this classification</li>
                     </ul>
                     
-                    <h4>Fabric Planes</h4>
-                    <p>AOD identifies "Fabric Planes" — integration motherships that aggregate many other applications. Instead of connecting to 500 individual apps, AAM can connect to 3-4 fabric planes that already have access to everything:</p>
+                    <h4>Fabric Planes First Strategy</h4>
+                    <p>AOD finds control planes (MuleSoft, Kong, Snowflake, Kafka) BEFORE individual endpoints. Finding 500 APIs is less valuable than discovering they're all managed by one MuleSoft instance:</p>
                     <ul>
                         <li><strong>iPaaS:</strong> Integration platforms like MuleSoft, Workato, Tray.io</li>
                         <li><strong>API Gateway:</strong> API management platforms like Kong, Apigee, AWS API Gateway</li>
@@ -454,17 +476,18 @@
                         <li><strong>Event Bus:</strong> Streaming platforms like Kafka, AWS EventBridge, Azure Event Hubs</li>
                     </ul>
                     
-                    <h4>Execution Signals</h4>
+                    <h4>Evidence-Based Execution Signals</h4>
                     <ul>
-                        <li><strong>provision (green):</strong> No blocking issues. AAM can auto-connect this asset.</li>
-                        <li><strong>inventory_only (amber):</strong> Blocking findings exist. AAM receives this for visibility but will not connect until triage is resolved.</li>
+                        <li><strong>provision (green):</strong> Tier 1 or Tier 2 evidence with confidence ≥0.70. AAM can auto-connect this asset.</li>
+                        <li><strong>inventory_only (amber):</strong> Tier 3 evidence only, or blocking findings exist. AAM receives for visibility but awaits triage resolution.</li>
+                        <li><strong>No Fabric Plane:</strong> Assets without sufficient evidence get NO assignment — flagged for investigation, not guessed.</li>
                     </ul>
                     
                     <h4>Exporting to AAM</h4>
-                    <p>Click "Export to AAM" to send all connection candidates for the selected run. AAM receives the complete inventory — both provision-ready and inventory-only candidates. AAM uses the execution signals to determine which assets to connect automatically vs. which to hold for human review.</p>
+                    <p>Click "Export to AAM" to send all connection candidates with their pipes and evidence. AAM receives the complete inventory including evidence trails, using confidence scores to prioritize which fabric plane routes to establish first.</p>
                     
                     <div class="guide-tip">
-                        <strong>Tip:</strong> Use the status filter to see only candidates that need attention before export.
+                        <strong>Tip:</strong> Review assets with Tier 3 evidence before export — these are hypotheses that benefit from human validation.
                     </div>
                 </div>
             </div>

@@ -917,7 +917,56 @@ async def execute_pipeline(
             "primary_plane": preset_context.primary_plane,
             "fabric_planes_detected": len(fabric_planes)
         })
-        
+
+        # Stage 6: Evidence Collection for AAM Handoff (RACI Sprint)
+        # Run evidence collection to generate EvidenceLeads for AAM validation
+        t_start = time.perf_counter()
+        evidence_result = collect_all_evidence(snapshot)
+        timings['evidence_collection'] = time.perf_counter() - t_start
+        logger.info("evidence_collection.complete", extra={
+            "run_id": run_id,
+            "evidence_lead_count": evidence_result.evidence_lead_count,
+            "fabric_planes_detected": len(evidence_result.fabric_plane_registry.planes),
+            "shadow_candidates": len(evidence_result.shadow_plane_candidates)
+        })
+
+        # Store evidence data in run_log.input_meta for AAM handoff endpoint
+        # This enables /handoff/aam/candidates to return the full ConnectionCandidatePayload
+        run_log.input_meta["_aod_evidence_leads"] = [
+            lead.model_dump(mode='json') for lead in evidence_result.evidence_leads
+        ]
+        run_log.input_meta["_aod_fabric_plane_registry"] = [
+            {
+                "plane_type": plane.plane_type.value,
+                "product": plane.vendor,
+                "endpoint": None,
+                "domain": plane.domain,
+                "detection_evidence": plane.evidence_refs[:5],
+                "is_shadow": False,
+                "confidence": plane.confidence
+            }
+            for plane in evidence_result.fabric_plane_registry.planes
+        ] + [
+            {
+                "plane_type": plane.plane_type.value,
+                "product": plane.vendor,
+                "endpoint": None,
+                "domain": plane.domain,
+                "detection_evidence": plane.evidence_refs[:5],
+                "is_shadow": True,
+                "confidence": plane.confidence
+            }
+            for plane in evidence_result.shadow_plane_candidates
+        ]
+        run_log.input_meta["_aod_preset_context"] = {
+            "preset": preset_context.preset.value,
+            "confidence": preset_context.confidence,
+            "rationale": preset_context.rationale,
+            "primary_plane": preset_context.primary_plane,
+            "density_scores": preset_context.density_scores,
+            "evidence": preset_context.evidence
+        }
+
         # Stage 1 Metrics: Track CMDB external_ref domain injection
         stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)
         logger.info("stage1.cmdb_external_ref_metrics", extra={

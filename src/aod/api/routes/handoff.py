@@ -551,21 +551,63 @@ async def export_aam_candidates(
         for s in farm_sors
     ]
     
+    # RACI Sprint: Retrieve evidence data from pipeline execution
+    # This data was stored in run_log.input_meta during pipeline execution
+    evidence_leads_raw = input_meta.get("_aod_evidence_leads", [])
+    fabric_plane_registry_raw = input_meta.get("_aod_fabric_plane_registry", [])
+    preset_context_raw = input_meta.get("_aod_preset_context", {})
+
+    # Reconstruct EvidenceLead objects from stored JSON
+    evidence_leads_out: List[EvidenceLead] = []
+    for lead_data in evidence_leads_raw:
+        try:
+            evidence_leads_out.append(EvidenceLead.model_validate(lead_data))
+        except Exception as e:
+            logger.warning("handoff.aam_candidates.evidence_lead_parse_error", extra={
+                "run_id": run_id,
+                "error": str(e),
+                "lead_data": str(lead_data)[:200]
+            })
+
+    # Reconstruct FabricPlaneRegistryEntry objects from stored JSON
+    fabric_plane_registry_out: List[FabricPlaneRegistryEntry] = []
+    for entry_data in fabric_plane_registry_raw:
+        try:
+            fabric_plane_registry_out.append(FabricPlaneRegistryEntry.model_validate(entry_data))
+        except Exception as e:
+            logger.warning("handoff.aam_candidates.registry_entry_parse_error", extra={
+                "run_id": run_id,
+                "error": str(e),
+                "entry_data": str(entry_data)[:200]
+            })
+
+    # Extract preset information
+    enterprise_preset = preset_context_raw.get("preset", "preset_unknown")
+    preset_confidence = preset_context_raw.get("confidence", 0.0)
+
     logger.info("handoff.aam_candidates.exported", extra={
         "run_id": run_id,
         "candidate_count": len(candidates),
         "fabric_plane_count": len(fabric_plane_summaries),
         "sor_count": len(sor_summaries),
+        "evidence_lead_count": len(evidence_leads_out),
+        "fabric_registry_count": len(fabric_plane_registry_out),
+        "enterprise_preset": enterprise_preset,
         "status_filter": status_filter or "active"
     })
-    
+
     return AAMCandidatesResponse(
         run_id=run_id,
         scan_session_id=run_id,
         candidates=candidates,
         count=len(candidates),
         fabric_planes=fabric_plane_summaries,
-        systems_of_record=sor_summaries
+        systems_of_record=sor_summaries,
+        # RACI Sprint additions - Full ConnectionCandidatePayload
+        evidence_leads=evidence_leads_out,
+        fabric_plane_registry=fabric_plane_registry_out,
+        enterprise_preset=enterprise_preset,
+        preset_confidence=preset_confidence
     )
 
 

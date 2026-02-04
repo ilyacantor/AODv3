@@ -2907,16 +2907,42 @@
                 }
                 
                 const tenants = tenantsData.tenants || [];
-                const existingOptions = Array.from(select.options).map(o => o.value);
                 
-                tenants.forEach(t => {
-                    if (!existingOptions.includes(t)) {
-                        const opt = document.createElement('option');
-                        opt.value = t;
-                        opt.textContent = t;
-                        select.appendChild(opt);
+                // Clear dropdown and add placeholder
+                select.innerHTML = '<option value="">Select a tenant...</option>';
+                
+                // Fetch all snapshots to find the latest one
+                let latestTenant = null;
+                try {
+                    const snapshotsRes = await fetch('/api/farm/all-snapshots');
+                    const allSnapshots = await snapshotsRes.json();
+                    if (Array.isArray(allSnapshots) && allSnapshots.length > 0) {
+                        // Find the most recent snapshot
+                        allSnapshots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        latestTenant = allSnapshots[0].tenant_id;
                     }
+                } catch (e) {
+                    console.warn('Could not fetch snapshot dates:', e);
+                }
+                
+                // Add tenants to dropdown, marking the latest with ★
+                tenants.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    if (t === latestTenant) {
+                        opt.textContent = `★ ${t} (Latest)`;
+                    } else {
+                        opt.textContent = t;
+                    }
+                    select.appendChild(opt);
                 });
+                
+                // Auto-select the latest tenant
+                if (latestTenant && tenants.includes(latestTenant)) {
+                    select.value = latestTenant;
+                    // Trigger change to load observation counts
+                    await handleTenantChange();
+                }
             } catch (e) {
                 console.warn('Could not fetch Farm tenants:', e);
             }

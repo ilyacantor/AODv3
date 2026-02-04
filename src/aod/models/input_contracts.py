@@ -100,6 +100,8 @@ class CMDBConfigItem(BaseModel):
     domain: Optional[str] = None
     canonical_domain: Optional[str] = None  # Jan 2026: Farm's correlation field linking to discovery domain
     domains: list[str] = Field(default_factory=list)  # Jan 2026 Phase B: All authoritative domains from Farm
+    integrates_via: Optional[str] = None  # Feb 2026: Fabric plane type (ipaas, api_gateway, event_bus, data_warehouse)
+    fabric_vendor: Optional[str] = None  # Feb 2026: Specific fabric vendor (workato, mulesoft, kong, etc.)
     raw_data: Optional[dict[str, Any]] = None
 
 

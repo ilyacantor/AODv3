@@ -89,6 +89,20 @@ FABRIC_PLANE_VENDORS: Dict[str, Tuple[FabricPlaneType, str, float]] = {
     "databricks": (FabricPlaneType.DATA_WAREHOUSE, "databricks", 0.90),
 }
 
+# Mapping from integrates_via field values to FabricPlaneType
+INTEGRATES_VIA_MAPPING: Dict[str, FabricPlaneType] = {
+    "ipaas": FabricPlaneType.IPAAS,
+    "api_gateway": FabricPlaneType.API_GATEWAY,
+    "event_bus": FabricPlaneType.EVENT_BUS,
+    "data_warehouse": FabricPlaneType.DATA_WAREHOUSE,
+    # Alternative spellings
+    "apigateway": FabricPlaneType.API_GATEWAY,
+    "eventbus": FabricPlaneType.EVENT_BUS,
+    "datawarehouse": FabricPlaneType.DATA_WAREHOUSE,
+    "warehouse": FabricPlaneType.DATA_WAREHOUSE,
+    "gateway": FabricPlaneType.API_GATEWAY,
+}
+
 # Dependency relationship keywords that indicate fabric plane routing
 DEPENDENCY_KEYWORDS: Dict[str, Tuple[FabricPlaneType, float]] = {
     "integrated via": (None, 0.85),  # plane type determined by target
@@ -133,6 +147,9 @@ class CMDBEvidenceCollector(EvidenceCollector):
 
             # Check for dependency relationships in raw_data
             self._check_dependencies(ci, snapshot_timestamp, result)
+
+            # Check for explicit integrates_via field (Tier 2 evidence)
+            self._check_integrates_via(ci, snapshot_timestamp, result)
 
     def _check_ci_is_plane(
         self,
@@ -210,6 +227,83 @@ class CMDBEvidenceCollector(EvidenceCollector):
         # Also check description/notes for integration mentions
         description = str(ci.raw_data.get("description", "") or ci.raw_data.get("notes", ""))
         self._check_description_for_planes(ci, description, timestamp, result)
+
+    def _check_integrates_via(
+        self,
+        ci: CMDBConfigItem,
+        timestamp: datetime,
+        result: EvidenceCollectionResult
+    ) -> None:
+        """
+        Check CI for explicit integrates_via field (Tier 2 evidence).
+
+        When CMDB has integrates_via set, this is authoritative documentation
+        that the asset routes through a specific fabric plane type. Combined
+        with fabric_vendor, we can identify the exact plane instance.
+        """
+        integrates_via = getattr(ci, 'integrates_via', None)
+        if not integrates_via:
+            return
+
+        integrates_via_lower = integrates_via.lower().strip()
+
+        # Map integrates_via value to FabricPlaneType
+        plane_type = INTEGRATES_VIA_MAPPING.get(integrates_via_lower)
+        if not plane_type:
+            logger.debug("cmdb_evidence.unknown_integrates_via", extra={
+                "ci_name": ci.name,
+                "integrates_via": integrates_via
+            })
+            return
+
+        # Get fabric_vendor if available
+        fabric_vendor = getattr(ci, 'fabric_vendor', None)
+        if fabric_vendor:
+            fabric_vendor = fabric_vendor.lower().strip()
+
+        # Tier 2 confidence = 0.75 (documented but not directly crawled)
+        confidence = 0.75
+
+        evidence = self._create_evidence(
+            signal_type="cmdb_integrates_via",
+            signal_detail=f"CMDB declares '{ci.name}' integrates via {plane_type.value}"
+                         f"{' (' + fabric_vendor + ')' if fabric_vendor else ''}",
+            confidence=confidence,
+            timestamp=timestamp,
+            fabric_plane_type=plane_type,
+            fabric_plane_vendor=fabric_vendor,
+            raw_data={
+                "ci_id": ci.ci_id,
+                "ci_name": ci.name,
+                "integrates_via": integrates_via,
+                "fabric_vendor": fabric_vendor,
+                "domain": ci.domain
+            }
+        )
+
+        # Asset key is the CI's domain or name
+        asset_key = ci.domain or ci.name
+        result.add_evidence(asset_key, evidence)
+
+        # Register plane if vendor identified
+        if fabric_vendor:
+            plane = self._create_fabric_plane(
+                plane_type=plane_type,
+                vendor=fabric_vendor,
+                display_name=f"{fabric_vendor.title()} ({plane_type.value})",
+                domain=None,
+                confidence=confidence
+            )
+            result.add_detected_plane(plane, is_shadow=False)
+
+        logger.info("cmdb_evidence.integrates_via_detected", extra={
+            "ci_name": ci.name,
+            "ci_domain": ci.domain,
+            "integrates_via": integrates_via,
+            "fabric_vendor": fabric_vendor,
+            "plane_type": plane_type.value,
+            "confidence": confidence
+        })
 
     def _process_dependency(
         self,

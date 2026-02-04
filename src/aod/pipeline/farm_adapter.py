@@ -59,6 +59,8 @@ CMDB_CI_MAPPING = {
     "owner": {"sources": ["owner", "owner_email"], "default": None},
     "vendor": {"sources": ["vendor"], "default": None},
     "domain": {"sources": ["external_ref", "domain"], "default": None},
+    "integrates_via": {"sources": ["integrates_via"], "default": None},
+    "fabric_vendor": {"sources": ["fabric_vendor"], "default": None},
 }
 
 CLOUD_RESOURCE_MAPPING = {

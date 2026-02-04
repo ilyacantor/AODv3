@@ -735,11 +735,271 @@ async def provision_connector_deprecated():
 async def get_targeting_package_deprecated():
     """
     DEPRECATED: Targeting package generation has been disabled.
-    
+
     AOD no longer generates targeting packages for DCL.
     Use POST /handoff/aam/candidates instead.
     """
     raise HTTPException(
         status_code=410,
         detail="Endpoint deprecated. Use POST /handoff/aam/candidates instead."
+    )
+
+
+# ============================================================================
+# Fabric Allocation Audit Trail
+# ============================================================================
+
+class AllocationDecision(BaseModel):
+    """Single allocation decision record for audit trail"""
+    decision: str = Field(description="Routed, Not Routed, Shadow Detected, Contradicted")
+    asset_name: str = Field(description="Asset name")
+    asset_id: str = Field(description="Asset ID")
+    plane_assigned: Optional[str] = Field(default=None, description="Fabric plane assignment e.g. 'iPaaS (Workato)'")
+    evidence_tier: Optional[str] = Field(default=None, description="Tier 1, Tier 2, Tier 3, or None")
+    confidence: Optional[float] = Field(default=None, description="Classification confidence 0.0-1.0")
+    rationale: str = Field(description="Plain-english explanation of decision")
+
+
+class AllocationSummary(BaseModel):
+    """Summary statistics for allocation audit"""
+    total_assets_scanned: int = Field(description="Total assets processed")
+    routed_tier_1: int = Field(description="Routed via Tier 1 (direct crawl)")
+    routed_tier_2: int = Field(description="Routed via Tier 2 (observed)")
+    routed_tier_3: int = Field(description="Routed via Tier 3 (inferred)")
+    not_routed: int = Field(description="Not routed (no evidence)")
+    shadow_detected: int = Field(description="Shadow assets detected")
+    contradictions_flagged: int = Field(description="Contradictions flagged")
+    multi_plane_sors: int = Field(description="SORs with multiple fabric planes")
+
+
+class FabricAllocationAuditResponse(BaseModel):
+    """Complete fabric allocation audit trail"""
+    run_id: str
+    scan_session_id: Optional[str] = None
+    generated_at: str
+    summary: AllocationSummary
+    decisions: List[AllocationDecision]
+
+
+def _build_rationale(pipe, asset) -> str:
+    """Build plain-english rationale for allocation decision"""
+    if not pipe:
+        return "No fabric routing evidence found across any observation plane or direct crawl"
+
+    evidence = pipe.classification_evidence if hasattr(pipe, 'classification_evidence') else []
+    if not evidence:
+        return "Classification assigned but no evidence details recorded"
+
+    # Get the top evidence item
+    top = evidence[0] if evidence else None
+    if not top:
+        return "Evidence recorded but details unavailable"
+
+    source = top.source_plane.value if hasattr(top, 'source_plane') and hasattr(top.source_plane, 'value') else str(getattr(top, 'source_plane', 'unknown'))
+    detail = top.signal_detail if hasattr(top, 'signal_detail') else str(getattr(top, 'signal_detail', ''))
+    signal_type = top.signal_type if hasattr(top, 'signal_type') else ''
+
+    # Build human-readable rationale based on evidence type
+    plane_type = pipe.fabric_plane.value if hasattr(pipe.fabric_plane, 'value') else str(pipe.fabric_plane)
+    vendor = pipe.fabric_plane_instance if hasattr(pipe, 'fabric_plane_instance') else None
+
+    if source == 'direct_crawl':
+        if 'workato' in (vendor or '').lower():
+            return f"Found in Workato recipe catalog: \"{detail[:80]}\""
+        elif 'kong' in (vendor or '').lower():
+            return f"Found in Kong service registry: \"{detail[:80]}\""
+        elif 'snowflake' in (vendor or '').lower():
+            return f"Found in Snowflake information schema: \"{detail[:80]}\""
+        elif 'mulesoft' in (vendor or '').lower():
+            return f"Found in MuleSoft API registry: \"{detail[:80]}\""
+        else:
+            return f"Direct crawl from {vendor or plane_type}: \"{detail[:80]}\""
+    elif source == 'network':
+        return f"Network traffic to {detail[:60]} detected"
+    elif source == 'cloud':
+        return f"Cloud resource association: {detail[:80]}"
+    elif source == 'cmdb':
+        return f"CMDB dependency record: {detail[:80]}"
+    elif source == 'finance':
+        return f"Finance record indicates: {detail[:80]}"
+    elif source == 'idp':
+        return f"IdP authentication pattern: {detail[:80]}"
+    else:
+        return f"Evidence from {source}: {detail[:80]}"
+
+
+def _determine_decision_type(asset, pipes) -> str:
+    """Determine the decision type for an asset"""
+    if not pipes:
+        return "Not Routed"
+
+    has_contradiction = any(
+        (p.has_contradictions if hasattr(p, 'has_contradictions') else False)
+        for p in pipes
+    )
+    if has_contradiction:
+        return "Contradicted"
+
+    has_shadow = any(
+        (p.governance_status.value if hasattr(p.governance_status, 'value') else str(p.governance_status)) == 'shadow'
+        for p in pipes
+    )
+    if has_shadow:
+        return "Shadow Detected"
+
+    return "Routed"
+
+
+def _format_plane_assignment(pipe) -> Optional[str]:
+    """Format plane assignment as 'Type (Vendor)'"""
+    if not pipe:
+        return None
+
+    plane_type = pipe.fabric_plane.value if hasattr(pipe.fabric_plane, 'value') else str(pipe.fabric_plane)
+    vendor = pipe.fabric_plane_instance if hasattr(pipe, 'fabric_plane_instance') else None
+
+    # Capitalize plane type nicely
+    type_display = {
+        'ipaas': 'iPaaS',
+        'api_gateway': 'API Gateway',
+        'event_bus': 'Event Bus',
+        'data_warehouse': 'Data Warehouse',
+        'unmanaged': 'Unmanaged'
+    }.get(plane_type, plane_type.replace('_', ' ').title())
+
+    if vendor:
+        vendor_display = vendor.replace('_', ' ').title()
+        return f"{type_display} ({vendor_display})"
+    return type_display
+
+
+def _format_evidence_tier(pipe) -> Optional[str]:
+    """Format evidence tier for display"""
+    if not pipe:
+        return None
+
+    tier = pipe.evidence_tier.value if hasattr(pipe.evidence_tier, 'value') else str(getattr(pipe, 'evidence_tier', ''))
+
+    tier_display = {
+        'tier_1_direct': 'Tier 1',
+        'tier_2_observed': 'Tier 2',
+        'tier_3_inferred': 'Tier 3'
+    }.get(tier, tier.replace('_', ' ').title() if tier else None)
+
+    return tier_display
+
+
+@router.get("/fabric-allocation-audit/{run_id}", response_model=FabricAllocationAuditResponse)
+async def get_fabric_allocation_audit(run_id: str):
+    """
+    Get fabric allocation audit trail for a discovery scan.
+
+    Provides a plain-english table of all allocation decisions showing:
+    - Decision type (Routed, Not Routed, Shadow Detected, Contradicted)
+    - Asset name and assigned fabric plane
+    - Evidence tier and confidence
+    - Human-readable rationale explaining the decision
+
+    Plus summary statistics for quick assessment.
+    """
+    from datetime import datetime, timezone
+
+    db = await get_db_direct()
+
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    all_assets = await db.get_assets_by_run(run_id)
+
+    # Build allocation decisions
+    decisions: List[AllocationDecision] = []
+
+    # Counters for summary
+    routed_tier_1 = 0
+    routed_tier_2 = 0
+    routed_tier_3 = 0
+    not_routed = 0
+    shadow_detected = 0
+    contradictions_flagged = 0
+    multi_plane_sors = set()
+
+    for asset in all_assets:
+        asset_name = asset.name if hasattr(asset, 'name') else asset.get('name', 'Unknown')
+        asset_id = asset.asset_id if hasattr(asset, 'asset_id') else asset.get('asset_id', 'unknown')
+
+        # Get pipes for this asset
+        pipes = []
+        if hasattr(asset, 'pipes') and asset.pipes:
+            pipes = asset.pipes
+
+        # Track multi-plane SORs
+        if len(pipes) > 1:
+            multi_plane_sors.add(asset_id)
+
+        # Create decision record for each pipe (or one "not routed" if no pipes)
+        if not pipes:
+            not_routed += 1
+            decisions.append(AllocationDecision(
+                decision="Not Routed",
+                asset_name=asset_name,
+                asset_id=asset_id,
+                plane_assigned=None,
+                evidence_tier=None,
+                confidence=None,
+                rationale="No fabric routing evidence found across any observation plane or direct crawl"
+            ))
+        else:
+            for pipe in pipes:
+                decision_type = _determine_decision_type(asset, [pipe])
+
+                # Update counters
+                tier = pipe.evidence_tier.value if hasattr(pipe.evidence_tier, 'value') else str(getattr(pipe, 'evidence_tier', ''))
+                if 'tier_1' in tier:
+                    routed_tier_1 += 1
+                elif 'tier_2' in tier:
+                    routed_tier_2 += 1
+                elif 'tier_3' in tier:
+                    routed_tier_3 += 1
+
+                if decision_type == "Shadow Detected":
+                    shadow_detected += 1
+                if decision_type == "Contradicted":
+                    contradictions_flagged += 1
+
+                # Build rationale
+                rationale = _build_rationale(pipe, asset)
+                if decision_type == "Contradicted":
+                    contradiction_note = pipe.contradiction_detail if hasattr(pipe, 'contradiction_detail') else None
+                    if contradiction_note:
+                        rationale = contradiction_note
+
+                decisions.append(AllocationDecision(
+                    decision=decision_type,
+                    asset_name=asset_name,
+                    asset_id=asset_id,
+                    plane_assigned=_format_plane_assignment(pipe),
+                    evidence_tier=_format_evidence_tier(pipe),
+                    confidence=pipe.classification_confidence if hasattr(pipe, 'classification_confidence') else None,
+                    rationale=rationale
+                ))
+
+    # Build summary
+    summary = AllocationSummary(
+        total_assets_scanned=len(all_assets),
+        routed_tier_1=routed_tier_1,
+        routed_tier_2=routed_tier_2,
+        routed_tier_3=routed_tier_3,
+        not_routed=not_routed,
+        shadow_detected=shadow_detected,
+        contradictions_flagged=contradictions_flagged,
+        multi_plane_sors=len(multi_plane_sors)
+    )
+
+    return FabricAllocationAuditResponse(
+        run_id=run_id,
+        scan_session_id=run_id,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        summary=summary,
+        decisions=decisions
     )

@@ -174,7 +174,8 @@ class NetworkEvidenceCollector(EvidenceCollector):
                 return
 
         # Skip low-volume traffic (likely browser access, not integration)
-        if log.bytes_transferred < MIN_BYTES_THRESHOLD:
+        # Only filter if bytes_transferred is available (> 0 means it was provided)
+        if log.bytes_transferred > 0 and log.bytes_transferred < MIN_BYTES_THRESHOLD:
             return
 
         # Check for fabric plane endpoint match

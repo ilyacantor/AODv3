@@ -24,6 +24,7 @@ Finding 500 APIs is useless if they're all managed by one MuleSoft instance.
 """
 
 import logging
+import re
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from uuid import uuid4
@@ -512,7 +513,10 @@ def _tier_3_inference(
 
     inferred_category = None
     for category_key in CATEGORY_TO_PLANE_TIER_3.keys():
-        if category_key in combined:
+        # Use word boundary matching to prevent "bi" matching "Big*" apps
+        # Match if category_key is a whole word in combined string
+        pattern = r'\b' + re.escape(category_key) + r'\b'
+        if re.search(pattern, combined, re.IGNORECASE):
             inferred_category = category_key
             break
 

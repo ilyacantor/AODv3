@@ -94,3 +94,29 @@ async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
         snapshots=snapshots,
         count=len(snapshots)
     )
+
+
+@router.get("/snapshot")
+async def get_farm_snapshot(snapshot_id: str, tenant_id: Optional[str] = None):
+    """
+    Fetch a specific snapshot from Farm.
+    
+    Args:
+        snapshot_id: The snapshot ID to fetch
+        tenant_id: Optional tenant ID (not used by Farm, included for frontend compatibility)
+    
+    Returns:
+        The full snapshot data from Farm
+    """
+    farm_client = get_farm_client()
+    if not farm_client:
+        return _farm_error_response("NO_FARM_URL", "No Farm URL configured")
+    
+    result = await farm_client.fetch_snapshot(snapshot_id)
+    
+    if not result.success:
+        if result.error_type == "FARM_SNAPSHOT_NOT_FOUND":
+            return JSONResponse(status_code=404, content={"detail": "Not Found", "error": result.error})
+        return _farm_error_response(result.error_type, result.error)
+    
+    return result.data

@@ -621,7 +621,7 @@ def detect_fabric_planes(
     New code should use detect_fabric_planes_evidence_based().
     """
     logger.warning("fabric_detector.legacy_mode",
-                  extra={"message": "Using legacy detection - consider migrating to evidence-based"})
+                  extra={"detail": "Using legacy detection - consider migrating to evidence-based"})
 
     detected_planes: Dict[str, FabricPlane] = {}
     asset_plane_tags: Dict[str, FabricPlaneTag] = {}

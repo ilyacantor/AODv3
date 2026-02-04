@@ -155,6 +155,33 @@ Raw Evidence → Validate → Normalize → Correlate → Admit → Classify →
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### CMDB Fabric Routing Fields (Feb 2026)
+
+CMDB Configuration Items can include explicit fabric plane routing declarations via two fields:
+
+| Field | Type | Values | Description |
+|-------|------|--------|-------------|
+| `integrates_via` | string | `ipaas`, `api_gateway`, `event_bus`, `data_warehouse` | The fabric plane type this asset routes through |
+| `fabric_vendor` | string | `workato`, `mulesoft`, `kong`, `snowflake`, etc. | The specific fabric plane vendor instance |
+
+**Example CMDB CI with fabric routing:**
+```json
+{
+  "ci_id": "ci-sf-001",
+  "name": "Salesforce",
+  "ci_type": "app",
+  "integrates_via": "ipaas",
+  "fabric_vendor": "workato"
+}
+```
+
+**Evidence Generation:** When `integrates_via` is set, CMDBEvidenceCollector creates Tier 2 evidence (confidence=0.75) with signal_type `cmdb_integrates_via`.
+
+**Data Quality Requirements for Farm:**
+1. **Real enterprise apps MUST have `integrates_via` set.** Priority apps: Salesforce, Workday, BambooHR, Zendesk, NetSuite, ServiceNow, Jira, HubSpot, Datadog, GitHub, Slack, Okta
+2. **`fabric_vendor` MUST match detected planes.** If snapshot detects Workato, Kong, Snowflake, Kafka as planes, CMDB `fabric_vendor` values must reference these — NOT planes that don't exist in the environment (e.g., Boomi, AWS API Gateway)
+3. **Coverage target: 61-80% of CMDB CIs should have `integrates_via` set**
+
 ---
 
 ## 4. Admission Gates & Rejection Rules

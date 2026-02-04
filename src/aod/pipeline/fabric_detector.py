@@ -331,10 +331,22 @@ def _reconcile_and_assign(
 
     for asset in assets:
         asset_id = str(asset.asset_id)
-        asset_key = asset.identifiers.domains[0] if asset.identifiers.domains else asset.name
 
-        # Get evidence for this asset
-        evidence_table = evidence_result.routing_evidence.get(asset_key)
+        # Build list of potential keys to search for evidence
+        # CMDB may key by CI name, while other sources key by domain
+        potential_keys = []
+        if asset.identifiers and asset.identifiers.domains:
+            potential_keys.extend(asset.identifiers.domains)
+        if asset.name:
+            potential_keys.append(asset.name)
+            potential_keys.append(asset.name.lower())
+
+        # Try each potential key to find evidence
+        evidence_table = None
+        for key in potential_keys:
+            evidence_table = evidence_result.routing_evidence.get(key)
+            if evidence_table and evidence_table.evidence:
+                break
 
         if evidence_table and evidence_table.evidence:
             # Have observation plane evidence - use it

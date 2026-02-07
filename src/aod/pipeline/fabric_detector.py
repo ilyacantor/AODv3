@@ -319,7 +319,8 @@ def check_contradictions(
 def detect_fabric_planes_evidence_based(
     snapshot: Snapshot,
     assets: List[Asset],
-    direct_crawl_results: Optional[Dict] = None
+    direct_crawl_results: Optional[Dict] = None,
+    farm_fabric_planes: Optional[List[dict]] = None
 ) -> Tuple[List[FabricPlane], Dict[str, FabricPlaneTag], List[Pipe]]:
     """
     Evidence-based fabric plane detection (Feb 2026 Blueprint).
@@ -356,7 +357,8 @@ def detect_fabric_planes_evidence_based(
 
     # Phase 3: Reconciliation - assign pipes to assets with evidence
     asset_plane_tags, pipes = _reconcile_and_assign(
-        assets, evidence_result, detected_planes
+        assets, evidence_result, detected_planes,
+        farm_fabric_planes=farm_fabric_planes
     )
 
     # Log shadow planes as high-value findings
@@ -411,7 +413,8 @@ def _merge_direct_crawl_results(
 def _reconcile_and_assign(
     assets: List[Asset],
     evidence_result: EvidenceCollectionResult,
-    detected_planes: List[FabricPlane]
+    detected_planes: List[FabricPlane],
+    farm_fabric_planes: Optional[List[dict]] = None
 ) -> Tuple[Dict[str, FabricPlaneTag], List[Pipe]]:
     """
     Reconcile evidence and assign fabric plane tags to assets.
@@ -421,6 +424,21 @@ def _reconcile_and_assign(
     """
     asset_plane_tags: Dict[str, FabricPlaneTag] = {}
     pipes: List[Pipe] = []
+
+    _FARM_PLANE_TYPE_MAP = {
+        "ipaas": FabricPlaneType.IPAAS,
+        "api_gateway": FabricPlaneType.API_GATEWAY,
+        "data_warehouse": FabricPlaneType.DATA_WAREHOUSE,
+        "event_bus": FabricPlaneType.EVENT_BUS,
+    }
+    farm_vendor_by_plane_type: Dict[FabricPlaneType, str] = {}
+    if farm_fabric_planes:
+        for fp in farm_fabric_planes:
+            pt_str = fp.get("plane_type", "")
+            vendor = fp.get("vendor", "")
+            mapped_type = _FARM_PLANE_TYPE_MAP.get(pt_str)
+            if mapped_type and vendor:
+                farm_vendor_by_plane_type[mapped_type] = vendor
 
     # Build plane lookup
     planes_by_type: Dict[FabricPlaneType, FabricPlane] = {}
@@ -468,6 +486,8 @@ def _reconcile_and_assign(
             saas_routing = _check_known_enterprise_saas(asset)
             if saas_routing:
                 plane_type, vendor = saas_routing
+                if farm_vendor_by_plane_type and plane_type in farm_vendor_by_plane_type:
+                    vendor = farm_vendor_by_plane_type[plane_type]
                 tag = FabricPlaneTag(
                     plane_type=plane_type,
                     controller_vendor=vendor,
@@ -482,7 +502,7 @@ def _reconcile_and_assign(
                 })
             else:
                 # No evidence and not known SaaS - try Tier 3 inference as LAST RESORT
-                tag, inferred_pipe = _tier_3_inference(asset, planes_by_type)
+                tag, inferred_pipe = _tier_3_inference(asset, planes_by_type, farm_vendor_by_plane_type=farm_vendor_by_plane_type)
                 if tag:
                     asset_plane_tags[asset_id] = tag
                 if inferred_pipe:
@@ -625,7 +645,8 @@ def _tag_fabric_plane_controller(asset: Asset) -> Optional[FabricPlaneTag]:
 
 def _tier_3_inference(
     asset: Asset,
-    planes_by_type: Dict[FabricPlaneType, FabricPlane]
+    planes_by_type: Dict[FabricPlaneType, FabricPlane],
+    farm_vendor_by_plane_type: Optional[Dict[FabricPlaneType, str]] = None
 ) -> Tuple[Optional[FabricPlaneTag], Optional[Pipe]]:
     """
     TIER 3: Category-based inference (DEMOTED).
@@ -673,9 +694,13 @@ def _tier_3_inference(
     # Determine confidence based on match strength
     confidence = TIER_3_CONFIDENCE["medium"]  # Default 0.40
 
+    tier3_vendor = plane.vendor
+    if farm_vendor_by_plane_type and plane_type in farm_vendor_by_plane_type:
+        tier3_vendor = farm_vendor_by_plane_type[plane_type]
+
     tag = FabricPlaneTag(
         plane_type=plane_type,
-        controller_vendor=plane.vendor,
+        controller_vendor=tier3_vendor,
         controller_domain=plane.domain,
         evidence=[
             f"Tier 3 inference: category '{inferred_category}' suggests {plane_type.value}",
@@ -703,7 +728,7 @@ def _tier_3_inference(
                 confidence=confidence,
                 timestamp=now_pst(),
                 fabric_plane_type=plane_type,
-                fabric_plane_vendor=plane.vendor
+                fabric_plane_vendor=tier3_vendor
             )
         ],
         classification_confidence=confidence,

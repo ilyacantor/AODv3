@@ -495,7 +495,10 @@ def run_pipeline_ephemeral(
             tracer.trace_evidence_collection(snapshot.planes, evidence_result_for_trace)
             logger.info(f"[DEBUG TRACE] Stage 4 (Evidence Collection) for '{DEBUG_TRACE_TARGET}' complete")
 
-        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(snapshot, assets)
+        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(
+            snapshot, assets,
+            farm_fabric_planes=data.get("meta", {}).get("fabric_planes", [])
+        )
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
 
         # Debug trace: Stage 5 - Fabric Plane Tagging
@@ -895,7 +898,10 @@ async def execute_pipeline(
         # Three-phase: Observation harvest -> Direct crawl -> Reconciliation
         # Returns fabric planes, asset tags, and pipes (SOR-to-plane routing)
         t_start = time.perf_counter()
-        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(snapshot, assets)
+        fabric_planes, asset_plane_tags, pipes = detect_fabric_planes_evidence_based(
+            snapshot, assets,
+            farm_fabric_planes=input_meta.get("fabric_planes", [])
+        )
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
         logger.info("fabric_detection.complete", extra={
             "run_id": run_id,

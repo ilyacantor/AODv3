@@ -179,6 +179,7 @@ config/
 
 ## Recent Changes
 
+- **2026-02-07**: Fabric plane vendor override fix - KNOWN_ENTERPRISE_SAAS_ROUTING now respects Farm's authoritative vendors; eliminates phantom Kong API Gateway when Farm declares AWS
 - **2026-02-04**: Documentation consolidation - Created master `docs/AOD_EVIDENCE_DISCOVERY.md` consolidating all discovery logic; updated all User Guides with 3-tier evidence system; archived deprecated docs to `docs/archive/`
 - **2026-02-04**: Evidence collector fixes - Fixed proxy log bytes_transferred filter (was filtering all logs); fixed Tier 3 category matching to use word boundaries (prevents "bi" matching "Big*")
 - **2026-02-04**: Removed static fallback snapshot - AOD now requires Farm Live mode for all discovery runs; no cached/static data

@@ -60,6 +60,69 @@ DEBUG_TRACE_TARGET = "Salesforce"
 # Note: MAX_OBSERVATION_SAMPLES removed - use get_current_config().query_limits.max_observation_samples
 
 
+def _synthesize_fabric_plane_candidates(
+    snapshot: 'Snapshot',
+    farm_fabric_planes: list[dict],
+    existing_candidates: list['CandidateEntity']
+) -> list['CandidateEntity']:
+    """
+    Synthesize CandidateEntity objects for Farm-declared fabric plane controllers
+    that exist in CMDB but have no discovery observations.
+
+    Farm declares fabric plane controllers (e.g., Azure Event Hubs for event_bus)
+    and puts corresponding CMDB CIs with ci_id prefix "CI-FABRIC-". If these
+    controllers have no discovery observations, they never enter the pipeline.
+    This function creates synthetic candidates so they flow through correlation
+    and admission normally.
+    """
+    if not farm_fabric_planes:
+        return []
+
+    existing_entity_names = {c.canonical_name for c in existing_candidates}
+    existing_domains = {c.domain for c in existing_candidates if c.domain}
+
+    farm_vendors = {fp.get('vendor', '').lower() for fp in farm_fabric_planes}
+
+    synthetic = []
+    cmdb_cis = snapshot.planes.cmdb.cis if snapshot.planes.cmdb else []
+
+    for ci in cmdb_cis:
+        if not ci.ci_id.startswith("CI-FABRIC-"):
+            continue
+
+        if not ci.fabric_vendor or ci.fabric_vendor.lower() not in farm_vendors:
+            continue
+
+        ci_name_lower = ci.name.lower().strip()
+        if ci_name_lower in existing_entity_names:
+            continue
+
+        domain = ci.canonical_domain or ci.domain
+        if not domain and ci.raw_data and isinstance(ci.raw_data, dict):
+            domain = ci.raw_data.get('canonical_domain')
+        if domain and domain in existing_domains:
+            continue
+
+        candidate = CandidateEntity(
+            entity_id=f"fabric_controller_{ci.ci_id}",
+            canonical_name=ci_name_lower,
+            original_name=ci.name,
+            domain=domain,
+            vendor=ci.vendor,
+            observation_ids=[],
+            source="cmdb_fabric_controller"
+        )
+        synthetic.append(candidate)
+        logger.info("pipeline.synthetic_fabric_candidate", extra={
+            "ci_id": ci.ci_id,
+            "name": ci.name,
+            "domain": domain,
+            "fabric_vendor": ci.fabric_vendor,
+        })
+
+    return synthetic
+
+
 def _extract_plane_timestamps(correlation: 'CorrelationResult') -> list[datetime]:
     """
     Extract activity timestamps from correlated plane records.
@@ -383,6 +446,17 @@ def run_pipeline_ephemeral(
         
         candidates, _ = normalize_observations(observations)
 
+        farm_fabric_planes = data.get("meta", {}).get("fabric_planes", [])
+        synthetic_candidates = _synthesize_fabric_plane_candidates(
+            snapshot, farm_fabric_planes, candidates
+        )
+        if synthetic_candidates:
+            candidates = candidates + synthetic_candidates
+            logger.info("pipeline.fabric_candidates_injected", extra={
+                "count": len(synthetic_candidates),
+                "names": [c.original_name for c in synthetic_candidates]
+            })
+
         # Debug trace: Stage 2 - Normalization
         if tracer:
             tracer.trace_normalization(candidates)
@@ -408,7 +482,23 @@ def run_pipeline_ephemeral(
         policy_config = get_current_config()
         policy_engine = PolicyEngine(policy_config)
         use_policy_engine = policy_config.scope.use_policy_engine
-        
+
+        fabric_plane_domains = set()
+        for fp in farm_fabric_planes:
+            fp_vendor = (fp.get('vendor') or '').lower()
+            for ci in (snapshot.planes.cmdb.cis if snapshot.planes.cmdb else []):
+                if ci.ci_id.startswith("CI-FABRIC-") and ci.fabric_vendor and ci.fabric_vendor.lower() == fp_vendor:
+                    domain = ci.canonical_domain or ci.domain
+                    if not domain and ci.raw_data and isinstance(ci.raw_data, dict):
+                        domain = ci.raw_data.get('canonical_domain')
+                    if domain:
+                        from .vendor_inference import extract_registered_domain
+                        reg = extract_registered_domain(domain)
+                        if reg:
+                            fabric_plane_domains.add(reg)
+        if fabric_plane_domains:
+            logger.info("pipeline.fabric_plane_domains_bypass", extra={"domains": list(fabric_plane_domains)})
+
         assets = []
         rejections = []
         
@@ -434,7 +524,8 @@ def run_pipeline_ephemeral(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map,
-                snapshot_timestamp=snapshot_as_of
+                snapshot_timestamp=snapshot_as_of,
+                fabric_plane_domains=fabric_plane_domains
             )
 
             # Pass propagated governance with metadata to policy engine
@@ -663,6 +754,17 @@ async def execute_pipeline(
                 ))
             await db.create_rejections_batch(iron_dome_batch)
         
+        synthetic_candidates = _synthesize_fabric_plane_candidates(
+            snapshot, input_meta.get("fabric_planes", []), candidates
+        )
+        if synthetic_candidates:
+            candidates = candidates + synthetic_candidates
+            logger.info("pipeline.fabric_candidates_injected", extra={
+                "run_id": run_id,
+                "count": len(synthetic_candidates),
+                "names": [c.original_name for c in synthetic_candidates]
+            })
+
         obs_samples = []
         max_samples = get_current_config().query_limits.max_observation_samples
         for candidate in candidates[:max_samples]:
@@ -771,7 +873,23 @@ async def execute_pipeline(
         
         if use_policy_engine:
             logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
-        
+
+        fabric_plane_domains = set()
+        for fp in input_meta.get("fabric_planes", []):
+            fp_vendor = (fp.get('vendor') or '').lower()
+            for ci in (snapshot.planes.cmdb.cis if snapshot.planes.cmdb else []):
+                if ci.ci_id.startswith("CI-FABRIC-") and ci.fabric_vendor and ci.fabric_vendor.lower() == fp_vendor:
+                    domain = ci.canonical_domain or ci.domain
+                    if not domain and ci.raw_data and isinstance(ci.raw_data, dict):
+                        domain = ci.raw_data.get('canonical_domain')
+                    if domain:
+                        from .vendor_inference import extract_registered_domain
+                        reg = extract_registered_domain(domain)
+                        if reg:
+                            fabric_plane_domains.add(reg)
+        if fabric_plane_domains:
+            logger.info("pipeline.fabric_plane_domains_bypass", extra={"domains": list(fabric_plane_domains)})
+
         t_start = time.perf_counter()
         assets = []
         rejections_batch = []
@@ -798,7 +916,8 @@ async def execute_pipeline(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map,
-                snapshot_timestamp=snapshot_as_of
+                snapshot_timestamp=snapshot_as_of,
+                fabric_plane_domains=fabric_plane_domains
             )
 
             # Pass propagated governance with metadata to policy engine

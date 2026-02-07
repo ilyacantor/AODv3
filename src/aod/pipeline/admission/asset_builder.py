@@ -529,7 +529,8 @@ def apply_admission_criteria(
     propagated_cmdb: bool = False,
     propagation_reason: Optional[str] = None,
     idp_activity_map: Optional[dict[str, datetime]] = None,
-    snapshot_timestamp: Optional[datetime] = None
+    snapshot_timestamp: Optional[datetime] = None,
+    fabric_plane_domains: Optional[set[str]] = None
 ) -> AdmissionResult:
     """
     Apply admission criteria to determine if entity should be admitted as asset.
@@ -547,15 +548,29 @@ def apply_admission_criteria(
     - Finance: match with contract/transaction evidence
     - Discovery: ≥2 distinct sources with recent activity
 
+    Args:
+        fabric_plane_domains: Set of domains for Farm-declared fabric plane
+            controllers. These bypass banned/infrastructure domain gates since
+            Farm is the authoritative source for fabric planes.
+
     Returns:
         AdmissionResult indicating whether entity is admitted
     """
     entity = correlation.entity
 
     # STEP 1: Domain gates (0, 0.5, 1)
+    # Fabric plane controller domains bypass Gates 0.5 (banned) and 1 (corporate)
+    # because Farm authoritatively declares these as infrastructure controllers
     gate_result = _check_domain_gates(entity, correlation)
     if not gate_result.passed:
-        return gate_result.rejection
+        registered = gate_result.registered_domain
+        is_fabric_bypass = (
+            fabric_plane_domains
+            and registered
+            and registered in fabric_plane_domains
+        )
+        if not is_fabric_bypass:
+            return gate_result.rejection
 
     effective_domain = gate_result.effective_domain
     registered_domain = gate_result.registered_domain
@@ -572,7 +587,13 @@ def apply_admission_criteria(
     )
 
     # GATE 2: Infrastructure domains without governance
-    if is_infrastructure_domain(registered_domain):
+    # Fabric plane controller domains bypass this gate (Farm-authoritative)
+    is_fabric_domain = (
+        fabric_plane_domains
+        and registered_domain
+        and registered_domain in fabric_plane_domains
+    )
+    if is_infrastructure_domain(registered_domain) and not is_fabric_domain:
         if not (idp_admitted or cmdb_admitted):
             return AdmissionResult(
                 admitted=False,
@@ -594,7 +615,12 @@ def apply_admission_criteria(
     )
 
     # STEP 4: Check if any admission criteria satisfied
-    if not any([
+    # Farm-declared fabric plane controllers are auto-admitted (Farm authority)
+    fabric_plane_auto_admit = (
+        is_fabric_domain
+        and entity.entity_id.startswith("fabric_controller_")
+    )
+    if not fabric_plane_auto_admit and not any([
         evidence.idp_can_admit,
         evidence.cmdb_can_admit,
         evidence.cloud_admitted,

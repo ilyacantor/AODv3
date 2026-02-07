@@ -483,22 +483,6 @@ def run_pipeline_ephemeral(
         policy_engine = PolicyEngine(policy_config)
         use_policy_engine = policy_config.scope.use_policy_engine
 
-        fabric_plane_domains = set()
-        for fp in farm_fabric_planes:
-            fp_vendor = (fp.get('vendor') or '').lower()
-            for ci in (snapshot.planes.cmdb.cis if snapshot.planes.cmdb else []):
-                if ci.ci_id.startswith("CI-FABRIC-") and ci.fabric_vendor and ci.fabric_vendor.lower() == fp_vendor:
-                    domain = ci.canonical_domain or ci.domain
-                    if not domain and ci.raw_data and isinstance(ci.raw_data, dict):
-                        domain = ci.raw_data.get('canonical_domain')
-                    if domain:
-                        from .vendor_inference import extract_registered_domain
-                        reg = extract_registered_domain(domain)
-                        if reg:
-                            fabric_plane_domains.add(reg)
-        if fabric_plane_domains:
-            logger.info("pipeline.fabric_plane_domains_bypass", extra={"domains": list(fabric_plane_domains)})
-
         assets = []
         rejections = []
         
@@ -524,8 +508,7 @@ def run_pipeline_ephemeral(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map,
-                snapshot_timestamp=snapshot_as_of,
-                fabric_plane_domains=fabric_plane_domains
+                snapshot_timestamp=snapshot_as_of
             )
 
             # Pass propagated governance with metadata to policy engine
@@ -874,22 +857,6 @@ async def execute_pipeline(
         if use_policy_engine:
             logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
 
-        fabric_plane_domains = set()
-        for fp in input_meta.get("fabric_planes", []):
-            fp_vendor = (fp.get('vendor') or '').lower()
-            for ci in (snapshot.planes.cmdb.cis if snapshot.planes.cmdb else []):
-                if ci.ci_id.startswith("CI-FABRIC-") and ci.fabric_vendor and ci.fabric_vendor.lower() == fp_vendor:
-                    domain = ci.canonical_domain or ci.domain
-                    if not domain and ci.raw_data and isinstance(ci.raw_data, dict):
-                        domain = ci.raw_data.get('canonical_domain')
-                    if domain:
-                        from .vendor_inference import extract_registered_domain
-                        reg = extract_registered_domain(domain)
-                        if reg:
-                            fabric_plane_domains.add(reg)
-        if fabric_plane_domains:
-            logger.info("pipeline.fabric_plane_domains_bypass", extra={"domains": list(fabric_plane_domains)})
-
         t_start = time.perf_counter()
         assets = []
         rejections_batch = []
@@ -916,8 +883,7 @@ async def execute_pipeline(
                 correlation, tenant_id, run_id, snapshot_id, entity_observations,
                 propagated_idp=prop_idp, propagated_cmdb=prop_cmdb, propagation_reason=prop_reason,
                 idp_activity_map=idp_activity_map,
-                snapshot_timestamp=snapshot_as_of,
-                fabric_plane_domains=fabric_plane_domains
+                snapshot_timestamp=snapshot_as_of
             )
 
             # Pass propagated governance with metadata to policy engine

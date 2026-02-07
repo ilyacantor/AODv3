@@ -12,8 +12,21 @@ def _get_excluded_domains() -> set[str]:
 
 
 def _get_banned_domains() -> set[str]:
-    """Get banned domains from policy config (legacy - now uses get_all_excluded_domains)."""
-    return _get_excluded_domains()
+    """Get only explicitly banned domains from policy config.
+
+    Gate 0.5 uses this to block domains that are absolutely forbidden.
+    Infrastructure domains are NOT included here — they are handled
+    separately at Gate 2 where governance (IdP/CMDB) can override.
+    """
+    from ...core.policy import get_current_config
+    config = get_current_config()
+    banned = set()
+    banned.update(config.exclusion_lists.banned_domains)
+    banned.update(config.custom_exclusions_config.domains)
+    banned.update(config.corporate_root_domains_config.domains)
+    banned.update(config.exclusions)
+    banned.update(config.exclusion_lists.custom_exclusions)
+    return banned
 
 
 def _get_corporate_root_domains() -> set[str]:

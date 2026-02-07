@@ -179,6 +179,8 @@ config/
 
 ## Recent Changes
 
+- **2026-02-07**: Gate 0.5 domain separation fix - `_get_banned_domains()` no longer conflates infrastructure domains with banned domains; infrastructure domains (azure.com, amazonaws.com) now properly evaluated at Gate 2 with governance checks instead of being blocked outright at Gate 0.5
+- **2026-02-07**: CMDB index raw domain fix - canonical_domain Path 1 now indexes both normalized and raw domain forms (matching Path 3 pattern), fixing correlator mismatch where azure.com normalized to microsoft.com
 - **2026-02-07**: Fabric plane vendor override fix - KNOWN_ENTERPRISE_SAAS_ROUTING now respects Farm's authoritative vendors; eliminates phantom Kong API Gateway when Farm declares AWS
 - **2026-02-04**: Documentation consolidation - Created master `docs/AOD_EVIDENCE_DISCOVERY.md` consolidating all discovery logic; updated all User Guides with 3-tier evidence system; archived deprecated docs to `docs/archive/`
 - **2026-02-04**: Evidence collector fixes - Fixed proxy log bytes_transferred filter (was filtering all logs); fixed Tier 3 category matching to use word boundaries (prevents "bi" matching "Big*")

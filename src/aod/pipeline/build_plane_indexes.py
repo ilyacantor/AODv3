@@ -265,8 +265,10 @@ def build_cmdb_index(cmdb_plane: CMDBPlane) -> PlaneIndex:
         if cmdb_canonical_domain:
             normalized_canonical = normalize_domain(cmdb_canonical_domain)
             add_to_index(index.by_canonical_domain, normalized_canonical, record_id)
-            # Also add to general by_domain for backward compatibility
             add_to_index(index.by_domain, normalized_canonical, record_id)
+            raw_canonical = _get_raw_domain(cmdb_canonical_domain)
+            if raw_canonical and raw_canonical != normalized_canonical:
+                add_to_index(index.by_domain, raw_canonical, record_id)
         
         # 2. Index domains[] array SEPARATELY (all authoritative domains from Farm)
         cmdb_domains = list(ci.domains) if ci.domains else []

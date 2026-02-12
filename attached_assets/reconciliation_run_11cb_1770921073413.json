@@ -1,0 +1,1426 @@
+{
+  "aod_run_id": "run_11cb8b3c8b97",
+  "snapshot_name": "InfoLogic-B3QJ",
+  "handoff_timestamp": "2026-02-12T18:27:34.623751",
+  "aod_sent": {
+    "candidates": 654,
+    "candidates_accepted": 654
+  },
+  "aam_stored": {
+    "candidates": 654,
+    "pipes": 654,
+    "fabric_planes": 4,
+    "sors": 16,
+    "fabrics_by_type": {
+      "API_GATEWAY": 1,
+      "DATA_WAREHOUSE": 1,
+      "EVENT_BUS": 1,
+      "IPAAS": 1
+    },
+    "candidates_by_category": {
+      "other": 636,
+      "crm": 6,
+      "hcm": 3,
+      "erp": 3,
+      "itsm": 2,
+      "data": 2,
+      "idp": 1,
+      "finance": 1
+    },
+    "top_vendors": [
+      {
+        "vendor": "unknown",
+        "category": "other",
+        "count": 24
+      },
+      {
+        "vendor": "atlassian",
+        "category": "other",
+        "count": 3
+      },
+      {
+        "vendor": "microsoft",
+        "category": "other",
+        "count": 3
+      },
+      {
+        "vendor": "salesforce",
+        "category": "crm",
+        "count": 3
+      },
+      {
+        "vendor": "zoom",
+        "category": "other",
+        "count": 2
+      },
+      {
+        "vendor": "AWS API Gateway",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "Azure Event Hubs",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "Snowflake",
+        "category": "data",
+        "count": 1
+      },
+      {
+        "vendor": "Workato",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "adp",
+        "category": "hcm",
+        "count": 1
+      },
+      {
+        "vendor": "airtable",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allbase inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "alldesk inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allflow inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allforce inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allfy inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allgrid inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allhub inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allify inc",
+        "category": "other",
+        "count": 1
+      },
+      {
+        "vendor": "allio inc",
+        "category": "other",
+        "count": 1
+      }
+    ]
+  },
+  "reconciliation": {
+    "candidates_match": true,
+    "pipes_match": true,
+    "discrepancy": 0
+  },
+  "deep_checks": {
+    "vendor_matching": {
+      "total_vendors": 623,
+      "vendors_by_count": {
+        "unknown": 24,
+        "salesforce": 3,
+        "microsoft": 3,
+        "atlassian": 3,
+        "zoom": 2,
+        "snowflake": 2,
+        "zendesk": 1,
+        "zapier": 1,
+        "workzone inc": 1,
+        "workway inc": 1,
+        "worksuite inc": 1,
+        "worksoft inc": 1,
+        "workpoint inc": 1,
+        "workpad inc": 1,
+        "worknest inc": 1,
+        "workmind inc": 1,
+        "workly inc": 1,
+        "workify inc": 1,
+        "workhub inc": 1,
+        "workfy inc": 1,
+        "workdesk inc": 1,
+        "workday": 1,
+        "workcloud inc": 1,
+        "workbox inc": 1,
+        "workbase inc": 1,
+        "workato": 1,
+        "ultrawire inc": 1,
+        "ultrasync inc": 1,
+        "ultrasuite inc": 1,
+        "ultraspot inc": 1,
+        "ultraspace inc": 1,
+        "ultrasoft inc": 1,
+        "ultrapoint inc": 1,
+        "ultramind inc": 1,
+        "ultraly inc": 1,
+        "ultraio inc": 1,
+        "ultraify inc": 1,
+        "ultraforce inc": 1,
+        "ultraflow inc": 1,
+        "ultradesk inc": 1,
+        "ultrabox inc": 1,
+        "ultrabase inc": 1,
+        "ultraapp inc": 1,
+        "ultimate software": 1,
+        "typeform": 1,
+        "tryzone inc": 1,
+        "trywire inc": 1,
+        "tryway inc": 1,
+        "tryview inc": 1,
+        "trysync inc": 1,
+        "trysuite inc": 1,
+        "trystack inc": 1,
+        "tryspot inc": 1,
+        "tryspace inc": 1,
+        "trysoft inc": 1,
+        "trypoint inc": 1,
+        "trylabs inc": 1,
+        "tryio inc": 1,
+        "tryify inc": 1,
+        "tryhub inc": 1,
+        "trydesk inc": 1,
+        "trybox inc": 1,
+        "tryapp inc": 1,
+        "topzone inc": 1,
+        "topwire inc": 1,
+        "topview inc": 1,
+        "topsync inc": 1,
+        "topsuite inc": 1,
+        "topstack inc": 1,
+        "topspot inc": 1,
+        "topspace inc": 1,
+        "topsoft inc": 1,
+        "toppoint inc": 1,
+        "topnest inc": 1,
+        "toplabs inc": 1,
+        "topify inc": 1,
+        "tophub inc": 1,
+        "topfy inc": 1,
+        "topforce inc": 1,
+        "topflow inc": 1,
+        "topcloud inc": 1,
+        "topbox inc": 1,
+        "topbase inc": 1,
+        "teamzone inc": 1,
+        "teamworks inc": 1,
+        "teamview inc": 1,
+        "teamsuite inc": 1,
+        "teamstack inc": 1,
+        "teamspot inc": 1,
+        "teamspace inc": 1,
+        "teampoint inc": 1,
+        "teampad inc": 1,
+        "teamnest inc": 1,
+        "teammind inc": 1,
+        "teamify inc": 1,
+        "teamhub inc": 1,
+        "teamgrid inc": 1,
+        "teamfy inc": 1,
+        "teamforce inc": 1,
+        "teamflow inc": 1,
+        "teamdesk inc": 1,
+        "teamcloud inc": 1,
+        "teambox inc": 1,
+        "teamapp inc": 1,
+        "syncwire inc": 1,
+        "syncway inc": 1,
+        "syncview inc": 1,
+        "synctech inc": 1,
+        "syncsync inc": 1,
+        "syncsuite inc": 1,
+        "syncstack inc": 1,
+        "syncspot inc": 1,
+        "syncpoint inc": 1,
+        "syncpad inc": 1,
+        "syncnest inc": 1,
+        "syncmind inc": 1,
+        "syncly inc": 1,
+        "synclabs inc": 1,
+        "syncio inc": 1,
+        "syncify inc": 1,
+        "synchub inc": 1,
+        "syncgrid inc": 1,
+        "syncfy inc": 1,
+        "syncforce inc": 1,
+        "syncdesk inc": 1,
+        "syncbox inc": 1,
+        "syncapp inc": 1,
+        "splunk": 1,
+        "smartzone inc": 1,
+        "smartworks inc": 1,
+        "smartway inc": 1,
+        "smartview inc": 1,
+        "smarttech inc": 1,
+        "smartsuite inc": 1,
+        "smartstack inc": 1,
+        "smartspace inc": 1,
+        "smartpoint inc": 1,
+        "smartpad inc": 1,
+        "smartnest inc": 1,
+        "smartmind inc": 1,
+        "smartly inc": 1,
+        "smartio inc": 1,
+        "smartify inc": 1,
+        "smarthub inc": 1,
+        "smartgrid inc": 1,
+        "smartfy inc": 1,
+        "smartforce inc": 1,
+        "smartflow inc": 1,
+        "smartdesk inc": 1,
+        "smartcloud inc": 1,
+        "smartbox inc": 1,
+        "smartbase inc": 1,
+        "smartapp inc": 1,
+        "servicenow": 1,
+        "sap": 1,
+        "rapidzone inc": 1,
+        "rapidworks inc": 1,
+        "rapidwire inc": 1,
+        "rapidway inc": 1,
+        "rapidview inc": 1,
+        "rapidtech inc": 1,
+        "rapidsync inc": 1,
+        "rapidsuite inc": 1,
+        "rapidstack inc": 1,
+        "rapidspot inc": 1,
+        "rapidsoft inc": 1,
+        "rapidpoint inc": 1,
+        "rapidnest inc": 1,
+        "rapidly inc": 1,
+        "rapidlabs inc": 1,
+        "rapidio inc": 1,
+        "rapidhub inc": 1,
+        "rapidflow inc": 1,
+        "rapiddesk inc": 1,
+        "rapidbase inc": 1,
+        "prozone inc": 1,
+        "proworks inc": 1,
+        "prowire inc": 1,
+        "proway inc": 1,
+        "protech inc": 1,
+        "prosync inc": 1,
+        "prosuite inc": 1,
+        "prospot inc": 1,
+        "prospace inc": 1,
+        "propad inc": 1,
+        "pronest inc": 1,
+        "promind inc": 1,
+        "proly inc": 1,
+        "prolabs inc": 1,
+        "prohub inc": 1,
+        "progrid inc": 1,
+        "profy inc": 1,
+        "proflow inc": 1,
+        "prodesk inc": 1,
+        "procloud inc": 1,
+        "probox inc": 1,
+        "primezone inc": 1,
+        "primeworks inc": 1,
+        "primewire inc": 1,
+        "primeway inc": 1,
+        "primeview inc": 1,
+        "primetech inc": 1,
+        "primesync inc": 1,
+        "primesuite inc": 1,
+        "primestack inc": 1,
+        "primespot inc": 1,
+        "primespace inc": 1,
+        "primesoft inc": 1,
+        "primepad inc": 1,
+        "primenest inc": 1,
+        "primemind inc": 1,
+        "primely inc": 1,
+        "primeio inc": 1,
+        "primeify inc": 1,
+        "primehub inc": 1,
+        "primeflow inc": 1,
+        "primecloud inc": 1,
+        "primebox inc": 1,
+        "primebase inc": 1,
+        "pivotal": 1,
+        "pipedrive": 1,
+        "pagerduty": 1,
+        "oracle": 1,
+        "openway inc": 1,
+        "opentech inc": 1,
+        "opensync inc": 1,
+        "opensuite inc": 1,
+        "openstack inc": 1,
+        "openspace inc": 1,
+        "opensoft inc": 1,
+        "openpoint inc": 1,
+        "openpad inc": 1,
+        "opennest inc": 1,
+        "openmind inc": 1,
+        "openly inc": 1,
+        "openlabs inc": 1,
+        "openhub inc": 1,
+        "openfy inc": 1,
+        "openforce inc": 1,
+        "openflow inc": 1,
+        "opendesk inc": 1,
+        "openbox inc": 1,
+        "openapp inc": 1,
+        "onezone inc": 1,
+        "oneworks inc": 1,
+        "onewire inc": 1,
+        "oneway inc": 1,
+        "oneview inc": 1,
+        "onetech inc": 1,
+        "onesync inc": 1,
+        "onesuite inc": 1,
+        "onestack inc": 1,
+        "onesoft inc": 1,
+        "onepad inc": 1,
+        "onenest inc": 1,
+        "onemind inc": 1,
+        "onely inc": 1,
+        "onelabs inc": 1,
+        "oneio inc": 1,
+        "oneify inc": 1,
+        "onehub inc": 1,
+        "onefy inc": 1,
+        "oneforce inc": 1,
+        "oneflow inc": 1,
+        "onedesk inc": 1,
+        "onecloud inc": 1,
+        "onebase inc": 1,
+        "oneapp inc": 1,
+        "okta": 1,
+        "notion": 1,
+        "nextzone inc": 1,
+        "nextview inc": 1,
+        "nextstack inc": 1,
+        "nextspace inc": 1,
+        "nextpoint inc": 1,
+        "nextpad inc": 1,
+        "nextnest inc": 1,
+        "nextmind inc": 1,
+        "nextlabs inc": 1,
+        "nextify inc": 1,
+        "nextgrid inc": 1,
+        "nextforce inc": 1,
+        "nextflow inc": 1,
+        "nextdesk inc": 1,
+        "nextbase inc": 1,
+        "newzone inc": 1,
+        "newwire inc": 1,
+        "newway inc": 1,
+        "newtech inc": 1,
+        "newsync inc": 1,
+        "newstack inc": 1,
+        "newspot inc": 1,
+        "newpoint inc": 1,
+        "newpad inc": 1,
+        "newgrid inc": 1,
+        "newforce inc": 1,
+        "newflow inc": 1,
+        "newdesk inc": 1,
+        "newcloud inc": 1,
+        "newbox inc": 1,
+        "netwire inc": 1,
+        "netway inc": 1,
+        "netview inc": 1,
+        "netsync inc": 1,
+        "netsuite inc": 1,
+        "netspot inc": 1,
+        "netsoft inc": 1,
+        "netnest inc": 1,
+        "netmind inc": 1,
+        "netly inc": 1,
+        "netlabs inc": 1,
+        "netio inc": 1,
+        "netify inc": 1,
+        "nethub inc": 1,
+        "netfy inc": 1,
+        "netforce inc": 1,
+        "netflow inc": 1,
+        "netdesk inc": 1,
+        "netcloud inc": 1,
+        "netbox inc": 1,
+        "netbase inc": 1,
+        "myzone inc": 1,
+        "myworks inc": 1,
+        "myway inc": 1,
+        "myview inc": 1,
+        "mytech inc": 1,
+        "mysync inc": 1,
+        "mysuite inc": 1,
+        "mysoft inc": 1,
+        "mypoint inc": 1,
+        "mynest inc": 1,
+        "mymind inc": 1,
+        "myly inc": 1,
+        "mylabs inc": 1,
+        "myify inc": 1,
+        "myhub inc": 1,
+        "myfy inc": 1,
+        "myforce inc": 1,
+        "myflow inc": 1,
+        "mydesk inc": 1,
+        "mycloud inc": 1,
+        "mybox inc": 1,
+        "mybase inc": 1,
+        "myapp inc": 1,
+        "monday.com": 1,
+        "momentive": 1,
+        "miro": 1,
+        "maxzone inc": 1,
+        "maxworks inc": 1,
+        "maxwire inc": 1,
+        "maxway inc": 1,
+        "maxtech inc": 1,
+        "maxsync inc": 1,
+        "maxsuite inc": 1,
+        "maxstack inc": 1,
+        "maxspot inc": 1,
+        "maxspace inc": 1,
+        "maxsoft inc": 1,
+        "maxpad inc": 1,
+        "maxmind inc": 1,
+        "maxio inc": 1,
+        "maxforce inc": 1,
+        "maxflow inc": 1,
+        "maxbox inc": 1,
+        "loom": 1,
+        "linkzone inc": 1,
+        "linkworks inc": 1,
+        "linkview inc": 1,
+        "linksync inc": 1,
+        "linksuite inc": 1,
+        "linkstack inc": 1,
+        "linkpoint inc": 1,
+        "linkpad inc": 1,
+        "linknest inc": 1,
+        "linklabs inc": 1,
+        "linkio inc": 1,
+        "linkify inc": 1,
+        "linkhub inc": 1,
+        "linkforce inc": 1,
+        "linkdesk inc": 1,
+        "linkcloud inc": 1,
+        "linkbox inc": 1,
+        "linkbase inc": 1,
+        "linkapp inc": 1,
+        "intuit": 1,
+        "hubway inc": 1,
+        "hubview inc": 1,
+        "hubtech inc": 1,
+        "hubstack inc": 1,
+        "hubspot inc": 1,
+        "hubspot": 1,
+        "hubspace inc": 1,
+        "hubsoft inc": 1,
+        "hubpad inc": 1,
+        "hubmind inc": 1,
+        "hubly inc": 1,
+        "hublabs inc": 1,
+        "hubio inc": 1,
+        "hubfy inc": 1,
+        "hubforce inc": 1,
+        "hubflow inc": 1,
+        "hubdesk inc": 1,
+        "hubcloud inc": 1,
+        "hubbox inc": 1,
+        "hubbase inc": 1,
+        "grammarly": 1,
+        "gozone inc": 1,
+        "goway inc": 1,
+        "goview inc": 1,
+        "gosuite inc": 1,
+        "gostack inc": 1,
+        "gosoft inc": 1,
+        "google": 1,
+        "gonest inc": 1,
+        "gomind inc": 1,
+        "golabs inc": 1,
+        "goio inc": 1,
+        "goify inc": 1,
+        "gohub inc": 1,
+        "gogrid inc": 1,
+        "goforce inc": 1,
+        "goflow inc": 1,
+        "godesk inc": 1,
+        "gocloud inc": 1,
+        "goapp inc": 1,
+        "gitlab": 1,
+        "getzone inc": 1,
+        "getsync inc": 1,
+        "getspot inc": 1,
+        "getspace inc": 1,
+        "getsoft inc": 1,
+        "getpoint inc": 1,
+        "getpad inc": 1,
+        "getnest inc": 1,
+        "getly inc": 1,
+        "getio inc": 1,
+        "getify inc": 1,
+        "getgrid inc": 1,
+        "getfy inc": 1,
+        "getforce inc": 1,
+        "getflow inc": 1,
+        "getcloud inc": 1,
+        "getbox inc": 1,
+        "getbase inc": 1,
+        "getapp inc": 1,
+        "freshworks": 1,
+        "flowview inc": 1,
+        "flowtech inc": 1,
+        "flowsuite inc": 1,
+        "flowspot inc": 1,
+        "flowpoint inc": 1,
+        "flownest inc": 1,
+        "flowio inc": 1,
+        "flowify inc": 1,
+        "flowhub inc": 1,
+        "flowgrid inc": 1,
+        "flowfy inc": 1,
+        "flowforce inc": 1,
+        "flowdesk inc": 1,
+        "flowcloud inc": 1,
+        "flowbox inc": 1,
+        "flowbase inc": 1,
+        "flexzone inc": 1,
+        "flextech inc": 1,
+        "flexsync inc": 1,
+        "flexsuite inc": 1,
+        "flexsoft inc": 1,
+        "flexpoint inc": 1,
+        "flexpad inc": 1,
+        "flexnest inc": 1,
+        "flexmind inc": 1,
+        "flexly inc": 1,
+        "flexio inc": 1,
+        "flexify inc": 1,
+        "flexhub inc": 1,
+        "flexgrid inc": 1,
+        "flexfy inc": 1,
+        "flexforce inc": 1,
+        "flexflow inc": 1,
+        "flexcloud inc": 1,
+        "figma": 1,
+        "fastzone inc": 1,
+        "fastworks inc": 1,
+        "fastwire inc": 1,
+        "fastway inc": 1,
+        "fastview inc": 1,
+        "fasttech inc": 1,
+        "fastsuite inc": 1,
+        "fastspot inc": 1,
+        "fastmind inc": 1,
+        "fastly inc": 1,
+        "fastio inc": 1,
+        "fastify inc": 1,
+        "fasthub inc": 1,
+        "fastgrid inc": 1,
+        "fastcloud inc": 1,
+        "fastbase inc": 1,
+        "evernote": 1,
+        "easyzone inc": 1,
+        "easyview inc": 1,
+        "easytech inc": 1,
+        "easysuite inc": 1,
+        "easyspace inc": 1,
+        "easypad inc": 1,
+        "easymind inc": 1,
+        "easylabs inc": 1,
+        "easyio inc": 1,
+        "easyfy inc": 1,
+        "easyforce inc": 1,
+        "easyflow inc": 1,
+        "easydesk inc": 1,
+        "easybox inc": 1,
+        "dropbox": 1,
+        "docusign": 1,
+        "dataworks inc": 1,
+        "dataway inc": 1,
+        "dataview inc": 1,
+        "datasync inc": 1,
+        "datasuite inc": 1,
+        "datastack inc": 1,
+        "datasoft inc": 1,
+        "datapoint inc": 1,
+        "datanest inc": 1,
+        "datamind inc": 1,
+        "dataly inc": 1,
+        "datalabs inc": 1,
+        "dataio inc": 1,
+        "dataify inc": 1,
+        "datafy inc": 1,
+        "dataforce inc": 1,
+        "dataflow inc": 1,
+        "datadog": 1,
+        "datadesk inc": 1,
+        "datacloud inc": 1,
+        "databox inc": 1,
+        "dataapp inc": 1,
+        "coretech inc": 1,
+        "coresync inc": 1,
+        "coresuite inc": 1,
+        "coresoft inc": 1,
+        "corepoint inc": 1,
+        "corenest inc": 1,
+        "corely inc": 1,
+        "coreio inc": 1,
+        "coreify inc": 1,
+        "coregrid inc": 1,
+        "coreforce inc": 1,
+        "coredesk inc": 1,
+        "corecloud inc": 1,
+        "corebox inc": 1,
+        "coreapp inc": 1,
+        "cloudzone inc": 1,
+        "cloudwire inc": 1,
+        "cloudway inc": 1,
+        "cloudview inc": 1,
+        "cloudsync inc": 1,
+        "cloudsuite inc": 1,
+        "cloudstack inc": 1,
+        "cloudspot inc": 1,
+        "cloudsoft inc": 1,
+        "cloudmind inc": 1,
+        "cloudly inc": 1,
+        "cloudlabs inc": 1,
+        "cloudio inc": 1,
+        "cloudify inc": 1,
+        "cloudfy inc": 1,
+        "cloudforce inc": 1,
+        "clouddesk inc": 1,
+        "cloudcloud inc": 1,
+        "cloudbox inc": 1,
+        "clickup": 1,
+        "cisco": 1,
+        "canva": 1,
+        "calendly": 1,
+        "ca technologies": 1,
+        "bytedance": 1,
+        "box": 1,
+        "bigzone inc": 1,
+        "bigworks inc": 1,
+        "bigwire inc": 1,
+        "bigtech inc": 1,
+        "bigsuite inc": 1,
+        "bigspot inc": 1,
+        "bigspace inc": 1,
+        "bigsoft inc": 1,
+        "bigmind inc": 1,
+        "bigly inc": 1,
+        "biglabs inc": 1,
+        "bighub inc": 1,
+        "bigfy inc": 1,
+        "bigforce inc": 1,
+        "bigdesk inc": 1,
+        "bigcloud inc": 1,
+        "bigbase inc": 1,
+        "bigapp inc": 1,
+        "basecamp": 1,
+        "bamboohr": 1,
+        "azure event hubs": 1,
+        "aws api gateway": 1,
+        "asana": 1,
+        "allzone inc": 1,
+        "allway inc": 1,
+        "alltech inc": 1,
+        "allsync inc": 1,
+        "allstack inc": 1,
+        "allspot inc": 1,
+        "allpoint inc": 1,
+        "allpad inc": 1,
+        "allnest inc": 1,
+        "allmind inc": 1,
+        "allly inc": 1,
+        "alllabs inc": 1,
+        "allio inc": 1,
+        "allify inc": 1,
+        "allhub inc": 1,
+        "allgrid inc": 1,
+        "allfy inc": 1,
+        "allforce inc": 1,
+        "allflow inc": 1,
+        "alldesk inc": 1,
+        "allbase inc": 1,
+        "airtable": 1,
+        "adp": 1
+      },
+      "case_duplicates": [
+        {
+          "canonical": "snowflake",
+          "variants": [
+            {
+              "name": "snowflake",
+              "count": 1
+            },
+            {
+              "name": "Snowflake",
+              "count": 1
+            }
+          ],
+          "total": 2
+        }
+      ],
+      "has_issues": true
+    },
+    "fabric_comparison": {
+      "vendors": [
+        {
+          "vendor": "aws_api_gateway",
+          "aod_plane_type": "API_GATEWAY",
+          "aam_plane_type": "API_GATEWAY",
+          "status": "match"
+        },
+        {
+          "vendor": "azure_event_hubs",
+          "aod_plane_type": "EVENT_BUS",
+          "aam_plane_type": "EVENT_BUS",
+          "status": "match"
+        },
+        {
+          "vendor": "snowflake",
+          "aod_plane_type": "DATA_WAREHOUSE",
+          "aam_plane_type": "DATA_WAREHOUSE",
+          "status": "match"
+        },
+        {
+          "vendor": "workato",
+          "aod_plane_type": "IPAAS",
+          "aam_plane_type": "IPAAS",
+          "status": "match"
+        }
+      ],
+      "by_type": [
+        {
+          "plane_type": "IPAAS",
+          "aod_vendors": [
+            {
+              "vendor": "workato",
+              "plane_type": "IPAAS",
+              "is_healthy": true,
+              "source": "aod_explicit"
+            }
+          ],
+          "aam_vendors": [
+            {
+              "vendor": "workato",
+              "plane_type": "IPAAS",
+              "display_name": "workato IPAAS"
+            }
+          ]
+        },
+        {
+          "plane_type": "API_GATEWAY",
+          "aod_vendors": [
+            {
+              "vendor": "aws_api_gateway",
+              "plane_type": "API_GATEWAY",
+              "is_healthy": true,
+              "source": "aod_explicit"
+            }
+          ],
+          "aam_vendors": [
+            {
+              "vendor": "aws_api_gateway",
+              "plane_type": "API_GATEWAY",
+              "display_name": "aws_api_gateway API_GATEWAY"
+            }
+          ]
+        },
+        {
+          "plane_type": "EVENT_BUS",
+          "aod_vendors": [
+            {
+              "vendor": "azure_event_hubs",
+              "plane_type": "EVENT_BUS",
+              "is_healthy": true,
+              "source": "aod_explicit"
+            }
+          ],
+          "aam_vendors": [
+            {
+              "vendor": "azure_event_hubs",
+              "plane_type": "EVENT_BUS",
+              "display_name": "azure_event_hubs EVENT_BUS"
+            }
+          ]
+        },
+        {
+          "plane_type": "DATA_WAREHOUSE",
+          "aod_vendors": [
+            {
+              "vendor": "snowflake",
+              "plane_type": "DATA_WAREHOUSE",
+              "is_healthy": true,
+              "source": "aod_explicit"
+            }
+          ],
+          "aam_vendors": [
+            {
+              "vendor": "snowflake",
+              "plane_type": "DATA_WAREHOUSE",
+              "display_name": "snowflake DATA_WAREHOUSE"
+            }
+          ]
+        }
+      ],
+      "only_in_aod": [],
+      "only_in_aam": [],
+      "in_both": [
+        "aws_api_gateway",
+        "azure_event_hubs",
+        "snowflake",
+        "workato"
+      ],
+      "mismatches": 0,
+      "has_aod_data": true,
+      "has_issues": false
+    },
+    "sor_comparison": {
+      "line_items": [
+        {
+          "domain": "CMDB",
+          "vendor": "ServiceNow",
+          "expected_category": "itsm",
+          "confidence": "high",
+          "source": "farm",
+          "ingested": true,
+          "aam_category": "itsm",
+          "aam_all_categories": {
+            "itsm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "CRM",
+          "vendor": "HubSpot",
+          "expected_category": "saas",
+          "confidence": "high",
+          "source": "farm",
+          "ingested": true,
+          "aam_category": "crm",
+          "aam_all_categories": {
+            "crm": 1
+          },
+          "aam_count": 1,
+          "category_match": false,
+          "verdict": "category_mismatch",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "ERP",
+          "vendor": "SAP",
+          "expected_category": "erp",
+          "confidence": "medium",
+          "source": "farm",
+          "ingested": true,
+          "aam_category": "erp",
+          "aam_all_categories": {
+            "erp": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "FINANCE",
+          "vendor": "Xero",
+          "expected_category": "saas",
+          "confidence": "high",
+          "source": "farm",
+          "ingested": false,
+          "aam_category": null,
+          "aam_count": 0,
+          "category_match": false,
+          "verdict": "missing",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "HR",
+          "vendor": "BambooHR",
+          "expected_category": "saas",
+          "confidence": "medium",
+          "source": "farm",
+          "ingested": true,
+          "aam_category": "hcm",
+          "aam_all_categories": {
+            "hcm": 1
+          },
+          "aam_count": 1,
+          "category_match": false,
+          "verdict": "category_mismatch",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "IDENTITY",
+          "vendor": "OneLogin",
+          "expected_category": "idp",
+          "confidence": "high",
+          "source": "farm",
+          "ingested": false,
+          "aam_category": null,
+          "aam_count": 0,
+          "category_match": false,
+          "verdict": "missing",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "adp",
+          "expected_category": "hcm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "hcm",
+          "aam_all_categories": {
+            "hcm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "hubspot inc",
+          "expected_category": "crm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "crm",
+          "aam_all_categories": {
+            "crm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "intuit",
+          "expected_category": "finance",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "finance",
+          "aam_all_categories": {
+            "finance": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "netsuite inc",
+          "expected_category": "erp",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "erp",
+          "aam_all_categories": {
+            "erp": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "okta",
+          "expected_category": "idp",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "idp",
+          "aam_all_categories": {
+            "idp": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "oracle",
+          "expected_category": "erp",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "erp",
+          "aam_all_categories": {
+            "erp": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "pipedrive",
+          "expected_category": "crm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "crm",
+          "aam_all_categories": {
+            "crm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "salesforce",
+          "expected_category": "crm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "crm",
+          "aam_all_categories": {
+            "crm": 3
+          },
+          "aam_count": 3,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "workday",
+          "expected_category": "hcm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "hcm",
+          "aam_all_categories": {
+            "hcm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        },
+        {
+          "domain": "",
+          "vendor": "zendesk",
+          "expected_category": "itsm",
+          "confidence": "inferred",
+          "source": "aod_candidate",
+          "ingested": true,
+          "aam_category": "itsm",
+          "aam_all_categories": {
+            "itsm": 1
+          },
+          "aam_count": 1,
+          "category_match": true,
+          "verdict": "ok",
+          "disposition": null,
+          "disposition_reason": null,
+          "disposition_notes": null,
+          "disposition_updated": null
+        }
+      ],
+      "total_sors": 16,
+      "matched": 12,
+      "category_mismatches": 2,
+      "missing": 2,
+      "mismatches": 4,
+      "undispositioned": 4,
+      "ingestion_accuracy": 75.0,
+      "all_ok": false,
+      "has_aod_data": true,
+      "has_issues": true
+    },
+    "schema_completeness": {
+      "total_candidates": 654,
+      "incomplete_count": 24,
+      "incomplete_candidates": [
+        {
+          "candidate_id": "a5b2f711-7480-44da-af2a-ffd3090d26a4",
+          "vendor": "unknown",
+          "display_name": "Allwire",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "13c614e7-3f98-42e8-b9d4-821a0cd91b3e",
+          "vendor": "unknown",
+          "display_name": "Bigflow",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "966703ab-482c-42f5-b401-558a3a39e621",
+          "vendor": "unknown",
+          "display_name": "Bigpoint",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "4b30964e-df61-43b7-95b0-b2eeb07a7e64",
+          "vendor": "unknown",
+          "display_name": "Bigway",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "30e82d9b-4910-4e18-aeec-5471765be9ae",
+          "vendor": "unknown",
+          "display_name": "Coremind",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "fe3f13c2-f0b7-4a6a-90fb-1c8960e44629",
+          "vendor": "unknown",
+          "display_name": "Coreway",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "a16a370c-b756-4d58-8b1a-34dfe505b444",
+          "vendor": "unknown",
+          "display_name": "Easyly",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "a4a50172-5955-4671-b305-28452239cc7d",
+          "vendor": "unknown",
+          "display_name": "Easywire",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "f10c2b30-a12a-4ea8-87fb-d9b09fe78d7b",
+          "vendor": "unknown",
+          "display_name": "Fastflow",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "a8a6308a-2e57-4bdc-a519-8ffee50686d0",
+          "vendor": "unknown",
+          "display_name": "Hubhub",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "4e98cf41-5587-4741-b73c-eea2a5403052",
+          "vendor": "unknown",
+          "display_name": "Hubify",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "773ba8a8-89ac-4689-8960-e2928d2c9a7e",
+          "vendor": "unknown",
+          "display_name": "Hubnest",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "0f2e2aad-9735-4b03-a7ee-20cf4f2392a9",
+          "vendor": "unknown",
+          "display_name": "myspot",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "081cc6b7-4426-4357-b067-2b58654c004a",
+          "vendor": "unknown",
+          "display_name": "Newview",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "b9a06619-16f3-4e4f-ac7f-dfe5bf71afce",
+          "vendor": "unknown",
+          "display_name": "Nextworks",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "6023c52b-dbdc-4a45-ab0b-f1fdf1213fea",
+          "vendor": "unknown",
+          "display_name": "Rapidmind",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "7d055156-d5de-4255-94d3-2c0328f9a80d",
+          "vendor": "unknown",
+          "display_name": "Rapidspace",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "ea5d52f0-97cd-41d1-bc29-a5c186d14c75",
+          "vendor": "unknown",
+          "display_name": "Smartwire",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "dd520338-f8f6-47fa-b53f-6a363e55c3fb",
+          "vendor": "unknown",
+          "display_name": "svc-stream-003",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "3c28e482-db98-40ee-93f5-0afebf9bd2b5",
+          "vendor": "unknown",
+          "display_name": "Teamway",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "5e68ca30-8e02-4fa7-9f39-9899ee924c4c",
+          "vendor": "unknown",
+          "display_name": "Topway",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "3fece748-4932-44a5-a3fd-4f2bcb3f2238",
+          "vendor": "unknown",
+          "display_name": "Trybase",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "4ccb07e5-1a8d-44f9-b6d1-b6e2f9f69674",
+          "vendor": "unknown",
+          "display_name": "Ultraworks",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        },
+        {
+          "candidate_id": "e3d714f0-1596-414e-b4a7-ce887c11318a",
+          "vendor": "unknown",
+          "display_name": "Workwire",
+          "missing_fields": [
+            "vendor_name"
+          ]
+        }
+      ],
+      "field_missing_counts": {
+        "vendor_name": 24,
+        "display_name": 0,
+        "category": 0,
+        "known_endpoints": 0,
+        "preferred_modality": 654,
+        "connected_via_plane": 654
+      },
+      "completeness_score": 96.3,
+      "has_issues": false,
+      "data_quality_notes": 24
+    },
+    "duplicates": {
+      "duplicate_groups": [],
+      "total_groups": 0,
+      "total_duplicate_rows": 0,
+      "has_issues": false
+    },
+    "total_issues": 5
+  }
+}

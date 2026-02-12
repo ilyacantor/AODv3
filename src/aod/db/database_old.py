@@ -429,8 +429,9 @@ class Database:
                     sync_status = $5,
                     sync_error = $6,
                     stage_timings = $7,
-                    policy_snapshot = $8
-                WHERE run_id = $9
+                    policy_snapshot = $8,
+                    input_meta = $9
+                WHERE run_id = $10
                 """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -440,6 +441,7 @@ class Database:
                 run.sync_error,
                 run.stage_timings.model_dump_json() if run.stage_timings else None,
                 json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
+                json.dumps(run.input_meta),
                 run.run_id
             )
         return run

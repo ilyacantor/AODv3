@@ -563,7 +563,63 @@ async def export_aam_candidates(
             fabric_plane_summary=fabric_summary
         )
         candidates.append(candidate)
-    
+
+    # Include Farm-designated SORs that weren't discovered by AOD
+    # These are critical business systems that must be handed off to AAM
+    discovered_names = {(a.name or "").lower() for a in filtered_assets}
+    undiscovered_sors = []
+
+    for sor in farm_sors:
+        sor_name = sor.get("sor_name", "")
+        sor_name_lower = sor_name.lower()
+        confidence = sor.get("confidence", "").lower()
+
+        # Only add high/medium confidence SORs that weren't already discovered
+        if confidence in ("high", "medium") and sor_name_lower not in discovered_names:
+            # Create a synthetic candidate for this Farm SOR
+            sor_candidate = ConnectionCandidate(
+                asset_key=f"{sor_name_lower}.com",  # Best guess at domain
+                vendor_name=sor_name,
+                display_name=sor_name,
+                category=sor.get("domain"),  # e.g., "financial", "identity"
+                governance_status="farm_designated",  # Special status for undiscovered SORs
+                findings=[],
+                sor_tagging=CandidateSORTagging(
+                    domain=sor.get("domain"),
+                    confidence=confidence,
+                    evidence=[f"Farm-designated {sor.get('domain')} SOR (not discovered by AOD)"]
+                ),
+                evidence_refs=[],
+                signals_summary={
+                    "has_idp": False,
+                    "has_cmdb": False,
+                    "has_finance": False,
+                    "has_discovery": False,
+                    "discovery_source_count": 0,
+                    "domain_count": 0,
+                    "vendor_governed": False,
+                    "farm_designated_sor": True
+                },
+                known_endpoints=None,
+                preferred_modality=None,
+                priority_score=100.0 if confidence == "high" else 75.0,  # High priority for SORs
+                connected_via_plane=None,
+                execution_allowed=True,
+                action_type="discover_and_provision",  # AAM needs to discover this
+                pipes=[],
+                fabric_plane_summary=None
+            )
+            undiscovered_sors.append(sor_candidate)
+            candidates.append(sor_candidate)
+
+    if undiscovered_sors:
+        logger.info("handoff.aam_candidates.undiscovered_sors_added", extra={
+            "run_id": run_id,
+            "count": len(undiscovered_sors),
+            "sor_names": [c.display_name for c in undiscovered_sors],
+            "reason": "Farm-designated SORs not discovered by AOD but must be handed off"
+        })
+
     candidates.sort(key=lambda c: c.priority_score or 0, reverse=True)
     
     def _format_plane_display_name(plane_type: str, vendor: str) -> str:

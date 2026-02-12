@@ -18,6 +18,7 @@ GUARDRAILS:
 
 import logging
 import os
+from datetime import datetime, timezone
 import httpx
 
 from fastapi import APIRouter, HTTPException, Query
@@ -40,6 +41,8 @@ from src.aod.models.output_contracts import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/handoff")
+
+_last_aam_export: Optional[dict] = None
 
 
 class GovernanceInfo(BaseModel):
@@ -848,6 +851,17 @@ async def export_to_aam(
             
             aam_response = response.json() if response.text else {}
             
+            global _last_aam_export
+            _last_aam_export = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_id,
+                "snapshot_name": run.tenant_id,
+                "candidates_sent": len(aam_candidates),
+                "aam_status_code": response.status_code,
+                "aam_response": aam_response,
+                "payload": export_payload.model_dump(),
+            }
+            
             logger.info("handoff.aam_export.success", extra={
                 "run_id": run_id,
                 "candidates_sent": len(aam_candidates),
@@ -870,6 +884,20 @@ async def export_to_aam(
             status_code=503,
             detail=f"Failed to connect to AAM: {str(e)}"
         )
+
+
+@router.get("/aod/debug/last-receive")
+async def debug_last_receive():
+    """
+    Debug endpoint for AAM to inspect the last payload AOD sent.
+    Returns the full export payload from the most recent /aam/export call.
+    """
+    if _last_aam_export is None:
+        return {
+            "status": "no_export_yet",
+            "message": "No export has been sent to AAM yet this session. Use POST /api/handoff/aam/export to send one.",
+        }
+    return _last_aam_export
 
 
 @router.post("/provision-connector")

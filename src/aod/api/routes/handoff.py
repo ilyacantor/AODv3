@@ -457,11 +457,25 @@ async def export_aam_candidates(
         active_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
         active_asset_ids = {str(a.asset_id) for a in active_assets}
 
-        # Add SORs with high/medium likelihood that aren't already included
+        def is_sor_candidate(asset) -> bool:
+            """Check if asset is a high/medium confidence SOR (AOD scoring OR Farm designation)"""
+            # Check AOD's internal SOR scoring
+            if asset.sor_tagging and asset.sor_tagging.likelihood in ("high", "medium"):
+                return True
+
+            # Check Farm's authoritative SOR list (high/medium confidence)
+            asset_name_lower = (asset.name or "").lower()
+            if asset_name_lower in farm_sor_by_name:
+                farm_confidence = farm_sor_by_name[asset_name_lower].get("confidence", "").lower()
+                if farm_confidence in ("high", "medium"):
+                    return True
+
+            return False
+
+        # Add SORs that aren't already included
         sor_assets = [
             a for a in all_assets
-            if a.sor_tagging
-            and a.sor_tagging.likelihood in ("high", "medium")
+            if is_sor_candidate(a)
             and str(a.asset_id) not in active_asset_ids
         ]
 

@@ -734,11 +734,28 @@ class AAMExportCandidate(BaseModel):
     aod_asset_id: str
 
 
+class AAMExportFabricPlane(BaseModel):
+    """Fabric plane declaration for AAM"""
+    plane_type: str
+    vendor: str
+    display_name: Optional[str] = None
+    is_healthy: bool = True
+
+class AAMExportSOR(BaseModel):
+    """System of Record declaration for AAM"""
+    app_name: str
+    domain: str
+    sor_type: Optional[str] = None
+    declared_by: str = "farm"
+    confidence: Optional[str] = None
+
 class AAMExportRequest(BaseModel):
     """Request body for AAM /api/handoff/aod/receive"""
     run_id: str
     snapshot_name: Optional[str] = None
     candidates: List[AAMExportCandidate]
+    fabric_planes: List[AAMExportFabricPlane] = []
+    sors: List[AAMExportSOR] = []
 
 
 class AAMExportResponse(BaseModel):
@@ -822,10 +839,36 @@ async def export_to_aam(
         )
         aam_candidates.append(aam_candidate)
     
+    input_meta = run.input_meta or {}
+    
+    farm_fabric_planes = []
+    for p in input_meta.get("fabric_planes", []):
+        vendor = p.get("vendor", "")
+        plane_type = p.get("plane_type", "")
+        display_name = f"{vendor.replace('_', ' ').title()}, {plane_type.replace('_', ' ').title()}"
+        farm_fabric_planes.append(AAMExportFabricPlane(
+            plane_type=plane_type,
+            vendor=vendor,
+            display_name=display_name,
+            is_healthy=p.get("is_healthy", True),
+        ))
+    
+    farm_sors = []
+    for s in input_meta.get("sors", []):
+        farm_sors.append(AAMExportSOR(
+            app_name=s.get("sor_name", ""),
+            domain=s.get("domain", ""),
+            sor_type=s.get("sor_type"),
+            declared_by="farm",
+            confidence=s.get("confidence"),
+        ))
+    
     export_payload = AAMExportRequest(
         run_id=run_id,
         snapshot_name=run.tenant_id,
-        candidates=aam_candidates
+        candidates=aam_candidates,
+        fabric_planes=farm_fabric_planes,
+        sors=farm_sors,
     )
     
     aam_endpoint = f"{aam_url.rstrip('/')}/api/handoff/aod/receive"

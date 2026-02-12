@@ -172,6 +172,7 @@ class FabricPlaneSummary(BaseModel):
     """Summary of a fabric plane from Farm's authoritative data"""
     plane_type: str
     vendor: str
+    display_name: str = Field(default="", description="Formatted name: 'Vendor, Plane Type'")
     is_healthy: bool = True
     source: str = "farm"
 
@@ -565,10 +566,24 @@ async def export_aam_candidates(
     
     candidates.sort(key=lambda c: c.priority_score or 0, reverse=True)
     
+    def _format_plane_display_name(plane_type: str, vendor: str) -> str:
+        """Format fabric plane display name as 'Vendor, Plane Type'"""
+        # Capitalize vendor nicely
+        vendor_display = vendor.replace("_", " ").title()
+        # Format plane type nicely
+        plane_type_display = {
+            'ipaas': 'iPaaS',
+            'api_gateway': 'API Gateway',
+            'event_bus': 'Event Bus',
+            'data_warehouse': 'Data Warehouse',
+        }.get(plane_type.lower(), plane_type.replace('_', ' ').title())
+        return f"{vendor_display}, {plane_type_display}"
+
     fabric_plane_summaries = [
         FabricPlaneSummary(
             plane_type=p.get("plane_type", "unknown"),
             vendor=p.get("vendor", "unknown"),
+            display_name=_format_plane_display_name(p.get("plane_type", ""), p.get("vendor", "")),
             is_healthy=p.get("is_healthy", True),
             source="farm"
         )

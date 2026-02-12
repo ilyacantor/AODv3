@@ -769,6 +769,17 @@ async def get_run_artifacts(run_id: str):
     if run.input_meta:
         farm_fabric_planes = run.input_meta.get("fabric_planes")
 
+    def _format_plane_display_name(plane_type: str, vendor: str) -> str:
+        """Format fabric plane display name as 'Vendor, Plane Type'"""
+        vendor_display = vendor.replace("_", " ").replace(".", " ").title()
+        plane_type_display = {
+            'ipaas': 'iPaaS',
+            'api_gateway': 'API Gateway',
+            'event_bus': 'Event Bus',
+            'data_warehouse': 'Data Warehouse',
+        }.get(plane_type.lower(), plane_type.replace('_', ' ').title())
+        return f"{vendor_display}, {plane_type_display}"
+
     if farm_fabric_planes and isinstance(farm_fabric_planes, list) and len(farm_fabric_planes) > 0:
         # Use Farm's authoritative fabric planes
         fabric_planes = []
@@ -783,7 +794,7 @@ async def get_run_artifacts(run_id: str):
                 "plane_id": f"{plane_type}:{vendor}",
                 "plane_type": plane_type,
                 "vendor": vendor,
-                "display_name": vendor.replace("_", " ").replace(".", " ").title(),
+                "display_name": _format_plane_display_name(plane_type, vendor),
                 "is_healthy": is_healthy,
                 "source": "farm"
             }
@@ -818,7 +829,7 @@ async def get_run_artifacts(run_id: str):
                     plane_vendor_counts[vendor] = {
                         "vendor": vendor,
                         "plane_type": plane_type,
-                        "display_name": vendor.replace("_", " ").title(),
+                        "display_name": _format_plane_display_name(plane_type, vendor),
                         "count": 0,
                         "assets": []
                     }

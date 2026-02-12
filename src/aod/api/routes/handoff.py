@@ -446,14 +446,35 @@ async def export_aam_candidates(
             if asset_id not in findings_by_asset:
                 findings_by_asset[asset_id] = []
             findings_by_asset[asset_id].append(f)
-    
+
     if status_filter == "all":
         filtered_assets = all_assets
     elif status_filter == "review":
         filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.REVIEW]
     else:
-        filtered_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
-    
+        # Default: ACTIVE assets + any high/medium confidence SORs regardless of status
+        # RACI: Recognized SORs must be handed off to AAM even if not yet governed
+        active_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
+        active_asset_ids = {str(a.asset_id) for a in active_assets}
+
+        # Add SORs with high/medium likelihood that aren't already included
+        sor_assets = [
+            a for a in all_assets
+            if a.sor_tagging
+            and a.sor_tagging.likelihood in ("high", "medium")
+            and str(a.asset_id) not in active_asset_ids
+        ]
+
+        if sor_assets:
+            logger.info("handoff.aam_candidates.sor_inclusion", extra={
+                "run_id": run_id,
+                "sor_assets_added": len(sor_assets),
+                "sor_names": [a.name for a in sor_assets[:10]],
+                "reason": "High/medium confidence SORs included regardless of provisioning status"
+            })
+
+        filtered_assets = active_assets + sor_assets
+
     candidates = []
     for asset in filtered_assets:
         primary_domain = asset.identifiers.domains[0] if asset.identifiers and asset.identifiers.domains else None

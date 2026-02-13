@@ -26,36 +26,15 @@
                     light.className = 'farm-status-light online';
                     light.title = 'Farm Online';
                     window.farmLiveMode = true;
-                    window.farmIsUp = true;
                 } else {
                     light.className = 'farm-status-light';
                     light.title = 'Farm Offline';
                     window.farmLiveMode = data.cache_available || false;
-                    window.farmIsUp = false;
-                }
-                const discBtn = document.getElementById('fetchFromFarm');
-                if (discBtn) {
-                    if (data.farm_available) {
-                        discBtn.disabled = false;
-                        discBtn.textContent = 'Run Discovery';
-                        discBtn.title = '';
-                    } else {
-                        discBtn.disabled = true;
-                        discBtn.textContent = 'Farm Sleeping';
-                        discBtn.title = 'Farm is offline — browse existing runs';
-                    }
                 }
             } catch (e) {
                 light.className = 'farm-status-light';
                 light.title = 'Farm Offline';
                 window.farmLiveMode = false;
-                window.farmIsUp = false;
-                const discBtn = document.getElementById('fetchFromFarm');
-                if (discBtn) {
-                    discBtn.disabled = true;
-                    discBtn.textContent = 'Farm Sleeping';
-                    discBtn.title = 'Farm is offline — browse existing runs';
-                }
             }
         }
 
@@ -3619,13 +3598,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const snapshotsData = await snapshotsRes.json();
                 
                 if (!snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
-                    const statusRes = await fetch('/api/farm/status');
-                    const statusData = await statusRes.json();
-                    if (!statusData.farm_available) {
-                        showToast('Farm is sleeping — select a previous run from the list', 'error');
-                    } else {
-                        showToast('No snapshots found for this tenant', 'error');
-                    }
+                    showToast('No snapshots found for this tenant', 'error');
                     return;
                 }
                 

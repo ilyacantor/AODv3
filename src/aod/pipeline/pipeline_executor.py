@@ -697,6 +697,13 @@ async def execute_pipeline(
     
     await db.create_run(run_log)
     
+    try:
+        pruned = await db.prune_old_runs(keep=6)
+        if pruned > 0:
+            logger.info("pipeline.runs.pruned", extra={"pruned": pruned, "kept": 6})
+    except Exception as e:
+        logger.warning("pipeline.runs.prune_failed", extra={"error": str(e)})
+    
     timings = {}
     
     if provenance and provenance.get("fetch_duration_ms"):

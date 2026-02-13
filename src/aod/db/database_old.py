@@ -524,6 +524,46 @@ class Database:
             deleted = int(result.split()[-1]) if result else 0
         return deleted
     
+    async def prune_old_runs(self, keep: int = 6) -> int:
+        """Delete oldest runs keeping only the most recent `keep` runs."""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            old_run_ids = await conn.fetch(
+                """
+                SELECT run_id FROM runs
+                ORDER BY started_at DESC
+                OFFSET $1
+                """,
+                keep,
+            )
+            if not old_run_ids:
+                return 0
+            ids = [r["run_id"] for r in old_run_ids]
+            for table in ["triage_actions", "observation_samples", "derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
+                try:
+                    await conn.execute(f"DELETE FROM {table} WHERE run_id = ANY($1)", ids)
+                except Exception:
+                    pass
+            result = await conn.execute("DELETE FROM runs WHERE run_id = ANY($1)", ids)
+            deleted = int(result.split()[-1]) if result else 0
+            return deleted
+
+    async def get_recent_tenants(self, limit: int = 5) -> list[str]:
+        """Get unique tenant_ids from recent runs for offline fallback."""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT ON (tenant_id) tenant_id
+                FROM runs
+                WHERE tenant_id IS NOT NULL AND tenant_id != ''
+                ORDER BY tenant_id, started_at DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+            return sorted([r["tenant_id"] for r in rows])
+
     async def create_asset(self, asset: Asset) -> Asset:
         """Create a new asset"""
         pool = await self.get_pool()

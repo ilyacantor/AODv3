@@ -377,61 +377,6 @@ async def list_runs(tenant_id: Optional[str] = None):
     ]
 
 
-@router.delete("")
-async def delete_all_runs(
-    confirm: str = Query(None, description="Must be 'DELETE_ALL_CONFIRMED' to proceed")
-):
-    """
-    Delete all discovery runs and associated data.
-
-    SAFEGUARDS:
-    - Blocked entirely in production (AOD_ENVIRONMENT=production)
-    - Requires explicit confirmation parameter in non-production
-
-    Usage (non-production only):
-        DELETE /api/runs?confirm=DELETE_ALL_CONFIRMED
-    """
-    env = os.environ.get("AOD_ENVIRONMENT", "development")
-
-    # GATE 1: Block entirely in production
-    if env == "production":
-        logger.warning("delete_all_runs.blocked", extra={
-            "environment": env,
-            "reason": "DELETE ALL is disabled in production"
-        })
-        raise HTTPException(
-            status_code=403,
-            detail="DELETE ALL is disabled in production. Use DELETE /api/runs/{run_id} for run-specific deletion."
-        )
-
-    # GATE 2: Require explicit confirmation in non-production
-    if confirm != "DELETE_ALL_CONFIRMED":
-        raise HTTPException(
-            status_code=400,
-            detail="Destructive operation requires confirmation. Add ?confirm=DELETE_ALL_CONFIRMED to proceed."
-        )
-
-    db = await get_db_direct()
-    deleted = await db.delete_all_runs()
-
-    # Invalidate all caches when deleting all runs
-    get_domain_rollups_cache().clear()
-    get_derived_classifications_cache().clear()
-
-    # Audit log
-    logger.warning("delete_all_runs.executed", extra={
-        "deleted_count": deleted,
-        "environment": env,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-    return {
-        "message": f"Deleted {deleted} runs and all associated data",
-        "deleted": deleted,
-        "environment": env
-    }
-
-
 @router.get("/{run_id}", response_model=RunDetailResponse)
 async def get_run(run_id: str, db: Database = Depends(get_db)):
     """Get run detail + counts"""

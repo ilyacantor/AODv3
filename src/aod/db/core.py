@@ -85,6 +85,12 @@ class Database:
     async def delete_all_runs(self) -> int:
         return await self._runs.delete_all_runs()
 
+    async def prune_old_runs(self, keep: int = 6) -> int:
+        return await self._runs.prune_old_runs(keep)
+
+    async def get_recent_tenants(self, limit: int = 5) -> list[str]:
+        return await self._runs.get_recent_tenants(limit)
+
     # Asset operations
     async def create_asset(self, asset: Asset) -> Asset:
         return await self._assets.create_asset(asset)

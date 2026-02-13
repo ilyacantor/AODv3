@@ -111,3 +111,54 @@ class RunOperations:
             result = await conn.execute("DELETE FROM runs")
             deleted = int(result.split()[-1]) if result else 0
         return deleted
+
+    async def prune_old_runs(self, keep: int = 6) -> int:
+        """Keep only the most recent N runs, delete older ones and their associated data."""
+        pool = await self._get_pool()
+
+        async with pool.acquire() as conn:
+            old_run_ids = await conn.fetch(
+                """
+                SELECT run_id FROM runs
+                ORDER BY started_at DESC
+                OFFSET $1
+                """,
+                keep
+            )
+
+            if not old_run_ids:
+                return 0
+
+            ids = [row["run_id"] for row in old_run_ids]
+
+            for table in ["triage_actions", "observation_samples", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
+                try:
+                    await conn.execute(
+                        f"DELETE FROM {table} WHERE run_id = ANY($1::text[])",
+                        ids
+                    )
+                except Exception:
+                    pass
+
+            result = await conn.execute(
+                "DELETE FROM runs WHERE run_id = ANY($1::text[])",
+                ids
+            )
+            deleted = int(result.split()[-1]) if result else 0
+            return deleted
+
+    async def get_recent_tenants(self, limit: int = 5) -> list[str]:
+        """Get distinct tenant IDs from recent runs, ordered by most recent."""
+        pool = await self._get_pool()
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT ON (tenant_id) tenant_id, started_at
+                FROM runs
+                ORDER BY tenant_id, started_at DESC
+                """,
+            )
+
+        sorted_rows = sorted(rows, key=lambda r: r["started_at"], reverse=True)
+        return [row["tenant_id"] for row in sorted_rows[:limit]]

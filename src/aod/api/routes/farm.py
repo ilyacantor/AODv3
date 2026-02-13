@@ -21,6 +21,7 @@ from ...cache import (
     has_cached_snapshot,
     has_cached_snapshot_list,
 )
+from ...db.database import get_db_direct
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,16 @@ async def list_farm_tenants():
         tenants = sorted(set(s.get("tenant_id", "") for s in cached_list if s.get("tenant_id")))
         logger.info("farm.tenants.from_cache", extra={"count": len(tenants)})
         return TenantListResponse(tenants=tenants, count=len(tenants))
+
+    # Cache empty - fall back to recent tenants from runs table
+    try:
+        db = await get_db_direct()
+        db_tenants = await db.get_recent_tenants(limit=5)
+        if db_tenants:
+            logger.info("farm.tenants.from_runs_db", extra={"count": len(db_tenants)})
+            return TenantListResponse(tenants=db_tenants, count=len(db_tenants))
+    except Exception as e:
+        logger.warning("farm.tenants.db_fallback_failed", extra={"error": str(e)})
 
     return _farm_error_response(result.error_type, result.error)
 
@@ -193,13 +204,29 @@ async def get_farm_status():
         farm_up = await farm_client.probe()
 
     cache_meta = get_cache_meta()
-    # Cache is available if either snapshot or snapshot list is cached
     has_cache = has_cached_snapshot() or has_cached_snapshot_list()
+
+    db_tenants_available = False
+    try:
+        db = await get_db_direct()
+        db_tenants = await db.get_recent_tenants(limit=5)
+        db_tenants_available = len(db_tenants) > 0
+    except Exception:
+        pass
+
+    if farm_up:
+        mode = "live"
+    elif has_cache:
+        mode = "cached"
+    elif db_tenants_available:
+        mode = "cached"
+    else:
+        mode = "unavailable"
 
     return {
         "farm_available": farm_up,
         "farm_url": get_farm_url(),
-        "cache_available": has_cache,
+        "cache_available": has_cache or db_tenants_available,
         "cache_meta": cache_meta,
-        "mode": "live" if farm_up else ("cached" if has_cache else "unavailable"),
+        "mode": mode,
     }

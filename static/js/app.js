@@ -3575,30 +3575,6 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         document.getElementById('tenantSelect').addEventListener('change', handleTenantChange);
         
-        document.getElementById('clearAllRuns').addEventListener('click', async () => {
-            if (!confirm('Delete all discovery runs? This cannot be undone.')) return;
-            const btn = document.getElementById('clearAllRuns');
-            btn.disabled = true;
-            btn.textContent = 'Clearing...';
-            try {
-                const r = await fetch('/api/runs?confirm=DELETE_ALL_CONFIRMED', { method: 'DELETE' });
-                const data = await r.json();
-                if (r.ok) {
-                    await loadRuns();
-                    document.getElementById('resultsSection').classList.add('hidden');
-                    currentRunId = null;
-                    showToast('All runs cleared', 'success');
-                } else {
-                    showToast(data.detail || 'Failed to clear runs', 'error');
-                }
-            } catch (e) {
-                console.error('Failed to clear runs:', e);
-                showToast('Failed to clear runs', 'error');
-            }
-            btn.disabled = false;
-            btn.textContent = 'Clear All';
-        });
-        
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {
             const tenantId = document.getElementById('tenantSelect').value;
             

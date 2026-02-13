@@ -103,6 +103,7 @@ main { padding: 2rem; }
 .catalog-link:hover { background: rgba(6, 182, 212, 0.25); text-decoration: underline; }
 .run-info { display: flex; align-items: center; gap: 0.75rem; width: 100%; }
 .run-tenant { font-weight: 600; color: var(--cyan-400); }
+.latest-run-badge { font-weight: 400; font-size: 0.75rem; color: var(--purple-400); opacity: 0.85; }
 .run-meta { display: flex; gap: 0.75rem; font-size: 0.8rem; color: var(--slate-400); }
 .run-size { background: var(--gray-700); padding: 0.15rem 0.4rem; border-radius: 4px; }
 .run-profile { color: var(--purple-400); }

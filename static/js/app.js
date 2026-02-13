@@ -3310,11 +3310,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                 updateTimingDisplay(runs);
                 if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
                 else {
-                    list.innerHTML = runs.map(run => {
+                    list.innerHTML = runs.map((run, idx) => {
                         const syncBadge = run.sync_status && run.sync_status !== 'not_applicable' 
                             ? `<span class="sync-status ${run.sync_status}" title="${run.sync_error || ''}">${run.sync_status === 'synced' ? 'SYNCED' : run.sync_status === 'failed' ? 'SYNC FAILED' : 'SYNCING'}</span>` 
                             : '';
                         const tenant = run.tenant_id || '-';
+                        const latestTag = idx === 0 ? ' <span class="latest-run-badge">(Latest)</span>' : '';
                         const size = run.input_meta?.scale || '-';
                         const profile = run.input_meta?.enterprise_profile || '-';
                         const isCompleted = run.status.toLowerCase().includes('completed');
@@ -3326,7 +3327,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                             : '';
                         return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
                             <div class="run-info">
-                                <span class="run-tenant">${tenant}</span>
+                                <span class="run-tenant">${tenant}${latestTag}</span>
                                 <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}${timingBadge}
                             </div>
                             <div class="run-meta">

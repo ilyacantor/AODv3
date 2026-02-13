@@ -3194,8 +3194,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         }
         
         async function populateTenantsFromFarm() {
-            if (!window.farmLiveMode) return;
-            
+            // Always try to fetch - backend handles cache fallback
             const select = document.getElementById('tenantSelect');
             
             try {
@@ -3264,7 +3263,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         async function handleTenantChange() {
             const tenantId = document.getElementById('tenantSelect').value;
             
-            if (window.farmLiveMode && tenantId) {
+            if (tenantId) {
                 try {
                     const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
                     if (snapshotsRes.ok) {
@@ -3748,10 +3747,8 @@ ${JSON.stringify(technicalReport, null, 2)}
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
-                if (window.farmLiveMode) {
-                    await populateTenantsFromFarm();
-                    await handleTenantChange();
-                }
+                await populateTenantsFromFarm();
+                await handleTenantChange();
                 showToast('Data refreshed', 'success');
             });
         }

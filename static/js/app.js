@@ -12,34 +12,27 @@
         
         window.farmLiveMode = true;
 
-        // Check Farm status and update light indicator
+        // Check Farm status and update light indicator (binary: green=online, grey=offline)
         async function checkFarmStatus() {
             const light = document.getElementById('farmStatusBadge');
             if (!light) return;
-
-            light.className = 'farm-status-light';
-            light.title = 'Checking Farm...';
 
             try {
                 const res = await fetch('/api/farm/status');
                 const data = await res.json();
 
                 if (data.farm_available) {
-                    light.className = 'farm-status-light live';
-                    light.title = 'Farm Live';
-                    window.farmLiveMode = true;
-                } else if (data.cache_available) {
-                    light.className = 'farm-status-light offline';
-                    light.title = `Offline - cached ${data.cache_meta?.cached_at || ''}`;
+                    light.className = 'farm-status-light online';
+                    light.title = 'Farm Online';
                     window.farmLiveMode = true;
                 } else {
-                    light.className = 'farm-status-light down';
-                    light.title = 'Farm unavailable';
+                    light.className = 'farm-status-light';
+                    light.title = 'Farm Offline';
                     window.farmLiveMode = false;
                 }
             } catch (e) {
-                light.className = 'farm-status-light down';
-                light.title = 'Farm unavailable';
+                light.className = 'farm-status-light';
+                light.title = 'Farm Offline';
                 window.farmLiveMode = false;
             }
         }

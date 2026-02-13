@@ -25,6 +25,7 @@ from ...farm_client import FarmClient, validate_schema_version
 from ...farm_reconcile import reconcile_to_farm
 from ...pipeline.pipeline_executor import execute_pipeline
 from ...models.output_contracts import RunStatus, SyncStatus
+from ...cache import write_snapshot_cache
 from ...pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
 from ...pipeline.cache import invalidate_run_caches, get_domain_rollups_cache, get_derived_classifications_cache
 from ...core.policy import get_current_config
@@ -183,10 +184,27 @@ async def create_run_from_farm(request: FarmRunRequest):
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
             raise HTTPException(status_code=400, detail=result.error)
         raise HTTPException(status_code=500, detail=result.error)
-    
+
+    # Cache snapshot for offline resilience (write-through)
+    # Only cache Farm-sourced snapshots, not re-cached data
+    try:
+        snapshot_name = snapshot_data.get("meta", {}).get("name", request.snapshot_id)
+        write_snapshot_cache(
+            snapshot_data=snapshot_data,
+            snapshot_id=request.snapshot_id,
+            snapshot_name=snapshot_name,
+            tenant_id=result.run_log.tenant_id,
+            asset_count=result.run_log.counts.assets_admitted,
+            finding_count=result.run_log.counts.findings_generated,
+            run_id=run_id,
+        )
+    except Exception as e:
+        # Cache write failure is non-fatal - log and continue
+        logger.warning("cache.write_failed_nonfatal", extra={"error": str(e)})
+
     sync_status = SyncStatus.PENDING
     sync_error = None
-    
+
     if result.run_log.status in (RunStatus.COMPLETED_WITH_RESULTS, RunStatus.COMPLETED_NO_ASSETS, RunStatus.COMPLETED):
         result.run_log.sync_status = SyncStatus.PENDING
         await db.update_run(result.run_log)

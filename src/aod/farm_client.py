@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # HTTP client configuration (environment-configurable)
 FARM_TIMEOUT = float(os.getenv("FARM_TIMEOUT", "25.0"))
 FARM_MAX_RETRIES = int(os.getenv("FARM_RETRIES", "3"))
+FARM_PROBE_TIMEOUT = float(os.getenv("FARM_PROBE_TIMEOUT", "1.0"))  # Fast probe for startup
 
 # Retryable HTTP status codes:
 # - 408: Request Timeout
@@ -57,11 +58,35 @@ class FarmClientError(Exception):
 
 class FarmClient:
     """HTTP client for fetching snapshots from AOS Farm"""
-    
+
     def __init__(self, base_url: str, timeout: float = FARM_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-    
+
+    async def probe(self) -> bool:
+        """
+        Fast health probe - is Farm reachable right now?
+
+        Uses FARM_PROBE_TIMEOUT (default 1s) to avoid blocking startup.
+        No retries. If Farm doesn't respond in 1s, it's asleep.
+
+        Returns True if Farm responds with any 2xx status.
+        """
+        url = f"{self.base_url}/api/snapshots?tenant_id=&limit=1"
+        try:
+            async with httpx.AsyncClient(timeout=FARM_PROBE_TIMEOUT) as client:
+                response = await client.get(url)
+                is_up = response.status_code < 400
+                logger.info("farm.probe", extra={
+                    "status": response.status_code, "up": is_up
+                })
+                return is_up
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError):
+            logger.info("farm.probe.down", extra={"timeout": FARM_PROBE_TIMEOUT})
+            return False
+        except Exception:
+            return False
+
     async def _make_request_with_retry(self, url: str, context: str = "request") -> tuple[httpx.Response | None, str | None]:
         """
         Make HTTP request with configurable retries on transient failures.

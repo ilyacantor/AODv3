@@ -7,6 +7,7 @@ from .snapshot_cache import (
     read_snapshot_list_cache,
     get_cache_meta,
     has_cached_snapshot,
+    has_cached_snapshot_list,
     clear_cache,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "read_snapshot_list_cache",
     "get_cache_meta",
     "has_cached_snapshot",
+    "has_cached_snapshot_list",
     "clear_cache",
 ]

@@ -19,6 +19,7 @@ from ...cache import (
     read_snapshot_cache,
     get_cache_meta,
     has_cached_snapshot,
+    has_cached_snapshot_list,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,6 +184,7 @@ async def get_farm_status():
 
     Fast probe (1s timeout) - doesn't block the UI.
     Returns whether Farm is reachable and what cache data is available.
+    cache_available is true if EITHER snapshot OR snapshot_list cache exists.
     """
     farm_client = get_farm_client()
 
@@ -191,7 +193,8 @@ async def get_farm_status():
         farm_up = await farm_client.probe()
 
     cache_meta = get_cache_meta()
-    has_cache = has_cached_snapshot()
+    # Cache is available if either snapshot or snapshot list is cached
+    has_cache = has_cached_snapshot() or has_cached_snapshot_list()
 
     return {
         "farm_available": farm_up,

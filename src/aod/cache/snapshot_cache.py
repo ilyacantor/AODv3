@@ -142,6 +142,11 @@ def has_cached_snapshot() -> bool:
     return (CACHE_DIR / _SNAPSHOT_FILE).exists()
 
 
+def has_cached_snapshot_list() -> bool:
+    """Check if a cached snapshot list exists (for tenant dropdown)."""
+    return (CACHE_DIR / _LIST_FILE).exists()
+
+
 # =========================================================================
 # Snapshot List Cache (for populating the dropdown in offline mode)
 # =========================================================================

@@ -39,9 +39,6 @@
             }
         }
 
-        // Check farm status on load
-        checkFarmStatus();
-
         function loadObservationPlaneCounts(snapshotData) {
             if (!snapshotData || !snapshotData.planes) {
                 document.getElementById('planeCountDiscovery').textContent = '-';
@@ -3733,6 +3730,8 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         (async function initConsoleTab() {
             loadObservationPlaneCounts(null);
+            // Ensure farm status is checked before populating tenants
+            await checkFarmStatus();
             await populateTenantsFromFarm();
         })();
         

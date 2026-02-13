@@ -13,6 +13,7 @@
         window.farmLiveMode = true;
 
         // Check Farm status and update light indicator (binary: green=online, grey=offline)
+        // farmLiveMode is true if farm OR cache is available (allows tenant loading)
         async function checkFarmStatus() {
             const light = document.getElementById('farmStatusBadge');
             if (!light) return;
@@ -28,7 +29,8 @@
                 } else {
                     light.className = 'farm-status-light';
                     light.title = 'Farm Offline';
-                    window.farmLiveMode = false;
+                    // Still allow tenant loading if we have cached data
+                    window.farmLiveMode = data.cache_available || false;
                 }
             } catch (e) {
                 light.className = 'farm-status-light';

@@ -29,6 +29,8 @@ Usage:
 
     # Get strategy-specific thresholds
     thresholds = policy.preset_thresholds
+
+Feb 2026: Added TenantStrategySelector for binding tenant -> strategy.
 """
 
 import logging
@@ -63,7 +65,132 @@ class TenantProfile:
     size: Optional[str] = None  # small, medium, large
     cmdb_reliability: Optional[str] = None  # high, medium, low
     currency: str = "USD"
+    tenant_type: Optional[str] = None  # BANK, STARTUP, ENTERPRISE, SMB
     custom_thresholds: Dict[str, Any] = field(default_factory=dict)
+
+
+# =============================================================================
+# TENANT STRATEGY SELECTOR
+# =============================================================================
+# This is the FACTORY that binds a tenant to the correct strategy.
+# Without this, strategies are just dead code.
+
+# Industry -> Strategy mapping
+_INDUSTRY_STRATEGY_MAP: Dict[str, str] = {
+    # Strict industries (regulated, SOX/HIPAA/PCI-DSS compliance)
+    "finance": StrategyProfile.STRICT_ENTERPRISE.value,
+    "banking": StrategyProfile.STRICT_ENTERPRISE.value,
+    "insurance": StrategyProfile.STRICT_ENTERPRISE.value,
+    "healthcare": StrategyProfile.STRICT_ENTERPRISE.value,
+    "pharma": StrategyProfile.STRICT_ENTERPRISE.value,
+    "government": StrategyProfile.STRICT_ENTERPRISE.value,
+
+    # Loose industries (move fast, less governance)
+    "tech_saas": StrategyProfile.LOOSE_STARTUP.value,
+    "startup": StrategyProfile.LOOSE_STARTUP.value,
+    "media": StrategyProfile.LOOSE_STARTUP.value,
+    "gaming": StrategyProfile.LOOSE_STARTUP.value,
+
+    # Balanced (default for everyone else)
+    "retail": StrategyProfile.BALANCED.value,
+    "manufacturing": StrategyProfile.BALANCED.value,
+    "logistics": StrategyProfile.BALANCED.value,
+    "energy": StrategyProfile.BALANCED.value,
+}
+
+# Tenant type -> Strategy mapping (overrides industry)
+_TENANT_TYPE_STRATEGY_MAP: Dict[str, str] = {
+    "BANK": StrategyProfile.STRICT_ENTERPRISE.value,
+    "REGULATED": StrategyProfile.STRICT_ENTERPRISE.value,
+    "ENTERPRISE": StrategyProfile.STRICT_ENTERPRISE.value,
+    "STARTUP": StrategyProfile.LOOSE_STARTUP.value,
+    "SMB": StrategyProfile.LOOSE_STARTUP.value,
+    "MIDMARKET": StrategyProfile.BALANCED.value,
+}
+
+
+def select_strategy_for_tenant(profile: TenantProfile) -> ScoringStrategy:
+    """
+    Select the appropriate scoring strategy for a tenant.
+
+    Resolution order:
+    1. Explicit strategy_profile (if set and not "balanced")
+    2. Tenant type (BANK, STARTUP, etc.)
+    3. Industry vertical (finance, healthcare, etc.)
+    4. CMDB reliability (low CMDB reliability -> loose strategy)
+    5. Default to Balanced
+
+    Args:
+        profile: TenantProfile from Farm or database
+
+    Returns:
+        Appropriate ScoringStrategy instance
+    """
+    # 1. Explicit strategy override
+    if profile.strategy_profile and profile.strategy_profile != StrategyProfile.BALANCED.value:
+        strategy = get_strategy(profile.strategy_profile)
+        logger.info("strategy.selected.explicit", extra={
+            "tenant_id": profile.tenant_id,
+            "strategy": strategy.name,
+            "reason": "explicit_profile"
+        })
+        return strategy
+
+    # 2. Tenant type override
+    if profile.tenant_type:
+        tenant_type_upper = profile.tenant_type.upper()
+        if tenant_type_upper in _TENANT_TYPE_STRATEGY_MAP:
+            strategy_name = _TENANT_TYPE_STRATEGY_MAP[tenant_type_upper]
+            strategy = get_strategy(strategy_name)
+            logger.info("strategy.selected.tenant_type", extra={
+                "tenant_id": profile.tenant_id,
+                "tenant_type": profile.tenant_type,
+                "strategy": strategy.name
+            })
+            return strategy
+
+    # 3. Industry-based selection
+    if profile.industry:
+        industry_lower = profile.industry.lower()
+        if industry_lower in _INDUSTRY_STRATEGY_MAP:
+            strategy_name = _INDUSTRY_STRATEGY_MAP[industry_lower]
+            strategy = get_strategy(strategy_name)
+            logger.info("strategy.selected.industry", extra={
+                "tenant_id": profile.tenant_id,
+                "industry": profile.industry,
+                "strategy": strategy.name
+            })
+            return strategy
+
+    # 4. CMDB reliability heuristic
+    if profile.cmdb_reliability:
+        cmdb_rel = profile.cmdb_reliability.lower()
+        if cmdb_rel == "low":
+            # Low CMDB reliability = don't trust it = loose mode
+            strategy = LooseStartupStrategy()
+            logger.info("strategy.selected.cmdb_reliability", extra={
+                "tenant_id": profile.tenant_id,
+                "cmdb_reliability": profile.cmdb_reliability,
+                "strategy": strategy.name
+            })
+            return strategy
+        elif cmdb_rel == "high":
+            # High CMDB reliability = trust it = strict mode
+            strategy = StrictEnterpriseStrategy()
+            logger.info("strategy.selected.cmdb_reliability", extra={
+                "tenant_id": profile.tenant_id,
+                "cmdb_reliability": profile.cmdb_reliability,
+                "strategy": strategy.name
+            })
+            return strategy
+
+    # 5. Default to Balanced
+    strategy = BalancedStrategy()
+    logger.info("strategy.selected.default", extra={
+        "tenant_id": profile.tenant_id,
+        "strategy": strategy.name
+    })
+    return strategy
 
 
 class PolicyContext:
@@ -86,8 +213,13 @@ class PolicyContext:
 
     @classmethod
     def for_tenant(cls, tenant_profile: TenantProfile) -> "PolicyContext":
-        """Create PolicyContext for a specific tenant."""
-        strategy = get_strategy(tenant_profile.strategy_profile)
+        """
+        Create PolicyContext for a specific tenant.
+
+        Uses select_strategy_for_tenant() to determine the appropriate
+        strategy based on tenant type, industry, and CMDB reliability.
+        """
+        strategy = select_strategy_for_tenant(tenant_profile)
         return cls(
             strategy=strategy,
             tenant_profile=tenant_profile,

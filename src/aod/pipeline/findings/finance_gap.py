@@ -3,7 +3,7 @@ Finance gap finding generation.
 
 Feb 2026: Refactored to use PolicyContext for financial thresholds.
 Thresholds now come from the tenant's ScoringStrategy, supporting:
-- Multi-currency normalization
+- Multi-currency normalization (amounts normalized to USD before comparison)
 - Tenant-specific materiality thresholds
 - Strategy-based scaling (enterprise vs startup)
 """
@@ -19,6 +19,7 @@ from ..build_plane_indexes import PlaneIndexes
 from ..deterministic_ids import deterministic_uuid
 from .base import get_category, compute_triage_priority, get_finance_gap_monthly_threshold
 from ...core.policy import PolicyContext, get_default_context
+from ...core.currency import normalize_to_usd
 
 # DEPRECATED: Use policy.get_finance_gap_threshold() instead
 # Kept for backward compatibility with code that imports these directly
@@ -72,22 +73,31 @@ def generate_finance_gap_findings(
         # Check if this is recurring spend
         is_recurring = False
         monthly_amount = 0.0
+        record_currency = "USD"  # Default to USD if not specified
 
         if record_id.startswith("contract:"):
             is_recurring = True
             if isinstance(record, Contract):
                 amount = record.amount or 0.0
                 monthly_amount = amount / 12.0
+                # Get currency from contract if available
+                record_currency = getattr(record, 'currency', None) or currency
         elif record_id.startswith("transaction:"):
             if hasattr(record, 'is_recurring') and record.is_recurring:
                 is_recurring = True
                 if isinstance(record, Transaction):
                     monthly_amount = record.amount or 0.0
+                    # Get currency from transaction if available
+                    record_currency = getattr(record, 'currency', None) or currency
 
         if not is_recurring:
             continue
 
-        if monthly_amount < get_finance_gap_monthly_threshold():
+        # CRITICAL: Normalize to USD BEFORE comparing against thresholds
+        # This fixes the "Currency Ghost" bug where €900 was compared against $1000
+        monthly_amount_usd = normalize_to_usd(monthly_amount, record_currency)
+
+        if monthly_amount_usd < get_finance_gap_monthly_threshold():
             continue
 
         # Get vendor/product name for aggregation
@@ -98,28 +108,30 @@ def generate_finance_gap_findings(
         if aggregate_key not in vendor_aggregates:
             vendor_aggregates[aggregate_key] = {
                 'display_name': vendor_name or product_name or record_id,
-                'total_monthly': 0.0,
+                'total_monthly_usd': 0.0,  # Always in USD for threshold comparison
                 'record_count': 0,
                 'evidence_refs': []
             }
 
-        vendor_aggregates[aggregate_key]['total_monthly'] += monthly_amount
+        # Aggregate using normalized USD amounts
+        vendor_aggregates[aggregate_key]['total_monthly_usd'] += monthly_amount_usd
         vendor_aggregates[aggregate_key]['record_count'] += 1
         vendor_aggregates[aggregate_key]['evidence_refs'].append(record_id)
 
     # Generate one finding per vendor/product (deduplicated)
     findings = []
     for aggregate_key, agg in vendor_aggregates.items():
-        total_monthly = agg['total_monthly']
+        total_monthly_usd = agg['total_monthly_usd']
         display_name = agg['display_name']
         record_count = agg['record_count']
 
         # Determine confidence/materiality based on spend level
         # Uses policy-derived thresholds (strategy-specific)
-        if total_monthly >= high_threshold:
+        # Comparison is always in USD (amounts were normalized above)
+        if total_monthly_usd >= high_threshold:
             confidence = Confidence.HIGH
             materiality = Materiality.HIGH
-        elif total_monthly >= med_threshold:
+        elif total_monthly_usd >= med_threshold:
             confidence = Confidence.HIGH
             materiality = Materiality.MED
         else:
@@ -129,9 +141,9 @@ def generate_finance_gap_findings(
         triage = compute_triage_priority(confidence, materiality)
 
         if record_count > 1:
-            explanation = f"Vendor '{display_name}' has ${total_monthly:.0f}/mo across {record_count} finance records with no corresponding asset. Possible undiscovered system(s)."
+            explanation = f"Vendor '{display_name}' has ${total_monthly_usd:.0f}/mo (USD) across {record_count} finance records with no corresponding asset. Possible undiscovered system(s)."
         else:
-            explanation = f"Finance record '{display_name}' (${total_monthly:.0f}/mo) has no corresponding asset in catalog. Possible undiscovered system."
+            explanation = f"Finance record '{display_name}' (${total_monthly_usd:.0f}/mo USD) has no corresponding asset in catalog. Possible undiscovered system."
 
         findings.append(Finding(
             finding_id=deterministic_uuid(snapshot_id, run_id, aggregate_key, "finance_gap"),

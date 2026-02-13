@@ -43,6 +43,7 @@ from .context import (
     TenantProfile,
     get_default_context,
     set_default_context,
+    select_strategy_for_tenant,
 )
 
 __all__ = [
@@ -83,4 +84,5 @@ __all__ = [
     "TenantProfile",
     "get_default_context",
     "set_default_context",
+    "select_strategy_for_tenant",
 ]

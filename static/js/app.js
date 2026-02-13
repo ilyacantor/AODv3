@@ -11,7 +11,44 @@
         let farmWakeCheckInterval = null;
         
         window.farmLiveMode = true;
-        
+
+        // Check Farm status and update badge
+        async function checkFarmStatus() {
+            const badge = document.getElementById('farmStatusBadge');
+            if (!badge) return;
+
+            badge.textContent = 'Checking...';
+            badge.className = 'farm-live-badge checking';
+
+            try {
+                const res = await fetch('/api/farm/status');
+                const data = await res.json();
+
+                if (data.farm_available) {
+                    badge.textContent = 'Farm Live';
+                    badge.className = 'farm-live-badge';
+                    window.farmLiveMode = true;
+                } else if (data.cache_available) {
+                    badge.textContent = 'Offline Mode';
+                    badge.className = 'farm-live-badge offline';
+                    badge.title = `Using cached data from ${data.cache_meta?.cached_at || 'unknown'}`;
+                    window.farmLiveMode = true; // Still functional with cache
+                } else {
+                    badge.textContent = 'Farm Down';
+                    badge.className = 'farm-live-badge unavailable';
+                    badge.title = 'Farm unavailable and no cached data';
+                    window.farmLiveMode = false;
+                }
+            } catch (e) {
+                badge.textContent = 'Farm Down';
+                badge.className = 'farm-live-badge unavailable';
+                window.farmLiveMode = false;
+            }
+        }
+
+        // Check farm status on load
+        checkFarmStatus();
+
         function loadObservationPlaneCounts(snapshotData) {
             if (!snapshotData || !snapshotData.planes) {
                 document.getElementById('planeCountDiscovery').textContent = '-';

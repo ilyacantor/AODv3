@@ -12,36 +12,34 @@
         
         window.farmLiveMode = true;
 
-        // Check Farm status and update badge
+        // Check Farm status and update light indicator
         async function checkFarmStatus() {
-            const badge = document.getElementById('farmStatusBadge');
-            if (!badge) return;
+            const light = document.getElementById('farmStatusBadge');
+            if (!light) return;
 
-            badge.textContent = 'Checking...';
-            badge.className = 'farm-live-badge checking';
+            light.className = 'farm-status-light';
+            light.title = 'Checking Farm...';
 
             try {
                 const res = await fetch('/api/farm/status');
                 const data = await res.json();
 
                 if (data.farm_available) {
-                    badge.textContent = 'Farm Live';
-                    badge.className = 'farm-live-badge';
+                    light.className = 'farm-status-light live';
+                    light.title = 'Farm Live';
                     window.farmLiveMode = true;
                 } else if (data.cache_available) {
-                    badge.textContent = 'Offline Mode';
-                    badge.className = 'farm-live-badge offline';
-                    badge.title = `Using cached data from ${data.cache_meta?.cached_at || 'unknown'}`;
-                    window.farmLiveMode = true; // Still functional with cache
+                    light.className = 'farm-status-light offline';
+                    light.title = `Offline - cached ${data.cache_meta?.cached_at || ''}`;
+                    window.farmLiveMode = true;
                 } else {
-                    badge.textContent = 'Farm Down';
-                    badge.className = 'farm-live-badge unavailable';
-                    badge.title = 'Farm unavailable and no cached data';
+                    light.className = 'farm-status-light down';
+                    light.title = 'Farm unavailable';
                     window.farmLiveMode = false;
                 }
             } catch (e) {
-                badge.textContent = 'Farm Down';
-                badge.className = 'farm-live-badge unavailable';
+                light.className = 'farm-status-light down';
+                light.title = 'Farm unavailable';
                 window.farmLiveMode = false;
             }
         }

@@ -1618,32 +1618,29 @@ main { padding: 2rem; }
     color: var(--cyan-400);
 }
 
-/* Farm Status Badge */
-.farm-live-badge {
-    background: linear-gradient(135deg, var(--cyan-500), var(--cyan-400));
-    color: var(--slate-900);
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    transition: background 0.3s ease;
+/* Farm Status Light */
+.farm-status-light {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--slate-500);
+    box-shadow: 0 0 4px var(--slate-500);
+    transition: all 0.3s ease;
 }
 
-.farm-live-badge.offline {
-    background: linear-gradient(135deg, var(--amber-500), var(--amber-400));
-    color: var(--slate-900);
+.farm-status-light.live {
+    background: var(--green-400);
+    box-shadow: 0 0 8px var(--green-400);
 }
 
-.farm-live-badge.unavailable {
-    background: linear-gradient(135deg, var(--red-500), var(--red-400));
-    color: white;
+.farm-status-light.offline {
+    background: var(--amber-400);
+    box-shadow: 0 0 8px var(--amber-400);
 }
 
-.farm-live-badge.checking {
-    background: var(--slate-600);
-    color: var(--slate-300);
+.farm-status-light.down {
+    background: var(--red-400);
+    box-shadow: 0 0 8px var(--red-400);
 }
 
 /* Farm Toggle (legacy) */

@@ -1,10 +1,15 @@
 """Core Database class with modular operations."""
 
 import logging
+import os
 from datetime import datetime
 from typing import Optional, AsyncGenerator
 
 import asyncpg
+
+# Database connection pool configuration (environment-configurable)
+DB_POOL_MIN_SIZE = int(os.getenv("DB_POOL_MIN", "2"))
+DB_POOL_MAX_SIZE = int(os.getenv("DB_POOL_MAX", "20"))
 
 from .config import get_database_url
 from .schema import initialize_schema
@@ -45,7 +50,11 @@ class Database:
     async def get_pool(self) -> asyncpg.Pool:
         """Get database connection pool."""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
+            self._pool = await asyncpg.create_pool(
+                self.db_url,
+                min_size=DB_POOL_MIN_SIZE,
+                max_size=DB_POOL_MAX_SIZE
+            )
         return self._pool
 
     async def close(self):

@@ -2,13 +2,23 @@
 
 import httpx
 import logging
+import os
 from typing import Any
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-FARM_TIMEOUT = 25.0
-RETRYABLE_STATUS_CODES = {502, 503, 504}
+# HTTP client configuration (environment-configurable)
+FARM_TIMEOUT = float(os.getenv("FARM_TIMEOUT", "25.0"))
+FARM_MAX_RETRIES = int(os.getenv("FARM_RETRIES", "3"))
+
+# Retryable HTTP status codes:
+# - 408: Request Timeout
+# - 429: Too Many Requests (rate limited)
+# - 502: Bad Gateway
+# - 503: Service Unavailable
+# - 504: Gateway Timeout
+RETRYABLE_STATUS_CODES = {408, 429, 502, 503, 504}
 
 
 @dataclass
@@ -54,50 +64,56 @@ class FarmClient:
     
     async def _make_request_with_retry(self, url: str, context: str = "request") -> tuple[httpx.Response | None, str | None]:
         """
-        Make HTTP request with one retry on transient failures.
-        
+        Make HTTP request with configurable retries on transient failures.
+
+        Retries on: 408, 429, 502, 503, 504 status codes and network errors.
+        Retry count controlled by FARM_RETRIES env var (default: 3 attempts).
+
         Returns:
             Tuple of (response, error_message). If error_message is set, response is None.
         """
         last_error = None
-        
-        for attempt in range(2):
+        max_attempts = FARM_MAX_RETRIES
+
+        for attempt in range(max_attempts):
+            is_last_attempt = (attempt == max_attempts - 1)
+
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     response = await client.get(url)
-                    
+
                     # Check for retryable status codes
                     if response.status_code in RETRYABLE_STATUS_CODES:
                         # Check if response is HTML (Replit "app not running" page)
                         content_type = response.headers.get("content-type", "")
                         if "html" in content_type.lower() or response.text.strip().startswith("<!"):
                             last_error = "FARM_WAKING_OR_DOWN"
-                            if attempt == 0:
-                                logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code})
+                            if not is_last_attempt:
+                                logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
                                 continue
                             break
-                        
+
                         last_error = f"HTTP {response.status_code}"
-                        if attempt == 0:
-                            logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code})
+                        if not is_last_attempt:
+                            logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
                             continue
                         break
-                    
+
                     return response, None
-                    
+
             except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
                 last_error = "FARM_WAKING_OR_DOWN"
                 logger.warning(f"farm.{context}.network_error", extra={
-                    "url": url, "attempt": attempt + 1, "error": str(e)
+                    "url": url, "attempt": attempt + 1, "max_attempts": max_attempts, "error": str(e)
                 })
-                if attempt == 0:
+                if not is_last_attempt:
                     continue
-                    
+
             except Exception as e:
                 last_error = str(e)
                 logger.exception(f"farm.{context}.unexpected_error", extra={"url": url})
                 break
-        
+
         return None, last_error
     
     async def list_snapshots(self, tenant_id: str, limit: int = 20, size: str | None = None) -> FarmListResult:

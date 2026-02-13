@@ -1,4 +1,14 @@
-"""Finance gap finding generation"""
+"""
+Finance gap finding generation.
+
+Feb 2026: Refactored to use PolicyContext for financial thresholds.
+Thresholds now come from the tenant's ScoringStrategy, supporting:
+- Multi-currency normalization
+- Tenant-specific materiality thresholds
+- Strategy-based scaling (enterprise vs startup)
+"""
+
+from typing import Optional
 
 from ...models.output_contracts import (
     Asset, Finding, FindingType, Severity, Confidence, Materiality
@@ -8,8 +18,10 @@ from ..correlate_entities import CorrelationResult, MatchStatus
 from ..build_plane_indexes import PlaneIndexes
 from ..deterministic_ids import deterministic_uuid
 from .base import get_category, compute_triage_priority, get_finance_gap_monthly_threshold
+from ...core.policy import PolicyContext, get_default_context
 
-# Finance gap materiality thresholds (monthly spend)
+# DEPRECATED: Use policy.get_finance_gap_threshold() instead
+# Kept for backward compatibility with code that imports these directly
 FINANCE_HIGH_MATERIALITY_THRESHOLD = 1000  # ≥$1000/mo → HIGH confidence + HIGH materiality
 FINANCE_MED_MATERIALITY_THRESHOLD = 500    # ≥$500/mo → HIGH confidence + MED materiality
 
@@ -20,7 +32,9 @@ def generate_finance_gap_findings(
     correlations: list[CorrelationResult],
     tenant_id: str,
     run_id: str,
-    snapshot_id: str
+    snapshot_id: str,
+    policy: Optional[PolicyContext] = None,
+    currency: str = "USD",
 ) -> list[Finding]:
     """
     Generate finance_gap findings with TIGHTER GATE (Dec 2025):
@@ -32,7 +46,17 @@ def generate_finance_gap_findings(
 
     DEDUPLICATION: Aggregates by vendor/product name to prevent multiple findings
     for the same vendor with many transactions.
+
+    Feb 2026: Now accepts PolicyContext for strategy-specific thresholds.
+    Use policy.get_finance_gap_threshold() instead of hardcoded values.
     """
+    # Use provided policy or default
+    policy = policy or get_default_context()
+
+    # Get thresholds from policy (strategy-specific)
+    high_threshold = policy.get_finance_gap_threshold("HIGH")
+    med_threshold = policy.get_finance_gap_threshold("MEDIUM")
+
     matched_finance_ids = set()
     for correlation in correlations:
         if correlation.finance.status == MatchStatus.MATCHED:
@@ -91,10 +115,11 @@ def generate_finance_gap_findings(
         record_count = agg['record_count']
 
         # Determine confidence/materiality based on spend level
-        if total_monthly >= FINANCE_HIGH_MATERIALITY_THRESHOLD:
+        # Uses policy-derived thresholds (strategy-specific)
+        if total_monthly >= high_threshold:
             confidence = Confidence.HIGH
             materiality = Materiality.HIGH
-        elif total_monthly >= FINANCE_MED_MATERIALITY_THRESHOLD:
+        elif total_monthly >= med_threshold:
             confidence = Confidence.HIGH
             materiality = Materiality.MED
         else:

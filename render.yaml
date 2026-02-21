@@ -1,15 +1,25 @@
 services:
   - type: web
-    name: aos-discover
+    name: aod-v3
     runtime: python
-    plan: free
+    plan: starter
+    region: oregon
+    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: cd src && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.11"
+        value: 3.11.0
+      - key: SUPABASE_DB_URL
+        sync: false
       - key: DATABASE_URL
         sync: false
-      - key: AOS_FARM_URL
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FARM_URL
+        sync: false
+      - key: FARM_SHARED_SECRET
         sync: false
     healthCheckPath: /api/health

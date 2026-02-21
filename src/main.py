@@ -155,7 +155,7 @@ async def serve_ui(response: Response):
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     index_path = TEMPLATES_DIR / "index.html"
     if index_path.exists():
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             content = f.read()
         return HTMLResponse(content=content, status_code=200)
     return HTMLResponse(content="<h1>AOD Fresh</h1><p>UI not found</p>", status_code=200)

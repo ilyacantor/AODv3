@@ -27,16 +27,16 @@ def get_farm_url() -> str | None:
     mode = os.environ.get("FARM_URL_MODE", "auto").lower()
     
     if mode == "prod":
-        return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+        return os.environ.get("FARM_URL_PROD") or os.environ.get("AOS_FARM_URL")
     elif mode == "dev":
-        return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL")
+        return os.environ.get("FARM_URL_DEV") or os.environ.get("AOS_FARM_URL")
     else:
         # Auto mode - detect if running in production deployment
         is_production = os.environ.get("REPLIT_DEPLOYMENT") == "1"
         if is_production:
-            return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL")
+            return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL_DEV") or os.environ.get("AOS_FARM_URL")
         else:
-            return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+            return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("AOS_FARM_URL")
 
 
 def get_farm_client() -> FarmClient | None:

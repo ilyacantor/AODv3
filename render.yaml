@@ -5,8 +5,8 @@ services:
     plan: starter
     region: oregon
     branch: dev
-    buildCommand: pip install -r requirements.txt && pip install -e .
-    startCommand: cd src && uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd src && PYTHONPATH=/opt/render/project/src uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0

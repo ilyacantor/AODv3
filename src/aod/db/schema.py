@@ -189,9 +189,38 @@ async def initialize_schema(conn: asyncpg.Connection) -> None:
             ignore_reason TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES runs(run_id)
+            FOREIGN KEY (run_id) REFERENCES runs(run_id),
+            UNIQUE(run_id, item_id)
         )
     """)
+
+    # Clean up duplicate triage actions before applying UNIQUE constraint
+    # This migration removes older duplicate actions, keeping the most recent one per (run_id, item_id)
+    try:
+        duplicates = await conn.fetch("""
+            SELECT run_id, item_id
+            FROM triage_actions
+            GROUP BY run_id, item_id
+            HAVING COUNT(*) > 1
+        """)
+
+        if duplicates:
+            logger.info(f"Cleaning up {len(duplicates)} duplicate triage action sets...")
+            for dup in duplicates:
+                # Keep the most recent action, delete older ones
+                await conn.execute("""
+                    DELETE FROM triage_actions
+                    WHERE action_id IN (
+                        SELECT action_id
+                        FROM triage_actions
+                        WHERE run_id = $1 AND item_id = $2
+                        ORDER BY updated_at DESC
+                        OFFSET 1
+                    )
+                """, dup['run_id'], dup['item_id'])
+            logger.info("Duplicate triage actions cleaned up successfully")
+    except Exception as e:
+        logger.warning(f"Could not clean up duplicate triage actions: {e}")
 
     # Indexes
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_triage_actions_run_id ON triage_actions(run_id)")

@@ -209,8 +209,7 @@
                     return;
                 }
                 
-                const key = `${itemType}:${itemId}`;
-                delete triageActionsMap[key];
+                delete triageActionsMap[itemId];
                 
                 updateTriageItemInSections(itemId, itemType, {
                     triageState: null,
@@ -252,8 +251,7 @@
                 }
                 
                 const state = result.state || action;
-                const key = `${itemType}:${itemId}`;
-                triageActionsMap[key] = {
+                triageActionsMap[itemId] = {
                     item_id: itemId,
                     item_type: itemType,
                     action: action,
@@ -305,9 +303,8 @@
                 
                 const stateMap = { 'SANCTION': 'approved', 'BAN': 'banned', 'DEPROVISION': 'deprovisioned', 'DISMISS_RISK': 'dismissed', 'ACKNOWLEDGE': 'acknowledged', 'RESOLVE': 'approved' };
                 const newState = stateMap[action] || action.toLowerCase();
-                
-                const key = `${itemType}:${assetId}`;
-                triageActionsMap[key] = {
+
+                triageActionsMap[assetId] = {
                     item_id: assetId,
                     item_type: itemType,
                     action: action.toLowerCase(),
@@ -581,8 +578,8 @@
                     const actionsData = await actionsRes.json();
                     const actions = actionsData.actions || actionsData || [];
                     actions.forEach(a => {
-                        const key = `${a.item_type}:${a.item_id}`;
-                        triageActionsMap[key] = a;
+                        // With UNIQUE(run_id, item_id) constraint, key by item_id only
+                        triageActionsMap[a.item_id] = a;
                     });
                 }
                 
@@ -623,7 +620,7 @@
                 
                 shadowAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
-                    const savedAction = triageActionsMap[`shadow:${assetId}`];
+                    const savedAction = triageActionsMap[assetId];
                     const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
@@ -652,7 +649,7 @@
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
                     if (provStatus === 'QUARANTINE' || provStatus === 'BLOCKED') {
-                        const savedAction = triageActionsMap[`blocked:${assetId}`];
+                        const savedAction = triageActionsMap[assetId];
                         const item = { 
                             ...a, 
                             itemType: 'blocked',
@@ -678,7 +675,7 @@
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
                     if (hasRedFinding(assetFindings)) {
-                        const savedAction = triageActionsMap[`blocking:${assetId}`];
+                        const savedAction = triageActionsMap[assetId];
                         const item = { 
                             ...a, 
                             itemType: 'blocking',
@@ -699,8 +696,8 @@
                 zombieAssets.forEach(a => {
                     const assetId = a.asset_id || a.id;
                     if (processedAssetIds.has(assetId)) return;
-                    
-                    const savedAction = triageActionsMap[`zombie:${assetId}`];
+
+                    const savedAction = triageActionsMap[assetId];
                     const provStatus = assetStatusMap[assetId] || (a.provisioning_status || '').toUpperCase();
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
@@ -729,7 +726,7 @@
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
                     if (hasYellowFinding(assetFindings) && !hasRedFinding(assetFindings)) {
-                        const savedAction = triageActionsMap[`judgment:${assetId}`];
+                        const savedAction = triageActionsMap[assetId];
                         const item = { 
                             ...a,
                             itemType: 'judgment',
@@ -755,7 +752,7 @@
                     const assetFindings = assetFindingsMap[assetId] || [];
                     
                     if (provStatus === 'ACTIVE' && hasOnlyGreenFindings(assetFindings)) {
-                        const savedAction = triageActionsMap[`hygiene:${assetId}`];
+                        const savedAction = triageActionsMap[assetId];
                         const item = { 
                             ...a,
                             itemType: 'hygiene',

@@ -140,21 +140,18 @@ async def view_catalog(run_id: str):
     
     finding_to_asset = {str(f.finding_id): str(f.asset_id) for f in findings if f.asset_id}
     
+    # Build map of asset_id -> triage action
+    # With UNIQUE(run_id, item_id) constraint, there's only one action per asset
     triage_by_asset = {}
     for action in triage_actions:
         item_id = action.get('item_id')
         item_type = action.get('item_type')
-        
-        if item_type in ('asset', 'shadow', 'zombie', 'governance', 'hygiene', 'toxic', 'blocked'):
-            if item_id not in triage_by_asset:
-                triage_by_asset[item_id] = action
-            else:
-                existing = triage_by_asset[item_id]
-                existing_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'assigned': 2, 'acknowledged': 2, 'ignored': 1}.get(existing.get('state', ''), 0)
-                new_priority = {'approved': 5, 'banned': 5, 'deprovisioned': 5, 'deferred': 3, 'assigned': 2, 'acknowledged': 2, 'ignored': 1}.get(action.get('state', ''), 0)
-                if new_priority > existing_priority:
-                    triage_by_asset[item_id] = action
+
+        if item_type in ('asset', 'shadow', 'zombie', 'governance', 'hygiene', 'toxic', 'blocked', 'blocking', 'judgment'):
+            # Map directly - no deduplication needed with UNIQUE constraint
+            triage_by_asset[item_id] = action
         elif item_type == 'finding':
+            # For finding-level actions, map to the associated asset
             asset_id = finding_to_asset.get(item_id)
             if asset_id and asset_id not in triage_by_asset:
                 triage_by_asset[asset_id] = action

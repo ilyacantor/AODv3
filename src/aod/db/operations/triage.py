@@ -31,21 +31,23 @@ class TriageOperations:
         action_id = str(uuid.uuid4())
 
         async with pool.acquire() as conn:
+            # Check for existing action by (run_id, item_id) only - item_type is informational
             existing = await conn.fetchrow(
-                "SELECT action_id FROM triage_actions WHERE run_id = $1 AND item_id = $2 AND item_type = $3",
-                run_id, item_id, item_type
+                "SELECT action_id FROM triage_actions WHERE run_id = $1 AND item_id = $2",
+                run_id, item_id
             )
 
             if existing:
+                # Update existing action, including item_type in case asset moved to different section
                 action_id = existing["action_id"]
                 await conn.execute(
                     """
                     UPDATE triage_actions SET
                         action = $1, state = $2, owner = $3, defer_until = $4,
-                        ignore_reason = $5, updated_at = $6
-                    WHERE action_id = $7
+                        ignore_reason = $5, item_type = $6, updated_at = $7
+                    WHERE action_id = $8
                     """,
-                    action, state, owner, defer_until, ignore_reason, now, action_id
+                    action, state, owner, defer_until, ignore_reason, item_type, now, action_id
                 )
             else:
                 await conn.execute(

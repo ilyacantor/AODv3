@@ -681,7 +681,7 @@ class SnowflakeConnector(FabricPlaneConnector):
         if isinstance(ts, str):
             try:
                 return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
+            except (ValueError, AttributeError) as e:
+                logger.debug("Failed to parse timestamp %r: %s", ts, e)
 
         return None

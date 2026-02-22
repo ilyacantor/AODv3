@@ -211,8 +211,8 @@ async def get_farm_status():
         db = await get_db_direct()
         db_tenants = await db.get_recent_tenants(limit=5)
         db_tenants_available = len(db_tenants) > 0
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("DB tenant availability check failed: %s", e, exc_info=True)
 
     if farm_up:
         mode = "live"

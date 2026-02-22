@@ -6,6 +6,7 @@ and supports runtime reloading without restart.
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -32,6 +33,8 @@ from .schema import (
 
 _current_config: Optional[PolicyConfig] = None
 _master_config_data: Optional[dict] = None
+
+logger = logging.getLogger(__name__)
 
 CORPORATE_ROOT_DOMAINS: set[str] = set()
 
@@ -315,8 +318,8 @@ def load_config(path: Optional[str] = None) -> PolicyConfig:
                 data = json.load(f)
             _current_config = _load_from_master(data)
             return _current_config
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning("Failed to load policy from %s: %s", master_path, e)
     
     if config_path.exists():
         try:
@@ -328,8 +331,8 @@ def load_config(path: Optional[str] = None) -> PolicyConfig:
             else:
                 _current_config = _load_from_legacy(data)
             return _current_config
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning("Failed to load policy from %s: %s", config_path, e)
     
     _current_config = PolicyConfig(
         corporate_root_domains=CORPORATE_ROOT_DOMAINS.copy(),

@@ -425,8 +425,8 @@ def run_pipeline_ephemeral(
                 snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
                 if snapshot_as_of.tzinfo is None:
                     snapshot_as_of = snapshot_as_of.replace(tzinfo=timezone.utc)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Failed to parse created_at %r: %s", created_at_str, e)
         
         snapshot = validate_snapshot(
             data,
@@ -679,8 +679,8 @@ async def execute_pipeline(
             snapshot_as_of = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
             if snapshot_as_of.tzinfo is None:
                 snapshot_as_of = snapshot_as_of.replace(tzinfo=timezone.utc)
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug("Failed to parse created_at %r: %s", created_at_str, e)
     
     input_meta = data.get("meta", {}).copy()
     if provenance:

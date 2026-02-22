@@ -518,8 +518,8 @@ class Database:
             for table in ["triage_actions", "observation_samples", "derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
                 try:
                     await conn.execute(f"DELETE FROM {table}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to DELETE FROM %s during clear_all_data: %s", table, e)
             result = await conn.execute("DELETE FROM runs")
             deleted = int(result.split()[-1]) if result else 0
         return deleted
@@ -542,8 +542,8 @@ class Database:
             for table in ["triage_actions", "observation_samples", "derived_classifications", "llm_facts", "rejections", "ambiguous_matches", "artifacts", "findings", "assets"]:
                 try:
                     await conn.execute(f"DELETE FROM {table} WHERE run_id = ANY($1)", ids)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to DELETE FROM %s during prune_old_runs: %s", table, e)
             result = await conn.execute("DELETE FROM runs WHERE run_id = ANY($1)", ids)
             deleted = int(result.split()[-1]) if result else 0
             return deleted

@@ -1,7 +1,10 @@
 """Domain extraction and normalization helpers for reconciliation."""
 
+import logging
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from ..vendor_inference import DOMAIN_TO_VENDOR, VENDOR_TO_DOMAIN
 from ..canonical_key import (
@@ -37,8 +40,8 @@ def extract_raw_domain(domain_input: str) -> Optional[str]:
             from urllib.parse import urlparse
             parsed = urlparse(domain)
             domain = parsed.netloc or parsed.path.split("/")[0]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("URL parse failed for %r: %s", domain_input, e)
 
     # Handle email addresses
     if "@" in domain:
@@ -82,8 +85,8 @@ def extract_registered_domain(domain: str) -> Optional[str]:
         extracted = extract_domain(domain)
         if extracted.suffix and extracted.domain:
             return f"{extracted.domain}.{extracted.suffix}"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("tldextract failed for %r: %s", domain, e)
 
     return None
 

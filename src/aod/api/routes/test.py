@@ -1,8 +1,11 @@
 """Test execution API routes"""
 
+import logging
 import subprocess
 
 from fastapi import APIRouter
+
+logger = logging.getLogger(__name__)
 
 from ..schemas import (
     RunTestsRequest,
@@ -40,13 +43,13 @@ async def run_tests(request: RunTestsRequest) -> RunTestsResponse:
                     if part == 'passed':
                         try:
                             passed_count = int(parts[i-1])
-                        except:
-                            pass
+                        except (ValueError, IndexError) as e:
+                            logger.debug("Failed to parse passed_count: %s", e)
                     if part == 'failed':
                         try:
                             failed_count = int(parts[i-1])
-                        except:
-                            pass
+                        except (ValueError, IndexError) as e:
+                            logger.debug("Failed to parse failed_count: %s", e)
 
         total = passed_count + failed_count
         all_passed = failed_count == 0 and passed_count > 0

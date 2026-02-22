@@ -470,6 +470,6 @@ class KongConnector(FabricPlaneConnector):
         if ts:
             try:
                 return datetime.utcfromtimestamp(ts)
-            except (ValueError, OSError):
-                pass
+            except (ValueError, OSError) as e:
+                logger.debug("Failed to parse Unix timestamp %r: %s", ts, e)
         return None

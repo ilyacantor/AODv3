@@ -476,6 +476,6 @@ class WorkatoConnector(FabricPlaneConnector):
                 # Handle various ISO formats
                 ts = ts.replace("Z", "+00:00")
                 return datetime.fromisoformat(ts)
-            except (ValueError, AttributeError):
-                pass
+            except (ValueError, AttributeError) as e:
+                logger.debug("Failed to parse ISO timestamp %r: %s", ts, e)
         return None

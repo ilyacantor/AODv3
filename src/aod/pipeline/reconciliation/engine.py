@@ -459,8 +459,8 @@ class ReconciliationEngine:
                 if modality_str:
                     try:
                         return ConnectivityModality(modality_str)
-                    except ValueError:
-                        pass
+                    except ValueError as e:
+                        logger.debug("Unknown ConnectivityModality value %r: %s", modality_str, e)
 
         # Default based on plane type
         # (This is a simplification - real implementation would be smarter)

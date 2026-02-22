@@ -1,7 +1,10 @@
 """Utility functions for run-related routes"""
 
+import logging
 from typing import Optional
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 def parse_iso_datetime(dt_str: str) -> Optional[datetime]:
@@ -39,8 +42,8 @@ def parse_snapshot_generated_at(snapshot_data: dict) -> Optional[datetime]:
             result = parse_iso_datetime(created_at_str)
             if result:
                 return result
-    except (ValueError, TypeError):
-        pass
+    except (ValueError, TypeError) as e:
+        logger.debug("Failed to parse snapshot datetime: %s", e)
     return None
 
 

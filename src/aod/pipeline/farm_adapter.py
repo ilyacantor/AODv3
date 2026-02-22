@@ -10,6 +10,9 @@ Validation flow: fetch raw -> normalize_farm_snapshot() -> Snapshot.model_valida
 from datetime import datetime, timezone
 from typing import Any
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # FIELD MAPPING TABLES
@@ -294,7 +297,7 @@ def _extract_domain_from_url(value: str | None) -> str | None:
         if ext.domain and ext.suffix:
             return f"{ext.domain}.{ext.suffix}"
     except ImportError:
-        pass
+        logger.warning("tldextract not installed; domain canonicalization limited to hostname fallback")
     
     # Fallback: return the cleaned hostname
     return value.lower() if value else None
@@ -415,8 +418,8 @@ def _normalize_idp_objects(raw_list: list) -> list[dict]:
             if normalized.get("domain"):
                 normalized["domain"] = _extract_domain_from_url(normalized["domain"])
             result.append(normalized)
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping IdPObject item: normalization failed: %s", e)
     return result
 
 
@@ -442,8 +445,8 @@ def _normalize_cmdb_cis(raw_list: list) -> list[dict]:
                     normalized["fabric_vendor"] = fabric_vendor
 
             result.append(normalized)
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping CMDBConfigItem item: normalization failed: %s", e)
     return result
 
 
@@ -460,8 +463,8 @@ def _normalize_cloud_resources(raw_list: list) -> list[dict]:
                 if env:
                     normalized["environment"] = env
             result.append(normalized)
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping CloudResource item: normalization failed: %s", e)
     return result
 
 
@@ -473,8 +476,8 @@ def _normalize_devices(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, ENDPOINT_DEVICE_MAPPING, "EndpointDevice"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping EndpointDevice item: normalization failed: %s", e)
     return result
 
 
@@ -486,8 +489,8 @@ def _normalize_installed_apps(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, INSTALLED_APP_MAPPING, "InstalledApp"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping InstalledApp item: normalization failed: %s", e)
     return result
 
 
@@ -499,8 +502,8 @@ def _normalize_dns_records(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, DNS_RECORD_MAPPING, "DNSRecord"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping DNSRecord item: normalization failed: %s", e)
     return result
 
 
@@ -512,8 +515,8 @@ def _normalize_proxy_logs(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, PROXY_LOG_MAPPING, "ProxyLog"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping ProxyLog item: normalization failed: %s", e)
     return result
 
 
@@ -525,8 +528,8 @@ def _normalize_certificates(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, CERTIFICATE_MAPPING, "Certificate"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping Certificate item: normalization failed: %s", e)
     return result
 
 
@@ -538,8 +541,8 @@ def _normalize_vendors(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, VENDOR_MAPPING, "Vendor"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping Vendor item: normalization failed: %s", e)
     return result
 
 
@@ -564,8 +567,8 @@ def _normalize_transactions(raw_list: list) -> list[dict]:
             continue
         try:
             result.append(_apply_mapping(raw, TRANSACTION_MAPPING, "Transaction"))
-        except NormalizationError:
-            pass
+        except NormalizationError as e:
+            logger.debug("Skipping Transaction item: normalization failed: %s", e)
     return result
 
 

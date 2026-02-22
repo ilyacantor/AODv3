@@ -34,7 +34,9 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
     Compares what timestamp fields exist in the raw Farm snapshot payload
     vs what fields are present after normalization.
     """
-    farm_url = os.environ.get("FARM_URL", "http://localhost:8000")
+    farm_url = os.environ.get("FARM_URL")
+    if not farm_url:
+        raise ValueError("FARM_URL env var is not set")
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:

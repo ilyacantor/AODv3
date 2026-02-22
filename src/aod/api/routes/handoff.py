@@ -44,6 +44,17 @@ router = APIRouter(prefix="/handoff")
 
 _last_aam_export: Optional[dict] = None
 
+# Maps AOD's internal FabricPlaneType values to AAM's FabricPlane enum keys.
+# AOD's DATA_WAREHOUSE enum value is "warehouse"; AAM expects "DATA_WAREHOUSE".
+# This must stay in sync with AAM's PLANE_TYPE_ALIASES and FabricPlane enum.
+_AOD_PLANE_TO_AAM: dict[str, str] = {
+    "ipaas": "IPAAS",
+    "api_gateway": "API_GATEWAY",
+    "event_bus": "EVENT_BUS",
+    "warehouse": "DATA_WAREHOUSE",
+    "data_warehouse": "DATA_WAREHOUSE",
+}
+
 
 class GovernanceInfo(BaseModel):
     """Governance metadata for AAM connection establishment"""
@@ -529,21 +540,20 @@ async def export_aam_candidates(
         connected_via = None
         if asset_vendor_lower in farm_fabric_by_vendor:
             plane = farm_fabric_by_vendor[asset_vendor_lower]
-            vendor_display = plane.get("vendor", "").replace("_", " ").title()
-            connected_via = f"Connect via {vendor_display}"
+            connected_via = _AOD_PLANE_TO_AAM.get(plane.get("plane_type", "").lower())
         elif asset.fabric_plane_tag:
-            vendor_display = asset.fabric_plane_tag.controller_vendor.replace("_", " ").title()
-            connected_via = f"Connect via {vendor_display}"
-        
+            # .name is the Python enum member name — maps directly to AAM's FabricPlane enum key
+            # e.g. FabricPlaneType.DATA_WAREHOUSE.name == "DATA_WAREHOUSE"
+            connected_via = asset.fabric_plane_tag.plane_type.name
+
         execution_allowed, action_type = determine_execution_flags(asset_findings)
 
         # Build evidence-based pipe data (Sprint 5 enhancement)
         asset_pipes, fabric_summary = build_pipe_evidence_for_asset(asset)
 
-        # Update connected_via from pipe evidence if available
-        if fabric_summary and fabric_summary.primary_vendor:
-            vendor_display = fabric_summary.primary_vendor.replace("_", " ").title()
-            connected_via = f"Connect via {vendor_display}"
+        # Update connected_via from pipe evidence if available (overrides tag/farm assignment)
+        if fabric_summary and fabric_summary.primary_plane:
+            connected_via = _AOD_PLANE_TO_AAM.get(fabric_summary.primary_plane) or connected_via
 
         candidate = ConnectionCandidate(
             asset_key=asset_key,

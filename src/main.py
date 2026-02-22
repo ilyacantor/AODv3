@@ -2,7 +2,7 @@
 
 import os
 import logging
-from fastapi import FastAPI, Response, Depends, HTTPException, Security
+from fastapi import FastAPI, Request, Response, Depends, HTTPException, Security
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,18 +24,25 @@ logger = logging.getLogger(__name__)
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+async def verify_api_key(request: Request, api_key: str = Security(API_KEY_HEADER)):
     """
     Verify API key for protected endpoints.
 
     Behavior:
     - If AOD_API_KEY env var is NOT set: Allow all requests (dev mode)
     - If AOD_API_KEY env var IS set: Require matching X-API-Key header
+    - Same-origin browser requests (Referer from served UI) are exempt
     """
     expected_key = os.environ.get("AOD_API_KEY")
 
     if not expected_key:
         # No key configured = dev mode, allow all
+        return True
+
+    # Allow same-origin requests from the served UI
+    referer = request.headers.get("referer", "")
+    host = request.headers.get("host", "")
+    if referer and host and host in referer:
         return True
 
     if not api_key:

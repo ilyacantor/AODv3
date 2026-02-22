@@ -121,6 +121,18 @@ async def startup():
     await get_db_direct()
 
 
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanup resources on shutdown"""
+    from aod.api.deps import get_farm_client
+
+    # Close Farm HTTP client and cleanup connections
+    farm_client = get_farm_client()
+    if farm_client:
+        await farm_client.close()
+        logger.info("shutdown.farm_client_closed")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for deployment"""
@@ -170,4 +182,5 @@ async def serve_ui(response: Response):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    # Use 2 workers for better concurrency (production uses same in render.yaml)
+    uvicorn.run(app, host="0.0.0.0", port=5000, workers=2)

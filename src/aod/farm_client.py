@@ -62,6 +62,19 @@ class FarmClient:
     def __init__(self, base_url: str, timeout: float = FARM_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # Reusable client with connection pooling for better performance
+        self._client = httpx.AsyncClient(
+            timeout=timeout,
+            limits=httpx.Limits(
+                max_keepalive_connections=20,
+                max_connections=100,
+                keepalive_expiry=30.0
+            )
+        )
+
+    async def close(self):
+        """Close the HTTP client and cleanup connections. Call on shutdown."""
+        await self._client.aclose()
 
     async def probe(self) -> bool:
         """
@@ -74,8 +87,9 @@ class FarmClient:
         """
         url = f"{self.base_url}/api/snapshots?tenant_id=&limit=1"
         try:
-            async with httpx.AsyncClient(timeout=FARM_PROBE_TIMEOUT) as client:
-                response = await client.get(url)
+            # Use dedicated short-timeout client for probe to avoid waiting
+            async with httpx.AsyncClient(timeout=FARM_PROBE_TIMEOUT) as probe_client:
+                response = await probe_client.get(url)
                 is_up = response.status_code < 400
                 logger.info("farm.probe", extra={
                     "status": response.status_code, "up": is_up
@@ -104,11 +118,11 @@ class FarmClient:
             is_last_attempt = (attempt == max_attempts - 1)
 
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.get(url)
+                # Use shared client with connection pooling
+                response = await self._client.get(url)
 
-                    # Check for retryable status codes
-                    if response.status_code in RETRYABLE_STATUS_CODES:
+                # Check for retryable status codes
+                if response.status_code in RETRYABLE_STATUS_CODES:
                         # Check if response is HTML (Replit "app not running" page)
                         content_type = response.headers.get("content-type", "")
                         if "html" in content_type.lower() or response.text.strip().startswith("<!"):
@@ -525,8 +539,8 @@ class FarmClient:
         })
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, json=payload)
+            # Use shared client with connection pooling
+            response = await self._client.post(url, json=payload)
         except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
             logger.warning("farm.generate_fabric.network_error", extra={
                 "industry": industry, "error": str(e)

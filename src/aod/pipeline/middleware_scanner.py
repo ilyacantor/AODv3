@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 FARM_URL = os.environ.get(
     "FARM_URL_PROD",
-    os.environ.get("FARM_URL", "https://autonomos.farm")
+    os.environ.get("FARM_URL", "https://farmv2.onrender.com")
 )
 
 

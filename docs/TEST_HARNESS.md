@@ -430,7 +430,7 @@ The test harness respects policy settings in `config/policy_master.json`:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `FARM_URL_PROD` | Production Farm URL | autonomos.farm |
+| `FARM_URL_PROD` | Production Farm URL | farmv2.onrender.com |
 | `FARM_URL_DEV` | Development Farm URL | Replit dev URL |
 | `FARM_URL_MODE` | Which URL to use: `prod`, `dev`, `auto` | `auto` |
 | `DATABASE_URL` | PostgreSQL connection | Replit-managed |

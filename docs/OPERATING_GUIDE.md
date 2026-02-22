@@ -9,7 +9,7 @@ This guide covers day-to-day operation of AOD (Asset Ownership Discovery) and Fa
 | Component | URL | Purpose |
 |-----------|-----|---------|
 | **AOD** | `discover.autonomos.tech` | Discovery engine - processes snapshots, classifies assets |
-| **Farm** | `autonomos.farm` | Test data generator - creates realistic enterprise snapshots |
+| **Farm** | `farmv2.onrender.com` | Test data generator - creates realistic enterprise snapshots |
 
 **Data Flow:**
 ```
@@ -31,7 +31,7 @@ Farm generates synthetic but realistic enterprise data snapshots containing:
 
 ### Accessing Farm
 
-1. Navigate to `autonomos.farm`
+1. Navigate to `farmv2.onrender.com`
 2. Farm uses autoscale - first request may take 10-15 seconds to wake
 3. AOD shows a cyan loading toast during Farm cold starts
 
@@ -225,7 +225,7 @@ These are **documented decisions**, not bugs:
 | Variable | Purpose | Example |
 |----------|---------|---------|
 | `DATABASE_URL` | PostgreSQL connection | `postgresql://...` |
-| `FARM_URL_PROD` | Production Farm URL | `https://autonomos.farm` |
+| `FARM_URL_PROD` | Production Farm URL | `https://farmv2.onrender.com` |
 | `FARM_URL_DEV` | Development Farm URL | `http://localhost:8000` |
 | `FARM_URL_MODE` | Which URL to use | `prod`, `dev`, `auto` |
 

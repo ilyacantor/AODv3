@@ -123,22 +123,22 @@ class FarmClient:
 
                 # Check for retryable status codes
                 if response.status_code in RETRYABLE_STATUS_CODES:
-                        # Check if response is HTML (Replit "app not running" page)
-                        content_type = response.headers.get("content-type", "")
-                        if "html" in content_type.lower() or response.text.strip().startswith("<!"):
-                            last_error = "FARM_WAKING_OR_DOWN"
-                            if not is_last_attempt:
-                                logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
-                                continue
-                            break
-
-                        last_error = f"HTTP {response.status_code}"
+                    # Check if response is HTML (Replit "app not running" page)
+                    content_type = response.headers.get("content-type", "")
+                    if "html" in content_type.lower() or response.text.strip().startswith("<!"):
+                        last_error = "FARM_WAKING_OR_DOWN"
                         if not is_last_attempt:
                             logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
                             continue
                         break
 
-                    return response, None
+                    last_error = f"HTTP {response.status_code}"
+                    if not is_last_attempt:
+                        logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
+                        continue
+                    break
+
+                return response, None
 
             except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
                 last_error = "FARM_WAKING_OR_DOWN"

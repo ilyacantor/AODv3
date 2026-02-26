@@ -15,7 +15,8 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-POLICY_MASTER_PATH = Path("config/policy_master.json")
+# Anchor to project root so path works regardless of cwd (Render does cd src/)
+POLICY_MASTER_PATH = Path(__file__).resolve().parents[4] / "config" / "policy_master.json"
 
 
 class PolicyManifestBuilder:

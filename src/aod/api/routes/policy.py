@@ -19,7 +19,8 @@ from ...core.policy import get_current_config, reload_config, save_config
 router = APIRouter(prefix="/policy", tags=["policy"])
 logger = logging.getLogger(__name__)
 
-POLICY_MASTER_PATH = Path("config/policy_master.json")
+# Anchor to project root (src/../config) so path works regardless of cwd
+POLICY_MASTER_PATH = Path(__file__).resolve().parents[4] / "config" / "policy_master.json"
 
 
 async def _notify_farm_webhook(webhook_url: str, config_dict: dict) -> bool:

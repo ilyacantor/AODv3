@@ -36,6 +36,9 @@ _master_config_data: Optional[dict] = None
 
 logger = logging.getLogger(__name__)
 
+# Anchor to project root so path works regardless of cwd (Render does cd src/)
+_PROJECT_CONFIG_DIR = Path(__file__).resolve().parents[4] / "config"
+
 CORPORATE_ROOT_DOMAINS: set[str] = set()
 
 
@@ -309,8 +312,8 @@ def load_config(path: Optional[str] = None) -> PolicyConfig:
         config_path = Path(path)
         master_path = None
     else:
-        master_path = Path("config/policy_master.json")
-        config_path = Path("config/policy.json")
+        master_path = _PROJECT_CONFIG_DIR / "policy_master.json"
+        config_path = _PROJECT_CONFIG_DIR / "policy.json"
     
     if master_path and master_path.exists():
         try:
@@ -399,7 +402,7 @@ def save_config(config: PolicyConfig, path: Optional[str] = None) -> bool:
     """
     global _master_config_data
     
-    config_path = Path(path) if path else Path("config/policy_master.json")
+    config_path = Path(path) if path else _PROJECT_CONFIG_DIR / "policy_master.json"
     
     if _master_config_data is None:
         if config_path.exists():

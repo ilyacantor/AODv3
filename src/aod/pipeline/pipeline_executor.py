@@ -698,9 +698,9 @@ async def execute_pipeline(
     await db.create_run(run_log)
     
     try:
-        pruned = await db.prune_old_runs(keep=6)
+        pruned = await db.prune_old_runs(keep=20)
         if pruned > 0:
-            logger.info("pipeline.runs.pruned", extra={"pruned": pruned, "kept": 6})
+            logger.info("pipeline.runs.pruned", extra={"pruned": pruned, "kept": 20})
     except Exception as e:
         logger.warning("pipeline.runs.prune_failed", extra={"error": str(e)})
     

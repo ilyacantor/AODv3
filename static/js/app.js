@@ -1479,8 +1479,9 @@
                 select.innerHTML = '<option value="">Select a run...</option>';
                 const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
                 completedRuns.sort((a, b) => new Date(b.started_at || b.created_at) - new Date(a.started_at || a.created_at));
-                console.log('Handoff: loaded', completedRuns.length, 'runs');
-                completedRuns.forEach((run, idx) => {
+                const displayRuns = completedRuns.slice(0, 20);
+                console.log('Handoff: loaded', completedRuns.length, 'runs, showing', displayRuns.length);
+                displayRuns.forEach((run, idx) => {
                     const opt = document.createElement('option');
                     opt.value = run.run_id;
                     const tenant = run.tenant_id || run.tenant_name || 'Unknown';
@@ -1490,12 +1491,12 @@
                     opt.textContent = `${tenant} - ${date}${latest}`;
                     select.appendChild(opt);
                 });
-                if (currentRunId && completedRuns.some(r => r.run_id === currentRunId)) {
+                if (currentRunId && displayRuns.some(r => r.run_id === currentRunId)) {
                     select.value = currentRunId;
                     loadHandoffCandidates(currentRunId, 'all');
-                } else if (completedRuns.length > 0) {
-                    select.value = completedRuns[0].run_id;
-                    loadHandoffCandidates(completedRuns[0].run_id, 'all');
+                } else if (displayRuns.length > 0) {
+                    select.value = displayRuns[0].run_id;
+                    loadHandoffCandidates(displayRuns[0].run_id, 'all');
                 }
             } catch (err) {
                 console.error('Failed to load handoff runs:', err);

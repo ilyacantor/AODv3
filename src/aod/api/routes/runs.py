@@ -353,28 +353,37 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
 @router.get("", response_model=list[RunDetailResponse])
 async def list_runs(tenant_id: Optional[str] = None):
     """List all discovery runs, optionally filtered by tenant_id"""
-    db = await get_db_direct()
-    runs = await db.get_all_runs()
-    
+    import traceback
+    try:
+        db = await get_db_direct()
+        runs = await db.get_all_runs()
+    except Exception as e:
+        logger.error("list_runs DB fetch failed: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"DB fetch failed: {type(e).__name__}: {e}")
+
     if tenant_id:
         runs = [r for r in runs if r.tenant_id == tenant_id]
-    
-    return [
-        RunDetailResponse(
-            run_id=run.run_id,
-            tenant_id=run.tenant_id,
-            status=run.status.value,
-            started_at=run.started_at.isoformat(),
-            completed_at=run.completed_at.isoformat() if run.completed_at else None,
-            input_meta=run.input_meta,
-            counts=run.counts,
-            stage_timings=run.stage_timings,
-            failure_reasons=run.failure_reasons,
-            sync_status=run.sync_status.value,
-            sync_error=run.sync_error
-        )
-        for run in runs
-    ]
+
+    try:
+        return [
+            RunDetailResponse(
+                run_id=run.run_id,
+                tenant_id=run.tenant_id,
+                status=run.status.value,
+                started_at=run.started_at.isoformat(),
+                completed_at=run.completed_at.isoformat() if run.completed_at else None,
+                input_meta=run.input_meta,
+                counts=run.counts,
+                stage_timings=run.stage_timings,
+                failure_reasons=run.failure_reasons,
+                sync_status=run.sync_status.value,
+                sync_error=run.sync_error
+            )
+            for run in runs
+        ]
+    except Exception as e:
+        logger.error("list_runs serialization failed: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Serialization failed: {type(e).__name__}: {e}")
 
 
 @router.get("/{run_id}", response_model=RunDetailResponse)

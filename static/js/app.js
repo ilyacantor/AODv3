@@ -3306,7 +3306,14 @@ ${JSON.stringify(technicalReport, null, 2)}
             const loading = document.getElementById('runsLoading'), list = document.getElementById('runsList');
             loading.classList.remove('hidden');
             try {
-                const r = await fetch('/api/runs'); let runs = await r.json();
+                const r = await fetch('/api/runs');
+                if (!r.ok) {
+                    const body = await r.text();
+                    const err = new Error(`API ${r.status}: ${body.slice(0, 300)}`);
+                    err.responseBody = body.slice(0, 500);
+                    throw err;
+                }
+                let runs = await r.json();
                 runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
                 updateTimingDisplay(runs);
                 if (runs.length === 0) { list.innerHTML = '<div class="empty-state">No runs yet. Fetch a snapshot to get started.</div>'; }
@@ -3344,7 +3351,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                         await selectRun(runs[0].run_id);
                     }
                 }
-            } catch { list.innerHTML = '<div class="error-message">Failed to load runs</div>'; }
+            } catch (err) {
+                console.error('Failed to load runs:', err);
+                let detail = err.message || String(err);
+                if (err.responseBody) detail += ' | ' + err.responseBody;
+                list.innerHTML = `<div class="error-message">Failed to load runs: ${detail}</div>`;
+            }
             finally { loading.classList.add('hidden'); }
         }
         

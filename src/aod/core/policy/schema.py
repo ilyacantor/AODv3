@@ -68,6 +68,7 @@ class IdpGovernanceConfig:
     """
     trust_heuristic_matches: bool = False  # Default: strict (Farm's approach)
     heuristic_requires_sso: bool = True    # When loose, still require SSO
+    require_sso_for_authoritative_matches: bool = False  # Authoritative matches don't need SSO
 
 
 @dataclass
@@ -309,6 +310,7 @@ class PolicyConfig:
             "idp_governance": {
                 "trust_heuristic_matches": self.idp_governance.trust_heuristic_matches,
                 "heuristic_requires_sso": self.idp_governance.heuristic_requires_sso,
+                "require_sso_for_authoritative_matches": self.idp_governance.require_sso_for_authoritative_matches,
             },
             "fuzzy_matching": {
                 "max_edit_distance": self.fuzzy_matching.max_edit_distance,

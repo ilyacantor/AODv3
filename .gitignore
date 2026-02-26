@@ -58,3 +58,9 @@ node_modules/
 client/node_modules/
 .npm
 npm-debug.log*
+
+# Local agent state
+.claude/
+
+# Windows metadata
+*.Zone.Identifier

@@ -66,6 +66,7 @@ def check_idp_admission(
     config = get_current_config()
     trust_heuristic = config.idp_governance.trust_heuristic_matches
     heuristic_requires_sso = config.idp_governance.heuristic_requires_sso
+    require_sso_for_authoritative = config.idp_governance.require_sso_for_authoritative_matches
 
     if correlation.idp.status not in (MatchStatus.MATCHED, MatchStatus.AMBIGUOUS):
         return False, ""
@@ -137,7 +138,10 @@ def check_idp_admission(
             # - Otherwise, SSO is required
             #
             requires_sso = True  # Default: always require SSO
-            if is_heuristic_match and trust_heuristic and not heuristic_requires_sso:
+            if is_authoritative and not require_sso_for_authoritative:
+                # Authoritative match quality is sufficient — SSO not required
+                requires_sso = False
+            elif is_heuristic_match and trust_heuristic and not heuristic_requires_sso:
                 # Loose mode with heuristic match AND SSO not required
                 requires_sso = False
             
@@ -151,12 +155,20 @@ def check_idp_admission(
             
             # No SSO - check if this match can still grant governance
             if not requires_sso:
-                if debug_match:
-                    logging.info(
-                        f"[GOVERNANCE_GATE] IdP heuristic governance granted (no SSO required): entity={entity_registered_domain} "
-                        f"idp_name={record.name} is_heuristic={is_heuristic_match}"
-                    )
-                return True, "IdP heuristic match (SSO not required by policy)"
+                if is_authoritative:
+                    if debug_match:
+                        logging.info(
+                            f"[GOVERNANCE_GATE] IdP authoritative governance granted (no SSO required): entity={entity_registered_domain} "
+                            f"idp_name={record.name} method={idp_match_method}"
+                        )
+                    return True, "IdP authoritative match (SSO not required for authoritative)"
+                else:
+                    if debug_match:
+                        logging.info(
+                            f"[GOVERNANCE_GATE] IdP heuristic governance granted (no SSO required): entity={entity_registered_domain} "
+                            f"idp_name={record.name} is_heuristic={is_heuristic_match}"
+                        )
+                    return True, "IdP heuristic match (SSO not required by policy)"
             
             # No SSO - this IdP record does not provide governance (SCIM alone is not enough)
             if debug_match:

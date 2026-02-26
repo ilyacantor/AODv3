@@ -110,6 +110,7 @@ def _load_from_master(data: dict) -> PolicyConfig:
     idp_governance = IdpGovernanceConfig(
         trust_heuristic_matches=_extract_value(ig_section, "trust_heuristic_matches", False),
         heuristic_requires_sso=_extract_value(ig_section, "heuristic_requires_sso", True),
+        require_sso_for_authoritative_matches=_extract_value(ig_section, "require_sso_for_authoritative_matches", False),
     )
     
     fm_section = data.get("fuzzy_matching", {})

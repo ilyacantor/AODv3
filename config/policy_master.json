@@ -165,6 +165,12 @@
       "type": "boolean",
       "description": "When trust_heuristic_matches=true, require SSO for heuristic matches to grant governance. TRUE = heuristic matches only govern if IdP has SSO enabled. FALSE = heuristic matches govern even without SSO.",
       "ui_label": "Heuristic Matches Require SSO"
+    },
+    "require_sso_for_authoritative_matches": {
+      "value": false,
+      "type": "boolean",
+      "description": "Whether authoritative IdP matches (domain, canonical_name, uri, foreign_key) require SSO to grant governance. FALSE = authoritative match quality alone is sufficient. TRUE = SSO required even for authoritative matches (original Jan 2026 behavior).",
+      "ui_label": "Require SSO for Authoritative Matches"
     }
   },
   "fuzzy_matching": {

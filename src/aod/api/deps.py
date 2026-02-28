@@ -16,27 +16,11 @@ def now_pst() -> datetime:
 
 def get_farm_url() -> str | None:
     """Get Farm URL from environment.
-    
-    FARM_URL_MODE controls which URL to use:
-    - "prod": Use FARM_URL_PROD only
-    - "dev": Use FARM_URL_DEV only  
-    - "auto" (default): Auto-detect based on REPLIT_DEPLOYMENT (prod if deployed, dev otherwise)
-    
-    Falls back to FARM_URL for backward compatibility.
+
+    Reads FARM_URL. Set in .env for local dev, in Render dashboard for production.
+    Returns None if not configured.
     """
-    mode = os.environ.get("FARM_URL_MODE", "auto").lower()
-    
-    if mode == "prod":
-        return os.environ.get("FARM_URL_PROD") or os.environ.get("AOS_FARM_URL")
-    elif mode == "dev":
-        return os.environ.get("FARM_URL_DEV") or os.environ.get("AOS_FARM_URL")
-    else:
-        # Auto mode - detect if running in production deployment
-        is_production = os.environ.get("REPLIT_DEPLOYMENT") == "1"
-        if is_production:
-            return os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL_DEV") or os.environ.get("AOS_FARM_URL")
-        else:
-            return os.environ.get("FARM_URL_DEV") or os.environ.get("FARM_URL_PROD") or os.environ.get("AOS_FARM_URL")
+    return os.environ.get("FARM_URL")
 
 
 def get_farm_client() -> FarmClient | None:

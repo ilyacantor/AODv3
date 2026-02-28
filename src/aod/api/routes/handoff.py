@@ -25,8 +25,8 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
-from src.aod.db.database import get_db_direct
-from src.aod.models.output_contracts import (
+from ...db.database import get_db_direct
+from ...models.output_contracts import (
     ProvisioningStatus,
     ConnectionCandidate,
     CandidateFinding,

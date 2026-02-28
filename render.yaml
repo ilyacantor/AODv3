@@ -34,12 +34,6 @@ services:
       - key: AOD_CORS_ORIGINS
         sync: false          # Comma-separated allowed origins; falls back to insecure dev default
       # --- Farm connection tunables ---
-      - key: FARM_URL_DEV
-        sync: false
-      - key: FARM_URL_PROD
-        sync: false
-      - key: FARM_URL_MODE
-        sync: false          # "dev" or "prod" — selects which FARM_URL_* to use
       - key: FARM_TIMEOUT
         sync: false
       - key: FARM_RETRIES

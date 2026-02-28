@@ -483,7 +483,7 @@ async def snapshot_drift_check(run_id: str):
         return {
             "run_id": run_id,
             "status": "NO_FARM_URL",
-            "detail": "FARM_URL_PROD not configured"
+            "detail": "FARM_URL not configured"
         }
     
     try:

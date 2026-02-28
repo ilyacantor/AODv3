@@ -65,7 +65,7 @@ def build_reconcile_payload(
         if f.triage_priority.value in ("p0", "p1")
     ][:10]
     
-    aod_callback_url = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    aod_callback_url = os.environ.get("AOD_BASE_URL", "")
     if aod_callback_url and not aod_callback_url.startswith("http"):
         aod_callback_url = f"https://{aod_callback_url}"
     
@@ -171,7 +171,7 @@ async def reconcile_to_farm(
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
     """
-    base_url = farm_url or os.environ.get("FARM_URL_PROD") or os.environ.get("FARM_URL")
+    base_url = farm_url or os.environ.get("FARM_URL")
     if not base_url:
         return False, "No Farm URL configured"
     

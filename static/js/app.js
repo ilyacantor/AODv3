@@ -3228,8 +3228,11 @@ ${JSON.stringify(technicalReport, null, 2)}
                 let latestTenant = null;
                 try {
                     const snapshotsRes = await fetch('/api/farm/all-snapshots');
-                    const allSnapshots = await snapshotsRes.json();
-                    if (Array.isArray(allSnapshots) && allSnapshots.length > 0) {
+                    const rawData = await snapshotsRes.json();
+                    // Backend returns a raw array when Farm is up,
+                    // or { snapshots: [...], offline_mode: true } when cached/offline
+                    const allSnapshots = Array.isArray(rawData) ? rawData : (rawData.snapshots || []);
+                    if (allSnapshots.length > 0) {
                         // Find the most recent snapshot
                         allSnapshots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                         latestTenant = allSnapshots[0].tenant_id;

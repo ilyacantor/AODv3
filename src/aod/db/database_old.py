@@ -479,6 +479,62 @@ class Database:
             policy_snapshot=json.loads(policy_snapshot_data) if policy_snapshot_data else None
         )
     
+    async def get_latest_run_for_tenant(
+        self, tenant_id: str, snapshot_id: Optional[str] = None
+    ) -> Optional[RunLog]:
+        """Get the latest run for a tenant, optionally filtered by snapshot_id.
+
+        Uses a SQL WHERE clause — does NOT load all runs.
+        """
+        pool = await self.get_pool()
+
+        async with pool.acquire() as conn:
+            if snapshot_id:
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM runs
+                    WHERE tenant_id = $1
+                      AND input_meta::jsonb ->> 'snapshot_id' = $2
+                    ORDER BY started_at DESC
+                    LIMIT 1
+                    """,
+                    tenant_id,
+                    snapshot_id,
+                )
+            else:
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM runs
+                    WHERE tenant_id = $1
+                    ORDER BY started_at DESC
+                    LIMIT 1
+                    """,
+                    tenant_id,
+                )
+
+        if not row:
+            return None
+
+        sync_status_val = row.get("sync_status", "not_applicable")
+        sync_error_val = row.get("sync_error")
+        stage_timings_data = row.get("stage_timings")
+        policy_snapshot_data = row.get("policy_snapshot")
+
+        return RunLog(
+            run_id=row["run_id"],
+            tenant_id=row["tenant_id"],
+            status=RunStatus(row["status"]),
+            started_at=datetime.fromisoformat(row["started_at"]),
+            completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            input_meta=json.loads(row["input_meta"]),
+            counts=RunCounts.model_validate_json(row["counts"]),
+            stage_timings=PipelineStageTimings.model_validate_json(stage_timings_data) if stage_timings_data else None,
+            failure_reasons=json.loads(row["failure_reasons"]),
+            sync_status=SyncStatus(sync_status_val),
+            sync_error=sync_error_val,
+            policy_snapshot=json.loads(policy_snapshot_data) if policy_snapshot_data else None
+        )
+
     async def get_all_runs(self) -> list[RunLog]:
         """Get all run logs"""
         pool = await self.get_pool()

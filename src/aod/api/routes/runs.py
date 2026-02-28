@@ -321,20 +321,16 @@ async def resync_run_to_farm(request: ResyncRequest):
 async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
     """
     Get the latest run for a tenant and optionally a specific snapshot.
-    
+
+    Uses a SQL WHERE clause — does NOT load all runs.
     Returns HTTP 404 if no matching run exists.
     """
     db = await get_db_direct()
-    runs = await db.get_all_runs()
-    
-    matching = [r for r in runs if r.tenant_id == tenant_id]
-    if snapshot_id:
-        matching = [r for r in matching if r.input_meta.get("snapshot_id") == snapshot_id]
-    
-    if not matching:
+    run = await db.get_latest_run_for_tenant(tenant_id, snapshot_id)
+
+    if not run:
         raise HTTPException(status_code=404, detail=f"No run found for tenant {tenant_id}" + (f" and snapshot {snapshot_id}" if snapshot_id else ""))
-    
-    run = matching[0]
+
     return RunDetailResponse(
         run_id=run.run_id,
         tenant_id=run.tenant_id,

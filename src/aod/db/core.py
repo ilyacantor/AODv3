@@ -88,6 +88,9 @@ class Database:
     async def prune_old_runs(self, keep: int = 6) -> int:
         return await self._runs.prune_old_runs(keep)
 
+    async def get_latest_run_for_tenant(self, tenant_id: str, snapshot_id=None):
+        return await self._runs.get_latest_run_for_tenant(tenant_id, snapshot_id)
+
     async def get_recent_tenants(self, limit: int = 5) -> list[str]:
         return await self._runs.get_recent_tenants(limit)
 

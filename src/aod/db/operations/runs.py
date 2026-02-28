@@ -150,6 +150,43 @@ class RunOperations:
             deleted = int(result.split()[-1]) if result else 0
             return deleted
 
+    async def get_latest_run_for_tenant(
+        self, tenant_id: str, snapshot_id: Optional[str] = None
+    ) -> Optional[RunLog]:
+        """Get the latest run for a tenant, optionally filtered by snapshot_id.
+
+        Uses a SQL WHERE clause — does NOT load all runs.
+        """
+        pool = await self._get_pool()
+
+        async with pool.acquire() as conn:
+            if snapshot_id:
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM runs
+                    WHERE tenant_id = $1
+                      AND input_meta::jsonb ->> 'snapshot_id' = $2
+                    ORDER BY started_at DESC
+                    LIMIT 1
+                    """,
+                    tenant_id,
+                    snapshot_id,
+                )
+            else:
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM runs
+                    WHERE tenant_id = $1
+                    ORDER BY started_at DESC
+                    LIMIT 1
+                    """,
+                    tenant_id,
+                )
+
+        if not row:
+            return None
+        return deserialize_run_row(row)
+
     async def get_recent_tenants(self, limit: int = 5) -> list[str]:
         """Get distinct tenant IDs from recent runs, ordered by most recent."""
         pool = await self._get_pool()

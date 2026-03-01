@@ -3740,8 +3740,20 @@ ${JSON.stringify(technicalReport, null, 2)}
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
+                // Always refresh tenant/snapshot data (Overview tab)
                 await populateTenantsFromFarm();
                 await handleTenantChange();
+
+                // Refresh whichever tab is currently active
+                const activeTab = document.querySelector('.header-nav-tab.active');
+                const activeTabId = activeTab ? activeTab.dataset.tab : null;
+
+                if (activeTabId === 'handoff') {
+                    await loadHandoffRuns();
+                } else if (activeTabId === 'triage') {
+                    await loadTriageRuns();
+                }
+
                 showToast('Data refreshed', 'success');
             });
         }

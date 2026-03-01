@@ -62,5 +62,8 @@ npm-debug.log*
 # Local agent state
 .claude/
 
+# Runtime data/cache
+data/
+
 # Windows metadata
 *.Zone.Identifier

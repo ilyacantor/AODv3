@@ -383,7 +383,47 @@ function buildEdges(run: RunData): Edge[] {
     raw.push({ from: `fabric-${i % fpCount}`, to: `sor-${i}`, width: 1.5 })
   })
 
-  return raw.map((e, i) => ({ ...e, id: `e${i}` }))
+  const withIds = raw.map((e, i) => ({ ...e, id: `e${i}` }))
+  return assignEdgeCurves(withIds)
+}
+
+/* ─── Distribute curve roundness so overlapping edges fan out visually ─── */
+function assignEdgeCurves(edges: Edge[]): Edge[] {
+  // Group edges by shared endpoint (fan-out by `from`, fan-in by `to`)
+  const fanOut = new Map<string, number[]>()
+  const fanIn  = new Map<string, number[]>()
+  edges.forEach((e, i) => {
+    const f = e.from as string
+    const t = e.to as string
+    if (!fanOut.has(f)) fanOut.set(f, [])
+    fanOut.get(f)!.push(i)
+    if (!fanIn.has(t)) fanIn.set(t, [])
+    fanIn.get(t)!.push(i)
+  })
+
+  // Collect all fan groups, largest first so each edge gets roundness from its most crowded fan
+  const groups: number[][] = []
+  for (const indices of fanOut.values()) if (indices.length > 1) groups.push(indices)
+  for (const indices of fanIn.values())  if (indices.length > 1) groups.push(indices)
+  groups.sort((a, b) => b.length - a.length)
+
+  const assigned = new Set<number>()
+  for (const group of groups) {
+    const unassigned = group.filter((i) => !assigned.has(i))
+    if (unassigned.length < 2) continue
+    const n = unassigned.length
+    const step = Math.min(0.15, 0.8 / (n - 1))
+    unassigned.forEach((idx, j) => {
+      const roundness = -((n - 1) * step) / 2 + j * step
+      edges[idx] = {
+        ...edges[idx],
+        smooth: { enabled: true, type: 'curvedCW' as any, roundness },
+      }
+      assigned.add(idx)
+    })
+  }
+
+  return edges
 }
 
 /* ─── Layout presets ─── */
@@ -457,7 +497,7 @@ function getBaseOptions(): Options {
     edges: {
       color: { color: C.edge, opacity: 0.8 },
       arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-      smooth: { enabled: true, type: 'dynamic', roundness: 0.5 },
+      smooth: { enabled: true, type: 'continuous', roundness: 0.5 },
       width: 2,
     },
     interaction: {
@@ -606,6 +646,14 @@ export default function PipelineTopology() {
   useEffect(() => {
     const net = networkRef.current
     if (!net) return
+
+    // 1. Stop physics before swapping solver to prevent mid-frame crash
+    net.stopSimulation()
+
+    // 2. Remove any leftover stabilization listener from previous layout
+    net.off('stabilizationIterationsDone')
+
+    // 3. Apply new layout options
     const opts = getLayoutOptions(layout)
     net.setOptions(opts as any)
 
@@ -617,6 +665,9 @@ export default function PipelineTopology() {
     } else {
       setPhysicsEnabled(true)
     }
+
+    // 4. Restart stabilization cleanly
+    net.stabilize()
   }, [layout])
 
   // Search — dim non-matching nodes

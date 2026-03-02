@@ -45,16 +45,6 @@ interface RunData {
   stage_timings?: Record<string, number>
 }
 
-interface DerivedData {
-  shadow_count: number
-  zombie_count: number
-  distribution: {
-    total_assets: number
-    with_idp_match: number
-    with_cmdb_match: number
-  }
-}
-
 /* ─── Color constants (matching AAM topology) ─── */
 const C = {
   cyan:     '#22d3ee',
@@ -279,8 +269,29 @@ const planeLabels: Record<string, string> = {
 const planeColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
 const observationColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
 
+/* ─── Map SORs to fabric planes by domain, sorted by fabric plane index ─── */
+function getSorMapping(run: RunData): { sorIndex: number; fpIndex: number }[] {
+  const fpCount = run.input_meta.fabric_planes.length
+  const domainGroups = new Map<string, number[]>()
+  run.input_meta.sors.forEach((s, i) => {
+    const d = s.domain
+    if (!domainGroups.has(d)) domainGroups.set(d, [])
+    domainGroups.get(d)!.push(i)
+  })
+  const mapping: { sorIndex: number; fpIndex: number }[] = []
+  let fpIdx = 0
+  for (const sorIndices of domainGroups.values()) {
+    const targetFp = fpIdx % fpCount
+    for (const i of sorIndices) mapping.push({ sorIndex: i, fpIndex: targetFp })
+    fpIdx++
+  }
+  // Sort by fpIndex so SORs cluster under their parent fabric plane
+  mapping.sort((a, b) => a.fpIndex - b.fpIndex || a.sorIndex - b.sorIndex)
+  return mapping
+}
+
 /* ─── Build graph data from live run ─── */
-function buildNodes(run: RunData, _derived: DerivedData): PipelineNode[] {
+function buildNodes(run: RunData): PipelineNode[] {
   const mc = run.input_meta.counts
   const rc = run.counts
 
@@ -340,10 +351,12 @@ function buildNodes(run: RunData, _derived: DerivedData): PipelineNode[] {
     })
   })
 
-  // Level 7 — SOR nodes from input_meta.sors
-  run.input_meta.sors.forEach((s, i) => {
+  // Level 7 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
+  const sorMapping = getSorMapping(run)
+  sorMapping.forEach((m, sortedIdx) => {
+    const s = run.input_meta.sors[m.sorIndex]
     nodes.push({
-      id: `sor-${i}`, label: s.sor_name, level: 7, shape: 'custom', ctxRenderer: drawSourceNode,
+      id: `sor-${sortedIdx}`, label: s.sor_name, level: 7, shape: 'custom', ctxRenderer: drawSourceNode,
       color: { background: C.slate800, border: C.amber }, size: 22, stage: 'Handoff', nodeType: 'sor',
       metadata: { vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence },
     })
@@ -377,10 +390,10 @@ function buildEdges(run: RunData): Edge[] {
     raw.push({ from: 'handoff-aam', to: `fabric-${i}`, width: 2 })
   })
 
-  // Fabric planes → SORs (distribute SORs across fabric planes)
-  const fpCount = run.input_meta.fabric_planes.length
-  run.input_meta.sors.forEach((_, i) => {
-    raw.push({ from: `fabric-${i % fpCount}`, to: `sor-${i}`, width: 1.5 })
+  // Fabric planes → SORs (sorted by fabric plane so edges don't cross)
+  const sorMapping = getSorMapping(run)
+  sorMapping.forEach((m, sortedIdx) => {
+    raw.push({ from: `fabric-${m.fpIndex}`, to: `sor-${sortedIdx}`, width: 1.5 })
   })
 
   const withIds = raw.map((e, i) => ({ ...e, id: `e${i}` }))
@@ -412,7 +425,7 @@ function assignEdgeCurves(edges: Edge[]): Edge[] {
     const unassigned = group.filter((i) => !assigned.has(i))
     if (unassigned.length < 2) continue
     const n = unassigned.length
-    const step = Math.min(0.15, 0.8 / (n - 1))
+    const step = Math.min(0.25, 0.8 / (n - 1))
     unassigned.forEach((idx, j) => {
       const roundness = -((n - 1) * step) / 2 + j * step
       edges[idx] = {
@@ -437,9 +450,9 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
           hierarchical: {
             enabled: true,
             direction: 'LR',
-            levelSeparation: 140,
-            nodeSpacing: 50,
-            treeSpacing: 60,
+            levelSeparation: 120,
+            nodeSpacing: 65,
+            treeSpacing: 75,
             sortMethod: 'directed',
           },
         },
@@ -451,6 +464,7 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
             springConstant: 0.01,
             nodeDistance: 70,
           },
+          stabilization: { iterations: 100 },
         },
       }
     case 'force':
@@ -540,12 +554,14 @@ export default function PipelineTopology() {
   const allEdgesRef = useRef<Edge[]>([])
   const [selectedNode, setSelectedNode] = useState<DetailsData | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  // Defaults: hierarchical LR with physics on — physics auto-disables after stabilization
   const [layout, setLayout] = useState<LayoutKey>('hierarchical')
   const [physicsEnabled, setPhysicsEnabled] = useState(true)
   const [layoutOpen, setLayoutOpen] = useState(false)
   const [hiddenStages, setHiddenStages] = useState<Set<Stage>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadingMessage, setLoadingMessage] = useState<string | null>('Loading pipeline data...')
   const [error, setError] = useState<string | null>(null)
 
   // Fetch latest run data, then initialize network
@@ -562,14 +578,10 @@ export default function PipelineTopology() {
         if (runs.length === 0) throw new Error('No discovery runs found')
         const run = runs[0]
 
-        // Fetch derived classifications
-        const derivedRes = await fetch(`/api/runs/${run.run_id}/derived`)
-        if (!derivedRes.ok) throw new Error(`Failed to fetch derived: ${derivedRes.status}`)
-        const derived: DerivedData = await derivedRes.json()
-
         if (destroyed) return
 
-        const allNodes = buildNodes(run, derived)
+        setLoadingMessage('Stabilizing graph layout...')
+        const allNodes = buildNodes(run)
         const allEdges = buildEdges(run)
         allNodesRef.current = allNodes
         allEdgesRef.current = allEdges
@@ -583,8 +595,37 @@ export default function PipelineTopology() {
           ...getLayoutOptions('hierarchical'),
         }
 
+        // Register stabilization listener BEFORE creating network to avoid
+        // race where 100-iteration stabilization completes during construction
+        const onStabilized = () => {
+          network.setOptions({ physics: { enabled: false } })
+          setPhysicsEnabled(false)
+          network.fit({ animation: false })
+          setLoadingMessage(null)
+          setLoading(false)
+        }
+
         const network = new Network(containerRef.current!, { nodes, edges }, options)
         networkRef.current = network
+
+        // Stabilize then disable physics for hierarchical, fit graph to viewport
+        network.once('stabilizationIterationsDone', onStabilized)
+
+        // Safety timeout — if stabilization event already fired before listener
+        // was attached (fast hierarchical solve), clear loading after 500ms
+        setTimeout(() => {
+          if (!destroyed) {
+            setLoading((prev) => {
+              if (prev) {
+                network.setOptions({ physics: { enabled: false } })
+                setPhysicsEnabled(false)
+                network.fit({ animation: false })
+              }
+              return false
+            })
+            setLoadingMessage(null)
+          }
+        }, 500)
 
         // Click → details panel
         network.on('click', (params) => {
@@ -615,14 +656,6 @@ export default function PipelineTopology() {
             nodes.update({ id, shadow: false } as any)
           })
         })
-
-        // Stabilize then disable physics for hierarchical
-        network.once('stabilizationIterationsDone', () => {
-          network.setOptions({ physics: { enabled: false } })
-          setPhysicsEnabled(false)
-        })
-
-        setLoading(false)
       } catch (err: any) {
         if (!destroyed) {
           setError(err.message || 'Failed to load pipeline data')
@@ -661,9 +694,13 @@ export default function PipelineTopology() {
       net.once('stabilizationIterationsDone', () => {
         net.setOptions({ physics: { enabled: false } })
         setPhysicsEnabled(false)
+        net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } })
       })
     } else {
       setPhysicsEnabled(true)
+      net.once('stabilizationIterationsDone', () => {
+        net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } })
+      })
     }
 
     // 4. Restart stabilization cleanly
@@ -778,7 +815,7 @@ export default function PipelineTopology() {
         <div className="absolute inset-0 flex items-center justify-center z-30">
           <div className="flex items-center gap-3 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg px-5 py-3">
             <Loader2 size={18} className="text-cyan-400 animate-spin" />
-            <span className="text-sm text-white font-[Quicksand]">Loading pipeline data...</span>
+            <span className="text-sm text-white font-[Quicksand]">{loadingMessage || 'Loading pipeline data...'}</span>
           </div>
         </div>
       )}

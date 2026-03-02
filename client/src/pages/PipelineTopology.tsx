@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
 import type { Node, Edge, Options } from 'vis-network/standalone'
-import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter } from 'lucide-react'
 
 /* ─── Types ─── */
 interface PipelineNode extends Node {
@@ -98,14 +98,14 @@ function buildNodes(): PipelineNode[] {
     // Level 0 — Hub
     { id: 'aod', label: 'AOD\nDiscovery', level: 0, shape: 'diamond', color: { background: C.cyan, border: C.cyan }, font: { color: C.bgDark, size: 13, face: 'Quicksand' }, size: 28, stage: 'Hub', nodeType: 'diamond', metadata: { role: 'Discovery orchestrator', module: 'AOD' } },
 
-    // Level 1 — Observation planes
-    { id: 'plane-idp',     label: 'Identity\nProvider',   level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },   size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'IdP',     examples: 'Okta, Azure AD',     tier: 'Tier 2' } },
-    { id: 'plane-network', label: 'Network\nTraffic',     level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },   size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Network', examples: 'DNS, proxy logs',   tier: 'Tier 2' } },
-    { id: 'plane-cloud',   label: 'Cloud\nInventory',     level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },   size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Cloud',   examples: 'AWS, Azure, GCP',   tier: 'Tier 2' } },
-    { id: 'plane-finance', label: 'Finance\nRecords',     level: 1, shape: 'dot', color: { background: C.orange, border: C.orange }, size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Finance', examples: 'Invoices, POs',     tier: 'Tier 2' } },
-    { id: 'plane-browser', label: 'Browser\nTelemetry',   level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },   size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Browser', examples: 'Extension data',    tier: 'Tier 2' } },
-    { id: 'plane-cmdb',    label: 'CMDB\nRecords',        level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },   size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'CMDB',    examples: 'ServiceNow, Jira',  tier: 'Tier 1' } },
-    { id: 'plane-catalog', label: 'Fabric Plane\nCatalog', level: 1, shape: 'dot', color: { background: C.orange, border: C.orange }, size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Catalog', examples: 'MuleSoft, Kong',    tier: 'Tier 1' } },
+    // Level 1 — Observation planes (counts sum to 448)
+    { id: 'plane-idp',     label: 'Identity Provider\n89 assets',  level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'IdP',     examples: 'Okta, Azure AD',    tier: 'Tier 2', assets: 89 } },
+    { id: 'plane-network', label: 'Network Traffic\n112 assets',   level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Network', examples: 'DNS, proxy logs',  tier: 'Tier 2', assets: 112 } },
+    { id: 'plane-cloud',   label: 'Cloud Inventory\n67 assets',    level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Cloud',   examples: 'AWS, Azure, GCP',  tier: 'Tier 2', assets: 67 } },
+    { id: 'plane-finance', label: 'Finance Records\n43 assets',    level: 1, shape: 'dot', color: { background: C.orange, border: C.orange },  size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Finance', examples: 'Invoices, POs',    tier: 'Tier 2', assets: 43 } },
+    { id: 'plane-browser', label: 'Browser Telemetry\n38 assets',  level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Browser', examples: 'Extension data',   tier: 'Tier 2', assets: 38 } },
+    { id: 'plane-cmdb',    label: 'CMDB Records\n52 assets',       level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'CMDB',    examples: 'ServiceNow, Jira', tier: 'Tier 1', assets: 52 } },
+    { id: 'plane-catalog', label: 'Fabric Plane Catalog\n47 assets', level: 1, shape: 'dot', color: { background: C.orange, border: C.orange }, size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Catalog', examples: 'MuleSoft, Kong',   tier: 'Tier 1', assets: 47 } },
 
     // Level 2 — Ingested
     { id: 'ingested', label: 'Ingested\n448 observations', level: 2, shape: 'dot', color: { background: C.cyan, border: C.cyan }, size: 20, stage: 'Ingestion', nodeType: 'dot', metadata: { count: 448, description: 'Raw evidence collected from all observation planes' } },
@@ -141,7 +141,7 @@ function buildNodes(): PipelineNode[] {
 }
 
 function buildEdges(): Edge[] {
-  return [
+  const raw: Omit<Edge, 'id'>[] = [
     // Hub → Observation planes
     { from: 'aod', to: 'plane-idp',     width: 2 },
     { from: 'aod', to: 'plane-network', width: 2 },
@@ -195,6 +195,7 @@ function buildEdges(): Edge[] {
     { from: 'fabric-data',  to: 'sor-snowflake',  width: 1.5 },
     { from: 'fabric-data',  to: 'sor-salesforce', width: 1.5 },
   ]
+  return raw.map((e, i) => ({ ...e, id: `e${i}` }))
 }
 
 /* ─── Layout presets ─── */
@@ -290,24 +291,53 @@ const legendItems = [
   { shape: 'rect',    color: C.amber,  label: 'System of Record' },
 ]
 
+/* ─── Stage filter config ─── */
+const ALL_STAGES = [
+  'Hub', 'Observation', 'Ingestion', 'Validation',
+  'Catalog', 'Classification', 'Handoff', 'Fabric Plane', 'System of Record',
+] as const
+type Stage = typeof ALL_STAGES[number]
+
+const stageColors: Record<Stage, string> = {
+  'Hub':              C.cyan,
+  'Observation':      C.cyan,
+  'Ingestion':        C.cyan,
+  'Validation':       C.cyan,
+  'Catalog':          C.cyan700,
+  'Classification':   C.purple,
+  'Handoff':          C.orange,
+  'Fabric Plane':     C.violet,
+  'System of Record': C.amber,
+}
+
 /* ─── Component ─── */
 export default function PipelineTopology() {
   const containerRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)
   const nodesRef = useRef<DataSet<PipelineNode> | null>(null)
+  const edgesRef = useRef<DataSet<Edge> | null>(null)
+  const allNodesRef = useRef<PipelineNode[]>([])
+  const allEdgesRef = useRef<Edge[]>([])
   const [selectedNode, setSelectedNode] = useState<DetailsData | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [layout, setLayout] = useState<LayoutKey>('hierarchical')
   const [physicsEnabled, setPhysicsEnabled] = useState(true)
   const [layoutOpen, setLayoutOpen] = useState(false)
+  const [hiddenStages, setHiddenStages] = useState<Set<Stage>>(new Set())
+  const [filterOpen, setFilterOpen] = useState(false)
 
   // Initialize network
   useEffect(() => {
     if (!containerRef.current) return
 
-    const nodes = new DataSet<PipelineNode>(buildNodes())
-    const edges = new DataSet<Edge>(buildEdges())
+    const allNodes = buildNodes()
+    const allEdges = buildEdges()
+    allNodesRef.current = allNodes
+    allEdgesRef.current = allEdges
+    const nodes = new DataSet<PipelineNode>(allNodes)
+    const edges = new DataSet<Edge>(allEdges)
     nodesRef.current = nodes
+    edgesRef.current = edges
 
     const options: Options = {
       ...getBaseOptions(),
@@ -359,6 +389,7 @@ export default function PipelineTopology() {
       network.destroy()
       networkRef.current = null
       nodesRef.current = null
+      edgesRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -401,6 +432,45 @@ export default function PipelineTopology() {
       nodes.update({ id: n.id, opacity: matches ? 1.0 : 0.15 } as any)
     })
   }, [searchTerm])
+
+  // Stage filter — hide/show nodes + connected edges
+  useEffect(() => {
+    const nodes = nodesRef.current
+    const edges = edgesRef.current
+    if (!nodes || !edges) return
+
+    const allNodes = allNodesRef.current
+    const allEdges = allEdgesRef.current
+
+    // Determine visible node IDs
+    const visibleIds = new Set<string>()
+    allNodes.forEach((n) => {
+      if (!hiddenStages.has(n.stage as Stage)) {
+        visibleIds.add(n.id as string)
+      }
+    })
+
+    // Update nodes: hidden if stage is filtered out
+    allNodes.forEach((n) => {
+      const hidden = !visibleIds.has(n.id as string)
+      nodes.update({ id: n.id, hidden } as any)
+    })
+
+    // Update edges: hidden if either endpoint is hidden
+    allEdges.forEach((e) => {
+      const hidden = !visibleIds.has(e.from as string) || !visibleIds.has(e.to as string)
+      edges.update({ id: e.id, hidden } as any)
+    })
+  }, [hiddenStages])
+
+  const toggleStage = useCallback((stage: Stage) => {
+    setHiddenStages((prev) => {
+      const next = new Set(prev)
+      if (next.has(stage)) next.delete(stage)
+      else next.add(stage)
+      return next
+    })
+  }, [])
 
   // Physics toggle
   const togglePhysics = useCallback(() => {
@@ -485,6 +555,54 @@ export default function PipelineTopology() {
           {physicsEnabled ? <Unlock size={14} /> : <Lock size={14} />}
           <span>{physicsEnabled ? 'Physics On' : 'Physics Off'}</span>
         </button>
+
+        {/* Stage filter */}
+        <div className="pointer-events-auto relative">
+          <button
+            onClick={() => setFilterOpen(!filterOpen)}
+            className={`flex items-center gap-1.5 bg-slate-800/90 backdrop-blur border rounded-lg px-3 py-2 text-sm font-[Quicksand] hover:border-cyan-500/50 transition-colors ${hiddenStages.size > 0 ? 'border-cyan-500/60 text-cyan-400' : 'border-slate-700 text-white'}`}
+          >
+            <Filter size={14} />
+            <span>Stages{hiddenStages.size > 0 ? ` (${ALL_STAGES.length - hiddenStages.size}/${ALL_STAGES.length})` : ''}</span>
+            <ChevronDown size={14} className="text-slate-400" />
+          </button>
+          {filterOpen && (
+            <div className="absolute top-full mt-1 left-0 bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg overflow-hidden shadow-xl min-w-[200px] py-1">
+              {ALL_STAGES.map((stage) => {
+                const active = !hiddenStages.has(stage)
+                return (
+                  <button
+                    key={stage}
+                    onClick={() => toggleStage(stage)}
+                    className="flex items-center gap-2.5 w-full text-left px-3 py-1.5 text-sm font-[Quicksand] hover:bg-slate-700/50 transition-colors"
+                  >
+                    <span
+                      className="w-3 h-3 rounded-sm border flex-shrink-0 flex items-center justify-center"
+                      style={{
+                        borderColor: stageColors[stage],
+                        backgroundColor: active ? stageColors[stage] : 'transparent',
+                      }}
+                    >
+                      {active && <span className="text-[9px] text-slate-950 font-bold leading-none">{'\u2713'}</span>}
+                    </span>
+                    <span className={active ? 'text-white' : 'text-slate-500'}>{stage}</span>
+                  </button>
+                )
+              })}
+              {hiddenStages.size > 0 && (
+                <>
+                  <div className="border-t border-slate-700 my-1" />
+                  <button
+                    onClick={() => setHiddenStages(new Set())}
+                    className="w-full text-left px-3 py-1.5 text-xs font-[Quicksand] text-cyan-400 hover:bg-slate-700/50 transition-colors"
+                  >
+                    Show all stages
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Zoom controls (bottom-right) */}

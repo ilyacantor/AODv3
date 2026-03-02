@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
 import type { Node, Edge, Options } from 'vis-network/standalone'
-import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter, Loader2 } from 'lucide-react'
 
 /* ─── Types ─── */
 interface PipelineNode extends Node {
@@ -17,6 +17,42 @@ interface DetailsData {
   stage: string
   nodeType: string
   metadata: Record<string, string | number>
+}
+
+interface RunData {
+  run_id: string
+  tenant_id: string
+  status: string
+  started_at: string
+  completed_at: string | null
+  input_meta: {
+    snapshot_id: string
+    scale: string
+    enterprise_profile: string
+    created_at: string
+    counts: Record<string, number>
+    fabric_planes: { plane_type: string; vendor: string; is_healthy: boolean }[]
+    sors: { domain: string; sor_name: string; sor_type: string; confidence: string }[]
+  }
+  counts: {
+    observations_in: number
+    candidates_out: number
+    assets_admitted: number
+    rejected: number
+    ambiguous_matches: number
+    findings_generated: number
+  }
+  stage_timings?: Record<string, number>
+}
+
+interface DerivedData {
+  shadow_count: number
+  zombie_count: number
+  distribution: {
+    total_assets: number
+    with_idp_match: number
+    with_cmdb_match: number
+  }
 }
 
 /* ─── Color constants (matching AAM topology) ─── */
@@ -37,6 +73,66 @@ const C = {
   slate600: '#475569',
   slate400: '#94a3b8',
   white:    '#ffffff',
+}
+
+/* ─── Custom database/cylinder renderer (label centered inside) ─── */
+function drawDatabaseNode({ ctx, x, y, state: { selected, hover }, style, label }: any) {
+  const w = style.size * 1.4
+  const h = style.size * 1.6
+  const ovalH = h * 0.22
+  const bgColor = (style.color?.background || C.cyan) as string
+  const borderColor = (style.color?.border || bgColor) as string
+  const fontColor = (style.color?.fontColor || C.bgDark) as string
+  const fontSize = 11
+
+  return {
+    drawNode() {
+      ctx.save()
+      if (selected) {
+        ctx.shadowColor = 'rgba(34, 211, 238, 0.5)'
+        ctx.shadowBlur = 12
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = 0
+      }
+      // Body
+      ctx.beginPath()
+      ctx.moveTo(x - w, y - h / 2 + ovalH)
+      ctx.lineTo(x - w, y + h / 2 - ovalH)
+      ctx.bezierCurveTo(x - w, y + h / 2 + ovalH * 0.6, x + w, y + h / 2 + ovalH * 0.6, x + w, y + h / 2 - ovalH)
+      ctx.lineTo(x + w, y - h / 2 + ovalH)
+      ctx.closePath()
+      ctx.fillStyle = bgColor
+      ctx.fill()
+      ctx.strokeStyle = selected ? C.white : hover ? C.slate400 : borderColor
+      ctx.lineWidth = selected ? 2.5 : 1.5
+      ctx.stroke()
+      // Top ellipse
+      ctx.beginPath()
+      ctx.ellipse(x, y - h / 2 + ovalH, w, ovalH, 0, 0, Math.PI * 2)
+      ctx.fillStyle = bgColor
+      ctx.fill()
+      ctx.strokeStyle = selected ? C.white : hover ? C.slate400 : borderColor
+      ctx.stroke()
+      ctx.restore()
+      // Label centered inside
+      if (label) {
+        ctx.save()
+        ctx.font = `bold ${fontSize}px Quicksand, sans-serif`
+        ctx.fillStyle = fontColor
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const lines = label.split('\n')
+        const lineHeight = fontSize * 1.3
+        const totalH = lines.length * lineHeight
+        const startY = y + ovalH * 0.3 - totalH / 2 + lineHeight / 2
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], x, startY + i * lineHeight)
+        }
+        ctx.restore()
+      }
+    },
+    nodeDimensions: { width: w * 2, height: h + ovalH },
+  }
 }
 
 /* ─── Custom SOR node renderer (port of AAM drawSourceNode) ─── */
@@ -92,109 +188,201 @@ function drawSourceNode({ ctx, x, y, state: { selected, hover }, style, label }:
   }
 }
 
-/* ─── Build graph data ─── */
-function buildNodes(): PipelineNode[] {
-  return [
-    // Level 0 — Hub
-    { id: 'aod', label: 'AOD\nDiscovery', level: 0, shape: 'diamond', color: { background: C.cyan, border: C.cyan }, font: { color: C.bgDark, size: 13, face: 'Quicksand' }, size: 28, stage: 'Hub', nodeType: 'diamond', metadata: { role: 'Discovery orchestrator', module: 'AOD' } },
+/* ─── Custom tenant hexagon renderer (auto-sizes to fit label) ─── */
+function drawTenantNode({ ctx, x, y, state: { selected, hover }, style, label }: any) {
+  const fontSize = 12
+  const padding = 14
+  const lineHeight = fontSize * 1.35
 
-    // Level 1 — Observation planes (counts sum to 448)
-    { id: 'plane-idp',     label: 'Identity Provider\n89 assets',  level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'IdP',     examples: 'Okta, Azure AD',    tier: 'Tier 2', assets: 89 } },
-    { id: 'plane-network', label: 'Network Traffic\n112 assets',   level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Network', examples: 'DNS, proxy logs',  tier: 'Tier 2', assets: 112 } },
-    { id: 'plane-cloud',   label: 'Cloud Inventory\n67 assets',    level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Cloud',   examples: 'AWS, Azure, GCP',  tier: 'Tier 2', assets: 67 } },
-    { id: 'plane-finance', label: 'Finance Records\n43 assets',    level: 1, shape: 'dot', color: { background: C.orange, border: C.orange },  size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Finance', examples: 'Invoices, POs',    tier: 'Tier 2', assets: 43 } },
-    { id: 'plane-browser', label: 'Browser Telemetry\n38 assets',  level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Browser', examples: 'Extension data',   tier: 'Tier 2', assets: 38 } },
-    { id: 'plane-cmdb',    label: 'CMDB Records\n52 assets',       level: 1, shape: 'dot', color: { background: C.cyan, border: C.cyan },     size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'CMDB',    examples: 'ServiceNow, Jira', tier: 'Tier 1', assets: 52 } },
-    { id: 'plane-catalog', label: 'Fabric Plane Catalog\n47 assets', level: 1, shape: 'dot', color: { background: C.orange, border: C.orange }, size: 14, stage: 'Observation', nodeType: 'dot', metadata: { type: 'Catalog', examples: 'MuleSoft, Kong',   tier: 'Tier 1', assets: 47 } },
+  // Measure text and word-wrap to determine hexagon size
+  ctx.save()
+  ctx.font = `bold ${fontSize}px Quicksand, sans-serif`
+  const words = (label || '').split(/[-\s]+/)
+  const maxLineW = style.size * 1.4 // target inner width
+  const lines: string[] = []
+  let cur = ''
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w
+    if (ctx.measureText(test).width > maxLineW && cur) {
+      lines.push(cur)
+      cur = w
+    } else {
+      cur = test
+    }
+  }
+  if (cur) lines.push(cur)
 
-    // Level 2 — Ingested
-    { id: 'ingested', label: 'Ingested\n448 observations', level: 2, shape: 'dot', color: { background: C.cyan, border: C.cyan }, size: 20, stage: 'Ingestion', nodeType: 'dot', metadata: { count: 448, description: 'Raw evidence collected from all observation planes' } },
+  // Compute hexagon size from text bounds
+  const textW = Math.max(...lines.map((l) => ctx.measureText(l).width))
+  const textH = lines.length * lineHeight
+  const innerW = textW + padding * 2
+  const innerH = textH + padding * 2
+  // For a flat-top hexagon: width = sz * sqrt(3), height = sz * 2
+  const sz = Math.max(innerW / 1.73, innerH / 2, style.size)
+  ctx.restore()
 
-    // Level 3 — Validated / Rejected
-    { id: 'validated', label: 'Validated\n101', level: 3, shape: 'dot', color: { background: C.cyan, border: C.cyan }, size: 18, stage: 'Validation', nodeType: 'dot', metadata: { count: 101, description: 'Passed format checks and deduplication' } },
-    { id: 'rejected',  label: 'Rejected\n3',   level: 3, shape: 'dot', color: { background: C.red, border: C.red },   size: 12, stage: 'Validation', nodeType: 'dot', metadata: { count: 3, description: 'Failed validation — format errors or duplicates' } },
+  // Flat-top hexagon path
+  function hexPath() {
+    ctx.beginPath()
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI / 3) * i
+      const px = x + sz * Math.cos(angle)
+      const py = y + sz * Math.sin(angle)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+  }
 
-    // Level 4 — Cataloged
-    { id: 'cataloged', label: 'Cataloged\n98', level: 4, shape: 'dot', color: { background: C.cyan700, border: C.cyan700 }, size: 18, stage: 'Catalog', nodeType: 'dot', metadata: { count: 98, description: 'Confirmed assets admitted to catalog' } },
-
-    // Level 5 — Classifications + Handoff hub
-    { id: 'class-shadow',   label: 'Shadow\n12',          level: 5, shape: 'triangle', color: { background: C.purple, border: C.purple }, size: 16, stage: 'Classification', nodeType: 'triangle', metadata: { count: 12, description: 'In use but NOT governed — no SSO, not in CMDB' } },
-    { id: 'class-zombie',   label: 'Zombie\n8',           level: 5, shape: 'triangle', color: { background: C.green, border: C.green },   size: 16, stage: 'Classification', nodeType: 'triangle', metadata: { count: 8, description: 'Governed but inactive 90+ days' } },
-    { id: 'class-security', label: 'Security\nRisk 5',    level: 5, shape: 'triangle', color: { background: C.amber, border: C.amber },   size: 16, stage: 'Classification', nodeType: 'triangle', metadata: { count: 5, description: 'Identity gaps, shadow spending, data conflicts' } },
-    { id: 'class-governed', label: 'Governed\n73',        level: 5, shape: 'triangle', color: { background: C.blue, border: C.blue },     size: 16, stage: 'Classification', nodeType: 'triangle', metadata: { count: 73, description: 'Fully governed, compliant assets' } },
-    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',      level: 5, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
-
-    // Level 6 — Fabric planes
-    { id: 'fabric-ipaas',   label: 'iPaaS\nWorkato',         level: 6, shape: 'diamond', color: { background: C.cyan, border: C.cyan },     size: 16, stage: 'Fabric Plane', nodeType: 'diamond', metadata: { vendor: 'Workato', type: 'iPaaS',       pipes: 14 } },
-    { id: 'fabric-event',   label: 'Event Bus\nEventBridge', level: 6, shape: 'diamond', color: { background: C.violet, border: C.violet }, size: 16, stage: 'Fabric Plane', nodeType: 'diamond', metadata: { vendor: 'AWS', type: 'Event Bus',        pipes: 8 } },
-    { id: 'fabric-api',     label: 'API Gateway\nKong',      level: 6, shape: 'diamond', color: { background: C.orange, border: C.orange }, size: 16, stage: 'Fabric Plane', nodeType: 'diamond', metadata: { vendor: 'Kong', type: 'API Gateway',     pipes: 22 } },
-    { id: 'fabric-data',    label: 'Data Mesh\nSnowflake',   level: 6, shape: 'diamond', color: { background: C.green, border: C.green },   size: 16, stage: 'Fabric Plane', nodeType: 'diamond', metadata: { vendor: 'Snowflake', type: 'Data Mesh',  pipes: 11 } },
-
-    // Level 7 — SOR nodes (custom renderer)
-    { id: 'sor-salesforce', label: 'Salesforce',    level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'Salesforce', category: 'CRM',      status: 'Connected' } },
-    { id: 'sor-sap',        label: 'SAP',           level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'SAP', category: 'ERP',            status: 'Connected' } },
-    { id: 'sor-okta',       label: 'Okta',          level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'Okta', category: 'Identity',       status: 'Connected' } },
-    { id: 'sor-workday',    label: 'Workday',       level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'Workday', category: 'HCM',        status: 'Connected' } },
-    { id: 'sor-snowflake',  label: 'Snowflake',     level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'Snowflake', category: 'Data',      status: 'Connected' } },
-    { id: 'sor-servicenow', label: 'ServiceNow',    level: 7, shape: 'custom', ctxRenderer: drawSourceNode, color: { background: C.slate800, border: C.amber }, size: 22, stage: 'System of Record', nodeType: 'sor', metadata: { vendor: 'ServiceNow', category: 'ITSM',    status: 'Connected' } },
-  ]
+  return {
+    drawNode() {
+      ctx.save()
+      if (selected || hover) {
+        ctx.shadowColor = 'rgba(34, 211, 238, 0.5)'
+        ctx.shadowBlur = selected ? 20 : 10
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = 0
+      }
+      hexPath()
+      const grad = ctx.createLinearGradient(x, y - sz, x, y + sz)
+      grad.addColorStop(0, '#22d3ee')
+      grad.addColorStop(1, '#0891b2')
+      ctx.fillStyle = grad
+      ctx.fill()
+      ctx.strokeStyle = selected ? C.white : '#06b6d4'
+      ctx.lineWidth = selected ? 3 : 2
+      ctx.stroke()
+      ctx.restore()
+      // Label inside (multi-line, centered)
+      if (label) {
+        ctx.save()
+        ctx.font = `bold ${fontSize}px Quicksand, sans-serif`
+        ctx.fillStyle = C.bgDark
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const startY = y - ((lines.length - 1) * lineHeight) / 2
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], x, startY + i * lineHeight)
+        }
+        ctx.restore()
+      }
+    },
+    nodeDimensions: { width: sz * 1.73, height: sz * 2 },
+  }
 }
 
-function buildEdges(): Edge[] {
-  const raw: Omit<Edge, 'id'>[] = [
-    // Hub → Observation planes
-    { from: 'aod', to: 'plane-idp',     width: 2 },
-    { from: 'aod', to: 'plane-network', width: 2 },
-    { from: 'aod', to: 'plane-cloud',   width: 2 },
-    { from: 'aod', to: 'plane-finance', width: 2 },
-    { from: 'aod', to: 'plane-browser', width: 2 },
-    { from: 'aod', to: 'plane-cmdb',    width: 2 },
-    { from: 'aod', to: 'plane-catalog', width: 2 },
+/* ─── Humanize plane type labels ─── */
+const planeLabels: Record<string, string> = {
+  ipaas: 'iPaaS', api_gateway: 'API Gateway', event_bus: 'Event Bus',
+  data_warehouse: 'Data Warehouse', etl: 'ETL', data_mesh: 'Data Mesh',
+}
+const planeColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
+const observationColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
 
-    // Observation planes → Ingested
-    { from: 'plane-idp',     to: 'ingested', width: 1.5 },
-    { from: 'plane-network', to: 'ingested', width: 1.5 },
-    { from: 'plane-cloud',   to: 'ingested', width: 1.5 },
-    { from: 'plane-finance', to: 'ingested', width: 1.5 },
-    { from: 'plane-browser', to: 'ingested', width: 1.5 },
-    { from: 'plane-cmdb',    to: 'ingested', width: 1.5 },
-    { from: 'plane-catalog', to: 'ingested', width: 1.5 },
+/* ─── Build graph data from live run ─── */
+function buildNodes(run: RunData, _derived: DerivedData): PipelineNode[] {
+  const mc = run.input_meta.counts
+  const rc = run.counts
 
-    // Ingested → Validated / Rejected
-    { from: 'ingested', to: 'validated', width: 2 },
-    { from: 'ingested', to: 'rejected',  width: 1.5, color: { color: C.red, opacity: 0.8 } },
-
-    // Validated → Cataloged
-    { from: 'validated', to: 'cataloged', width: 2 },
-
-    // Cataloged → Classifications
-    { from: 'cataloged', to: 'class-shadow',   width: 1.5 },
-    { from: 'cataloged', to: 'class-zombie',   width: 1.5 },
-    { from: 'cataloged', to: 'class-security', width: 1.5 },
-    { from: 'cataloged', to: 'class-governed', width: 1.5 },
-
-    // Classifications → Handoff (dashed)
-    { from: 'class-shadow',   to: 'handoff-aam', width: 1.5, dashes: [6, 4] },
-    { from: 'class-zombie',   to: 'handoff-aam', width: 1.5, dashes: [6, 4] },
-    { from: 'class-security', to: 'handoff-aam', width: 1.5, dashes: [6, 4] },
-    { from: 'class-governed', to: 'handoff-aam', width: 1.5, dashes: [6, 4] },
-
-    // Handoff → Fabric planes
-    { from: 'handoff-aam', to: 'fabric-ipaas', width: 2 },
-    { from: 'handoff-aam', to: 'fabric-event', width: 2 },
-    { from: 'handoff-aam', to: 'fabric-api',   width: 2 },
-    { from: 'handoff-aam', to: 'fabric-data',  width: 2 },
-
-    // Fabric planes → SORs
-    { from: 'fabric-ipaas', to: 'sor-salesforce', width: 1.5 },
-    { from: 'fabric-ipaas', to: 'sor-workday',    width: 1.5 },
-    { from: 'fabric-event', to: 'sor-sap',        width: 1.5 },
-    { from: 'fabric-event', to: 'sor-snowflake',  width: 1.5 },
-    { from: 'fabric-api',   to: 'sor-okta',       width: 1.5 },
-    { from: 'fabric-api',   to: 'sor-servicenow', width: 1.5 },
-    { from: 'fabric-data',  to: 'sor-snowflake',  width: 1.5 },
-    { from: 'fabric-data',  to: 'sor-salesforce', width: 1.5 },
+  // Observation plane counts (aggregate sub-keys into 7 planes)
+  const planes: { id: string; label: string; count: number; tier: string; examples: string }[] = [
+    { id: 'plane-discovery', label: 'Discovery',  count: mc.discovery_observations || 0, tier: 'Tier 2', examples: 'Web apps, SaaS' },
+    { id: 'plane-idp',      label: 'Identity\nProvider', count: mc.idp_objects || 0,    tier: 'Tier 2', examples: 'Okta, Azure AD' },
+    { id: 'plane-cmdb',     label: 'CMDB',        count: mc.cmdb_cis || 0,              tier: 'Tier 1', examples: 'ServiceNow, Jira' },
+    { id: 'plane-cloud',    label: 'Cloud\nInventory', count: mc.cloud_resources || 0,   tier: 'Tier 2', examples: 'AWS, Azure, GCP' },
+    { id: 'plane-network',  label: 'Network',     count: (mc.network_dns || 0) + (mc.network_proxy || 0) + (mc.network_certs || 0), tier: 'Tier 2', examples: 'DNS, proxy, certs' },
+    { id: 'plane-finance',  label: 'Finance',     count: (mc.finance_vendors || 0) + (mc.finance_contracts || 0) + (mc.finance_transactions || 0), tier: 'Tier 2', examples: 'Vendors, contracts' },
+    { id: 'plane-endpoint', label: 'Endpoint',    count: (mc.endpoint_devices || 0) + (mc.endpoint_installed_apps || 0), tier: 'Tier 2', examples: 'Devices, installed apps' },
   ]
+
+  const totalAssets = rc.assets_admitted
+
+  const nodes: PipelineNode[] = [
+    // Level 0 — Hub: tenant name rendered inside a custom hexagon
+    { id: 'aod', label: run.tenant_id, level: 0, shape: 'custom', ctxRenderer: drawTenantNode, color: { background: C.cyan, border: C.cyan }, size: 42, stage: 'Discovery', nodeType: 'hexagon', metadata: { tenant: run.tenant_id, run_id: run.run_id, snapshot_id: run.input_meta.snapshot_id, status: run.status, scale: run.input_meta.scale, profile: run.input_meta.enterprise_profile, started_at: run.started_at } },
+
+    // Level 2 — Ingested
+    { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
+
+    // Level 3 — Validated / Rejected
+    { id: 'validated', label: `Validated\n${rc.candidates_out}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { count: rc.candidates_out, description: 'Passed format checks and deduplication' } },
+    { id: 'rejected',  label: `Rejected\n${rc.rejected}`,       level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 14, stage: 'Classification', nodeType: 'database', metadata: { count: rc.rejected, description: 'Failed validation — format errors or duplicates' } },
+
+    // Level 4 — Cataloged
+    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 4, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
+
+    // Level 5 — Handoff hub (cataloged flows directly here)
+    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 5, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
+  ]
+
+  // Level 1 — Observation plane nodes (multicolored triangleDown with 3D shading)
+  planes.forEach((p, i) => {
+    const col = observationColors[i % observationColors.length]
+    nodes.push({
+      id: p.id, label: `${p.label}\n${p.count.toLocaleString()} signals`, level: 1,
+      shape: 'triangleDown', size: 18,
+      color: { background: col, border: col, highlight: { background: col, border: C.white } },
+      shadow: { enabled: true, color: col + '40', size: 8, x: 2, y: 3 },
+      borderWidth: 2,
+      stage: 'Discovery', nodeType: 'triangleDown',
+      metadata: { type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count },
+    })
+  })
+
+  // Level 6 — Fabric planes from input_meta.fabric_planes
+  run.input_meta.fabric_planes.forEach((fp, i) => {
+    const label = planeLabels[fp.plane_type] || fp.plane_type
+    nodes.push({
+      id: `fabric-${i}`, label: `${label}\n${fp.vendor}`, level: 6, shape: 'diamond',
+      color: { background: planeColors[i % planeColors.length], border: planeColors[i % planeColors.length] },
+      size: 16, stage: 'Handoff', nodeType: 'diamond',
+      metadata: { vendor: fp.vendor, type: label, healthy: fp.is_healthy ? 'Yes' : 'No' },
+    })
+  })
+
+  // Level 7 — SOR nodes from input_meta.sors
+  run.input_meta.sors.forEach((s, i) => {
+    nodes.push({
+      id: `sor-${i}`, label: s.sor_name, level: 7, shape: 'custom', ctxRenderer: drawSourceNode,
+      color: { background: C.slate800, border: C.amber }, size: 22, stage: 'Handoff', nodeType: 'sor',
+      metadata: { vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence },
+    })
+  })
+
+  return nodes
+}
+
+function buildEdges(run: RunData): Edge[] {
+  const raw: Omit<Edge, 'id'>[] = []
+  const planeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
+
+  // Hub → Observation planes
+  planeIds.forEach((p) => raw.push({ from: 'aod', to: p, width: 2 }))
+
+  // Observation planes → Ingested
+  planeIds.forEach((p) => raw.push({ from: p, to: 'ingested', width: 1.5 }))
+
+  // Ingested → Validated / Rejected
+  raw.push({ from: 'ingested', to: 'validated', width: 2 })
+  raw.push({ from: 'ingested', to: 'rejected', width: 1.5, color: { color: C.red, opacity: 0.8 } })
+
+  // Validated → Cataloged
+  raw.push({ from: 'validated', to: 'cataloged', width: 2 })
+
+  // Cataloged → Handoff
+  raw.push({ from: 'cataloged', to: 'handoff-aam', width: 2 })
+
+  // Handoff → Fabric planes
+  run.input_meta.fabric_planes.forEach((_, i) => {
+    raw.push({ from: 'handoff-aam', to: `fabric-${i}`, width: 2 })
+  })
+
+  // Fabric planes → SORs (distribute SORs across fabric planes)
+  const fpCount = run.input_meta.fabric_planes.length
+  run.input_meta.sors.forEach((_, i) => {
+    raw.push({ from: `fabric-${i % fpCount}`, to: `sor-${i}`, width: 1.5 })
+  })
+
   return raw.map((e, i) => ({ ...e, id: `e${i}` }))
 }
 
@@ -209,9 +397,9 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
           hierarchical: {
             enabled: true,
             direction: 'LR',
-            levelSeparation: 200,
-            nodeSpacing: 80,
-            treeSpacing: 100,
+            levelSeparation: 140,
+            nodeSpacing: 50,
+            treeSpacing: 60,
             sortMethod: 'directed',
           },
         },
@@ -219,9 +407,9 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
           enabled: true,
           hierarchicalRepulsion: {
             centralGravity: 0.0,
-            springLength: 150,
+            springLength: 100,
             springConstant: 0.01,
-            nodeDistance: 120,
+            nodeDistance: 70,
           },
         },
       }
@@ -269,7 +457,7 @@ function getBaseOptions(): Options {
     edges: {
       color: { color: C.edge, opacity: 0.8 },
       arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-      smooth: { enabled: true, type: 'continuous', roundness: 0.2 },
+      smooth: { enabled: true, type: 'dynamic', roundness: 0.5 },
       width: 2,
     },
     interaction: {
@@ -285,29 +473,21 @@ function getBaseOptions(): Options {
 
 /* ─── Legend entries ─── */
 const legendItems = [
-  { shape: 'diamond', color: C.cyan,   label: 'Hub / Fabric' },
-  { shape: 'circle',  color: C.cyan,   label: 'Flow stage' },
-  { shape: 'triangle', color: C.purple, label: 'Classification' },
-  { shape: 'rect',    color: C.amber,  label: 'System of Record' },
+  { shape: 'hexagon',      color: C.cyan,   label: 'Tenant' },
+  { shape: 'triangleDown', color: C.violet, label: 'Observation plane' },
+  { shape: 'database',     color: C.cyan,   label: 'Pipeline stage' },
+  { shape: 'diamond',      color: C.orange, label: 'Fabric plane' },
+  { shape: 'rect',         color: C.amber,  label: 'System of Record' },
 ]
 
-/* ─── Stage filter config ─── */
-const ALL_STAGES = [
-  'Hub', 'Observation', 'Ingestion', 'Validation',
-  'Catalog', 'Classification', 'Handoff', 'Fabric Plane', 'System of Record',
-] as const
+/* ─── Stage filter config (matches Pipeline.tsx 3-stage model) ─── */
+const ALL_STAGES = ['Discovery', 'Classification', 'Handoff'] as const
 type Stage = typeof ALL_STAGES[number]
 
 const stageColors: Record<Stage, string> = {
-  'Hub':              C.cyan,
-  'Observation':      C.cyan,
-  'Ingestion':        C.cyan,
-  'Validation':       C.cyan,
-  'Catalog':          C.cyan700,
-  'Classification':   C.purple,
-  'Handoff':          C.orange,
-  'Fabric Plane':     C.violet,
-  'System of Record': C.amber,
+  'Discovery':      C.cyan,
+  'Classification': C.purple,
+  'Handoff':        C.orange,
 }
 
 /* ─── Component ─── */
@@ -325,68 +505,97 @@ export default function PipelineTopology() {
   const [layoutOpen, setLayoutOpen] = useState(false)
   const [hiddenStages, setHiddenStages] = useState<Set<Stage>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Initialize network
+  // Fetch latest run data, then initialize network
   useEffect(() => {
     if (!containerRef.current) return
+    let destroyed = false
 
-    const allNodes = buildNodes()
-    const allEdges = buildEdges()
-    allNodesRef.current = allNodes
-    allEdgesRef.current = allEdges
-    const nodes = new DataSet<PipelineNode>(allNodes)
-    const edges = new DataSet<Edge>(allEdges)
-    nodesRef.current = nodes
-    edgesRef.current = edges
+    async function init() {
+      try {
+        // Fetch most recent run (first in list, sorted by recency)
+        const runsRes = await fetch('/api/runs')
+        if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
+        const runs: RunData[] = await runsRes.json()
+        if (runs.length === 0) throw new Error('No discovery runs found')
+        const run = runs[0]
 
-    const options: Options = {
-      ...getBaseOptions(),
-      ...getLayoutOptions('hierarchical'),
+        // Fetch derived classifications
+        const derivedRes = await fetch(`/api/runs/${run.run_id}/derived`)
+        if (!derivedRes.ok) throw new Error(`Failed to fetch derived: ${derivedRes.status}`)
+        const derived: DerivedData = await derivedRes.json()
+
+        if (destroyed) return
+
+        const allNodes = buildNodes(run, derived)
+        const allEdges = buildEdges(run)
+        allNodesRef.current = allNodes
+        allEdgesRef.current = allEdges
+        const nodes = new DataSet<PipelineNode>(allNodes)
+        const edges = new DataSet<Edge>(allEdges)
+        nodesRef.current = nodes
+        edgesRef.current = edges
+
+        const options: Options = {
+          ...getBaseOptions(),
+          ...getLayoutOptions('hierarchical'),
+        }
+
+        const network = new Network(containerRef.current!, { nodes, edges }, options)
+        networkRef.current = network
+
+        // Click → details panel
+        network.on('click', (params) => {
+          if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0]
+            const node = nodes.get(nodeId) as unknown as PipelineNode | null
+            if (node) {
+              setSelectedNode({
+                label: (node.label || '').replace('\n', ' '),
+                stage: node.stage,
+                nodeType: node.nodeType,
+                metadata: node.metadata,
+              })
+            }
+          } else {
+            setSelectedNode(null)
+          }
+        })
+
+        // Selection glow
+        network.on('selectNode', (params) => {
+          params.nodes.forEach((id: string) => {
+            nodes.update({ id, shadow: { enabled: true, color: 'rgba(34,211,238,0.5)', size: 15, x: 0, y: 0 } } as any)
+          })
+        })
+        network.on('deselectNode', (params) => {
+          params.previousSelection.nodes.forEach((id: string) => {
+            nodes.update({ id, shadow: false } as any)
+          })
+        })
+
+        // Stabilize then disable physics for hierarchical
+        network.once('stabilizationIterationsDone', () => {
+          network.setOptions({ physics: { enabled: false } })
+          setPhysicsEnabled(false)
+        })
+
+        setLoading(false)
+      } catch (err: any) {
+        if (!destroyed) {
+          setError(err.message || 'Failed to load pipeline data')
+          setLoading(false)
+        }
+      }
     }
 
-    const network = new Network(containerRef.current, { nodes, edges }, options)
-    networkRef.current = network
-
-    // Click → details panel
-    network.on('click', (params) => {
-      if (params.nodes.length > 0) {
-        const nodeId = params.nodes[0]
-        const node = nodes.get(nodeId) as unknown as PipelineNode | null
-        if (node) {
-          setSelectedNode({
-            label: (node.label || '').replace('\n', ' '),
-            stage: node.stage,
-            nodeType: node.nodeType,
-            metadata: node.metadata,
-          })
-        }
-      } else {
-        setSelectedNode(null)
-      }
-    })
-
-    // Selection glow
-    network.on('selectNode', (params) => {
-      params.nodes.forEach((id: string) => {
-        nodes.update({ id, shadow: { enabled: true, color: 'rgba(34,211,238,0.5)', size: 15, x: 0, y: 0 } } as any)
-      })
-    })
-    network.on('deselectNode', (params) => {
-      params.previousSelection.nodes.forEach((id: string) => {
-        nodes.update({ id, shadow: false } as any)
-      })
-    })
-
-    // Stabilize then disable physics for hierarchical
-    network.once('stabilizationIterationsDone', () => {
-      if (layout === 'hierarchical') {
-        network.setOptions({ physics: { enabled: false } })
-        setPhysicsEnabled(false)
-      }
-    })
+    init()
 
     return () => {
-      network.destroy()
+      destroyed = true
+      networkRef.current?.destroy()
       networkRef.current = null
       nodesRef.current = null
       edgesRef.current = null
@@ -466,8 +675,13 @@ export default function PipelineTopology() {
   const toggleStage = useCallback((stage: Stage) => {
     setHiddenStages((prev) => {
       const next = new Set(prev)
-      if (next.has(stage)) next.delete(stage)
-      else next.add(stage)
+      if (next.has(stage)) {
+        next.delete(stage)
+      } else {
+        // Prevent hiding all stages
+        if (next.size >= ALL_STAGES.length - 1) return prev
+        next.add(stage)
+      }
       return next
     })
   }, [])
@@ -507,6 +721,25 @@ export default function PipelineTopology() {
     }}>
       {/* Graph container */}
       <div ref={containerRef} className="w-full h-full" />
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center z-30">
+          <div className="flex items-center gap-3 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg px-5 py-3">
+            <Loader2 size={18} className="text-cyan-400 animate-spin" />
+            <span className="text-sm text-white font-[Quicksand]">Loading pipeline data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center z-30">
+          <div className="bg-slate-800/90 backdrop-blur border border-red-500/50 rounded-lg px-5 py-3 max-w-md">
+            <span className="text-sm text-red-400 font-[Quicksand]">{error}</span>
+          </div>
+        </div>
+      )}
 
       {/* Top toolbar */}
       <div className="absolute top-4 left-4 right-4 flex items-center gap-3 pointer-events-none z-10">
@@ -684,6 +917,22 @@ export default function PipelineTopology() {
 /* ─── Legend shape helper ─── */
 function LegendShape({ shape, color }: { shape: string; color: string }) {
   const size = 12
+  if (shape === 'hexagon') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 12 12">
+        <polygon points="3,0 9,0 12,6 9,12 3,12 0,6" fill={color} />
+      </svg>
+    )
+  }
+  if (shape === 'database') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 12 14">
+        <ellipse cx="6" cy="3" rx="5" ry="2.5" fill={color} />
+        <rect x="1" y="3" width="10" height="8" fill={color} />
+        <ellipse cx="6" cy="11" rx="5" ry="2.5" fill={color} opacity="0.7" />
+      </svg>
+    )
+  }
   if (shape === 'diamond') {
     return (
       <svg width={size} height={size} viewBox="0 0 12 12">
@@ -695,6 +944,13 @@ function LegendShape({ shape, color }: { shape: string; color: string }) {
     return (
       <svg width={size} height={size} viewBox="0 0 12 12">
         <polygon points="6,0 12,12 0,12" fill={color} />
+      </svg>
+    )
+  }
+  if (shape === 'triangleDown') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 12 12">
+        <polygon points="0,0 12,0 6,12" fill={color} />
       </svg>
     )
   }

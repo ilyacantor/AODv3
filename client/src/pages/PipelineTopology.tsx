@@ -595,37 +595,30 @@ export default function PipelineTopology() {
           ...getLayoutOptions('hierarchical'),
         }
 
-        // Register stabilization listener BEFORE creating network to avoid
-        // race where 100-iteration stabilization completes during construction
-        const onStabilized = () => {
-          network.setOptions({ physics: { enabled: false } })
-          setPhysicsEnabled(false)
-          network.fit({ animation: false })
-          setLoadingMessage(null)
-          setLoading(false)
-        }
-
         const network = new Network(containerRef.current!, { nodes, edges }, options)
         networkRef.current = network
 
-        // Stabilize then disable physics for hierarchical, fit graph to viewport
-        network.once('stabilizationIterationsDone', onStabilized)
-
-        // Safety timeout — if stabilization event already fired before listener
-        // was attached (fast hierarchical solve), clear loading after 500ms
-        setTimeout(() => {
-          if (!destroyed) {
-            setLoading((prev) => {
-              if (prev) {
-                network.setOptions({ physics: { enabled: false } })
-                setPhysicsEnabled(false)
-                network.fit({ animation: false })
-              }
-              return false
-            })
+        // After stabilization: disable physics, then fit on the NEXT draw frame
+        // so the canvas has final node positions before we calculate the viewport.
+        let settled = false
+        const settle = () => {
+          if (settled || destroyed) return
+          settled = true
+          network.setOptions({ physics: { enabled: false } })
+          setPhysicsEnabled(false)
+          // Wait for one canvas redraw with final positions, then fit
+          network.once('afterDrawing', () => {
+            network.fit({ animation: false })
             setLoadingMessage(null)
-          }
-        }, 500)
+            setLoading(false)
+          })
+          // Trigger a redraw so afterDrawing fires
+          network.redraw()
+        }
+
+        network.once('stabilizationIterationsDone', settle)
+        // Safety: if stabilization completed before listener was attached
+        setTimeout(settle, 800)
 
         // Click → details panel
         network.on('click', (params) => {
@@ -690,17 +683,18 @@ export default function PipelineTopology() {
     const opts = getLayoutOptions(layout)
     net.setOptions(opts as any)
 
-    if (layout === 'hierarchical') {
-      net.once('stabilizationIterationsDone', () => {
+    net.once('stabilizationIterationsDone', () => {
+      if (layout === 'hierarchical') {
         net.setOptions({ physics: { enabled: false } })
         setPhysicsEnabled(false)
+      }
+      net.once('afterDrawing', () => {
         net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } })
       })
-    } else {
+      net.redraw()
+    })
+    if (layout !== 'hierarchical') {
       setPhysicsEnabled(true)
-      net.once('stabilizationIterationsDone', () => {
-        net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } })
-      })
     }
 
     // 4. Restart stabilization cleanly

@@ -29,6 +29,7 @@ header { display: flex; align-items: center; padding: 0 2rem; height: 56px; back
 main { padding: 2rem; }
 .section { background: rgba(30, 41, 59, 0.4); border: 1px solid var(--slate-700); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
 .section.compact { flex: 1; min-width: 300px; max-width: 500px; }
+.section.compact-results { flex: 2; min-width: 400px; }
 .section-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
 .run-descriptors { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--slate-800); border-radius: 8px; }
 .run-desc-item { display: flex; gap: 0.5rem; align-items: center; }
@@ -52,19 +53,19 @@ main { padding: 2rem; }
 .kpi-section { margin-bottom: 1.5rem; }
 .kpi-section-label { font-size: 0.7rem; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 0.5rem; }
-.stats-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.stats-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stats-grid-2 { grid-template-columns: repeat(2, 1fr); }
-.stat-card { background: var(--slate-800); border-radius: 8px; padding: 1rem; text-align: center; position: relative; }
+.stat-card { background: var(--slate-800); border-radius: 8px; padding: 0.65rem; text-align: center; position: relative; }
 .stat-help { position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; border-radius: 50%; background: var(--slate-700); color: var(--slate-400); font-size: 0.7rem; font-weight: 600; display: flex; align-items: center; justify-content: center; cursor: help; transition: all 0.2s; }
 .stat-help:hover { background: var(--cyan-400); color: var(--slate-900); }
-.stat-value { font-size: 2rem; font-weight: 700; color: var(--cyan-400); }
+.stat-value { font-size: 1.4rem; font-weight: 700; color: var(--cyan-400); }
 .stat-value.stat-shadow { color: var(--amber-400); }
 .stat-value.stat-zombie { color: var(--red-400); }
 .stat-value.stat-rejected { color: var(--red-400); }
 .stat-value.stat-visibility { color: var(--cyan-400); }
 .stat-value.stat-fabric { color: var(--purple-400); }
 .stat-value.stat-sor { color: var(--green-400); }
-.stat-label { font-size: 0.875rem; color: var(--slate-400); margin-top: 0.25rem; }
+.stat-label { font-size: 0.75rem; color: var(--slate-400); margin-top: 0.25rem; }
 .stat-sublabel { font-size: 0.7rem; color: var(--slate-500); margin-top: 0.15rem; font-weight: 400; }
 .stat-sublabel-link { color: var(--cyan-400); cursor: pointer; transition: color 0.2s; }
 .stat-sublabel-link:hover { color: var(--cyan-300); text-decoration: underline; }

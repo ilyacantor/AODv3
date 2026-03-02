@@ -141,7 +141,6 @@
                     tab.classList.add('active');
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
                     if (targetTab === 'triage') loadTriageRuns();
-                    if (targetTab === 'handoff') loadHandoffRuns();
                 });
             });
         }
@@ -1411,30 +1410,23 @@
         }
         
         function initHandoffTab() {
-            const handoffSelect = document.getElementById('handoffRunSelect');
             const handoffStatusFilter = document.getElementById('handoffStatusFilter');
             const exportBtn = document.getElementById('exportToAAMBtn');
             const auditBtn = document.getElementById('viewFabricAuditBtn');
             const closeAuditBtn = document.getElementById('closeFabricAuditBtn');
             const downloadAuditBtn = document.getElementById('downloadAuditReportBtn');
+            const handoffBtn = document.getElementById('handoffBtn');
 
-            if (!handoffSelect) {
-                console.error('Handoff tab elements not found');
+            if (!handoffStatusFilter) {
+                console.error('Handoff elements not found');
                 return;
             }
-
-            handoffSelect.addEventListener('change', () => {
-                const runId = handoffSelect.value;
-                const statusFilter = handoffStatusFilter.value;
-                if (runId) loadHandoffCandidates(runId, statusFilter);
-            });
 
             exportBtn.addEventListener('click', exportToAAM);
 
             if (auditBtn) {
                 auditBtn.addEventListener('click', () => {
-                    const runId = handoffSelect.value;
-                    if (runId) loadFabricAudit(runId);
+                    if (currentRunId) loadFabricAudit(currentRunId);
                 });
             }
 
@@ -1444,63 +1436,25 @@
 
             if (downloadAuditBtn) {
                 downloadAuditBtn.addEventListener('click', () => {
-                    const runId = handoffSelect.value;
-                    if (runId) downloadAuditReport(runId);
+                    if (currentRunId) downloadAuditReport(currentRunId);
                 });
             }
 
             handoffStatusFilter.addEventListener('change', () => {
                 hideHandoffDrill();
-                const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
-                if (runId) loadHandoffCandidates(runId, statusFilter);
+                if (currentRunId) loadHandoffCandidates(currentRunId, statusFilter);
             });
+
+            if (handoffBtn) {
+                handoffBtn.addEventListener('click', () => {
+                    document.getElementById('handoffSection').scrollIntoView({ behavior: 'smooth' });
+                });
+            }
 
             const backBtn = document.getElementById('handoffDrillBack');
             if (backBtn) {
                 backBtn.addEventListener('click', hideHandoffDrill);
-            }
-        }
-        
-        async function loadHandoffRuns() {
-            const select = document.getElementById('handoffRunSelect');
-            if (!select) {
-                console.error('handoffRunSelect element not found');
-                return;
-            }
-            select.innerHTML = '<option value="">Loading runs...</option>';
-            try {
-                const response = await fetch('/api/runs');
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-                const runs = await response.json();
-                const currentVal = select.value;
-                select.innerHTML = '<option value="">Select a run...</option>';
-                const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
-                completedRuns.sort((a, b) => new Date(b.started_at || b.created_at) - new Date(a.started_at || a.created_at));
-                const displayRuns = completedRuns.slice(0, 20);
-                console.log('Handoff: loaded', completedRuns.length, 'runs, showing', displayRuns.length);
-                displayRuns.forEach((run, idx) => {
-                    const opt = document.createElement('option');
-                    opt.value = run.run_id;
-                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
-                    const dateStr = run.started_at || run.created_at;
-                    const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
-                    const latest = idx === 0 ? ' (Latest)' : '';
-                    opt.textContent = `${tenant} - ${date}${latest}`;
-                    select.appendChild(opt);
-                });
-                if (currentRunId && displayRuns.some(r => r.run_id === currentRunId)) {
-                    select.value = currentRunId;
-                    loadHandoffCandidates(currentRunId, 'all');
-                } else if (displayRuns.length > 0) {
-                    select.value = displayRuns[0].run_id;
-                    loadHandoffCandidates(displayRuns[0].run_id, 'all');
-                }
-            } catch (err) {
-                console.error('Failed to load handoff runs:', err);
-                select.innerHTML = '<option value="">Failed to load runs</option>';
             }
         }
         
@@ -1960,12 +1914,12 @@
         }
         
         async function exportToAAM() {
-            const runId = document.getElementById('handoffRunSelect').value;
+            const runId = currentRunId;
             const statusFilter = document.getElementById('handoffStatusFilter').value;
             const exportBtn = document.getElementById('exportToAAMBtn');
 
             if (!runId) {
-                showToast('Please select a snapshot first', 'error');
+                showToast('Please run discovery first', 'error');
                 return;
             }
 
@@ -1997,7 +1951,7 @@
 
         async function loadFabricAudit(runId) {
             const auditPanel = document.getElementById('fabricAuditPanel');
-            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').parentElement;
             const farmMetadata = document.querySelector('.farm-metadata-section');
             const tableBody = document.getElementById('fabricAuditTableBody');
 
@@ -2083,7 +2037,7 @@
 
         function hideFabricAudit() {
             const auditPanel = document.getElementById('fabricAuditPanel');
-            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').parentElement;
             const farmMetadata = document.querySelector('.farm-metadata-section');
 
             if (auditPanel) auditPanel.classList.add('hidden');
@@ -3368,7 +3322,10 @@ ${JSON.stringify(technicalReport, null, 2)}
             hideDrillPanel();
             document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
             document.getElementById('resultsSection').classList.remove('hidden');
-            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId)]);
+            document.getElementById('handoffSection').classList.remove('hidden');
+            document.getElementById('handoffBtn').disabled = false;
+            const statusFilter = document.getElementById('handoffStatusFilter').value;
+            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId), loadHandoffCandidates(runId, statusFilter)]);
         }
         
         async function loadRunDetails(runId) {
@@ -3703,7 +3660,6 @@ ${JSON.stringify(technicalReport, null, 2)}
         initTriageTab();
         initTestTab();
         initHandoffTab();
-        loadHandoffRuns();
         
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('from') === 'farm' || urlParams.get('source') === 'farm') {
@@ -3748,10 +3704,13 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const activeTab = document.querySelector('.header-nav-tab.active');
                 const activeTabId = activeTab ? activeTab.dataset.tab : null;
 
-                if (activeTabId === 'handoff') {
-                    await loadHandoffRuns();
-                } else if (activeTabId === 'triage') {
+                if (activeTabId === 'triage') {
                     await loadTriageRuns();
+                }
+                // Reload handoff data if a discovery run is selected
+                if (currentRunId) {
+                    const statusFilter = document.getElementById('handoffStatusFilter').value;
+                    await loadHandoffCandidates(currentRunId, statusFilter);
                 }
 
                 showToast('Data refreshed', 'success');

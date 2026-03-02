@@ -406,8 +406,8 @@ const TourManager = (function() {
         const state = { active: true, phase: 'overview_0', runId: null, overviewIndex: 0 };
         setState(state);
         
-        const overviewTab = document.querySelector('.header-nav-tab[data-tab="overview"]');
-        if (overviewTab) overviewTab.click();
+        const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
+        if (consoleTab) consoleTab.click();
         
         setTimeout(() => executePhase('overview_0'), 300);
     }

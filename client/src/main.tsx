@@ -1,10 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import PipelineTopology from './pages/PipelineTopology'
+import Discovery from './pages/Discovery'
 import './index.css'
 
 function App() {
-  return <PipelineTopology />
+  return <Discovery />
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

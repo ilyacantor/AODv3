@@ -1449,6 +1449,7 @@
             if (handoffBtn) {
                 handoffBtn.addEventListener('click', () => {
                     document.getElementById('handoffSection').scrollIntoView({ behavior: 'smooth' });
+                    exportToAAM();
                 });
             }
 
@@ -3789,8 +3790,8 @@ ${JSON.stringify(technicalReport, null, 2)}
               document.getElementById('fetchFromFarm')?.click();
             });
             panel.querySelector('#obsHandoffBtn').addEventListener('click', () => {
-              document.getElementById('handoffBtn')?.click();
               document.getElementById('handoffSection')?.scrollIntoView({ behavior: 'smooth' });
+              exportToAAM();
             });
             // MutationObserver: keep counts in sync when original grid updates
             if (origGrid) {
@@ -4092,6 +4093,12 @@ ${JSON.stringify(technicalReport, null, 2)}
             topRow.after(divider);
             // Ensure handoff section follows the divider
             divider.after(hs);
+            // Hide original Observation Sources + Results section-row
+            // (the redesigned .console-top-row replaces it)
+            const origSectionRow = document.querySelector('.section-row');
+            if (origSectionRow) {
+              origSectionRow.style.setProperty('display', 'none', 'important');
+            }
           })();
           // ════════════════════════════════════════════════════════════
           // 6. RESTRUCTURE HANDOFF SECTION
@@ -4152,6 +4159,9 @@ ${JSON.stringify(technicalReport, null, 2)}
             pushSep.style.marginLeft = 'auto';
             ctrlRow.appendChild(pushSep);
             if (ctrlDiv)      ctrlRow.appendChild(ctrlDiv);
+            // Remove redundant Export to AAM button (Handoff → in obs panel replaces it)
+            const _exportBtn = document.getElementById('exportToAAMBtn');
+            if (_exportBtn) _exportBtn.style.setProperty('display', 'none', 'important');
             // ── Build #hs-cand-section (collapsible candidates) ──────
             const candSection   = document.createElement('div');
             candSection.id      = 'hs-cand-section';

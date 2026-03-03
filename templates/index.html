@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=27">
+    <link rel="stylesheet" href="/static/css/main.css?v=28">
 </head>
 <body>
     <header>
@@ -21,7 +21,7 @@
                 <button class="header-nav-tab" data-tab="discovery">Console</button>
                 <button class="header-nav-tab" data-tab="triage">Triage</button>
                 <button class="header-nav-tab" data-tab="policy">Policy</button>
-                <button class="header-nav-tab" data-tab="handoff">Handoff</button>
+                <!-- Handoff merged into Console tab -->
                 <button class="header-nav-tab" data-tab="test" style="display:none;">Test Lab</button>
             </nav>
         </div>
@@ -277,6 +277,182 @@
                 </div>
             </div>
         </div>
+
+        <!-- Handoff Section (merged from Handoff tab) -->
+        <div id="handoffSection" class="section hidden" style="margin-top:1.5rem;">
+            <!-- Hidden dropdowns kept for JS compatibility -->
+            <select id="handoffRunSelect" class="form-select" style="display:none;">
+                <option value="">Select a run...</option>
+            </select>
+            <select id="handoffStatusFilter" class="form-select" style="display:none;">
+                <option value="active">Active Only</option>
+                <option value="review">Needs Review</option>
+                <option value="all" selected>All Candidates</option>
+            </select>
+
+            <!-- Handoff Summary title + KPI stats -->
+            <h2 class="section-title">Handoff to AAM</h2>
+            <div class="stats-grid stats-grid-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="handoffTotalCount">-</div>
+                    <div class="stat-label">Total Candidates</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="handoffFabricCount" style="color:var(--purple-400);">-</div>
+                    <div class="stat-label">Fabric Planes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="handoffSorCount" style="color:var(--green-400);">-</div>
+                    <div class="stat-label">SOR Tagged</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="handoffFindingsCount" style="color:var(--amber-400);">-</div>
+                    <div class="stat-label">With Findings</div>
+                </div>
+            </div>
+
+            <!-- Fabric planes breakdown + filter + buttons -->
+            <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
+                <div class="fabric-plane-item ipaas" onclick="filterByFabricPlane('ipaas')">
+                    <span class="fabric-plane-icon">🔗</span>
+                    <span class="fabric-plane-name">iPaaS</span>
+                    <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
+                </div>
+                <div class="fabric-plane-item api-gateway" onclick="filterByFabricPlane('api_gateway')">
+                    <span class="fabric-plane-icon">🌐</span>
+                    <span class="fabric-plane-name">API Gateway</span>
+                    <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
+                </div>
+                <div class="fabric-plane-item warehouse" onclick="filterByFabricPlane('warehouse')">
+                    <span class="fabric-plane-icon">📊</span>
+                    <span class="fabric-plane-name">Warehouse</span>
+                    <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
+                </div>
+                <div class="fabric-plane-item event-bus" onclick="filterByFabricPlane('event_bus')">
+                    <span class="fabric-plane-icon">⚡</span>
+                    <span class="fabric-plane-name">Event Bus</span>
+                    <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
+                </div>
+            </div>
+            <div id="fabricFilterActive" class="fabric-filter-active hidden">
+                <span id="fabricFilterLabel">Showing: All</span>
+                <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
+            </div>
+            <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem;">
+                <button class="btn btn-secondary" id="viewFabricAuditBtn" disabled>View Fabric Allocation Audit</button>
+                <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
+            </div>
+
+            <!-- Farm metadata: Fabric Planes | SORs side by side -->
+            <div class="farm-metadata-section" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
+                <div class="section">
+                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
+                        <span style="color:var(--cyan-400);">Fabric Planes</span>
+                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
+                    </h3>
+                    <div id="farmFabricPlanesContainer" class="farm-data-container">
+                        <div class="empty-state">Load candidates to see fabric planes</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
+                        <span style="color:var(--purple-400);">Systems of Record</span>
+                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
+                    </h3>
+                    <div id="farmSORsContainer" class="farm-data-container">
+                        <div class="empty-state">Load candidates to see SORs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Candidates + drill panel -->
+            <div class="section" style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h2 class="section-title" style="margin-bottom:0;">Connection Candidates</h2>
+                    <span class="config-note" id="handoffCandidateLabel" style="margin:0;">Select a run to view candidates</span>
+                </div>
+                <div id="handoffCandidatesContainer" class="handoff-candidates-list">
+                    <div class="empty-state">Select a discovery run above to preview AAM handoff candidates</div>
+                </div>
+
+                <div id="handoffDrillPanel" class="drill-panel hidden">
+                    <div class="drill-panel-header">
+                        <span class="drill-panel-title" id="handoffDrillTitle">Asset Details</span>
+                        <button class="btn btn-back" id="handoffDrillBack">← Back to List</button>
+                    </div>
+                    <div id="handoffDrillContent"></div>
+                </div>
+            </div>
+
+            <!-- Fabric Allocation Audit Panel -->
+            <div id="fabricAuditPanel" class="section hidden" style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h2 class="section-title" style="margin-bottom:0;">Fabric Allocation Audit Trail</h2>
+                    <div style="display:flex;gap:0.5rem;">
+                        <button class="btn btn-secondary" id="downloadAuditReportBtn">Download Report</button>
+                        <button class="btn btn-back" id="closeFabricAuditBtn">← Back to Candidates</button>
+                    </div>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditTotalScanned">-</div>
+                        <div class="stat-label">Total Scanned</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier1" style="color:var(--green-400);">-</div>
+                        <div class="stat-label">Tier 1 (Direct)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier2" style="color:var(--cyan-400);">-</div>
+                        <div class="stat-label">Tier 2 (Observed)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditRoutedTier3" style="color:var(--amber-400);">-</div>
+                        <div class="stat-label">Tier 3 (Inferred)</div>
+                    </div>
+                </div>
+                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditNotRouted" style="color:var(--gray-400);">-</div>
+                        <div class="stat-label">Not Routed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditShadow" style="color:var(--purple-400);">-</div>
+                        <div class="stat-label">Shadow Detected</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditContradictions" style="color:var(--red-400);">-</div>
+                        <div class="stat-label">Contradictions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="auditMultiPlane" style="color:var(--blue-400);">-</div>
+                        <div class="stat-label">Multi-Plane SORs</div>
+                    </div>
+                </div>
+
+                <!-- Decisions Table -->
+                <div class="table-container" style="max-height:500px;overflow-y:auto;">
+                    <table class="data-table" id="fabricAuditTable">
+                        <thead>
+                            <tr>
+                                <th style="width:120px;">Decision</th>
+                                <th style="width:180px;">Asset</th>
+                                <th style="width:180px;">Plane Assigned</th>
+                                <th style="width:80px;">Tier</th>
+                                <th style="width:80px;">Confidence</th>
+                                <th>Rationale</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fabricAuditTableBody">
+                            <tr><td colspan="6" class="empty-state">Loading audit data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </main>
     </div>
     
@@ -457,229 +633,9 @@
     </div>
     
     <div id="handoffTabContent" class="main-tab-content">
-        <main style="padding:2rem;">
-            <div class="user-guide" id="handoffGuide">
-                <div class="user-guide-header" onclick="toggleUserGuide('handoffGuide')">
-                    <span class="user-guide-icon">▶</span>
-                    <span>User Guide: Handoff</span>
-                </div>
-                <div class="user-guide-content">
-                    <h4>What This Tab Does</h4>
-                    <p>The Handoff tab is where AOD transfers its discovery results to AAM (Adaptive API Mesh). Every discovered asset becomes a "Connection Candidate" with one or more "Pipes" — connection routes through fabric planes, each with its own evidence and confidence score.</p>
-                    
-                    <h4>The Pipes Model</h4>
-                    <p>Assets can have multiple connection routes ("pipes") through different fabric planes. Each pipe includes:</p>
-                    <ul>
-                        <li><strong>Fabric Plane:</strong> The integration mothership (iPaaS, API Gateway, Warehouse, Event Bus)</li>
-                        <li><strong>Evidence Tier:</strong> How AOD discovered this connection (Tier 1 direct, Tier 2 observed, Tier 3 inferred)</li>
-                        <li><strong>Confidence Score:</strong> Composite confidence from 0.30 (hypothesis) to 0.95 (authoritative)</li>
-                        <li><strong>Evidence Trail:</strong> Attached records showing exactly what signals support this classification</li>
-                    </ul>
-                    
-                    <h4>Fabric Planes First Strategy</h4>
-                    <p>AOD finds control planes (MuleSoft, Kong, Snowflake, Kafka) BEFORE individual endpoints. Finding 500 APIs is less valuable than discovering they're all managed by one MuleSoft instance:</p>
-                    <ul>
-                        <li><strong>iPaaS:</strong> Integration platforms like MuleSoft, Workato, Tray.io</li>
-                        <li><strong>API Gateway:</strong> API management platforms like Kong, Apigee, AWS API Gateway</li>
-                        <li><strong>Data Warehouse:</strong> Analytics platforms like Snowflake, BigQuery, Databricks</li>
-                        <li><strong>Event Bus:</strong> Streaming platforms like Kafka, AWS EventBridge, Azure Event Hubs</li>
-                    </ul>
-                    
-                    <h4>Evidence-Based Execution Signals</h4>
-                    <ul>
-                        <li><strong>provision (green):</strong> Tier 1 or Tier 2 evidence with confidence ≥0.70. AAM can auto-connect this asset.</li>
-                        <li><strong>inventory_only (amber):</strong> Tier 3 evidence only, or blocking findings exist. AAM receives for visibility but awaits triage resolution.</li>
-                        <li><strong>No Fabric Plane:</strong> Assets without sufficient evidence get NO assignment — flagged for investigation, not guessed.</li>
-                    </ul>
-                    
-                    <h4>Exporting to AAM</h4>
-                    <p>Click "Export to AAM" to send all connection candidates with their pipes and evidence. AAM receives the complete inventory including evidence trails, using confidence scores to prioritize which fabric plane routes to establish first.</p>
-                    
-                    <div class="guide-tip">
-                        <strong>Tip:</strong> Review assets with Tier 3 evidence before export — these are hypotheses that benefit from human validation.
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section-row">
-                <div class="section compact">
-                    <h2 class="section-title">Select Run</h2>
-                    <div class="form-group">
-                        <label class="form-label">Discovery Run</label>
-                        <select class="form-select" id="handoffRunSelect">
-                            <option value="">Loading runs...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Status Filter</label>
-                        <select class="form-select" id="handoffStatusFilter">
-                            <option value="active">Active Only</option>
-                            <option value="review">Needs Review</option>
-                            <option value="all" selected>All Candidates</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="section" style="flex:2;">
-                    <h2 class="section-title">Handoff Summary</h2>
-                    <div class="stats-grid stats-grid-4">
-                        <div class="stat-card">
-                            <div class="stat-value" id="handoffTotalCount">-</div>
-                            <div class="stat-label">Total Candidates</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="handoffFabricCount" style="color:var(--purple-400);">-</div>
-                            <div class="stat-label">Fabric Planes</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="handoffSorCount" style="color:var(--green-400);">-</div>
-                            <div class="stat-label">SOR Tagged</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="handoffFindingsCount" style="color:var(--amber-400);">-</div>
-                            <div class="stat-label">With Findings</div>
-                        </div>
-                    </div>
-                    <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
-                        <div class="fabric-plane-item ipaas" onclick="filterByFabricPlane('ipaas')">
-                            <span class="fabric-plane-icon">🔗</span>
-                            <span class="fabric-plane-name">iPaaS</span>
-                            <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
-                        </div>
-                        <div class="fabric-plane-item api-gateway" onclick="filterByFabricPlane('api_gateway')">
-                            <span class="fabric-plane-icon">🌐</span>
-                            <span class="fabric-plane-name">API Gateway</span>
-                            <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
-                        </div>
-                        <div class="fabric-plane-item warehouse" onclick="filterByFabricPlane('warehouse')">
-                            <span class="fabric-plane-icon">📊</span>
-                            <span class="fabric-plane-name">Warehouse</span>
-                            <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
-                        </div>
-                        <div class="fabric-plane-item event-bus" onclick="filterByFabricPlane('event_bus')">
-                            <span class="fabric-plane-icon">⚡</span>
-                            <span class="fabric-plane-name">Event Bus</span>
-                            <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
-                        </div>
-                    </div>
-                    <div id="fabricFilterActive" class="fabric-filter-active hidden">
-                        <span id="fabricFilterLabel">Showing: All</span>
-                        <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
-                    </div>
-                    <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem;">
-                        <button class="btn btn-secondary" id="viewFabricAuditBtn" disabled>View Fabric Allocation Audit</button>
-                        <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="farm-metadata-section" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
-                <div class="section">
-                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
-                        <span style="color:var(--cyan-400);">Fabric Planes</span>
-                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
-                    </h3>
-                    <div id="farmFabricPlanesContainer" class="farm-data-container">
-                        <div class="empty-state">Load candidates to see fabric planes</div>
-                    </div>
-                </div>
-                <div class="section">
-                    <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
-                        <span style="color:var(--purple-400);">Systems of Record</span>
-                        <span class="source-badge farm" style="margin-left:0.5rem;">Farm</span>
-                    </h3>
-                    <div id="farmSORsContainer" class="farm-data-container">
-                        <div class="empty-state">Load candidates to see SORs</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section" style="margin-top:1.5rem;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                    <h2 class="section-title" style="margin-bottom:0;">Connection Candidates</h2>
-                    <span class="config-note" id="handoffCandidateLabel" style="margin:0;">Select a run to view candidates</span>
-                </div>
-                <div id="handoffCandidatesContainer" class="handoff-candidates-list">
-                    <div class="empty-state">Select a discovery run above to preview AAM handoff candidates</div>
-                </div>
-                
-                <div id="handoffDrillPanel" class="drill-panel hidden">
-                    <div class="drill-panel-header">
-                        <span class="drill-panel-title" id="handoffDrillTitle">Asset Details</span>
-                        <button class="btn btn-back" id="handoffDrillBack">← Back to List</button>
-                    </div>
-                    <div id="handoffDrillContent"></div>
-                </div>
-            </div>
-
-            <!-- Fabric Allocation Audit Panel -->
-            <div id="fabricAuditPanel" class="section hidden" style="margin-top:1.5rem;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                    <h2 class="section-title" style="margin-bottom:0;">Fabric Allocation Audit Trail</h2>
-                    <div style="display:flex;gap:0.5rem;">
-                        <button class="btn btn-secondary" id="downloadAuditReportBtn">Download Report</button>
-                        <button class="btn btn-back" id="closeFabricAuditBtn">← Back to Candidates</button>
-                    </div>
-                </div>
-
-                <!-- Summary Stats -->
-                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditTotalScanned">-</div>
-                        <div class="stat-label">Total Scanned</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditRoutedTier1" style="color:var(--green-400);">-</div>
-                        <div class="stat-label">Tier 1 (Direct)</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditRoutedTier2" style="color:var(--cyan-400);">-</div>
-                        <div class="stat-label">Tier 2 (Observed)</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditRoutedTier3" style="color:var(--amber-400);">-</div>
-                        <div class="stat-label">Tier 3 (Inferred)</div>
-                    </div>
-                </div>
-                <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditNotRouted" style="color:var(--gray-400);">-</div>
-                        <div class="stat-label">Not Routed</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditShadow" style="color:var(--purple-400);">-</div>
-                        <div class="stat-label">Shadow Detected</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditContradictions" style="color:var(--red-400);">-</div>
-                        <div class="stat-label">Contradictions</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="auditMultiPlane" style="color:var(--blue-400);">-</div>
-                        <div class="stat-label">Multi-Plane SORs</div>
-                    </div>
-                </div>
-
-                <!-- Decisions Table -->
-                <div class="table-container" style="max-height:500px;overflow-y:auto;">
-                    <table class="data-table" id="fabricAuditTable">
-                        <thead>
-                            <tr>
-                                <th style="width:120px;">Decision</th>
-                                <th style="width:180px;">Asset</th>
-                                <th style="width:180px;">Plane Assigned</th>
-                                <th style="width:80px;">Tier</th>
-                                <th style="width:80px;">Confidence</th>
-                                <th>Rationale</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fabricAuditTableBody">
-                            <tr><td colspan="6" class="empty-state">Loading audit data...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </main>
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-family:Quicksand,sans-serif;">
+            Handoff — merged into Console tab
+        </div>
     </div>
     
     <div id="testTabContent" class="main-tab-content">
@@ -958,6 +914,7 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/app.js?v=48"></script>
+    <script src="/static/js/console-redesign.js?v=1"></script>
+    <script src="/static/js/app.js?v=49"></script>
 </body>
 </html>

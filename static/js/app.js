@@ -1491,12 +1491,11 @@
                     opt.textContent = `${tenant} - ${date}${latest}`;
                     select.appendChild(opt);
                 });
+                // Populate dropdown only — Console's selectRun() handles candidate loading
                 if (currentRunId && displayRuns.some(r => r.run_id === currentRunId)) {
                     select.value = currentRunId;
-                    loadHandoffCandidates(currentRunId, 'all');
                 } else if (displayRuns.length > 0) {
                     select.value = displayRuns[0].run_id;
-                    loadHandoffCandidates(displayRuns[0].run_id, 'all');
                 }
             } catch (err) {
                 console.error('Failed to load handoff runs:', err);
@@ -1572,13 +1571,14 @@
                 }
 
                 renderHandoffCandidates(candidates);
+                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
             } catch (err) {
                 console.error('Failed to load handoff candidates:', err);
                 container.innerHTML = `<div class="error-message">Failed to load candidates: ${err.message}</div>`;
                 labelEl.textContent = 'Error loading candidates';
             }
         }
-        
+
         let handoffCandidatesData = [];
         let handoffCandidatesFullData = [];
         
@@ -3266,7 +3266,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         async function handleTenantChange() {
             const tenantId = document.getElementById('tenantSelect').value;
-            
+
             if (tenantId) {
                 try {
                     const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
@@ -3278,6 +3278,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                             if (snapshotRes.ok) {
                                 const snapshotData = await snapshotRes.json();
                                 loadObservationPlaneCounts(snapshotData);
+                                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
                                 return;
                             }
                         }
@@ -3287,6 +3288,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
             }
             loadObservationPlaneCounts(null);
+            if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
         }
         
         function updateTimingDisplay(runs) {
@@ -3369,6 +3371,22 @@ ${JSON.stringify(technicalReport, null, 2)}
             document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
             document.getElementById('resultsSection').classList.remove('hidden');
             await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId)]);
+
+            // Load handoff data for this run (merged from Handoff tab)
+            const handoffSelect = document.getElementById('handoffRunSelect');
+            if (handoffSelect) {
+                if (!handoffSelect.querySelector(`option[value="${runId}"]`)) {
+                    const opt = document.createElement('option');
+                    opt.value = runId;
+                    opt.textContent = runId;
+                    handoffSelect.appendChild(opt);
+                }
+                handoffSelect.value = runId;
+            }
+            const statusFilter = document.getElementById('handoffStatusFilter')?.value || 'all';
+            await loadHandoffCandidates(runId, statusFilter);
+            document.getElementById('handoffSection')?.classList.remove('hidden');
+            if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
         }
         
         async function loadRunDetails(runId) {
@@ -3725,6 +3743,8 @@ ${JSON.stringify(technicalReport, null, 2)}
             // Ensure farm status is checked before populating tenants
             await checkFarmStatus();
             await populateTenantsFromFarm();
+            // Apply console redesign overlay (defined in console-redesign.js)
+            if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
         })();
         
         setInterval(checkHealth, 30000);
@@ -3748,8 +3768,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const activeTab = document.querySelector('.header-nav-tab.active');
                 const activeTabId = activeTab ? activeTab.dataset.tab : null;
 
-                if (activeTabId === 'handoff') {
-                    await loadHandoffRuns();
+                if (activeTabId === 'discovery' || activeTabId === 'topology') {
+                    // Refresh handoff data if a run is selected (handoff merged into Console)
+                    if (currentRunId) {
+                        const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
+                        await loadHandoffCandidates(currentRunId, sf);
+                    }
                 } else if (activeTabId === 'triage') {
                     await loadTriageRuns();
                 }

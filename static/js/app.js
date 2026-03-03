@@ -4030,6 +4030,45 @@ ${JSON.stringify(technicalReport, null, 2)}
                 it.classList.toggle('active', it.dataset.runId === activeRunId);
               });
             }).observe(runsList, { attributes: true, subtree: true, attributeFilter: ['class'] });
+            // ── Fix 4: Rebuild runs panel when loadRuns() replaces innerHTML ──
+            new MutationObserver(() => {
+              const newRuns = Array.from(runsList.children).map(c => ({
+                runId:    c.dataset.runId || '',
+                tenant:   c.querySelector('.run-tenant')?.childNodes[0]?.textContent?.trim()
+                          || c.querySelector('.run-tenant')?.textContent?.trim() || '—',
+                isLatest: !!c.querySelector('.latest-run-badge'),
+                status:   c.querySelector('.run-status')?.textContent?.trim() || '',
+                sync:     c.querySelector('.sync-status')?.textContent?.trim() || '',
+                timing:   c.querySelector('.run-timing')?.textContent?.trim() || '',
+                isActive: c.classList.contains('selected'),
+              }));
+              const newTotal = newRuns.length;
+              const itemsList = document.getElementById('runsItemsList');
+              if (!itemsList) return;
+              itemsList.innerHTML = newRuns.map(r => `
+                <div class="runs-row-item${r.isActive ? ' active' : ''}"
+                     data-run-id="${r.runId}" data-tenant="${r.tenant.toLowerCase()}">
+                  <span class="ri-dot" style="background:${dotColor(r.status)}"></span>
+                  <span class="ri-tenant">${r.tenant}</span>
+                  ${r.isLatest ? '<span class="ri-latest">Latest</span>' : ''}
+                  <span class="ri-sync">${r.sync}</span>
+                  <span class="ri-timing">${r.timing}</span>
+                </div>`).join('');
+              document.getElementById('runsCountBadge').textContent = newTotal;
+              const filterInput = document.getElementById('runsFilterInput');
+              if (filterInput) { filterInput.value = ''; filterInput.disabled = false; }
+              // Re-wire click handlers for new run items
+              document.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
+                item.addEventListener('click', e => {
+                  if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
+                  const origItem = runsList.querySelector(`[data-run-id="${item.dataset.runId}"]`);
+                  if (origItem) origItem.click();
+                  document.querySelectorAll('#runsItemsList .runs-row-item')
+                    .forEach(it => it.classList.remove('active'));
+                  item.classList.add('active');
+                });
+              });
+            }).observe(runsList, { childList: true });
           })(); // end buildRunsPanel
           // ════════════════════════════════════════════════════════════
           // 5. ASSEMBLE TOP ROW  (Obs Sources | Results)
@@ -4132,6 +4171,16 @@ ${JSON.stringify(technicalReport, null, 2)}
             if (candWrapper) {
               while (candWrapper.firstChild) candBody.appendChild(candWrapper.firstChild);
             }
+            // ── Fix 3: Hide the original Connection Candidates header ──
+            // candToggle already provides the collapsible header; the original
+            // <h3>Connection Candidates</h3> div moved into candBody is a duplicate.
+            const origCandHeader = candBody.querySelector('.section-title');
+            if (origCandHeader) {
+              const headerDiv = origCandHeader.closest('div');
+              if (headerDiv && headerDiv.parentElement === candBody) {
+                headerDiv.style.display = 'none';
+              }
+            }
             candSection.appendChild(candToggle);
             candSection.appendChild(candBody);
             // Toggle logic
@@ -4142,6 +4191,16 @@ ${JSON.stringify(technicalReport, null, 2)}
               const chev = document.getElementById('hs-cand-chevron');
               if (chev) chev.style.transform = candOpen ? '' : 'rotate(-90deg)';
             });
+            // ── Fix 5: Sync handoff candidate count badge ───────────
+            // #handoffTotalCount is updated by loadHandoffCandidates after init;
+            // keep #hs-cand-count-badge in sync via MutationObserver.
+            const totalCountEl = document.getElementById('handoffTotalCount');
+            if (totalCountEl) {
+              new MutationObserver(() => {
+                const badge = document.getElementById('hs-cand-count-badge');
+                if (badge) badge.textContent = totalCountEl.textContent.trim() + ' candidates';
+              }).observe(totalCountEl, { childList: true, characterData: true, subtree: true });
+            }
             // ── Reassemble #handoffSection ────────────────────────────
             const title = hs.querySelector(':scope > h2.section-title, :scope > .section-title');
             // Clear hs of everything except title
@@ -4157,6 +4216,15 @@ ${JSON.stringify(technicalReport, null, 2)}
             _applyHandoffStyles();
             // ── Wire chip drills ──────────────────────────────────────
             _wireChipDrills(chipDrill);
+            // ── Fix 1+2: Re-apply styles & re-wire drills for dynamic content ──
+            // renderFarmFabricPlanes(), renderFarmSORs(), renderHandoffCandidates()
+            // all populate containers AFTER init. MutationObservers ensure new
+            // chips/cards get inline styles and click-to-drill handlers.
+            const _reapply = () => { _applyHandoffStyles(); _wireChipDrills(chipDrill); };
+            ['farmFabricPlanesContainer', 'farmSORsContainer', 'handoffCandidatesContainer'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) new MutationObserver(_reapply).observe(el, { childList: true, subtree: true });
+            });
           })(); // end restructureHandoff
           // ════════════════════════════════════════════════════════════
           // HELPER: apply inline styles to all handoff elements

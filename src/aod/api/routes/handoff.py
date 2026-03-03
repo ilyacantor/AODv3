@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from ...db.database import get_db_direct
 from ...models.output_contracts import (
+    AODActionType,
     ProvisioningStatus,
     ConnectionCandidate,
     CandidateFinding,
@@ -315,8 +316,8 @@ def determine_execution_flags(findings: list) -> tuple[bool, str]:
     has_blocking = any(f.severity.value == "critical" for f in findings)
 
     if has_blocking:
-        return (False, "inventory_only")
-    return (True, "provision")
+        return (False, AODActionType.INVENTORY_ONLY)
+    return (True, AODActionType.PROVISION)
 
 
 def build_pipe_evidence_for_asset(asset) -> tuple[list[CandidatePipeEvidence], Optional[CandidateFabricPlaneSummary]]:
@@ -618,7 +619,7 @@ async def export_aam_candidates(
                 priority_score=100.0 if confidence == "high" else 75.0,  # High priority for SORs
                 connected_via_plane=None,
                 execution_allowed=True,
-                action_type="discover_and_provision",  # AAM needs to discover this
+                action_type="provision",  # Farm-designated SOR: clear for provisioning
                 pipes=[],
                 fabric_plane_summary=None
             )
@@ -739,7 +740,7 @@ class AAMExportCandidate(BaseModel):
     governance_status: str
     known_endpoints: List[str] = []
     execution_allowed: bool = True
-    action_type: str = "provision"
+    action_type: AODActionType = AODActionType.PROVISION
     aod_run_id: str
     aod_asset_id: str
 
@@ -873,7 +874,7 @@ async def export_to_aam(
                 governance_status="farm_designated",
                 known_endpoints=[],
                 execution_allowed=True,
-                action_type="discover_and_provision",
+                action_type="provision",  # Farm-designated SOR: clear for provisioning
                 aod_run_id=run_id,
                 aod_asset_id=f"farm_sor_{sor_name_lower}",
             )

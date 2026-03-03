@@ -545,7 +545,7 @@ const stageColors: Record<Stage, string> = {
 }
 
 /* ─── Component ─── */
-export default function PipelineTopology() {
+export default function Discovery() {
   const containerRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)
   const nodesRef = useRef<DataSet<PipelineNode> | null>(null)

@@ -1941,6 +1941,7 @@
 
                 showToast(`Exported ${data.candidates_sent} candidates to AAM`, 'success');
                 console.log('AAM export response:', data);
+                if (typeof updatePipelineStep === 'function') updatePipelineStep(5);
             } catch (err) {
                 console.error('Failed to export to AAM:', err);
                 showToast(`Export failed: ${err.message}`, 'error');
@@ -3211,7 +3212,9 @@ ${JSON.stringify(technicalReport, null, 2)}
                 // Auto-select the latest tenant
                 if (latestTenant && tenants.includes(latestTenant)) {
                     select.value = latestTenant;
-                    // Trigger change to load observation counts
+                    // Fire change event so cloned selects (obs panel) stay in sync
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Load observation counts for the auto-selected tenant
                     await handleTenantChange();
                 }
             } catch (e) {
@@ -3325,6 +3328,7 @@ ${JSON.stringify(technicalReport, null, 2)}
             document.getElementById('resultsSection').classList.remove('hidden');
             document.getElementById('handoffSection').classList.remove('hidden');
             document.getElementById('handoffBtn').disabled = false;
+            if (typeof updatePipelineStep === 'function') updatePipelineStep(4);
             const statusFilter = document.getElementById('handoffStatusFilter').value;
             await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId), loadHandoffCandidates(runId, statusFilter)]);
         }
@@ -3597,10 +3601,11 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
                 
                 showOutcome(result.status, result.message);
-                currentRunId = result.run_id; 
+                currentRunId = result.run_id;
                 await loadRuns();
                 await selectRun(result.run_id);
-            } catch (e) { 
+                if (typeof updatePipelineStep === 'function') updatePipelineStep(4);
+            } catch (e) {
                 showOutcome('upstream_error', e.message);
             } finally { 
                 btn.disabled = false; 
@@ -3689,27 +3694,42 @@ ${JSON.stringify(technicalReport, null, 2)}
           // ════════════════════════════════════════════════════════════
           // 1. PIPELINE STRIP
           // ════════════════════════════════════════════════════════════
+          const PIPELINE_LABELS = [
+            'Select Tenant', 'Review Sources', 'Run Discovery',
+            'Review Results', 'Handoff to AAM',
+          ];
           (function buildPipeline() {
-            const steps = [
-              { n: 1, label: 'Select Tenant',  done: true  },
-              { n: 2, label: 'Review Sources', done: true  },
-              { n: 3, label: 'Run Discovery',  active: true },
-              { n: 4, label: 'Review Results', done: false },
-              { n: 5, label: 'Handoff to AAM', done: false },
-            ];
             const strip = document.createElement('div');
             strip.className = 'console-pipeline';
-            steps.forEach((st, i) => {
-              const cls  = st.done ? 'done' : st.active ? 'active' : '';
-              const icon = st.done ? '✓' : st.n;
-              strip.innerHTML += `<div class="cp-step ${cls}">
-                <span class="cp-num">${icon}</span>${st.label}</div>` +
-                (i < steps.length - 1 ? '<span class="cp-arrow">›</span>' : '');
+            PIPELINE_LABELS.forEach((label, i) => {
+              const n = i + 1;
+              const done   = n <= 2;
+              const active = n === 3;
+              const cls  = done ? 'done' : active ? 'active' : '';
+              const icon = done ? '✓' : n;
+              strip.innerHTML += `<div class="cp-step ${cls}" data-step="${n}">
+                <span class="cp-num">${icon}</span>${label}</div>` +
+                (i < PIPELINE_LABELS.length - 1 ? '<span class="cp-arrow">›</span>' : '');
             });
             const guide = document.getElementById('consoleGuide');
             if (guide) guide.after(strip);
             else tabContent.prepend(strip);
           })();
+          // Update pipeline strip to show activeStep as current
+          // Steps before activeStep are "done", activeStep is "active", rest are blank
+          // Exposed globally so selectRun() and exportToAAM() can call it
+          window.updatePipelineStep = function updatePipelineStep(activeStep) {
+            const strip = document.querySelector('.console-pipeline');
+            if (!strip) return;
+            strip.querySelectorAll('.cp-step').forEach(el => {
+              const n = parseInt(el.dataset.step);
+              if (!n) return;
+              const done   = n < activeStep;
+              const active = n === activeStep;
+              el.className = `cp-step${done ? ' done' : active ? ' active' : ''}`;
+              el.querySelector('.cp-num').textContent = done ? '✓' : n;
+            });
+          }
           // ════════════════════════════════════════════════════════════
           // 2. OBS PANEL  (left half of top row)
           // ════════════════════════════════════════════════════════════
@@ -3777,12 +3797,19 @@ ${JSON.stringify(technicalReport, null, 2)}
               const clone = origSelect.cloneNode(true);
               clone.id = 'tenantSelectNew';
               clone.style.cssText = 'width:100%;font-size:.72rem;';
+              // cloneNode doesn't copy programmatic .value — sync it explicitly
+              clone.value = origSelect.value;
               clone.addEventListener('change', e => {
                 origSelect.value = e.target.value;
                 origSelect.dispatchEvent(new Event('change', { bubbles: true }));
               });
-              // Keep original select in sync when changed externally
+              // Keep clone in sync when original changes value
               origSelect.addEventListener('change', () => { clone.value = origSelect.value; });
+              // Keep clone options in sync when original is repopulated (e.g. refresh)
+              new MutationObserver(() => {
+                clone.innerHTML = origSelect.innerHTML;
+                clone.value = origSelect.value;
+              }).observe(origSelect, { childList: true });
               panel.querySelector('#obs-tenant-mount').appendChild(clone);
             }
             // Wire buttons to existing DOM buttons

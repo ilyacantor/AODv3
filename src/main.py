@@ -123,9 +123,9 @@ async def startup():
         await asyncio.wait_for(get_db_direct(), timeout=15)
         logger.info("startup.db_ready")
     except asyncio.TimeoutError:
-        logger.warning("startup.db_timeout", extra={"msg": "DB init timed out after 15s, will retry lazily on first request"})
+        logger.warning("startup.db_timeout — DB init timed out after 15s, will retry lazily on first request")
     except Exception as e:
-        logger.warning("startup.db_error", extra={"msg": str(e), "note": "DB init failed, will retry lazily on first request"})
+        logger.warning("startup.db_error — %s — will retry lazily on first request", str(e))
 
 
 @app.on_event("shutdown")

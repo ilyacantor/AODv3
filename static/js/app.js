@@ -3871,12 +3871,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                   </div>
                 </div>
               </div>
-              <div class="results-go-btn-wrap">
-                <button class="btn btn-outline-secondary" id="rpGoToFarmBtn">Go to Farm for Grading →</button>
-              </div>`;
-            panel.querySelector('#rpGoToFarmBtn').addEventListener('click', () => {
-              document.getElementById('goToFarmBtn')?.click();
-            });
+              `;
             // ── Keep Results panel in sync when the hidden summaryTab updates ──
             const summaryTab = document.getElementById('summaryTab');
             if (summaryTab) {

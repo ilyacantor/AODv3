@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=28">
+    <link rel="stylesheet" href="/static/css/main.css?v=29">
 </head>
 <body>
     <header>
@@ -105,193 +105,194 @@
             </div>
         </div>
         
-        <div class="section-row">
-        <div class="section compact">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h2 class="section-title" style="margin:0;">Observation Sources</h2>
-                <span id="farmStatusBadge" class="farm-status-light" title="Checking Farm..."></span>
+        <!-- ═══ Console Top Row: Obs Sources | Results ═══ -->
+        <div class="console-top-row">
+
+            <!-- LEFT: Observation Sources -->
+            <div class="obs-panel">
+                <div class="obs-panel-header">
+                    <div class="obs-panel-title">
+                        <span class="obs-online-dot"></span>Observation Sources
+                    </div>
+                    <span id="farmStatusBadge" class="farm-status-light" title="Checking Farm..."></span>
+                </div>
+                <div class="obs-tenant-row">
+                    <span class="obs-tenant-label">Tenant:</span>
+                    <select class="form-select" id="tenantSelect" style="flex:1;min-width:0;font-size:.72rem;">
+                        <option value="">Select a tenant...</option>
+                    </select>
+                </div>
+                <div class="obs-sources-list" id="obsSourcesList">
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">🔍</span>
+                        <span class="obs-source-name">Discovery</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarDiscovery" style="background:#4299e1;"></div></div>
+                        <span class="obs-source-count" id="planeCountDiscovery">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">🔐</span>
+                        <span class="obs-source-name">IdP</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarIdp" style="background:#9f7aea;"></div></div>
+                        <span class="obs-source-count" id="planeCountIdp">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">📋</span>
+                        <span class="obs-source-name">CMDB</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarCmdb" style="background:#48bb78;"></div></div>
+                        <span class="obs-source-count" id="planeCountCmdb">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">☁️</span>
+                        <span class="obs-source-name">Cloud</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarCloud" style="background:#ed8936;"></div></div>
+                        <span class="obs-source-count" id="planeCountCloud">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">💻</span>
+                        <span class="obs-source-name">Endpoint</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarEndpoint" style="background:#f6ad55;"></div></div>
+                        <span class="obs-source-count" id="planeCountEndpoint">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">🌐</span>
+                        <span class="obs-source-name">Network</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarNetwork" style="background:#63b3ed;"></div></div>
+                        <span class="obs-source-count" id="planeCountNetwork">-</span>
+                    </div>
+                    <div class="obs-source-row">
+                        <span class="obs-source-icon">💰</span>
+                        <span class="obs-source-name">Finance</span>
+                        <div class="obs-source-bar-wrap"><div class="obs-source-bar" id="obsBarFinance" style="background:#fc8181;"></div></div>
+                        <span class="obs-source-count" id="planeCountFinance">-</span>
+                    </div>
+                </div>
+                <div class="obs-action-row">
+                    <button class="btn btn-primary" id="fetchFromFarm">⚡ Run Discovery</button>
+                    <button class="btn btn-outline-secondary" id="obsHandoffBtn" disabled>Handoff →</button>
+                </div>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label">Tenant</label>
-                <select class="form-select" id="tenantSelect">
-                    <option value="">Select a tenant...</option>
-                </select>
-            </div>
-            
-            <div id="observationPlanesGrid" class="observation-planes-grid">
-                <div class="observation-plane-card" data-plane="discovery">
-                    <div class="plane-icon">🔍</div>
-                    <div class="plane-name">Discovery</div>
-                    <div class="plane-count" id="planeCountDiscovery">-</div>
-                    <div class="plane-sublabel">observations</div>
-                </div>
-                <div class="observation-plane-card" data-plane="idp">
-                    <div class="plane-icon">🔐</div>
-                    <div class="plane-name">IdP</div>
-                    <div class="plane-count" id="planeCountIdp">-</div>
-                    <div class="plane-sublabel">objects</div>
-                </div>
-                <div class="observation-plane-card" data-plane="cmdb">
-                    <div class="plane-icon">📋</div>
-                    <div class="plane-name">CMDB</div>
-                    <div class="plane-count" id="planeCountCmdb">-</div>
-                    <div class="plane-sublabel">config items</div>
-                </div>
-                <div class="observation-plane-card" data-plane="cloud">
-                    <div class="plane-icon">☁️</div>
-                    <div class="plane-name">Cloud</div>
-                    <div class="plane-count" id="planeCountCloud">-</div>
-                    <div class="plane-sublabel">resources</div>
-                </div>
-                <div class="observation-plane-card" data-plane="endpoint">
-                    <div class="plane-icon">💻</div>
-                    <div class="plane-name">Endpoint</div>
-                    <div class="plane-count" id="planeCountEndpoint">-</div>
-                    <div class="plane-sublabel">devices/apps</div>
-                </div>
-                <div class="observation-plane-card" data-plane="network">
-                    <div class="plane-icon">🌐</div>
-                    <div class="plane-name">Network</div>
-                    <div class="plane-count" id="planeCountNetwork">-</div>
-                    <div class="plane-sublabel">records</div>
-                </div>
-                <div class="observation-plane-card" data-plane="finance">
-                    <div class="plane-icon">💰</div>
-                    <div class="plane-name">Finance</div>
-                    <div class="plane-count" id="planeCountFinance">-</div>
-                    <div class="plane-sublabel">vendors/contracts</div>
-                </div>
-            </div>
-            
-            
-            <div class="button-row" style="margin-top:1rem;">
-                <button class="btn btn-primary" id="fetchFromFarm">Run Discovery</button>
-            </div>
-        </div>
-        
-        <div class="section compact">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <h2 class="section-title" style="margin:0;">Discovery Runs</h2>
-            </div>
-            <div id="runsLoading" class="loading hidden"><div class="spinner"></div>Loading runs...</div>
-            <div id="runsList" class="runs-list"><div class="empty-state">No runs yet. Fetch a snapshot to get started.</div></div>
-        </div>
-        </div>
-        
-        <div class="section hidden" id="resultsSection">
-            <h2 class="section-title">Results</h2>
-            <div id="summaryTab" class="tab-content">
-                <div id="runDescriptors" class="run-descriptors">
-                    <div class="run-desc-item"><span class="run-desc-label">Run ID:</span><span class="run-desc-value" id="descRunId">-</span></div>
-                    <div class="run-desc-item"><span class="run-desc-label">Tenant:</span><span class="run-desc-value" id="descTenant">-</span></div>
-                    <div class="run-desc-item"><span class="run-desc-label">Status:</span><span class="run-desc-value" id="descStatus">-</span></div>
-                    <div class="run-desc-item"><span class="run-desc-label">Completed:</span><span class="run-desc-value" id="descCompleted">-</span></div>
-                </div>
-                <div class="kpi-section">
-                    <div class="kpi-section-label">Lifecycle</div>
-                    <div id="lifecycleStats" class="stats-grid stats-grid-4">
-                        <div class="stat-card clickable" data-drill-type="observations">
-                            <div class="stat-help" title="Raw evidence collected from discovery sources (DNS, network, IdP, etc). Each observation is a single data point about a system or service.">?</div>
-                            <div class="stat-value" id="statObservations">-</div>
-                            <div class="stat-label">Ingested</div>
+
+            <!-- RIGHT: Results + Discovery Runs -->
+            <div class="results-panel">
+                <div class="results-panel-title">Results</div>
+                <div id="resultsSection" class="hidden">
+                    <div id="summaryTab" class="tab-content">
+                        <div id="runDescriptors" class="run-meta-bar">
+                            <span><span class="rml">Run:</span> <span class="rmv" id="descRunId">-</span></span>
+                            <span><span class="rml">Tenant:</span> <span class="rmv" id="descTenant">-</span></span>
+                            <span><span class="rml">Status:</span> <span class="rmv" id="descStatus" style="color:#48bb78;">-</span></span>
+                            <span><span class="rml">Completed:</span> <span class="rmv" id="descCompleted">-</span></span>
                         </div>
-                        <div class="stat-card clickable" data-drill-type="validated">
-                            <div class="stat-help" title="Observations that passed schema validation and normalization. These are candidates ready for correlation and admission processing.">?</div>
-                            <div class="stat-value" id="statValidated">-</div>
-                            <div class="stat-label">Validated</div>
+                        <div class="kpi-two-col">
+                            <div class="kpi-group">
+                                <div class="kpi-group-label">Lifecycle</div>
+                                <div id="lifecycleStats" class="kpi-row-inner">
+                                    <div class="stat-card clickable" data-drill-type="observations">
+                                        <div class="stat-value" id="statObservations" style="color:#63b3ed;">-</div>
+                                        <div class="stat-label">Ingested</div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="validated">
+                                        <div class="stat-value" id="statValidated" style="color:#48bb78;">-</div>
+                                        <div class="stat-label">Validated</div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="rejections">
+                                        <div class="stat-value stat-rejected" id="statRejected" style="color:#fc8181;">-</div>
+                                        <div class="stat-label">Rejected</div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="assets">
+                                        <div class="stat-value" id="statAssets" style="color:#9f7aea;">-</div>
+                                        <div class="stat-label">Cataloged</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="kpi-group">
+                                <div class="kpi-group-label">Classifications</div>
+                                <div id="summaryStats" class="kpi-row-inner">
+                                    <div class="stat-card clickable" data-drill-type="shadow">
+                                        <div class="stat-value stat-shadow" id="statShadow" style="color:#ecc94b;">-</div>
+                                        <div class="stat-label">Shadow</div>
+                                        <div class="stat-sublabel stat-sublabel-link" id="shadowAssetsSublabel"></div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="zombie">
+                                        <div class="stat-value stat-zombie" id="statZombie" style="color:#f6ad55;">-</div>
+                                        <div class="stat-label">Zombie</div>
+                                        <div class="stat-sublabel stat-sublabel-link" id="zombieAssetsSublabel"></div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="security_risks">
+                                        <div class="stat-value stat-security" id="statSecurityRisks" style="color:#fc8181;">-</div>
+                                        <div class="stat-label">Sec. Risks</div>
+                                        <div class="stat-sublabel" id="riskBreakdown"></div>
+                                        <div class="stat-sublabel stat-sublabel-link" id="securityAssetsCount"></div>
+                                    </div>
+                                    <div class="stat-card clickable" data-drill-type="governance_hygiene">
+                                        <div class="stat-value" id="statGovernanceHygiene" style="color:#48bb78;">-</div>
+                                        <div class="stat-label">Governance</div>
+                                        <div class="stat-sublabel stat-sublabel-link" id="governanceAssetsCount"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="stat-card clickable" data-drill-type="rejections">
-                            <div class="stat-help" title="Observations rejected during processing. Includes schema failures, banned fields, and records that failed admission criteria.">?</div>
-                            <div class="stat-value stat-rejected" id="statRejected">-</div>
-                            <div class="stat-label">Rejected</div>
+                        <!-- Artifacts (hidden — data targets preserved for app.js) -->
+                        <div style="display:none;">
+                            <div id="artifactsStats">
+                                <div class="stat-card clickable" data-drill-type="fabric_planes">
+                                    <div class="stat-value" id="statFabricPlanes">-</div>
+                                    <div class="stat-sublabel" id="fabricPlaneBreakdown"></div>
+                                </div>
+                                <div class="stat-card clickable" data-drill-type="sor">
+                                    <div class="stat-value" id="statSOR">-</div>
+                                    <div class="stat-sublabel" id="sorBreakdown"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="stat-card clickable" data-drill-type="assets">
-                            <div class="stat-help" title="Confirmed enterprise systems admitted to the asset catalog. These are deduplicated, correlated assets ready for governance.">?</div>
-                            <div class="stat-value" id="statAssets">-</div>
-                            <div class="stat-label">Cataloged</div>
+                        <div id="drillPanel" class="drill-panel hidden">
+                            <div class="drill-panel-header">
+                                <div style="display:flex;align-items:center;gap:1rem;">
+                                    <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
+                                    <span id="drillCatalogLink" class="hidden"></span>
+                                </div>
+                                <button class="btn btn-back" id="drillBackBtn">← Back</button>
+                            </div>
+                            <div class="breadcrumb" id="drillBreadcrumb"></div>
+                            <div id="drillError" class="drill-error hidden"></div>
+                            <div id="drillContent"></div>
+                        </div>
+                        <div class="results-go-btn-wrap">
+                            <button class="btn btn-secondary" id="goToFarmBtn">Go to Farm for Grading →</button>
                         </div>
                     </div>
                 </div>
-                <div class="kpi-section">
-                    <div class="kpi-section-label">Classifications</div>
-                    <div id="summaryStats" class="stats-grid stats-grid-4">
-                        <div class="stat-card clickable" data-drill-type="shadow">
-                            <div class="stat-help" title="Shadow IT: Assets discovered and actively used but NOT governed (no IdP AND no CMDB presence). Represents potential security and compliance risk.">?</div>
-                            <div class="stat-value stat-shadow" id="statShadow">-</div>
-                            <div class="stat-label">Shadow</div>
-                            <div class="stat-sublabel stat-sublabel-link" id="shadowAssetsSublabel"></div>
-                        </div>
-                        <div class="stat-card clickable" data-drill-type="zombie">
-                            <div class="stat-help" title="Zombie Assets: Governed (in IdP or CMDB) but inactive for 90+ days. May indicate unused licenses or orphaned systems.">?</div>
-                            <div class="stat-value stat-zombie" id="statZombie">-</div>
-                            <div class="stat-label">Zombie</div>
-                            <div class="stat-sublabel stat-sublabel-link" id="zombieAssetsSublabel"></div>
-                        </div>
-                        <div class="stat-card clickable" data-drill-type="security_risks">
-                            <div class="stat-help" title="Security Risks: Identity gaps (ungoverned access paths), shadow IT spend (financially-backed shadow systems), and data conflicts (conflicting authoritative data).">?</div>
-                            <div class="stat-value stat-security" id="statSecurityRisks">-</div>
-                            <div class="stat-label">Security Risks</div>
-                            <div class="stat-sublabel" id="riskBreakdown"></div>
-                            <div class="stat-sublabel stat-sublabel-link" id="securityAssetsCount"></div>
-                        </div>
-                        <div class="stat-card clickable" data-drill-type="governance_hygiene">
-                            <div class="stat-help" title="Governance Hygiene: CMDB coverage gaps (partial governance), ownership gaps, and duplicate records. These are exposure amplifiers that reduce control plane accuracy.">?</div>
-                            <div class="stat-value" id="statGovernanceHygiene">-</div>
-                            <div class="stat-label">Governance</div>
-                            <div class="stat-sublabel stat-sublabel-link" id="governanceAssetsCount"></div>
+
+                <!-- Discovery Runs (collapsible, inside results panel) -->
+                <div class="runs-row" id="discoveryRunsPanel">
+                    <div class="runs-row-header" id="runsRowHeader">
+                        <div class="runs-row-left">
+                            <span class="runs-chevron" id="runsChevron">▼</span>
+                            <span class="runs-row-title">Discovery Runs</span>
+                            <span class="runs-count-badge" id="runsCountBadge">0</span>
                         </div>
                     </div>
-                </div>
-                <div class="kpi-section">
-                    <div class="kpi-section-label">Artifacts</div>
-                    <div id="artifactsStats" class="stats-grid stats-grid-2">
-                        <div class="stat-card clickable" data-drill-type="fabric_planes">
-                            <div class="stat-help" title="Fabric Planes: Integration 'motherships' detected (iPaaS, API Gateway, Event Bus, Warehouse). AAM connects to these instead of individual apps.">?</div>
-                            <div class="stat-value stat-fabric" id="statFabricPlanes">-</div>
-                            <div class="stat-label">Fabric Planes</div>
-                            <div class="stat-sublabel" id="fabricPlaneBreakdown"></div>
-                        </div>
-                        <div class="stat-card clickable" data-drill-type="sor">
-                            <div class="stat-help" title="Systems of Record: Authoritative data sources for specific domains (customer, employee, financial). High confidence SORs are likely data masters.">?</div>
-                            <div class="stat-value stat-sor" id="statSOR">-</div>
-                            <div class="stat-label">Systems of Record</div>
-                            <div class="stat-sublabel" id="sorBreakdown"></div>
-                        </div>
+                    <div class="runs-body" id="runsBody">
+                        <div id="runsLoading" class="loading hidden"><div class="spinner"></div>Loading runs...</div>
+                        <div id="runsList" class="runs-list"><div class="empty-state">No runs yet. Fetch a snapshot to get started.</div></div>
                     </div>
-                </div>
-                <div id="drillPanel" class="drill-panel hidden">
-                    <div class="drill-panel-header">
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <span class="drill-panel-title" id="drillPanelTitle">Drill Down</span>
-                            <span id="drillCatalogLink" class="hidden"></span>
-                        </div>
-                        <button class="btn btn-back" id="drillBackBtn">← Back</button>
-                    </div>
-                    <div class="breadcrumb" id="drillBreadcrumb"></div>
-                    <div id="drillError" class="drill-error hidden"></div>
-                    <div id="drillContent"></div>
-                </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
-                    <button class="btn btn-secondary" id="goToFarmBtn">Go to Farm for Grading →</button>
                 </div>
             </div>
+
         </div>
 
-        <!-- Handoff Section (merged from Handoff tab) -->
-        <div id="handoffSection" class="section hidden" style="margin-top:1.5rem;">
-            <!-- Hidden dropdowns kept for JS compatibility -->
+        <!-- ═══ Flow Divider ═══ -->
+        <div class="flow-divider">↓ ready for handoff to AAM</div>
+
+        <!-- ═══ Handoff Section ═══ -->
+        <div id="handoffSection" class="section hidden">
             <select id="handoffRunSelect" class="form-select" style="display:none;">
                 <option value="">Select a run...</option>
             </select>
-            <select id="handoffStatusFilter" class="form-select" style="display:none;">
-                <option value="active">Active Only</option>
-                <option value="review">Needs Review</option>
-                <option value="all" selected>All Candidates</option>
-            </select>
 
-            <!-- Handoff Summary title + KPI stats -->
             <h2 class="section-title">Handoff to AAM</h2>
+
+            <!-- KPI bar -->
             <div class="stats-grid stats-grid-4">
                 <div class="stat-card">
                     <div class="stat-value" id="handoffTotalCount">-</div>
@@ -311,40 +312,8 @@
                 </div>
             </div>
 
-            <!-- Fabric planes breakdown + filter + buttons -->
-            <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
-                <div class="fabric-plane-item ipaas" onclick="filterByFabricPlane('ipaas')">
-                    <span class="fabric-plane-icon">🔗</span>
-                    <span class="fabric-plane-name">iPaaS</span>
-                    <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
-                </div>
-                <div class="fabric-plane-item api-gateway" onclick="filterByFabricPlane('api_gateway')">
-                    <span class="fabric-plane-icon">🌐</span>
-                    <span class="fabric-plane-name">API Gateway</span>
-                    <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
-                </div>
-                <div class="fabric-plane-item warehouse" onclick="filterByFabricPlane('warehouse')">
-                    <span class="fabric-plane-icon">📊</span>
-                    <span class="fabric-plane-name">Warehouse</span>
-                    <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
-                </div>
-                <div class="fabric-plane-item event-bus" onclick="filterByFabricPlane('event_bus')">
-                    <span class="fabric-plane-icon">⚡</span>
-                    <span class="fabric-plane-name">Event Bus</span>
-                    <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
-                </div>
-            </div>
-            <div id="fabricFilterActive" class="fabric-filter-active hidden">
-                <span id="fabricFilterLabel">Showing: All</span>
-                <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
-            </div>
-            <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem;">
-                <button class="btn btn-secondary" id="viewFabricAuditBtn" disabled>View Fabric Allocation Audit</button>
-                <button class="btn btn-primary" id="exportToAAMBtn" disabled>Export to AAM</button>
-            </div>
-
-            <!-- Farm metadata: Fabric Planes | SORs side by side -->
-            <div class="farm-metadata-section" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
+            <!-- Meta row: Fabric Planes | Systems of Record -->
+            <div id="hs-meta-row" class="farm-metadata-section">
                 <div class="section">
                     <h3 class="section-title" style="font-size:1rem;margin-bottom:0.75rem;">
                         <span style="color:var(--cyan-400);">Fabric Planes</span>
@@ -365,27 +334,74 @@
                 </div>
             </div>
 
-            <!-- Connection Candidates + drill panel -->
-            <div class="section" style="margin-top:1.5rem;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                    <h2 class="section-title" style="margin-bottom:0;">Connection Candidates</h2>
-                    <span class="config-note" id="handoffCandidateLabel" style="margin:0;">Select a run to view candidates</span>
-                </div>
-                <div id="handoffCandidatesContainer" class="handoff-candidates-list">
-                    <div class="empty-state">Select a discovery run above to preview AAM handoff candidates</div>
-                </div>
+            <!-- Chip drill panel (expands on fabric/SOR chip click) -->
+            <div id="chipDrillPanel" class="chip-drill-panel"></div>
 
-                <div id="handoffDrillPanel" class="drill-panel hidden">
-                    <div class="drill-panel-header">
-                        <span class="drill-panel-title" id="handoffDrillTitle">Asset Details</span>
-                        <button class="btn btn-back" id="handoffDrillBack">← Back to List</button>
+            <!-- Controls row: breakdown tabs | filter | buttons -->
+            <div id="hs-controls-row">
+                <div id="fabricPlanesBreakdown" class="fabric-planes-breakdown hidden">
+                    <div class="fabric-plane-item ipaas" onclick="filterByFabricPlane('ipaas')">
+                        <span class="fabric-plane-icon">🔗</span>
+                        <span class="fabric-plane-name">iPaaS</span>
+                        <span class="fabric-plane-count" id="fabricIpaasCount">0</span>
                     </div>
-                    <div id="handoffDrillContent"></div>
+                    <div class="fabric-plane-item api-gateway" onclick="filterByFabricPlane('api_gateway')">
+                        <span class="fabric-plane-icon">🌐</span>
+                        <span class="fabric-plane-name">API Gateway</span>
+                        <span class="fabric-plane-count" id="fabricApiGatewayCount">0</span>
+                    </div>
+                    <div class="fabric-plane-item warehouse" onclick="filterByFabricPlane('warehouse')">
+                        <span class="fabric-plane-icon">📊</span>
+                        <span class="fabric-plane-name">Warehouse</span>
+                        <span class="fabric-plane-count" id="fabricWarehouseCount">0</span>
+                    </div>
+                    <div class="fabric-plane-item event-bus" onclick="filterByFabricPlane('event_bus')">
+                        <span class="fabric-plane-icon">⚡</span>
+                        <span class="fabric-plane-name">Event Bus</span>
+                        <span class="fabric-plane-count" id="fabricEventBusCount">0</span>
+                    </div>
+                </div>
+                <span class="hs-sep">|</span>
+                <div id="fabricFilterActive" class="fabric-filter-active hidden">
+                    <span id="fabricFilterLabel">Showing: All</span>
+                    <button class="btn btn-small" onclick="clearFabricFilter()">Clear Filter</button>
+                </div>
+                <span class="hs-sep hs-push">|</span>
+                <select id="handoffStatusFilter" class="form-select" style="font-size:.68rem;padding:.2rem .4rem;">
+                    <option value="active">Active Only</option>
+                    <option value="review">Needs Review</option>
+                    <option value="all" selected>All Candidates</option>
+                </select>
+                <button class="btn btn-secondary" id="viewFabricAuditBtn" disabled>View Fabric Audit</button>
+                <button class="btn btn-primary" id="exportToAAMBtn" disabled style="display:none;">Export to AAM</button>
+            </div>
+
+            <!-- Connection Candidates (collapsible) -->
+            <div id="hs-cand-section">
+                <div id="hs-cand-toggle">
+                    <div style="display:flex;align-items:center;gap:.5rem;">
+                        <span style="font-size:.78rem;font-weight:700;color:#63b3ed;">Connection Candidates</span>
+                        <span id="hs-cand-count-badge" style="font-size:.65rem;color:#718096;">- candidates</span>
+                        <span class="config-note" id="handoffCandidateLabel" style="margin:0;font-size:.6rem;">Select a run to view candidates</span>
+                    </div>
+                    <span id="hs-cand-chevron">▼</span>
+                </div>
+                <div id="hs-cand-body">
+                    <div id="handoffCandidatesContainer" class="handoff-candidates-list">
+                        <div class="empty-state">Select a discovery run above to preview AAM handoff candidates</div>
+                    </div>
+                    <div id="handoffDrillPanel" class="drill-panel hidden">
+                        <div class="drill-panel-header">
+                            <span class="drill-panel-title" id="handoffDrillTitle">Asset Details</span>
+                            <button class="btn btn-back" id="handoffDrillBack">← Back to List</button>
+                        </div>
+                        <div id="handoffDrillContent"></div>
+                    </div>
                 </div>
             </div>
 
             <!-- Fabric Allocation Audit Panel -->
-            <div id="fabricAuditPanel" class="section hidden" style="margin-top:1.5rem;">
+            <div id="fabricAuditPanel" class="section hidden" style="margin-top:1rem;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
                     <h2 class="section-title" style="margin-bottom:0;">Fabric Allocation Audit Trail</h2>
                     <div style="display:flex;gap:0.5rem;">
@@ -393,8 +409,6 @@
                         <button class="btn btn-back" id="closeFabricAuditBtn">← Back to Candidates</button>
                     </div>
                 </div>
-
-                <!-- Summary Stats -->
                 <div class="stats-grid stats-grid-4" style="margin-bottom:1.5rem;">
                     <div class="stat-card">
                         <div class="stat-value" id="auditTotalScanned">-</div>
@@ -431,8 +445,6 @@
                         <div class="stat-label">Multi-Plane SORs</div>
                     </div>
                 </div>
-
-                <!-- Decisions Table -->
                 <div class="table-container" style="max-height:500px;overflow-y:auto;">
                     <table class="data-table" id="fabricAuditTable">
                         <thead>
@@ -914,7 +926,7 @@
     </div>
 
     <script src="/static/js/tour.js?v=1"></script>
-    <script src="/static/js/console-redesign.js?v=2"></script>
-    <script src="/static/js/app.js?v=50"></script>
+    <script src="/static/js/console-redesign.js?v=3"></script>
+    <script src="/static/js/app.js?v=51"></script>
 </body>
 </html>

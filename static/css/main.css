@@ -1996,6 +1996,29 @@ main { padding: 2rem; }
     grid-template-columns: repeat(4, 1fr);
     gap: .3rem;
 }
+.kpi-row-inner .stat-card {
+    background: #0d1117;
+    border: 1px solid #1e2a3a;
+    border-radius: 6px;
+    padding: .2rem .15rem;
+    text-align: center;
+}
+.kpi-row-inner .stat-card .stat-value {
+    font-size: .95rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.kpi-row-inner .stat-card .stat-label {
+    font-size: .52rem;
+    color: #718096;
+    margin-top: .05rem;
+}
+.kpi-row-inner .stat-card .stat-sublabel {
+    font-size: .45rem;
+}
+.kpi-row-inner .stat-card .stat-help {
+    display: none;
+}
 .kpi-cell {
     text-align: center;
     padding: .2rem .15rem;
@@ -2203,6 +2226,159 @@ main { padding: 2rem; }
     overflow: hidden;
 }
 
+/* Handoff section */
+#handoffSection {
+    background: #0f1923;
+    border: 1px solid #1e2a3a;
+    border-radius: 10px;
+    padding: .85rem;
+    margin-top: .5rem;
+}
+#handoffSection .stats-grid {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .6rem;
+}
+#handoffSection .stats-grid .stat-card {
+    background: #131f2e;
+    border: 1px solid #1e2a3a;
+    border-radius: 7px;
+    padding: .3rem .65rem;
+    text-align: center;
+    min-width: 70px;
+    flex: 0 0 auto;
+}
+#handoffSection .stats-grid .stat-card .stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+#handoffSection .stats-grid .stat-card .stat-label {
+    font-size: .6rem;
+    color: #718096;
+}
+
+/* Meta row: Fabric Planes | SORs */
+#hs-meta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .6rem;
+    margin-bottom: .6rem;
+    align-items: stretch;
+}
+#hs-meta-row > .section {
+    background: #131f2e;
+    border: 1px solid #1e2a3a;
+    border-radius: 7px;
+    padding: .5rem .6rem;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+}
+#hs-meta-row > .section h3 {
+    font-size: .68rem;
+    font-weight: 700;
+    color: #a0aec0;
+    margin-bottom: .35rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+#hs-meta-row .farm-data-container {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    flex: 1;
+    justify-content: space-between;
+}
+
+/* Controls row */
+#hs-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: .6rem;
+    padding: .4rem .55rem;
+    background: #131f2e;
+    border: 1px solid #1e2a3a;
+    border-radius: 7px;
+}
+#hs-controls-row #fabricPlanesBreakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .28rem;
+    flex-shrink: 0;
+}
+#hs-controls-row #fabricFilterActive {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .67rem;
+    flex-shrink: 0;
+}
+#hs-controls-row .form-select {
+    font-size: .68rem;
+    padding: .2rem .4rem;
+}
+#hs-controls-row .btn {
+    font-size: .67rem;
+    padding: .22rem .65rem;
+    white-space: nowrap;
+}
+.hs-sep {
+    color: #2d3748;
+    font-size: .9rem;
+    flex-shrink: 0;
+}
+.hs-push {
+    margin-left: auto;
+}
+
+/* Collapsible candidates section */
+#hs-cand-section {
+    margin-top: .4rem;
+}
+
+/* Candidates container scroll */
+#handoffCandidatesContainer {
+    max-height: 460px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    padding-right: .2rem;
+}
+
+/* Results go-to-farm button wrap */
+.results-go-btn-wrap {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .6rem;
+}
+
+/* Outline secondary button (used for Handoff, Go to Farm) */
+.btn-outline-secondary {
+    background: transparent;
+    border: 1px solid #4a5568;
+    color: #a0aec0;
+    padding: .45rem .85rem;
+    font-size: .72rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s ease;
+}
+.btn-outline-secondary:hover {
+    border-color: #63b3ed;
+    color: #e2e8f0;
+}
+.btn-outline-secondary:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
 /* Responsive breakpoint */
 @media (max-width: 900px) {
     .console-top-row {
@@ -2210,5 +2386,8 @@ main { padding: 2rem; }
     }
     .kpi-row-inner {
         grid-template-columns: repeat(2, 1fr);
+    }
+    #hs-meta-row {
+        grid-template-columns: 1fr;
     }
 }

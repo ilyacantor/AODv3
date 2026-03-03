@@ -47,6 +47,7 @@
                 document.getElementById('planeCountEndpoint').textContent = '-';
                 document.getElementById('planeCountNetwork').textContent = '-';
                 document.getElementById('planeCountFinance').textContent = '-';
+                if (typeof updateObsBars === 'function') updateObsBars();
                 return;
             }
             
@@ -67,6 +68,7 @@
             document.getElementById('planeCountEndpoint').textContent = endpointCount;
             document.getElementById('planeCountNetwork').textContent = networkCount;
             document.getElementById('planeCountFinance').textContent = financeCount;
+            if (typeof updateObsBars === 'function') updateObsBars();
         }
         
         function toggleUserGuide(guideId) {
@@ -3362,9 +3364,17 @@ ${JSON.stringify(technicalReport, null, 2)}
                 if (err.responseBody) detail += ' | ' + err.responseBody;
                 list.innerHTML = `<div class="error-message">Failed to load runs: ${detail}</div>`;
             }
-            finally { loading.classList.add('hidden'); }
+            finally {
+                loading.classList.add('hidden');
+                // Update runs count badge
+                const badge = document.getElementById('runsCountBadge');
+                if (badge) {
+                    const count = document.querySelectorAll('#runsList .run-item').length;
+                    badge.textContent = count;
+                }
+            }
         }
-        
+
         async function selectRun(runId) {
             currentRunId = runId;
             hideDrillPanel();
@@ -3743,15 +3753,9 @@ ${JSON.stringify(technicalReport, null, 2)}
             // Ensure farm status is checked before populating tenants
             await checkFarmStatus();
             await populateTenantsFromFarm();
-        })().finally(() => {
-            // Apply console redesign overlay REGARDLESS of Farm availability.
-            // Wrapped in .finally + try/catch so a Farm timeout can never
-            // leave the Console in a gutted state (hidden originals, no overlay).
-            try {
-                if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
-            } catch (e) {
-                console.error('initConsoleRedesign failed:', e);
-            }
+        })().then(() => {
+            // Build pipeline strip and wire interactive behaviors
+            if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
         });
         
         setInterval(checkHealth, 30000);

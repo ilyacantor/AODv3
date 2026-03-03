@@ -3743,9 +3743,16 @@ ${JSON.stringify(technicalReport, null, 2)}
             // Ensure farm status is checked before populating tenants
             await checkFarmStatus();
             await populateTenantsFromFarm();
-            // Apply console redesign overlay (defined in console-redesign.js)
-            if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
-        })();
+        })().finally(() => {
+            // Apply console redesign overlay REGARDLESS of Farm availability.
+            // Wrapped in .finally + try/catch so a Farm timeout can never
+            // leave the Console in a gutted state (hidden originals, no overlay).
+            try {
+                if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
+            } catch (e) {
+                console.error('initConsoleRedesign failed:', e);
+            }
+        });
         
         setInterval(checkHealth, 30000);
         

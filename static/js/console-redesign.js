@@ -10,6 +10,9 @@ function initConsoleRedesign() {
   const tabContent = document.getElementById('discoveryTabContent');
   if (!tabContent) return;
 
+  // Track elements to hide — only hidden after full success
+  const _toHide = [];
+
   // ════════════════════════════════════════════════════════════
   // 1. PIPELINE STRIP  (reactive — updated by updatePipelineStrip)
   // ════════════════════════════════════════════════════════════
@@ -392,12 +395,11 @@ function initConsoleRedesign() {
     const pipeline = document.querySelector('.console-pipeline');
     pipeline.after(topRow);
 
-    // Hide original sections that the redesign replaces
-    // (keep them in DOM so existing JS still reads/writes their values)
+    // Mark original sections for hiding (deferred until full success)
     const sectionRow = tabContent.querySelector('.section-row');
-    if (sectionRow) sectionRow.style.setProperty('display', 'none', 'important');
+    if (sectionRow) _toHide.push(sectionRow);
     const resultsSection = document.getElementById('resultsSection');
-    if (resultsSection) resultsSection.style.setProperty('display', 'none', 'important');
+    if (resultsSection) _toHide.push(resultsSection);
 
     // Flow divider between top row and handoff
     const divider = document.createElement('div');
@@ -712,13 +714,13 @@ function initConsoleRedesign() {
       });
     });
 
-    // Hide the original Discovery Runs standalone section
+    // Mark Discovery Runs section for hiding (deferred until full success)
     const drTitle = Array.from(document.querySelectorAll('.section-title'))
       .find(el => el.textContent.trim() === 'Discovery Runs');
     const drSection = drTitle?.closest('.section') || drTitle?.parentElement;
     if (drSection && !drSection.id) {
       drSection.id = 'aod-runs-original';
-      drSection.style.setProperty('display', 'none', 'important');
+      _toHide.push(drSection);
     }
   } // end _applyHandoffStyles
 
@@ -788,6 +790,11 @@ function initConsoleRedesign() {
       });
     });
   } // end _wireChipDrills
+
+  // ════════════════════════════════════════════════════════════
+  // FINAL: Everything built successfully — NOW hide originals
+  // ════════════════════════════════════════════════════════════
+  _toHide.forEach(el => el.style.setProperty('display', 'none', 'important'));
 
   // Initial pipeline state
   updatePipelineStrip();

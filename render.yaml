@@ -45,4 +45,4 @@ services:
         sync: false
       - key: DB_POOL_MAX
         sync: false
-    healthCheckPath: /api/health
+    healthCheckPath: /health

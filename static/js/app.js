@@ -3978,47 +3978,49 @@ ${JSON.stringify(technicalReport, null, 2)}
               </div>`;
             resultsPanel.appendChild(panel);
             // Toggle open/close
+            // NOTE: use panel.querySelector() here because resultsPanel is still
+            // detached from the document at this point (assembleTopRow runs later)
             let runsOpen = true;
-            document.getElementById('runsRowHeader').addEventListener('click', e => {
+            panel.querySelector('#runsRowHeader').addEventListener('click', e => {
               if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
               runsOpen = !runsOpen;
-              document.getElementById('runsBody').classList.toggle('collapsed', !runsOpen);
-              document.getElementById('runsChevron').classList.toggle('collapsed', !runsOpen);
+              panel.querySelector('#runsBody').classList.toggle('collapsed', !runsOpen);
+              panel.querySelector('#runsChevron').classList.toggle('collapsed', !runsOpen);
             });
             // Live filter
-            document.getElementById('runsFilterInput').addEventListener('input', function () {
+            panel.querySelector('#runsFilterInput').addEventListener('input', function () {
               const q = this.value.trim().toLowerCase();
               let visible = 0;
-              document.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
+              panel.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
                 const hide = q && !item.dataset.tenant.includes(q);
                 item.classList.toggle('hidden-by-filter', hide);
                 if (!hide) visible++;
               });
-              document.getElementById('runsCountBadge').textContent = q ? `${visible}/${total}` : total;
-              document.getElementById('runsNoResults').style.display =
+              panel.querySelector('#runsCountBadge').textContent = q ? `${visible}/${total}` : total;
+              panel.querySelector('#runsNoResults').style.display =
                 (visible === 0 && q) ? 'block' : 'none';
             });
             // Clear all
-            document.getElementById('runsClearBtn').addEventListener('click', e => {
+            panel.querySelector('#runsClearBtn').addEventListener('click', e => {
               e.stopPropagation();
               if (!confirm(
                 `Remove all ${total} discovery runs from this view?\n` +
                 `(Display only — stored data is not affected.)`
               )) return;
-              const list = document.getElementById('runsItemsList');
+              const list = panel.querySelector('#runsItemsList');
               list.innerHTML = `<div class="runs-no-results"
                 style="display:block;padding:.6rem 0;color:#4a5568;">
                 All runs cleared. Refresh to restore.</div>`;
-              document.getElementById('runsCountBadge').textContent = '0';
-              document.getElementById('runsFilterInput').disabled = true;
+              panel.querySelector('#runsCountBadge').textContent = '0';
+              panel.querySelector('#runsFilterInput').disabled = true;
             });
             // Click a run row → proxy to original run-item click (triggers existing app logic)
-            document.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
+            panel.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
               item.addEventListener('click', e => {
                 if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
                 const origItem = runsList.querySelector(`[data-run-id="${item.dataset.runId}"]`);
                 if (origItem) origItem.click();
-                document.querySelectorAll('#runsItemsList .runs-row-item')
+                panel.querySelectorAll('#runsItemsList .runs-row-item')
                   .forEach(it => it.classList.remove('active'));
                 item.classList.add('active');
               });
@@ -4160,7 +4162,9 @@ ${JSON.stringify(technicalReport, null, 2)}
             ctrlRow.appendChild(pushSep);
             if (ctrlDiv)      ctrlRow.appendChild(ctrlDiv);
             // Remove redundant Export to AAM button (Handoff → in obs panel replaces it)
-            const _exportBtn = document.getElementById('exportToAAMBtn');
+            // NOTE: use ctrlRow.querySelector because ctrlDiv has been moved out of the
+            // document DOM into the detached ctrlRow — document.getElementById won't find it
+            const _exportBtn = ctrlRow.querySelector('#exportToAAMBtn');
             if (_exportBtn) _exportBtn.style.setProperty('display', 'none', 'important');
             // ── Build #hs-cand-section (collapsible candidates) ──────
             const candSection   = document.createElement('div');
@@ -4365,7 +4369,7 @@ ${JSON.stringify(technicalReport, null, 2)}
               const vBtn = document.getElementById('viewFabricAuditBtn');
               if (vBtn) Object.assign(vBtn.style, { fontSize: '.67rem', padding: '.22rem .55rem', whiteSpace: 'nowrap' });
               const eBtn = document.getElementById('exportToAAMBtn');
-              if (eBtn) Object.assign(eBtn.style, { fontSize: '.67rem', padding: '.22rem .65rem', whiteSpace: 'nowrap' });
+              if (eBtn) Object.assign(eBtn.style, { display: 'none', fontSize: '.67rem', padding: '.22rem .65rem', whiteSpace: 'nowrap' });
             }
             // Candidates container scroll
             const candContainer = document.getElementById('handoffCandidatesContainer');
@@ -4498,7 +4502,11 @@ ${JSON.stringify(technicalReport, null, 2)}
             await checkFarmStatus();
             await populateTenantsFromFarm();
             // Initialize redesigned Console UI overlay after data is populated
-            initConsoleRedesign();
+            try {
+                initConsoleRedesign();
+            } catch (e) {
+                console.error('[Console Redesign] Failed to initialize overlay:', e);
+            }
         })();
         
         setInterval(checkHealth, 30000);

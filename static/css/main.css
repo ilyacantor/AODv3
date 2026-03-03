@@ -2113,7 +2113,7 @@ main { padding: 2rem; }
 .handoff-finding.severity-low  { background: rgba(104,211,145,.08); color: #68d391; }
 
 /* Hide original section-row and resultsSection (replaced by new panels) */
-#discoveryTabContent > .section-row { display: none !important; }
+#discoveryTabContent .section-row { display: none !important; }
 #resultsSection                      { display: none !important; }
 #observationPlanesGrid               { display: none !important; }
 #aod-runs-original                   { display: none !important; }

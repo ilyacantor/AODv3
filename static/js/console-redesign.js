@@ -392,6 +392,13 @@ function initConsoleRedesign() {
     const pipeline = document.querySelector('.console-pipeline');
     pipeline.after(topRow);
 
+    // Hide original sections that the redesign replaces
+    // (keep them in DOM so existing JS still reads/writes their values)
+    const sectionRow = tabContent.querySelector('.section-row');
+    if (sectionRow) sectionRow.style.setProperty('display', 'none', 'important');
+    const resultsSection = document.getElementById('resultsSection');
+    if (resultsSection) resultsSection.style.setProperty('display', 'none', 'important');
+
     // Flow divider between top row and handoff
     const divider = document.createElement('div');
     divider.className = 'flow-divider';

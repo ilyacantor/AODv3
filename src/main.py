@@ -1,5 +1,8 @@
 """AOD Fresh - AutonomOS Discover Main Application"""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import logging
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, Security

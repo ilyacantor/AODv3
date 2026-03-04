@@ -527,11 +527,13 @@ function getBaseOptions(): Options {
 
 /* ─── Legend entries ─── */
 const legendItems = [
-  { shape: 'hexagon',      color: C.cyan,   label: 'Tenant' },
-  { shape: 'triangleDown', color: C.violet, label: 'Observation plane' },
-  { shape: 'database',     color: C.cyan,   label: 'Pipeline stage' },
-  { shape: 'diamond',      color: C.orange, label: 'Fabric plane' },
-  { shape: 'rect',         color: C.amber,  label: 'System of Record' },
+  { shape: 'hexagon',      color: C.cyan,    label: 'Tenant' },
+  { shape: 'triangleDown', color: C.violet,  label: 'Observation plane' },
+  { shape: 'database',     color: C.cyan,    label: 'Pipeline stage' },
+  { shape: 'database',     color: C.red,     label: 'Rejected' },
+  { shape: 'diamond',      color: C.orange,  label: 'Handoff hub' },
+  { shape: 'diamond',      color: C.violet,  label: 'Fabric plane' },
+  { shape: 'rect',         color: C.amber,   label: 'System of Record' },
 ]
 
 /* ─── Stage filter config (matches Pipeline.tsx 3-stage model) ─── */
@@ -937,8 +939,8 @@ export default function Discovery() {
       <div className="absolute bottom-4 left-4 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg px-4 py-3 z-10">
         <div className="text-xs text-slate-400 font-[Quicksand] font-semibold uppercase tracking-wider mb-2">Legend</div>
         <div className="flex flex-col gap-1.5">
-          {legendItems.map((item) => (
-            <div key={item.label} className="flex items-center gap-2 text-xs text-white font-[Quicksand]">
+          {legendItems.map((item, i) => (
+            <div key={`${item.shape}-${item.label}-${i}`} className="flex items-center gap-2 text-xs text-white font-[Quicksand]">
               <LegendShape shape={item.shape} color={item.color} />
               <span>{item.label}</span>
             </div>

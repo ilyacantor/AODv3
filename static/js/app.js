@@ -3780,6 +3780,10 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const activeTabId = activeTab ? activeTab.dataset.tab : null;
 
                 if (activeTabId === 'discovery' || activeTabId === 'topology') {
+                    // Reload the Discovery visualization iframe so it re-fetches /api/runs
+                    const iframe = document.getElementById('topologyIframe');
+                    if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+
                     // Refresh handoff data if a run is selected (handoff merged into Console)
                     if (currentRunId) {
                         const sf = document.getElementById('handoffStatusFilter')?.value || 'all';

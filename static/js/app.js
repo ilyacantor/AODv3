@@ -3833,6 +3833,23 @@ ${JSON.stringify(technicalReport, null, 2)}
                     const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
                     if (consoleTab) consoleTab.classList.add('active');
                     document.getElementById('discoveryTabContent').classList.add('active');
+                } else if (event.data.action === 'runDiscovery') {
+                    // Programmatically trigger Run Discovery (same as clicking the button)
+                    const btn = document.getElementById('fetchFromFarm');
+                    if (btn) {
+                        console.log('[AOD] postMessage: runDiscovery — clicking fetchFromFarm');
+                        btn.click();
+                    }
+                } else if (event.data.action === 'triggerHandoff') {
+                    // Programmatically trigger Export to AAM
+                    if (typeof exportToAAM === 'function') {
+                        console.log('[AOD] postMessage: triggerHandoff — calling exportToAAM()');
+                        exportToAAM();
+                    } else {
+                        // Fallback: click the button
+                        const btn = document.getElementById('exportToAAMBtn');
+                        if (btn) btn.click();
+                    }
                 }
             }
         });

@@ -961,6 +961,10 @@ class RunCounts(BaseModel):
     rejected: int = 0
     ambiguous_matches: int = 0
     findings_generated: int = 0
+    # Normalization funnel breakdown (observations_in → candidates_out)
+    iron_dome_rejected: int = 0        # Invalid domains/names rejected at normalization
+    domain_merged: int = 0             # Observations merged into existing entity (many-to-one)
+    entities_normalized: int = 0       # Unique entities after normalization (pre-artifact filter)
 
 
 class PipelineStageTimings(BaseModel):

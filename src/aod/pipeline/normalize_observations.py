@@ -314,25 +314,25 @@ def choose_primary_key_from_observations(observations: list[Observation]) -> Opt
     return scored[0][3] if scored else None
 
 
-def normalize_observations(observations: list[Observation]) -> tuple[list[CandidateEntity], list[dict]]:
+def normalize_observations(observations: list[Observation]) -> tuple[list['CandidateEntity'], list[dict]]:
     """
     Normalize observations and derive candidate system entities.
-    
+
     ARCHITECTURE:
     - Observations with domains: Group by REGISTERED DOMAIN (eTLD+1)
     - Observations without domains (name-only): Try to merge with existing domain entities via base token
-    
+
     This preserves the entity:domain relationship that Farm expects while still
     allowing name-only observations to merge with their domain counterparts.
-    
+
     All entities with resolvable domains have:
     - entity_id = "entity:{normalized_domain}"
     - canonical_name = normalized_domain
     - domain = normalized_domain
-    
+
     Args:
         observations: List of raw observations
-        
+
     Returns:
         Tuple of (valid_entities, rejected_observations)
     """
@@ -341,7 +341,7 @@ def normalize_observations(observations: list[Observation]) -> tuple[list[Candid
     entities_by_domain: dict[str, CandidateEntity] = {}
     entities_by_name: dict[str, CandidateEntity] = {}
     rejected: list[dict] = []
-    
+
     debug_keys = os.environ.get("AOD_DEBUG_KEYS")
     
     for obs in sorted(observations, key=lambda o: o.observation_id):

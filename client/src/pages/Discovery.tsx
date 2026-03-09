@@ -41,6 +41,9 @@ interface RunData {
     rejected: number
     ambiguous_matches: number
     findings_generated: number
+    iron_dome_rejected?: number
+    domain_merged?: number
+    entities_normalized?: number
   }
   stage_timings?: Record<string, number>
 }
@@ -73,7 +76,7 @@ function drawDatabaseNode({ ctx, x, y, state: { selected, hover }, style, label 
   const bgColor = (style.color?.background || C.cyan) as string
   const borderColor = (style.color?.border || bgColor) as string
   const fontColor = (style.color?.fontColor || C.bgDark) as string
-  const fontSize = 11
+  const fontSize = Math.max(9, Math.min(12, style.size * 0.55))
 
   return {
     drawNode() {
@@ -315,23 +318,29 @@ function buildNodes(run: RunData): PipelineNode[] {
     // Level 2 — Ingested
     { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
 
-    // Level 3 — Validated / Rejected
-    { id: 'validated', label: `Validated\n${rc.candidates_out}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.candidates_out, description: 'Passed format checks and deduplication' } },
-    { id: 'rejected',  label: `Rejected\n${rc.rejected}`,       level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 14, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.rejected, description: 'Failed validation — format errors or duplicates' } },
+    // Level 3 — Normalization funnel: rejected + duplicates + unique entities
+    { id: 'rejected', label: `Rejected\n${(rc.iron_dome_rejected || 0) + rc.rejected}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: (rc.iron_dome_rejected || 0) + rc.rejected, iron_dome: rc.iron_dome_rejected || 0, admission_failed: rc.rejected, description: `Observations that could not be admitted to the catalog. Iron Dome (${rc.iron_dome_rejected || 0}): blocked at normalization — internal hostnames, invalid TLDs, malformed domains, or empty identifiers. Admission failed (${rc.rejected}): passed normalization but lacked sufficient governance evidence — no IdP, CMDB, cloud, finance, or discovery signals met the admission threshold.` } },
+    ...(rc.domain_merged ? [{ id: 'domain-merged', label: `Duplicates\n${rc.domain_merged}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.amber, border: C.amber, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.domain_merged, description: 'Observations merged — multiple signals from different planes resolved to the same entity' } }] : []) as PipelineNode[],
 
-    // Level 4 — Cataloged
-    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 4, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
+    // Level 3 — Cataloged (same level, main flow)
+    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
 
-    // Level 5 — Handoff hub (cataloged flows directly here)
-    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 5, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
+    // Level 4 — Handoff hub
+    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
   ]
 
   // Level 1 — Observation plane nodes (multicolored triangleDown with 3D shading)
   planes.forEach((p, i) => {
     const col = observationColors[i % observationColors.length]
     nodes.push({
-      id: p.id, label: `${p.label}\n${p.count.toLocaleString()} signals`, level: 1,
+      id: p.id, label: `*${p.label}*\n_${p.count.toLocaleString()}_`, level: 1,
       shape: 'triangleDown', size: 18,
+      font: {
+        multi: 'markdown',
+        color: C.white, size: 13, face: 'Quicksand, sans-serif',
+        bold: { color: col, size: 14, face: 'Quicksand, sans-serif', vadjust: -2 },
+        ital: { color: C.white, size: 12, face: 'Quicksand, sans-serif' },
+      } as any,
       color: { background: col, border: col, highlight: { background: col, border: C.white } },
       shadow: { enabled: true, color: col + '40', size: 8, x: 2, y: 3 },
       borderWidth: 2,
@@ -340,23 +349,29 @@ function buildNodes(run: RunData): PipelineNode[] {
     })
   })
 
-  // Level 6 — Fabric planes from input_meta.fabric_planes
+  // Level 5 — Fabric planes from input_meta.fabric_planes
   run.input_meta.fabric_planes.forEach((fp, i) => {
     const label = planeLabels[fp.plane_type] || fp.plane_type
     nodes.push({
-      id: `fabric-${i}`, label: `${label}\n${fp.vendor}`, level: 6, shape: 'diamond',
+      id: `fabric-${i}`, label: `*${label}*\n_${fp.vendor}_`, level: 5, shape: 'diamond',
+      font: {
+        multi: 'markdown',
+        color: C.white, size: 13, face: 'Quicksand, sans-serif',
+        bold: { color: planeColors[i % planeColors.length], size: 14, face: 'Quicksand, sans-serif', vadjust: -2 },
+        ital: { color: C.white, size: 12, face: 'Quicksand, sans-serif' },
+      } as any,
       color: { background: planeColors[i % planeColors.length], border: planeColors[i % planeColors.length] },
       size: 16, stage: 'Handoff', nodeType: 'diamond',
       metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: fp.vendor, type: label, healthy: fp.is_healthy ? 'Yes' : 'No', description: 'Target integration plane — routes cataloged assets to downstream systems via this vendor\'s connection fabric' },
     })
   })
 
-  // Level 7 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
+  // Level 6 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
   const sorMapping = getSorMapping(run)
   sorMapping.forEach((m, sortedIdx) => {
     const s = run.input_meta.sors[m.sorIndex]
     nodes.push({
-      id: `sor-${sortedIdx}`, label: s.sor_name, level: 7, shape: 'custom', ctxRenderer: drawSourceNode,
+      id: `sor-${sortedIdx}`, label: s.sor_name, level: 6, shape: 'custom', ctxRenderer: drawSourceNode,
       color: { background: C.slate800, border: C.amber }, size: 22, stage: 'Handoff', nodeType: 'sor',
       metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence, description: 'System of Record — the authoritative source of truth for this data domain in the enterprise' },
     })
@@ -367,6 +382,7 @@ function buildNodes(run: RunData): PipelineNode[] {
 
 function buildEdges(run: RunData): Edge[] {
   const raw: Omit<Edge, 'id'>[] = []
+  const rc = run.counts
   const planeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
 
   // Hub → Observation planes
@@ -375,12 +391,10 @@ function buildEdges(run: RunData): Edge[] {
   // Observation planes → Ingested
   planeIds.forEach((p) => raw.push({ from: p, to: 'ingested', width: 1.5 }))
 
-  // Ingested → Validated / Rejected
-  raw.push({ from: 'ingested', to: 'validated', width: 2 })
+  // Ingested → Rejected / Duplicates / Cataloged
   raw.push({ from: 'ingested', to: 'rejected', width: 1.5, color: { color: C.red, opacity: 0.8 } })
-
-  // Validated → Cataloged
-  raw.push({ from: 'validated', to: 'cataloged', width: 2 })
+  if (rc.domain_merged) raw.push({ from: 'ingested', to: 'domain-merged', width: 1.5, color: { color: C.amber, opacity: 0.8 } })
+  raw.push({ from: 'ingested', to: 'cataloged', width: 2 })
 
   // Cataloged → Handoff
   raw.push({ from: 'cataloged', to: 'handoff-aam', width: 2 })
@@ -529,9 +543,10 @@ function getBaseOptions(): Options {
 const legendItems = [
   { shape: 'hexagon',      color: C.cyan,    label: 'Tenant' },
   { shape: 'triangleDown', color: C.violet,  label: 'Observation plane' },
-  { shape: 'database',     color: C.cyan,    label: 'Pipeline stage' },
-  { shape: 'database',     color: C.red,     label: 'Rejected' },
-  { shape: 'diamond',      color: C.orange,  label: 'Handoff hub' },
+  { shape: 'database',     color: C.cyan,    label: 'Lifecycle stage' },
+  { shape: 'line',         color: C.red,     label: 'Rejected' },
+  { shape: 'line',         color: C.amber,   label: 'Duplicates' },
+  { shape: 'diamond',      color: C.orange,  label: 'Handoff' },
   { shape: 'diamond',      color: C.violet,  label: 'Fabric plane' },
   { shape: 'rect',         color: C.amber,   label: 'System of Record' },
 ]
@@ -1019,6 +1034,14 @@ export default function Discovery() {
 /* ─── Legend shape helper ─── */
 function LegendShape({ shape, color }: { shape: string; color: string }) {
   const size = 12
+  if (shape === 'line') {
+    return (
+      <svg width={size} height={4} viewBox="0 0 12 4">
+        <line x1="0" y1="2" x2="12" y2="2" stroke={color} strokeWidth="2.5" />
+        <polygon points="9,0 12,2 9,4" fill={color} />
+      </svg>
+    )
+  }
   if (shape === 'hexagon') {
     return (
       <svg width={size} height={size} viewBox="0 0 12 12">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
 import type { Node, Edge, Options } from 'vis-network/standalone'
-import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter, Loader2 } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter, Loader2, Info } from 'lucide-react'
 
 /* ─── Types ─── */
 interface PipelineNode extends Node {
@@ -580,6 +580,11 @@ export default function Discovery() {
   const [loading, setLoading] = useState(true)
   const [loadingMessage, setLoadingMessage] = useState<string | null>('Loading pipeline data...')
   const [error, setError] = useState<string | null>(null)
+  const [calloutModal, setCalloutModal] = useState<string | null>(null)
+  const [planeCalloutPos, setPlaneCalloutPos] = useState<{ x: number; y: number } | null>(null)
+  const planeCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
+  const [fabricCalloutPos, setFabricCalloutPos] = useState<{ x: number; y: number } | null>(null)
+  const fabricCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
 
   // Fetch latest run data, then initialize network
   useEffect(() => {
@@ -621,11 +626,34 @@ export default function Discovery() {
         const settle = () => {
           if (settled || destroyed) return
           settled = true
+          const positions = network.getPositions()
           network.setOptions({ physics: { enabled: false } })
           setPhysicsEnabled(false)
+          // Compute callout position under observation plane nodes
+          const planeNodeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
+          const planePositions = planeNodeIds.map(id => positions[id]).filter(Boolean)
+          planeCanvasCenterRef.current = planePositions.length > 0 ? {
+            x: planePositions.reduce((s, p) => s + p.x, 0) / planePositions.length,
+            y: Math.max(...planePositions.map(p => p.y)) + 45,
+          } : null
+          // Compute fabric plane callout position
+          const fabricIds = Object.keys(positions).filter(id => id.startsWith('fabric-'))
+          const fabricPositions = fabricIds.map(id => positions[id]).filter(Boolean)
+          fabricCanvasCenterRef.current = fabricPositions.length > 0 ? {
+            x: fabricPositions.reduce((s, p) => s + p.x, 0) / fabricPositions.length,
+            y: Math.max(...fabricPositions.map(p => p.y)) + 45,
+          } : null
           // Wait for one canvas redraw with final positions, then fit
           network.once('afterDrawing', () => {
             network.fit({ animation: false })
+            if (planeCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(planeCanvasCenterRef.current)
+              setPlaneCalloutPos({ x: dom.x, y: dom.y })
+            }
+            if (fabricCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
+              setFabricCalloutPos({ x: dom.x, y: dom.y })
+            }
             setLoadingMessage(null)
             setLoading(false)
           })
@@ -684,6 +712,21 @@ export default function Discovery() {
             nodes.update({ id, shadow: false } as any)
           })
         })
+
+        // Update callout positions on zoom/pan/drag
+        const updateCalloutPos = () => {
+          if (planeCanvasCenterRef.current) {
+            const dom = network.canvasToDOM(planeCanvasCenterRef.current)
+            setPlaneCalloutPos({ x: dom.x, y: dom.y })
+          }
+          if (fabricCanvasCenterRef.current) {
+            const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
+            setFabricCalloutPos({ x: dom.x, y: dom.y })
+          }
+        }
+        network.on('zoom', updateCalloutPos)
+        network.on('dragEnd', updateCalloutPos)
+        network.on('dragging', updateCalloutPos)
       } catch (err: any) {
         if (!destroyed) {
           setError(err.message || 'Failed to load pipeline data')
@@ -981,6 +1024,131 @@ export default function Discovery() {
         </div>
       </div>
 
+      {/* Callout: Observation Planes — anchored under the triangle column */}
+      {!loading && planeCalloutPos && (
+        <button
+          onClick={() => setCalloutModal('observation-planes')}
+          className="absolute z-10 group flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-violet-500/40 rounded-full pl-2.5 pr-3.5 py-1.5 hover:border-violet-400 hover:bg-slate-700/90 transition-all duration-200"
+          style={{ left: planeCalloutPos.x, top: planeCalloutPos.y, transform: 'translateX(-50%)' }}
+        >
+          <Info size={14} className="text-violet-400 group-hover:text-violet-300 transition-colors" />
+          <span className="text-xs text-violet-300 group-hover:text-violet-200 font-[Quicksand] font-medium transition-colors whitespace-nowrap">Why 7 observation planes?</span>
+        </button>
+      )}
+
+      {/* Callout Modal */}
+      {calloutModal === 'observation-planes' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center" onClick={() => setCalloutModal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-lg w-full mx-4 animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white font-[Quicksand]">The 7 Observation Planes</h3>
+                  <p className="text-xs text-slate-400 font-[Quicksand] mt-0.5">Why AOD collects evidence from exactly these sources</p>
+                </div>
+                <button onClick={() => setCalloutModal(null)} className="text-slate-400 hover:text-white transition-colors p-1 -mr-1 -mt-1">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-slate-300 font-[Quicksand] leading-relaxed">
+                No single enterprise system has a complete picture of what software an organization actually uses. AOD solves this by collecting evidence from seven independent observation planes — each providing a different lens on the IT landscape.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { name: 'Discovery', color: C.cyan, desc: 'Web traffic, SaaS login pages, and browser-observed applications. Catches shadow IT that no official system tracks.' },
+                  { name: 'Identity Provider', color: C.violet, desc: 'SSO configurations, SCIM provisioning, and service principals from Okta, Azure AD, etc. The strongest governance signal — if it\'s in IdP, someone sanctioned it.' },
+                  { name: 'CMDB', color: C.orange, desc: 'Configuration items from ServiceNow, Jira Assets, and similar. The official IT inventory — but often incomplete or stale.' },
+                  { name: 'Cloud Inventory', color: C.green, desc: 'Resource inventories from AWS, Azure, and GCP. Reveals infrastructure-level dependencies invisible to other planes.' },
+                  { name: 'Network', color: C.blue, desc: 'DNS records, proxy logs, and TLS certificates. Provides independent verification of what systems are actually communicating.' },
+                  { name: 'Finance', color: C.amber, desc: 'Vendor contracts, purchase orders, and transaction records. If the company is paying for it, it exists — even if IT doesn\'t know about it.' },
+                  { name: 'Endpoint', color: C.red, desc: 'Device management and installed application inventories. Reveals locally installed software that never touches the network.' },
+                ].map((plane) => (
+                  <div key={plane.name} className="flex gap-3">
+                    <div className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: plane.color }} />
+                    <div>
+                      <span className="text-sm font-semibold font-[Quicksand]" style={{ color: plane.color }}>{plane.name}</span>
+                      <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed mt-0.5">{plane.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-700/50 pt-4">
+                <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed italic">
+                  The power is in the intersection. An application seen only in Discovery is shadow IT. One seen in IdP + CMDB + Finance is fully governed. AOD triangulates across all seven planes to classify every asset on the Governed / Shadow / Zombie spectrum.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Callout: Fabric Planes — anchored under the diamond column */}
+      {!loading && fabricCalloutPos && (
+        <button
+          onClick={() => setCalloutModal('fabric-planes')}
+          className="absolute z-10 group flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-orange-500/40 rounded-full pl-2.5 pr-3.5 py-1.5 hover:border-orange-400 hover:bg-slate-700/90 transition-all duration-200"
+          style={{ left: fabricCalloutPos.x, top: fabricCalloutPos.y, transform: 'translateX(-50%)' }}
+        >
+          <Info size={14} className="text-orange-400 group-hover:text-orange-300 transition-colors" />
+          <span className="text-xs text-orange-300 group-hover:text-orange-200 font-[Quicksand] font-medium transition-colors whitespace-nowrap">Why fabric planes?</span>
+        </button>
+      )}
+
+      {/* Fabric Planes Modal */}
+      {calloutModal === 'fabric-planes' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center" onClick={() => setCalloutModal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-lg w-full mx-4 animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white font-[Quicksand]">Fabric Planes</h3>
+                  <p className="text-xs text-slate-400 font-[Quicksand] mt-0.5">How AOD routes cataloged assets to downstream systems</p>
+                </div>
+                <button onClick={() => setCalloutModal(null)} className="text-slate-400 hover:text-white transition-colors p-1 -mr-1 -mt-1">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-slate-300 font-[Quicksand] leading-relaxed">
+                Fabric planes are the integration highways that connect enterprise systems. After AOD discovers and catalogs an asset, it needs to understand <em>how</em> that asset is wired into the enterprise — which integration fabric carries its data, and which system of record is authoritative for it.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { name: 'iPaaS', color: C.cyan, desc: 'Integration Platform as a Service (MuleSoft, Workato, Boomi). The middleware layer — if two systems exchange data, iPaaS is usually the broker. Most enterprise integration runs through here.' },
+                  { name: 'API Gateway', color: C.violet, desc: 'Managed API endpoints (Kong, Apigee, AWS API Gateway). Governs who can call what, with rate limits and auth policies. Reveals the real dependency graph between services.' },
+                  { name: 'Event Bus', color: C.orange, desc: 'Asynchronous messaging (Kafka, EventBridge, RabbitMQ). The real-time nervous system — events flow here before they reach databases. Catches integration patterns invisible to request-based monitoring.' },
+                  { name: 'Data Warehouse', color: C.green, desc: 'Analytical data stores (Snowflake, BigQuery, Redshift). Where business data lands for reporting. If a system feeds the warehouse, it is operationally critical — even if IT classifies it as shadow.' },
+                ].map((plane) => (
+                  <div key={plane.name} className="flex gap-3">
+                    <div className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: plane.color }} />
+                    <div>
+                      <span className="text-sm font-semibold font-[Quicksand]" style={{ color: plane.color }}>{plane.name}</span>
+                      <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed mt-0.5">{plane.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-700/50 pt-4">
+                <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed italic">
+                  Fabric planes bridge discovery and action. AOD doesn't just find assets — it maps how they connect through real integration infrastructure, so AAM can build pipe blueprints that follow the enterprise's actual wiring, not a theoretical architecture diagram.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Details panel (right sidebar) */}
       {selectedNode && (
         <div className="absolute top-0 right-0 h-full w-80 bg-slate-800/95 backdrop-blur border-l border-slate-700 z-20 overflow-y-auto animate-slide-in">
@@ -1025,6 +1193,13 @@ export default function Discovery() {
         }
         .animate-slide-in {
           animation: slideIn 0.2s ease-out;
+        }
+        @keyframes modalIn {
+          from { transform: scale(0.95) translateY(8px); opacity: 0; }
+          to   { transform: scale(1) translateY(0);      opacity: 1; }
+        }
+        .animate-modal-in {
+          animation: modalIn 0.2s ease-out;
         }
       `}</style>
     </div>

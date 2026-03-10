@@ -154,8 +154,6 @@ function _wireObsHandoffBtn() {
   const btn = document.getElementById('obsHandoffBtn');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const hs = document.getElementById('handoffSection');
-    if (hs) hs.scrollIntoView({ behavior: 'smooth' });
     if (typeof exportToAAM === 'function') {
       exportToAAM();
     } else {

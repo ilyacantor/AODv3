@@ -3372,6 +3372,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                     const count = document.querySelectorAll('#runsList .run-item').length;
                     badge.textContent = count;
                 }
+                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
             }
         }
 
@@ -3667,14 +3668,22 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
                 
                 showOutcome(result.status, result.message);
-                currentRunId = result.run_id; 
+                currentRunId = result.run_id;
                 await loadRuns();
                 await selectRun(result.run_id);
-            } catch (e) { 
+                const iframe = document.getElementById('topologyIframe');
+                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+
+                // Auto-trigger handoff to AAM after successful discovery
+                if (result.status === 'completed' && typeof exportToAAM === 'function') {
+                    console.log('[AOD] Discovery completed — auto-triggering handoff to AAM');
+                    await exportToAAM();
+                }
+            } catch (e) {
                 showOutcome('upstream_error', e.message);
-            } finally { 
-                btn.disabled = false; 
-                btn.textContent = 'Run Discovery'; 
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Discovery';
             }
         });
         
@@ -3779,18 +3788,13 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const activeTab = document.querySelector('.header-nav-tab.active');
                 const activeTabId = activeTab ? activeTab.dataset.tab : null;
 
-                if (activeTabId === 'discovery' || activeTabId === 'topology') {
-                    // Reload the Discovery visualization iframe so it re-fetches /api/runs
-                    const iframe = document.getElementById('topologyIframe');
-                    if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
-
-                    // Refresh handoff data if a run is selected (handoff merged into Console)
-                    if (currentRunId) {
-                        const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
-                        await loadHandoffCandidates(currentRunId, sf);
-                    }
-                } else if (activeTabId === 'triage') {
-                    await loadTriageRuns();
+                // Always refresh both Console runs and Discovery iframe
+                await loadRuns();
+                const iframe = document.getElementById('topologyIframe');
+                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+                if (currentRunId) {
+                    const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
+                    await loadHandoffCandidates(currentRunId, sf);
                 }
 
                 showToast('Data refreshed', 'success');
@@ -3850,6 +3854,25 @@ ${JSON.stringify(technicalReport, null, 2)}
                         const btn = document.getElementById('exportToAAMBtn');
                         if (btn) btn.click();
                     }
+                } else if (event.data.action === 'snapshotGenerated') {
+                    // Farm generated a new snapshot — refresh tenants and auto-run discovery
+                    console.log('[AOD] postMessage: snapshotGenerated — refreshing and running discovery');
+                    (async () => {
+                        await populateTenantsFromFarm();
+                        // Select the tenant from the event if provided
+                        if (event.data.tenant_id) {
+                            const select = document.getElementById('tenantSelect');
+                            if (select) {
+                                select.value = event.data.tenant_id;
+                                await handleTenantChange();
+                            }
+                        } else {
+                            await handleTenantChange();
+                        }
+                        // Trigger discovery run (same as clicking "Run Discovery")
+                        const btn = document.getElementById('fetchFromFarm');
+                        if (btn) btn.click();
+                    })();
                 }
             }
         });

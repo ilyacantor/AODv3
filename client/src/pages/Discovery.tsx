@@ -634,14 +634,14 @@ export default function Discovery() {
           const planePositions = planeNodeIds.map(id => positions[id]).filter(Boolean)
           planeCanvasCenterRef.current = planePositions.length > 0 ? {
             x: planePositions.reduce((s, p) => s + p.x, 0) / planePositions.length,
-            y: Math.max(...planePositions.map(p => p.y)) + 45,
+            y: Math.max(...planePositions.map(p => p.y)) + 80,
           } : null
           // Compute fabric plane callout position
           const fabricIds = Object.keys(positions).filter(id => id.startsWith('fabric-'))
           const fabricPositions = fabricIds.map(id => positions[id]).filter(Boolean)
           fabricCanvasCenterRef.current = fabricPositions.length > 0 ? {
             x: fabricPositions.reduce((s, p) => s + p.x, 0) / fabricPositions.length,
-            y: Math.max(...fabricPositions.map(p => p.y)) + 45,
+            y: Math.max(...fabricPositions.map(p => p.y)) + 80,
           } : null
           // Wait for one canvas redraw with final positions, then fit
           network.once('afterDrawing', () => {

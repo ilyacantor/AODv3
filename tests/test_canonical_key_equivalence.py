@@ -11,7 +11,8 @@ instead of relying on name-based domain detection or vendor fallback.
 import pytest
 import uuid
 from src.aod.pipeline.vendor_inference import extract_registered_domain
-from src.aod.pipeline.aod_agent_reconcile import _extract_registered_domain, _normalize_name_for_vendor_lookup
+from src.aod.pipeline.aod_agent_reconcile import _extract_registered_domain
+from src.aod.utils.normalization import normalize_name_for_vendor_lookup as _normalize_name_for_vendor_lookup
 from src.aod.models.output_contracts import Asset, AssetIdentifiers, LensStatuses, LensCoverage
 
 

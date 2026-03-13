@@ -12,6 +12,7 @@ from .triage import router as triage_router
 from .debug import router as debug_router
 from .policy import router as policy_router
 from .handoff import router as handoff_router
+from .maestra import router as maestra_router
 
 router = APIRouter(prefix="/api")
 
@@ -24,5 +25,6 @@ router.include_router(findings_router, tags=["findings"])
 router.include_router(triage_router, tags=["triage"])
 router.include_router(debug_router, tags=["debug"])
 router.include_router(handoff_router, tags=["handoff"])
+router.include_router(maestra_router, tags=["maestra"])
 
 router.include_router(policy_router, prefix="/v1", tags=["policy"])

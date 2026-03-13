@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from ...db.database import get_db_direct
 from ...models.output_contracts import (
+    AODActionType,
     ProvisioningStatus,
     ConnectionCandidate,
     CandidateFinding,
@@ -315,8 +316,8 @@ def determine_execution_flags(findings: list) -> tuple[bool, str]:
     has_blocking = any(f.severity.value == "critical" for f in findings)
 
     if has_blocking:
-        return (False, "inventory_only")
-    return (True, "provision")
+        return (False, AODActionType.INVENTORY_ONLY)
+    return (True, AODActionType.PROVISION)
 
 
 def build_pipe_evidence_for_asset(asset) -> tuple[list[CandidatePipeEvidence], Optional[CandidateFabricPlaneSummary]]:
@@ -618,7 +619,7 @@ async def export_aam_candidates(
                 priority_score=100.0 if confidence == "high" else 75.0,  # High priority for SORs
                 connected_via_plane=None,
                 execution_allowed=True,
-                action_type="discover_and_provision",  # AAM needs to discover this
+                action_type="provision",  # Farm-designated SOR: clear for provisioning
                 pipes=[],
                 fabric_plane_summary=None
             )
@@ -739,7 +740,7 @@ class AAMExportCandidate(BaseModel):
     governance_status: str
     known_endpoints: List[str] = []
     execution_allowed: bool = True
-    action_type: str = "provision"
+    action_type: AODActionType = AODActionType.PROVISION
     aod_run_id: str
     aod_asset_id: str
 
@@ -766,6 +767,7 @@ class AAMExportRequest(BaseModel):
     candidates: List[AAMExportCandidate]
     fabric_planes: List[AAMExportFabricPlane] = []
     sors: List[AAMExportSOR] = []
+    reconciliation_manifest: Optional[dict] = None
 
 
 class AAMExportResponse(BaseModel):
@@ -850,7 +852,85 @@ async def export_to_aam(
         aam_candidates.append(aam_candidate)
     
     input_meta = run.input_meta or {}
-    
+    farm_sor_list = input_meta.get("sors", [])
+
+    # ── Compute full candidate universe (matches /aam/candidates behavior) ──
+    # The /aam/candidates endpoint includes Farm-designated SORs not discovered
+    # by AOD. The export must do the same to close the 151→99 gap.
+    discovered_names = {(a.name or "").lower() for a in filtered_assets}
+    farm_sor_candidates: List[AAMExportCandidate] = []
+
+    for sor in farm_sor_list:
+        sor_name = sor.get("sor_name", "")
+        sor_name_lower = sor_name.lower()
+        confidence = sor.get("confidence", "").lower()
+
+        if confidence in ("high", "medium") and sor_name_lower not in discovered_names:
+            farm_sor_candidate = AAMExportCandidate(
+                asset_key=f"{sor_name_lower}.com",
+                vendor_name=sor_name,
+                display_name=sor_name,
+                category=sor.get("domain", "other"),
+                governance_status="farm_designated",
+                known_endpoints=[],
+                execution_allowed=True,
+                action_type="provision",  # Farm-designated SOR: clear for provisioning
+                aod_run_id=run_id,
+                aod_asset_id=f"farm_sor_{sor_name_lower}",
+            )
+            aam_candidates.append(farm_sor_candidate)
+            farm_sor_candidates.append(farm_sor_candidate)
+
+    if farm_sor_candidates:
+        logger.info("handoff.aam_export.farm_sor_candidates_added", extra={
+            "run_id": run_id,
+            "count": len(farm_sor_candidates),
+            "names": [c.display_name for c in farm_sor_candidates[:10]],
+        })
+
+    # ── Compute excluded candidates (for reconciliation transparency) ──
+    # Assets that /aam/candidates would include but /aam/export excludes
+    # due to status_filter (e.g., non-ACTIVE SOR candidates when filter != "all")
+    excluded_candidates = []
+    if status_filter != "all":
+        farm_sor_by_name = {
+            s.get("sor_name", "").lower(): s for s in farm_sor_list
+        }
+
+        def _is_sor_candidate(asset) -> bool:
+            if asset.sor_tagging and getattr(asset.sor_tagging, "likelihood", None) in ("high", "medium"):
+                return True
+            asset_name_lower = (asset.name or "").lower()
+            if asset_name_lower in farm_sor_by_name:
+                farm_conf = farm_sor_by_name[asset_name_lower].get("confidence", "").lower()
+                if farm_conf in ("high", "medium"):
+                    return True
+            return False
+
+        filtered_asset_ids = {str(a.asset_id) for a in filtered_assets}
+        for asset in all_assets:
+            if str(asset.asset_id) not in filtered_asset_ids and _is_sor_candidate(asset):
+                excluded_candidates.append({
+                    "vendor_name": asset.vendor or asset.name,
+                    "display_name": asset.name,
+                    "category": infer_category(asset) or "other",
+                    "aod_asset_id": str(asset.asset_id),
+                    "reason": (
+                        f"Provisioning status '{asset.provisioning_status.value}' "
+                        f"excluded by status_filter='{status_filter}'"
+                    ),
+                })
+
+    # ── Build reconciliation manifest ──
+    reconciliation_manifest = {
+        "aod_candidate_universe": len(all_assets) + len(farm_sor_candidates) + len(excluded_candidates),
+        "candidates_exported": len(aam_candidates),
+        "farm_sor_candidates_added": len(farm_sor_candidates),
+        "candidates_excluded": len(excluded_candidates),
+        "excluded_detail": excluded_candidates,
+        "status_filter_used": status_filter,
+    }
+
     farm_fabric_planes = []
     for p in input_meta.get("fabric_planes", []):
         vendor = p.get("vendor", "")
@@ -862,9 +942,9 @@ async def export_to_aam(
             display_name=display_name,
             is_healthy=p.get("is_healthy", True),
         ))
-    
+
     farm_sors = []
-    for s in input_meta.get("sors", []):
+    for s in farm_sor_list:
         farm_sors.append(AAMExportSOR(
             app_name=s.get("sor_name", ""),
             domain=s.get("domain", ""),
@@ -872,13 +952,14 @@ async def export_to_aam(
             declared_by="farm",
             confidence=s.get("confidence"),
         ))
-    
+
     export_payload = AAMExportRequest(
         run_id=run_id,
         snapshot_name=run.tenant_id,
         candidates=aam_candidates,
         fabric_planes=farm_fabric_planes,
         sors=farm_sors,
+        reconciliation_manifest=reconciliation_manifest,
     )
     
     aam_endpoint = f"{aam_url.rstrip('/')}/api/handoff/aod/receive"

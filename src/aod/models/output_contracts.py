@@ -36,6 +36,17 @@ class ProvisioningStatus(str, Enum):
     IGNORED = "ignored"
 
 
+# CONTRACT: must match AAM AODActionType enum in aam/app/models.py
+class AODActionType(str, Enum):
+    """Execution intent for AAM handoff.
+
+    PROVISION: Asset is clear for auto-connection. No blocking findings.
+    INVENTORY_ONLY: Asset requires human review. Blocking findings exist.
+    """
+    PROVISION = "provision"
+    INVENTORY_ONLY = "inventory_only"
+
+
 class AssetType(str, Enum):
     """Asset type enumeration"""
     SAAS = "saas"
@@ -687,7 +698,7 @@ class ConnectionCandidate(BaseModel):
     priority_score: Optional[float] = Field(default=None, description="Priority score for connection ordering")
     connected_via_plane: Optional[str] = Field(default=None, description="Fabric plane connection: 'Connect via MuleSoft', etc.")
     execution_allowed: bool = Field(default=True, description="Whether AAM should auto-provision. False if blocking findings exist.")
-    action_type: str = Field(default="provision", description="Execution intent: 'provision' (clear) or 'inventory_only' (blocked)")
+    action_type: AODActionType = Field(default=AODActionType.PROVISION, description="Execution intent: 'provision' (clear) or 'inventory_only' (blocked)")
 
     # Enhanced fabric plane classification (Sprint 5)
     pipes: list[CandidatePipeEvidence] = Field(
@@ -950,6 +961,10 @@ class RunCounts(BaseModel):
     rejected: int = 0
     ambiguous_matches: int = 0
     findings_generated: int = 0
+    # Normalization funnel breakdown (observations_in → candidates_out)
+    iron_dome_rejected: int = 0        # Invalid domains/names rejected at normalization
+    domain_merged: int = 0             # Observations merged into existing entity (many-to-one)
+    entities_normalized: int = 0       # Unique entities after normalization (pre-artifact filter)
 
 
 class PipelineStageTimings(BaseModel):

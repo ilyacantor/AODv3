@@ -47,6 +47,7 @@
                 document.getElementById('planeCountEndpoint').textContent = '-';
                 document.getElementById('planeCountNetwork').textContent = '-';
                 document.getElementById('planeCountFinance').textContent = '-';
+                if (typeof updateObsBars === 'function') updateObsBars();
                 return;
             }
             
@@ -67,6 +68,7 @@
             document.getElementById('planeCountEndpoint').textContent = endpointCount;
             document.getElementById('planeCountNetwork').textContent = networkCount;
             document.getElementById('planeCountFinance').textContent = financeCount;
+            if (typeof updateObsBars === 'function') updateObsBars();
         }
         
         function toggleUserGuide(guideId) {
@@ -141,6 +143,7 @@
                     tab.classList.add('active');
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
                     if (targetTab === 'triage') loadTriageRuns();
+                    if (targetTab === 'handoff') loadHandoffRuns();
                 });
             });
         }
@@ -1410,23 +1413,30 @@
         }
         
         function initHandoffTab() {
+            const handoffSelect = document.getElementById('handoffRunSelect');
             const handoffStatusFilter = document.getElementById('handoffStatusFilter');
             const exportBtn = document.getElementById('exportToAAMBtn');
             const auditBtn = document.getElementById('viewFabricAuditBtn');
             const closeAuditBtn = document.getElementById('closeFabricAuditBtn');
             const downloadAuditBtn = document.getElementById('downloadAuditReportBtn');
-            const handoffBtn = document.getElementById('handoffBtn');
 
-            if (!handoffStatusFilter) {
-                console.error('Handoff elements not found');
+            if (!handoffSelect) {
+                console.error('Handoff tab elements not found');
                 return;
             }
+
+            handoffSelect.addEventListener('change', () => {
+                const runId = handoffSelect.value;
+                const statusFilter = handoffStatusFilter.value;
+                if (runId) loadHandoffCandidates(runId, statusFilter);
+            });
 
             exportBtn.addEventListener('click', exportToAAM);
 
             if (auditBtn) {
                 auditBtn.addEventListener('click', () => {
-                    if (currentRunId) loadFabricAudit(currentRunId);
+                    const runId = handoffSelect.value;
+                    if (runId) loadFabricAudit(runId);
                 });
             }
 
@@ -1436,26 +1446,62 @@
 
             if (downloadAuditBtn) {
                 downloadAuditBtn.addEventListener('click', () => {
-                    if (currentRunId) downloadAuditReport(currentRunId);
+                    const runId = handoffSelect.value;
+                    if (runId) downloadAuditReport(runId);
                 });
             }
 
             handoffStatusFilter.addEventListener('change', () => {
                 hideHandoffDrill();
+                const runId = handoffSelect.value;
                 const statusFilter = handoffStatusFilter.value;
-                if (currentRunId) loadHandoffCandidates(currentRunId, statusFilter);
+                if (runId) loadHandoffCandidates(runId, statusFilter);
             });
-
-            if (handoffBtn) {
-                handoffBtn.addEventListener('click', () => {
-                    document.getElementById('handoffSection').scrollIntoView({ behavior: 'smooth' });
-                    exportToAAM();
-                });
-            }
 
             const backBtn = document.getElementById('handoffDrillBack');
             if (backBtn) {
                 backBtn.addEventListener('click', hideHandoffDrill);
+            }
+        }
+        
+        async function loadHandoffRuns() {
+            const select = document.getElementById('handoffRunSelect');
+            if (!select) {
+                console.error('handoffRunSelect element not found');
+                return;
+            }
+            select.innerHTML = '<option value="">Loading runs...</option>';
+            try {
+                const response = await fetch('/api/runs');
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                const runs = await response.json();
+                const currentVal = select.value;
+                select.innerHTML = '<option value="">Select a run...</option>';
+                const completedRuns = runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS');
+                completedRuns.sort((a, b) => new Date(b.started_at || b.created_at) - new Date(a.started_at || a.created_at));
+                const displayRuns = completedRuns.slice(0, 20);
+                console.log('Handoff: loaded', completedRuns.length, 'runs, showing', displayRuns.length);
+                displayRuns.forEach((run, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = run.run_id;
+                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                    const dateStr = run.started_at || run.created_at;
+                    const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
+                    const latest = idx === 0 ? ' (Latest)' : '';
+                    opt.textContent = `${tenant} - ${date}${latest}`;
+                    select.appendChild(opt);
+                });
+                // Populate dropdown only — Console's selectRun() handles candidate loading
+                if (currentRunId && displayRuns.some(r => r.run_id === currentRunId)) {
+                    select.value = currentRunId;
+                } else if (displayRuns.length > 0) {
+                    select.value = displayRuns[0].run_id;
+                }
+            } catch (err) {
+                console.error('Failed to load handoff runs:', err);
+                select.innerHTML = '<option value="">Failed to load runs</option>';
             }
         }
         
@@ -1527,13 +1573,14 @@
                 }
 
                 renderHandoffCandidates(candidates);
+                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
             } catch (err) {
                 console.error('Failed to load handoff candidates:', err);
                 container.innerHTML = `<div class="error-message">Failed to load candidates: ${err.message}</div>`;
                 labelEl.textContent = 'Error loading candidates';
             }
         }
-        
+
         let handoffCandidatesData = [];
         let handoffCandidatesFullData = [];
         
@@ -1915,12 +1962,12 @@
         }
         
         async function exportToAAM() {
-            const runId = currentRunId;
+            const runId = document.getElementById('handoffRunSelect').value;
             const statusFilter = document.getElementById('handoffStatusFilter').value;
             const exportBtn = document.getElementById('exportToAAMBtn');
 
             if (!runId) {
-                showToast('Please run discovery first', 'error');
+                showToast('Please select a snapshot first', 'error');
                 return;
             }
 
@@ -1941,7 +1988,6 @@
 
                 showToast(`Exported ${data.candidates_sent} candidates to AAM`, 'success');
                 console.log('AAM export response:', data);
-                if (typeof updatePipelineStep === 'function') updatePipelineStep(5);
             } catch (err) {
                 console.error('Failed to export to AAM:', err);
                 showToast(`Export failed: ${err.message}`, 'error');
@@ -1953,7 +1999,7 @@
 
         async function loadFabricAudit(runId) {
             const auditPanel = document.getElementById('fabricAuditPanel');
-            const candidatesSection = document.getElementById('handoffCandidatesContainer').parentElement;
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
             const farmMetadata = document.querySelector('.farm-metadata-section');
             const tableBody = document.getElementById('fabricAuditTableBody');
 
@@ -2039,7 +2085,7 @@
 
         function hideFabricAudit() {
             const auditPanel = document.getElementById('fabricAuditPanel');
-            const candidatesSection = document.getElementById('handoffCandidatesContainer').parentElement;
+            const candidatesSection = document.getElementById('handoffCandidatesContainer').closest('.section');
             const farmMetadata = document.querySelector('.farm-metadata-section');
 
             if (auditPanel) auditPanel.classList.add('hidden');
@@ -3212,9 +3258,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 // Auto-select the latest tenant
                 if (latestTenant && tenants.includes(latestTenant)) {
                     select.value = latestTenant;
-                    // Fire change event so cloned selects (obs panel) stay in sync
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    // Load observation counts for the auto-selected tenant
+                    // Trigger change to load observation counts
                     await handleTenantChange();
                 }
             } catch (e) {
@@ -3224,7 +3268,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         async function handleTenantChange() {
             const tenantId = document.getElementById('tenantSelect').value;
-            
+
             if (tenantId) {
                 try {
                     const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
@@ -3236,6 +3280,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                             if (snapshotRes.ok) {
                                 const snapshotData = await snapshotRes.json();
                                 loadObservationPlaneCounts(snapshotData);
+                                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
                                 return;
                             }
                         }
@@ -3245,6 +3290,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
             }
             loadObservationPlaneCounts(null);
+            if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
         }
         
         function updateTimingDisplay(runs) {
@@ -3318,19 +3364,40 @@ ${JSON.stringify(technicalReport, null, 2)}
                 if (err.responseBody) detail += ' | ' + err.responseBody;
                 list.innerHTML = `<div class="error-message">Failed to load runs: ${detail}</div>`;
             }
-            finally { loading.classList.add('hidden'); }
+            finally {
+                loading.classList.add('hidden');
+                // Update runs count badge
+                const badge = document.getElementById('runsCountBadge');
+                if (badge) {
+                    const count = document.querySelectorAll('#runsList .run-item').length;
+                    badge.textContent = count;
+                }
+                if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
+            }
         }
-        
+
         async function selectRun(runId) {
             currentRunId = runId;
             hideDrillPanel();
             document.querySelectorAll('.run-item').forEach(item => item.classList.toggle('selected', item.dataset.runId === runId));
             document.getElementById('resultsSection').classList.remove('hidden');
-            document.getElementById('handoffSection').classList.remove('hidden');
-            document.getElementById('handoffBtn').disabled = false;
-            if (typeof updatePipelineStep === 'function') updatePipelineStep(4);
-            const statusFilter = document.getElementById('handoffStatusFilter').value;
-            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId), loadHandoffCandidates(runId, statusFilter)]);
+            await Promise.all([loadRunDetails(runId), loadAssets(runId), loadFindings(runId), loadArtifacts(runId)]);
+
+            // Load handoff data for this run (merged from Handoff tab)
+            const handoffSelect = document.getElementById('handoffRunSelect');
+            if (handoffSelect) {
+                if (!handoffSelect.querySelector(`option[value="${runId}"]`)) {
+                    const opt = document.createElement('option');
+                    opt.value = runId;
+                    opt.textContent = runId;
+                    handoffSelect.appendChild(opt);
+                }
+                handoffSelect.value = runId;
+            }
+            const statusFilter = document.getElementById('handoffStatusFilter')?.value || 'all';
+            await loadHandoffCandidates(runId, statusFilter);
+            document.getElementById('handoffSection')?.classList.remove('hidden');
+            if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
         }
         
         async function loadRunDetails(runId) {
@@ -3604,12 +3671,19 @@ ${JSON.stringify(technicalReport, null, 2)}
                 currentRunId = result.run_id;
                 await loadRuns();
                 await selectRun(result.run_id);
-                if (typeof updatePipelineStep === 'function') updatePipelineStep(4);
+                const iframe = document.getElementById('topologyIframe');
+                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+
+                // Auto-trigger handoff to AAM after successful discovery
+                if (result.status === 'completed' && typeof exportToAAM === 'function') {
+                    console.log('[AOD] Discovery completed — auto-triggering handoff to AAM');
+                    await exportToAAM();
+                }
             } catch (e) {
                 showOutcome('upstream_error', e.message);
-            } finally { 
-                btn.disabled = false; 
-                btn.textContent = 'Run Discovery'; 
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Discovery';
             }
         });
         
@@ -3666,6 +3740,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         initTriageTab();
         initTestTab();
         initHandoffTab();
+        loadHandoffRuns();
         
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('from') === 'farm' || urlParams.get('source') === 'farm') {
@@ -3679,857 +3754,18 @@ ${JSON.stringify(technicalReport, null, 2)}
             window.history.replaceState({}, '', window.location.pathname);
         }
         
-        checkHealth();
+        checkHealth(); 
         loadRuns(true);
-
-        /* ============================================================
-           AOD Console Redesign v3
-           Called once from initConsoleTab()
-           ============================================================ */
-        function initConsoleRedesign() {
-          // ── Guard: don't double-init ──────────────────────────────
-          if (document.querySelector('.console-pipeline')) return;
-          const tabContent = document.getElementById('discoveryTabContent');
-          if (!tabContent) return;
-          // ════════════════════════════════════════════════════════════
-          // 1. PIPELINE STRIP
-          // ════════════════════════════════════════════════════════════
-          const PIPELINE_LABELS = [
-            'Select Tenant', 'Review Sources', 'Run Discovery',
-            'Review Results', 'Handoff to AAM',
-          ];
-          (function buildPipeline() {
-            const strip = document.createElement('div');
-            strip.className = 'console-pipeline';
-            PIPELINE_LABELS.forEach((label, i) => {
-              const n = i + 1;
-              const done   = n <= 2;
-              const active = n === 3;
-              const cls  = done ? 'done' : active ? 'active' : '';
-              const icon = done ? '✓' : n;
-              strip.innerHTML += `<div class="cp-step ${cls}" data-step="${n}">
-                <span class="cp-num">${icon}</span>${label}</div>` +
-                (i < PIPELINE_LABELS.length - 1 ? '<span class="cp-arrow">›</span>' : '');
-            });
-            const guide = document.getElementById('consoleGuide');
-            if (guide) guide.after(strip);
-            else tabContent.prepend(strip);
-          })();
-          // Update pipeline strip to show activeStep as current
-          // Steps before activeStep are "done", activeStep is "active", rest are blank
-          // Exposed globally so selectRun() and exportToAAM() can call it
-          window.updatePipelineStep = function updatePipelineStep(activeStep) {
-            const strip = document.querySelector('.console-pipeline');
-            if (!strip) return;
-            strip.querySelectorAll('.cp-step').forEach(el => {
-              const n = parseInt(el.dataset.step);
-              if (!n) return;
-              const done   = n < activeStep;
-              const active = n === activeStep;
-              el.className = `cp-step${done ? ' done' : active ? ' active' : ''}`;
-              el.querySelector('.cp-num').textContent = done ? '✓' : n;
-            });
-          }
-          // ════════════════════════════════════════════════════════════
-          // 2. OBS PANEL  (left half of top row)
-          // ════════════════════════════════════════════════════════════
-          const obsPanel = (function buildObsPanel() {
-            const sources = [
-              { icon: '🔍', name: 'Discovery',  countId: null, max: 500,  color: '#4299e1' },
-              { icon: '🔐', name: 'IdP',        countId: null, max: 200,  color: '#9f7aea' },
-              { icon: '📋', name: 'CMDB',       countId: null, max: 200,  color: '#48bb78' },
-              { icon: '☁️', name: 'Cloud',      countId: null, max: 200,  color: '#ed8936' },
-              { icon: '💻', name: 'Endpoint',   countId: null, max: 500,  color: '#f6ad55' },
-              { icon: '🌐', name: 'Network',    countId: null, max: 4000, color: '#63b3ed' },
-              { icon: '💰', name: 'Finance',    countId: null, max: 400,  color: '#fc8181' },
-            ];
-            // Read live counts from original observation-plane-card elements
-            const origGrid = document.getElementById('observationPlanesGrid');
-            if (origGrid) {
-              Array.from(origGrid.querySelectorAll('.observation-plane-card')).forEach((card, i) => {
-                if (i >= sources.length) return;
-                const numEl = card.querySelector('.plane-count, [class*="count"], strong, b');
-                if (numEl) {
-                  const n = parseInt(numEl.textContent.replace(/[^\d]/g, ''));
-                  if (!isNaN(n)) sources[i].count = n;
-                }
-                if (!sources[i].count) {
-                  // fallback: find first standalone number in card text
-                  const m = card.textContent.match(/\b(\d{2,5})\b/);
-                  if (m) sources[i].count = parseInt(m[1]);
-                }
-              });
-            }
-            const panel = document.createElement('div');
-            panel.className = 'obs-panel';
-            panel.innerHTML = `
-              <div class="obs-panel-header">
-                <div class="obs-panel-title">
-                  <span class="obs-online-dot"></span>Observation Sources
-                </div>
-                <span id="farmStatusBadgeNew" style="font-size:.65rem;color:#48bb78;">● Farm Online</span>
-              </div>
-              <div class="obs-tenant-row">
-                <span class="obs-tenant-label">Tenant:</span>
-                <div id="obs-tenant-mount" style="flex:1;min-width:0;"></div>
-              </div>
-              <div class="obs-sources-list" id="obsSourcesList">
-                ${sources.map((s, i) => {
-                  const count = s.count || 0;
-                  const pct   = Math.min(100, Math.round(count / s.max * 100));
-                  return `<div class="obs-source-row" data-source-idx="${i}">
-                    <span class="obs-source-icon">${s.icon}</span>
-                    <span class="obs-source-name">${s.name}</span>
-                    <div class="obs-source-bar-wrap">
-                      <div class="obs-source-bar" style="width:${pct}%;background:${s.color};"></div>
-                    </div>
-                    <span class="obs-source-count">${count ? count.toLocaleString() : '—'}</span>
-                  </div>`;
-                }).join('')}
-              </div>
-              <div class="obs-action-row">
-                <button class="btn btn-primary" id="obsRunBtn">⚡ Run Discovery</button>
-                <button class="btn btn-outline-secondary" id="obsHandoffBtn">Handoff →</button>
-              </div>`;
-            // Clone tenant select into new mount
-            const origSelect = document.getElementById('tenantSelect');
-            if (origSelect) {
-              const clone = origSelect.cloneNode(true);
-              clone.id = 'tenantSelectNew';
-              clone.style.cssText = 'width:100%;font-size:.72rem;';
-              // cloneNode doesn't copy programmatic .value — sync it explicitly
-              clone.value = origSelect.value;
-              clone.addEventListener('change', e => {
-                origSelect.value = e.target.value;
-                origSelect.dispatchEvent(new Event('change', { bubbles: true }));
-              });
-              // Keep clone in sync when original changes value
-              origSelect.addEventListener('change', () => { clone.value = origSelect.value; });
-              // Keep clone options in sync when original is repopulated (e.g. refresh)
-              new MutationObserver(() => {
-                clone.innerHTML = origSelect.innerHTML;
-                clone.value = origSelect.value;
-              }).observe(origSelect, { childList: true });
-              panel.querySelector('#obs-tenant-mount').appendChild(clone);
-            }
-            // Wire buttons to existing DOM buttons
-            panel.querySelector('#obsRunBtn').addEventListener('click', () => {
-              document.getElementById('fetchFromFarm')?.click();
-            });
-            panel.querySelector('#obsHandoffBtn').addEventListener('click', () => {
-              document.getElementById('handoffSection')?.scrollIntoView({ behavior: 'smooth' });
-              exportToAAM();
-            });
-            // MutationObserver: keep counts in sync when original grid updates
-            if (origGrid) {
-              const observer = new MutationObserver(() => {
-                Array.from(origGrid.querySelectorAll('.observation-plane-card')).forEach((card, i) => {
-                  if (i >= sources.length) return;
-                  const numEl = card.querySelector('.plane-count, [class*="count"], strong, b');
-                  if (!numEl) return;
-                  const n = parseInt(numEl.textContent.replace(/[^\d]/g, ''));
-                  if (isNaN(n)) return;
-                  const row       = panel.querySelector(`[data-source-idx="${i}"]`);
-                  const countEl   = row?.querySelector('.obs-source-count');
-                  const barEl     = row?.querySelector('.obs-source-bar');
-                  if (countEl) countEl.textContent = n.toLocaleString();
-                  if (barEl)   barEl.style.width   = Math.min(100, Math.round(n / sources[i].max * 100)) + '%';
-                });
-              });
-              observer.observe(origGrid, { childList: true, subtree: true, characterData: true });
-            }
-            return panel;
-          })();
-          // ════════════════════════════════════════════════════════════
-          // 3. RESULTS PANEL  (right half of top row)
-          // ════════════════════════════════════════════════════════════
-          const resultsPanel = (function buildResultsPanel() {
-            // Read live values from existing summaryTab
-            const cardMap = {};
-            document.querySelectorAll('#summaryTab .stat-card').forEach(c => {
-              const lbl = c.querySelector('.stat-label')?.textContent?.trim() || '';
-              cardMap[lbl] = {
-                val: c.querySelector('.stat-value')?.textContent?.trim() || '—',
-                sub: c.querySelector('.stat-sublabel')?.textContent?.trim() || '',
-              };
-            });
-            const runId    = document.getElementById('descRunId')?.textContent?.trim()    || '—';
-            const tenant   = document.getElementById('descTenant')?.textContent?.trim()   || '—';
-            const status   = document.getElementById('descStatus')?.textContent?.trim()   || '—';
-            const compEl   = document.querySelector('#runDescriptors .run-desc-item:last-child .run-desc-value');
-            const completed = compEl?.textContent?.trim() || '—';
-            const KPI_COLORS = {
-              Ingested: '#63b3ed', Validated: '#48bb78', Rejected: '#fc8181', Cataloged: '#9f7aea',
-              Shadow: '#ecc94b', Zombie: '#f6ad55', 'Security Risks': '#fc8181', Governance: '#48bb78',
-            };
-            const panel = document.createElement('div');
-            panel.className = 'results-panel';
-            panel.id        = 'resultsPanelNew';
-            panel.innerHTML = `
-              <div class="results-panel-title">Results</div>
-              <div class="run-meta-bar">
-                <span><span class="rml">Run: </span><span class="rmv" id="rpRunId">${runId}</span></span>
-                <span><span class="rml">Tenant: </span><span class="rmv" id="rpTenant">${tenant}</span></span>
-                <span><span class="rml">Status: </span><span class="rmv" id="rpStatus" style="color:#48bb78;">${status}</span></span>
-                <span><span class="rml">Completed: </span><span class="rmv" id="rpCompleted">${completed}</span></span>
-              </div>
-              <div class="kpi-two-col">
-                <div class="kpi-group">
-                  <div class="kpi-group-label">Lifecycle</div>
-                  <div class="kpi-row-inner">
-                    ${['Ingested','Validated','Rejected','Cataloged'].map(lbl => `
-                    <div class="kpi-cell">
-                      <div class="kv" style="color:${KPI_COLORS[lbl]}" id="rpKpi${lbl}">${cardMap[lbl]?.val||'—'}</div>
-                      <div class="kl">${lbl}</div>
-                    </div>`).join('')}
-                  </div>
-                </div>
-                <div class="kpi-group">
-                  <div class="kpi-group-label">Classifications</div>
-                  <div class="kpi-row-inner">
-                    ${['Shadow','Zombie','Security Risks','Governance'].map(lbl => {
-                      const safeId = lbl.replace(/\s+/g,'');
-                      return `<div class="kpi-cell">
-                        <div class="kv" style="color:${KPI_COLORS[lbl]}" id="rpKpi${safeId}">${cardMap[lbl]?.val||'—'}</div>
-                        <div class="kl">${lbl==='Security Risks'?'Sec. Risks':lbl}</div>
-                        ${cardMap[lbl]?.sub ? `<div class="ks">${cardMap[lbl].sub}</div>` : ''}
-                      </div>`;
-                    }).join('')}
-                  </div>
-                </div>
-              </div>
-              `;
-            // ── Keep Results panel in sync when the hidden summaryTab updates ──
-            const summaryTab = document.getElementById('summaryTab');
-            if (summaryTab) {
-              const syncResults = () => {
-                // Re-read all stat-card values from the hidden original
-                document.querySelectorAll('#summaryTab .stat-card').forEach(c => {
-                  const lbl = c.querySelector('.stat-label')?.textContent?.trim() || '';
-                  const val = c.querySelector('.stat-value')?.textContent?.trim() || '—';
-                  const sub = c.querySelector('.stat-sublabel')?.textContent?.trim() || '';
-                  // Map label → new panel element ID
-                  const idMap = {
-                    'Ingested':       'rpKpiIngested',
-                    'Validated':      'rpKpiValidated',
-                    'Rejected':       'rpKpiRejected',
-                    'Cataloged':      'rpKpiCataloged',
-                    'Shadow':         'rpKpiShadow',
-                    'Zombie':         'rpKpiZombie',
-                    'Security Risks': 'rpKpiSecurityRisks',
-                    'Governance':     'rpKpiGovernance',
-                  };
-                  const targetId = idMap[lbl];
-                  if (targetId) {
-                    const el = document.getElementById(targetId);
-                    if (el) el.textContent = val;
-                  }
-                });
-                // Sync run meta bar
-                const syncField = (srcId, destId) => {
-                  const src = document.getElementById(srcId);
-                  const dst = document.getElementById(destId);
-                  if (src && dst) dst.textContent = src.textContent.trim();
-                };
-                syncField('descRunId',  'rpRunId');
-                syncField('descTenant', 'rpTenant');
-                syncField('descStatus', 'rpStatus');
-                const compSrc = document.querySelector('#runDescriptors .run-desc-item:last-child .run-desc-value');
-                const compDst = document.getElementById('rpCompleted');
-                if (compSrc && compDst) compDst.textContent = compSrc.textContent.trim();
-              };
-              // Observe the hidden summaryTab for any content changes
-              new MutationObserver(syncResults)
-                .observe(summaryTab, { childList: true, subtree: true, characterData: true });
-            }
-            return panel;
-          })(); // end buildResultsPanel
-          // ════════════════════════════════════════════════════════════
-          // 4. DISCOVERY RUNS  (collapsible strip inside resultsPanel)
-          // ════════════════════════════════════════════════════════════
-          (function buildRunsPanel() {
-            const runsList = document.getElementById('runsList');
-            if (!runsList) return;
-            const runs = Array.from(runsList.children).map(c => ({
-              runId:    c.dataset.runId || '',
-              tenant:   c.querySelector('.run-tenant')?.childNodes[0]?.textContent?.trim()
-                        || c.querySelector('.run-tenant')?.textContent?.trim() || '—',
-              isLatest: !!c.querySelector('.latest-run-badge'),
-              status:   c.querySelector('.run-status')?.textContent?.trim() || '',
-              sync:     c.querySelector('.sync-status')?.textContent?.trim() || '',
-              timing:   c.querySelector('.run-timing')?.textContent?.trim() || '',
-              isActive: c.classList.contains('selected'),
-            }));
-            const total = runs.length;
-            function dotColor(status) {
-              if (status.includes('completed')) return '#48bb78';
-              if (status.includes('fail'))      return '#fc8181';
-              return '#ecc94b';
-            }
-            const panel = document.createElement('div');
-            panel.id        = 'resultsRunsPanel';
-            panel.className = 'runs-row';
-            panel.innerHTML = `
-              <div class="runs-row-header" id="runsRowHeader">
-                <div class="runs-row-left">
-                  <span class="runs-chevron" id="runsChevron">▼</span>
-                  <span class="runs-row-title">Discovery Runs</span>
-                  <span class="runs-count-badge" id="runsCountBadge">${total}</span>
-                </div>
-                <div class="runs-row-right">
-                  <input class="runs-filter-input" id="runsFilterInput"
-                         type="text" placeholder="Filter tenant…" autocomplete="off"/>
-                  <button class="runs-clear-btn" id="runsClearBtn"
-                          title="Clear all runs from view">⊘ Clear All</button>
-                </div>
-              </div>
-              <div class="runs-body" id="runsBody">
-                <div class="runs-items-list" id="runsItemsList">
-                  ${runs.map(r => `
-                    <div class="runs-row-item${r.isActive ? ' active' : ''}"
-                         data-run-id="${r.runId}"
-                         data-tenant="${r.tenant.toLowerCase()}">
-                      <span class="ri-dot" style="background:${dotColor(r.status)}"></span>
-                      <span class="ri-tenant">${r.tenant}</span>
-                      ${r.isLatest ? '<span class="ri-latest">Latest</span>' : ''}
-                      <span class="ri-sync">${r.sync}</span>
-                      <span class="ri-timing">${r.timing}</span>
-                    </div>`).join('')}
-                </div>
-                <div class="runs-no-results" id="runsNoResults">No runs match filter</div>
-              </div>`;
-            resultsPanel.appendChild(panel);
-            // Toggle open/close
-            // NOTE: use panel.querySelector() here because resultsPanel is still
-            // detached from the document at this point (assembleTopRow runs later)
-            let runsOpen = true;
-            panel.querySelector('#runsRowHeader').addEventListener('click', e => {
-              if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
-              runsOpen = !runsOpen;
-              panel.querySelector('#runsBody').classList.toggle('collapsed', !runsOpen);
-              panel.querySelector('#runsChevron').classList.toggle('collapsed', !runsOpen);
-            });
-            // Live filter
-            panel.querySelector('#runsFilterInput').addEventListener('input', function () {
-              const q = this.value.trim().toLowerCase();
-              let visible = 0;
-              panel.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
-                const hide = q && !item.dataset.tenant.includes(q);
-                item.classList.toggle('hidden-by-filter', hide);
-                if (!hide) visible++;
-              });
-              panel.querySelector('#runsCountBadge').textContent = q ? `${visible}/${total}` : total;
-              panel.querySelector('#runsNoResults').style.display =
-                (visible === 0 && q) ? 'block' : 'none';
-            });
-            // Clear all
-            panel.querySelector('#runsClearBtn').addEventListener('click', e => {
-              e.stopPropagation();
-              if (!confirm(
-                `Remove all ${total} discovery runs from this view?\n` +
-                `(Display only — stored data is not affected.)`
-              )) return;
-              const list = panel.querySelector('#runsItemsList');
-              list.innerHTML = `<div class="runs-no-results"
-                style="display:block;padding:.6rem 0;color:#4a5568;">
-                All runs cleared. Refresh to restore.</div>`;
-              panel.querySelector('#runsCountBadge').textContent = '0';
-              panel.querySelector('#runsFilterInput').disabled = true;
-            });
-            // Click a run row → proxy to original run-item click (triggers existing app logic)
-            panel.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
-              item.addEventListener('click', e => {
-                if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
-                const origItem = runsList.querySelector(`[data-run-id="${item.dataset.runId}"]`);
-                if (origItem) origItem.click();
-                panel.querySelectorAll('#runsItemsList .runs-row-item')
-                  .forEach(it => it.classList.remove('active'));
-                item.classList.add('active');
-              });
-            });
-            // Keep active highlight in sync when app selects a different run externally
-            new MutationObserver(() => {
-              const selectedOrig = runsList.querySelector('.run-item.selected');
-              const activeRunId  = selectedOrig?.dataset?.runId;
-              document.querySelectorAll('#runsItemsList .runs-row-item').forEach(it => {
-                it.classList.toggle('active', it.dataset.runId === activeRunId);
-              });
-            }).observe(runsList, { attributes: true, subtree: true, attributeFilter: ['class'] });
-            // ── Fix 4: Rebuild runs panel when loadRuns() replaces innerHTML ──
-            new MutationObserver(() => {
-              const newRuns = Array.from(runsList.children).map(c => ({
-                runId:    c.dataset.runId || '',
-                tenant:   c.querySelector('.run-tenant')?.childNodes[0]?.textContent?.trim()
-                          || c.querySelector('.run-tenant')?.textContent?.trim() || '—',
-                isLatest: !!c.querySelector('.latest-run-badge'),
-                status:   c.querySelector('.run-status')?.textContent?.trim() || '',
-                sync:     c.querySelector('.sync-status')?.textContent?.trim() || '',
-                timing:   c.querySelector('.run-timing')?.textContent?.trim() || '',
-                isActive: c.classList.contains('selected'),
-              }));
-              const newTotal = newRuns.length;
-              const itemsList = document.getElementById('runsItemsList');
-              if (!itemsList) return;
-              itemsList.innerHTML = newRuns.map(r => `
-                <div class="runs-row-item${r.isActive ? ' active' : ''}"
-                     data-run-id="${r.runId}" data-tenant="${r.tenant.toLowerCase()}">
-                  <span class="ri-dot" style="background:${dotColor(r.status)}"></span>
-                  <span class="ri-tenant">${r.tenant}</span>
-                  ${r.isLatest ? '<span class="ri-latest">Latest</span>' : ''}
-                  <span class="ri-sync">${r.sync}</span>
-                  <span class="ri-timing">${r.timing}</span>
-                </div>`).join('');
-              document.getElementById('runsCountBadge').textContent = newTotal;
-              const filterInput = document.getElementById('runsFilterInput');
-              if (filterInput) { filterInput.value = ''; filterInput.disabled = false; }
-              // Re-wire click handlers for new run items
-              document.querySelectorAll('#runsItemsList .runs-row-item').forEach(item => {
-                item.addEventListener('click', e => {
-                  if (e.target.closest('#runsFilterInput') || e.target.closest('#runsClearBtn')) return;
-                  const origItem = runsList.querySelector(`[data-run-id="${item.dataset.runId}"]`);
-                  if (origItem) origItem.click();
-                  document.querySelectorAll('#runsItemsList .runs-row-item')
-                    .forEach(it => it.classList.remove('active'));
-                  item.classList.add('active');
-                });
-              });
-            }).observe(runsList, { childList: true });
-          })(); // end buildRunsPanel
-          // ════════════════════════════════════════════════════════════
-          // 5. ASSEMBLE TOP ROW  (Obs Sources | Results)
-          // ════════════════════════════════════════════════════════════
-          (function assembleTopRow() {
-            // Remove any previous attempt
-            document.querySelector('.console-top-row')?.remove();
-            document.querySelector('.flow-divider')?.remove();
-            const topRow = document.createElement('div');
-            topRow.className = 'console-top-row';
-            topRow.appendChild(obsPanel);
-            topRow.appendChild(resultsPanel);
-            // Insert after pipeline strip
-            const pipeline = document.querySelector('.console-pipeline');
-            pipeline.after(topRow);
-            // Flow divider between top row and handoff
-            const divider = document.createElement('div');
-            divider.className = 'flow-divider';
-            divider.textContent = '↓  ready for handoff to AAM';
-            const hs = document.getElementById('handoffSection');
-            topRow.after(divider);
-            // Ensure handoff section follows the divider
-            divider.after(hs);
-            // Hide original Observation Sources + Results section-row
-            // (the redesigned .console-top-row replaces it)
-            const origSectionRow = document.querySelector('.section-row');
-            if (origSectionRow) {
-              origSectionRow.style.setProperty('display', 'none', 'important');
-            }
-          })();
-          // ════════════════════════════════════════════════════════════
-          // 6. RESTRUCTURE HANDOFF SECTION
-          // ════════════════════════════════════════════════════════════
-          (function restructureHandoff() {
-            const hs = document.getElementById('handoffSection');
-            if (!hs) return;
-            // ── Guard: already restructured ──────────────────────────
-            if (document.getElementById('hs-meta-row')) {
-              _applyHandoffStyles();
-              return;
-            }
-            // ── Collect original child elements ──────────────────────
-            const statsGrid    = hs.querySelector('.stats-grid');
-            const fpBreakdown  = document.getElementById('fabricPlanesBreakdown');
-            const filterActive = document.getElementById('fabricFilterActive');
-            const farmMeta     = hs.querySelector('.farm-metadata-section');
-            const auditPanel   = document.getElementById('fabricAuditPanel');
-            // Find the controls div (the one containing the select)
-            let ctrlDiv = null;
-            Array.from(hs.children).forEach(c => {
-              if (!ctrlDiv && c.querySelector && c.querySelector('#handoffStatusFilter')) {
-                ctrlDiv = c;
-              }
-            });
-            // Find the candidates wrapper (contains #handoffCandidatesContainer)
-            let candWrapper = null;
-            Array.from(hs.children).forEach(c => {
-              if (!candWrapper && c.querySelector && c.querySelector('#handoffCandidatesContainer')) {
-                candWrapper = c;
-              }
-            });
-            // Extract the two metadata sections from farm-metadata-section
-            const fpSection  = farmMeta?.children[0]; // Fabric Planes section
-            const sorSection = farmMeta?.children[1]; // Systems of Record section
-            // ── Build #hs-meta-row  (Fabric Planes | SORs side by side) ──
-            const metaRow = document.createElement('div');
-            metaRow.id = 'hs-meta-row';
-            if (fpSection)  metaRow.appendChild(fpSection);
-            if (sorSection) metaRow.appendChild(sorSection);
-            // ── Build #chipDrillPanel (inline drill for chip clicks) ──
-            const chipDrill = document.createElement('div');
-            chipDrill.id    = 'chipDrillPanel';
-            chipDrill.className = 'chip-drill-panel';
-            // ── Build #hs-controls-row ──────────────────────────────
-            const ctrlRow = document.createElement('div');
-            ctrlRow.id = 'hs-controls-row';
-            const sep = () => {
-              const s = document.createElement('span');
-              s.style.cssText = 'color:#2d3748;font-size:.9rem;flex-shrink:0;';
-              s.textContent = '|';
-              return s;
-            };
-            if (fpBreakdown)  ctrlRow.appendChild(fpBreakdown);
-            ctrlRow.appendChild(sep());
-            if (filterActive) ctrlRow.appendChild(filterActive);
-            const pushSep = sep();
-            pushSep.style.marginLeft = 'auto';
-            ctrlRow.appendChild(pushSep);
-            if (ctrlDiv)      ctrlRow.appendChild(ctrlDiv);
-            // Remove redundant Export to AAM button (Handoff → in obs panel replaces it)
-            // NOTE: use ctrlRow.querySelector because ctrlDiv has been moved out of the
-            // document DOM into the detached ctrlRow — document.getElementById won't find it
-            const _exportBtn = ctrlRow.querySelector('#exportToAAMBtn');
-            if (_exportBtn) _exportBtn.style.setProperty('display', 'none', 'important');
-            // ── Build #hs-cand-section (collapsible candidates) ──────
-            const candSection   = document.createElement('div');
-            candSection.id      = 'hs-cand-section';
-            const candToggle    = document.createElement('div');
-            candToggle.id       = 'hs-cand-toggle';
-            const candCount     = document.getElementById('handoffTotalCount')?.textContent?.trim() || '—';
-            candToggle.innerHTML = `
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span style="font-size:.78rem;font-weight:700;color:#63b3ed;">Connection Candidates</span>
-                <span id="hs-cand-count-badge"
-                      style="font-size:.65rem;color:#718096;">${candCount} candidates</span>
-              </div>
-              <span id="hs-cand-chevron">▼</span>`;
-            const candBody      = document.createElement('div');
-            candBody.id         = 'hs-cand-body';
-            // Move everything from candWrapper into candBody
-            if (candWrapper) {
-              while (candWrapper.firstChild) candBody.appendChild(candWrapper.firstChild);
-            }
-            // ── Fix 3: Hide the original Connection Candidates header ──
-            // candToggle already provides the collapsible header; the original
-            // <h3>Connection Candidates</h3> div moved into candBody is a duplicate.
-            const origCandHeader = candBody.querySelector('.section-title');
-            if (origCandHeader) {
-              const headerDiv = origCandHeader.closest('div');
-              if (headerDiv && headerDiv.parentElement === candBody) {
-                headerDiv.style.display = 'none';
-              }
-            }
-            candSection.appendChild(candToggle);
-            candSection.appendChild(candBody);
-            // Toggle logic
-            let candOpen = true;
-            candToggle.addEventListener('click', () => {
-              candOpen = !candOpen;
-              candBody.classList.toggle('collapsed', !candOpen);
-              const chev = document.getElementById('hs-cand-chevron');
-              if (chev) chev.style.transform = candOpen ? '' : 'rotate(-90deg)';
-            });
-            // ── Fix 5: Sync handoff candidate count badge ───────────
-            // #handoffTotalCount is updated by loadHandoffCandidates after init;
-            // keep #hs-cand-count-badge in sync via MutationObserver.
-            const totalCountEl = document.getElementById('handoffTotalCount');
-            if (totalCountEl) {
-              new MutationObserver(() => {
-                const badge = document.getElementById('hs-cand-count-badge');
-                if (badge) badge.textContent = totalCountEl.textContent.trim() + ' candidates';
-              }).observe(totalCountEl, { childList: true, characterData: true, subtree: true });
-            }
-            // ── Reassemble #handoffSection ────────────────────────────
-            const title = hs.querySelector(':scope > h2.section-title, :scope > .section-title');
-            // Clear hs of everything except title
-            while (hs.lastChild) hs.removeChild(hs.lastChild);
-            if (title)       hs.appendChild(title);
-            if (statsGrid)   hs.appendChild(statsGrid);
-            hs.appendChild(metaRow);
-            hs.appendChild(chipDrill);
-            hs.appendChild(ctrlRow);
-            hs.appendChild(candSection);
-            if (auditPanel)  hs.appendChild(auditPanel);
-            // ── Apply all inline styles ───────────────────────────────
-            _applyHandoffStyles();
-            // ── Wire chip drills ──────────────────────────────────────
-            _wireChipDrills(chipDrill);
-            // ── Fix 1+2: Re-apply styles & re-wire drills for dynamic content ──
-            // renderFarmFabricPlanes(), renderFarmSORs(), renderHandoffCandidates()
-            // all populate containers AFTER init. MutationObservers ensure new
-            // chips/cards get inline styles and click-to-drill handlers.
-            const _reapply = () => { _applyHandoffStyles(); _wireChipDrills(chipDrill); };
-            ['farmFabricPlanesContainer', 'farmSORsContainer', 'handoffCandidatesContainer'].forEach(id => {
-              const el = document.getElementById(id);
-              if (el) new MutationObserver(_reapply).observe(el, { childList: true, subtree: true });
-            });
-          })(); // end restructureHandoff
-          // ════════════════════════════════════════════════════════════
-          // HELPER: apply inline styles to all handoff elements
-          // ════════════════════════════════════════════════════════════
-          function _applyHandoffStyles() {
-            const hs = document.getElementById('handoffSection');
-            if (!hs) return;
-            // Section container
-            Object.assign(hs.style, {
-              background: '#0f1923', border: '1px solid #1e2a3a',
-              borderRadius: '10px', padding: '.85rem', marginTop: '.5rem',
-            });
-            // KPI bar (compact flex row)
-            const statsGrid = hs.querySelector('.stats-grid');
-            if (statsGrid) {
-              Object.assign(statsGrid.style, {
-                display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginBottom: '.6rem',
-              });
-              statsGrid.querySelectorAll('.stat-card').forEach(card => {
-                Object.assign(card.style, {
-                  background: '#131f2e', border: '1px solid #1e2a3a',
-                  borderRadius: '7px', padding: '.3rem .65rem',
-                  textAlign: 'center', minWidth: '70px', flex: '0 0 auto',
-                });
-                const val = card.querySelector('.stat-value');
-                const lbl = card.querySelector('.stat-label');
-                if (val) Object.assign(val.style, { fontSize: '1.1rem', fontWeight: '700', lineHeight: '1.2' });
-                if (lbl) Object.assign(lbl.style, { fontSize: '.6rem', color: '#718096' });
-              });
-            }
-            // Meta row boxes
-            const metaRow = document.getElementById('hs-meta-row');
-            if (metaRow) {
-              Object.assign(metaRow.style, {
-                display: 'grid', gridTemplateColumns: '1fr 1fr',
-                gap: '.6rem', marginBottom: '.6rem', alignItems: 'stretch',
-              });
-              Array.from(metaRow.children).forEach(box => {
-                Object.assign(box.style, {
-                  background: '#131f2e', border: '1px solid #1e2a3a',
-                  borderRadius: '7px', padding: '.5rem .6rem',
-                  marginBottom: '0', marginTop: '0',
-                  display: 'flex', flexDirection: 'column', alignSelf: 'stretch',
-                });
-                const h3 = box.querySelector('h3');
-                if (h3) Object.assign(h3.style, {
-                  fontSize: '.68rem', fontWeight: '700', color: '#a0aec0',
-                  marginBottom: '.35rem', display: 'flex', alignItems: 'center', gap: '.4rem',
-                });
-                const dc = box.querySelector('.farm-data-container');
-                if (dc) Object.assign(dc.style, {
-                  display: 'flex', flexDirection: 'column',
-                  gap: '.2rem', flex: '1', justifyContent: 'space-between',
-                });
-              });
-            }
-            // Fabric plane chips
-            document.querySelectorAll('.fabric-plane-chip').forEach(chip => {
-              Object.assign(chip.style, {
-                display: 'flex', alignItems: 'center', gap: '.35rem',
-                padding: '.22rem .45rem', borderRadius: '5px',
-                background: '#0d1117', border: '1px solid #1e2a3a',
-                cursor: 'pointer', flexWrap: 'nowrap', overflow: 'hidden',
-              });
-              const pt = chip.querySelector('.plane-type');
-              const pv = chip.querySelector('.plane-vendor');
-              const hb = chip.querySelector('.health-badge');
-              const sb = chip.querySelector('.source-badge');
-              if (pt) Object.assign(pt.style, { fontSize: '.6rem', color: '#718096', minWidth: '68px' });
-              if (pv) Object.assign(pv.style, {
-                fontSize: '.7rem', color: '#e2e8f0', fontWeight: '600', flex: '1',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90px',
-              });
-              if (hb) Object.assign(hb.style, {
-                fontSize: '.58rem', padding: '.06rem .28rem', borderRadius: '3px',
-                background: 'rgba(72,187,120,.15)', color: '#48bb78', fontWeight: '600',
-              });
-              if (sb) Object.assign(sb.style, {
-                fontSize: '.58rem', padding: '.06rem .28rem', borderRadius: '3px',
-                background: 'rgba(99,179,237,.1)', color: '#63b3ed', fontWeight: '600',
-              });
-            });
-            // SOR chips
-            document.querySelectorAll('.sor-chip').forEach(chip => {
-              Object.assign(chip.style, {
-                display: 'flex', alignItems: 'center', gap: '.35rem',
-                padding: '.22rem .45rem', borderRadius: '5px',
-                background: '#0d1117', border: '1px solid #1e2a3a',
-                cursor: 'pointer', flexWrap: 'nowrap', overflow: 'hidden',
-              });
-              const sd = chip.querySelector('.sor-domain');
-              const sn = chip.querySelector('.sor-name');
-              const st = chip.querySelector('.sor-type');
-              const cb = chip.querySelector('.confidence-badge');
-              const srcb = chip.querySelector('.source-badge');
-              if (sd)   Object.assign(sd.style,   { fontSize: '.6rem', color: '#718096', minWidth: '52px' });
-              if (sn)   Object.assign(sn.style,   { fontSize: '.7rem', color: '#e2e8f0', fontWeight: '600', flex: '1' });
-              if (st)   Object.assign(st.style,   { fontSize: '.58rem', color: '#a0aec0' });
-              if (cb) {
-                const isHigh   = cb.classList.contains('high');
-                const isMedium = cb.classList.contains('medium');
-                Object.assign(cb.style, {
-                  fontSize: '.58rem', padding: '.06rem .28rem', borderRadius: '3px', fontWeight: '600',
-                  background: isHigh   ? 'rgba(252,129,74,.15)'  :
-                              isMedium ? 'rgba(236,201,75,.15)'  : 'rgba(160,174,192,.1)',
-                  color:      isHigh   ? '#fc814a' : isMedium ? '#ecc94b' : '#a0aec0',
-                });
-              }
-              if (srcb) Object.assign(srcb.style, {
-                fontSize: '.58rem', padding: '.06rem .28rem', borderRadius: '3px',
-                background: 'rgba(99,179,237,.1)', color: '#63b3ed', fontWeight: '600',
-              });
-            });
-            // Controls row
-            const ctrlRow = document.getElementById('hs-controls-row');
-            if (ctrlRow) {
-              Object.assign(ctrlRow.style, {
-                display: 'flex', flexWrap: 'wrap', alignItems: 'center',
-                gap: '.45rem', marginBottom: '.6rem', padding: '.4rem .55rem',
-                background: '#131f2e', border: '1px solid #1e2a3a', borderRadius: '7px',
-              });
-              const fpb = document.getElementById('fabricPlanesBreakdown');
-              if (fpb) Object.assign(fpb.style, { display: 'flex', flexWrap: 'wrap', gap: '.28rem', flexShrink: '0' });
-              const fa = document.getElementById('fabricFilterActive');
-              if (fa)  Object.assign(fa.style,  { display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.67rem', flexShrink: '0' });
-              const sel = document.getElementById('handoffStatusFilter');
-              if (sel) Object.assign(sel.style, { fontSize: '.68rem', padding: '.2rem .4rem' });
-              const vBtn = document.getElementById('viewFabricAuditBtn');
-              if (vBtn) Object.assign(vBtn.style, { fontSize: '.67rem', padding: '.22rem .55rem', whiteSpace: 'nowrap' });
-              const eBtn = document.getElementById('exportToAAMBtn');
-              if (eBtn) Object.assign(eBtn.style, { display: 'none', fontSize: '.67rem', padding: '.22rem .65rem', whiteSpace: 'nowrap' });
-            }
-            // Candidates container scroll
-            const candContainer = document.getElementById('handoffCandidatesContainer');
-            if (candContainer) {
-              Object.assign(candContainer.style, {
-                maxHeight: '460px', overflowY: 'auto',
-                display: 'flex', flexDirection: 'column', gap: '.3rem', paddingRight: '.2rem',
-              });
-            }
-            // Candidate cards
-            document.querySelectorAll('.handoff-candidate-card').forEach(card => {
-              Object.assign(card.style, {
-                background: '#131f2e', border: '1px solid #1e2a3a',
-                borderRadius: '7px', padding: '.45rem .6rem', cursor: 'pointer',
-              });
-            });
-            // Candidate card sub-elements
-            document.querySelectorAll('.handoff-card-header').forEach(h =>
-              Object.assign(h.style, { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '.4rem' }));
-            document.querySelectorAll('.handoff-card-title').forEach(t =>
-              Object.assign(t.style, { fontSize: '.76rem', fontWeight: '700', color: '#e2e8f0' }));
-            document.querySelectorAll('.handoff-card-subtitle').forEach(s =>
-              Object.assign(s.style, { fontSize: '.65rem', color: '#718096' }));
-            document.querySelectorAll('.handoff-card-badges').forEach(b =>
-              Object.assign(b.style, { display: 'flex', gap: '.25rem', flexWrap: 'wrap', flexShrink: '0' }));
-            document.querySelectorAll('.handoff-card-body').forEach(body =>
-              Object.assign(body.style, { marginTop: '.2rem', display: 'flex', flexWrap: 'wrap', gap: '.25rem', alignItems: 'center' }));
-            document.querySelectorAll('.handoff-sor-tag').forEach(tag =>
-              Object.assign(tag.style, {
-                display: 'inline-flex', flexDirection: 'row', alignItems: 'center',
-                gap: '.2rem', padding: '.06rem .3rem', borderRadius: '3px',
-                background: '#0d1117', border: '1px solid #1e2a3a', whiteSpace: 'nowrap', maxWidth: '200px',
-              }));
-            document.querySelectorAll('.handoff-sor-label').forEach(l =>
-              Object.assign(l.style, { fontSize: '.58rem', color: '#718096', display: 'inline' }));
-            document.querySelectorAll('.handoff-sor-value').forEach(v =>
-              Object.assign(v.style, { fontSize: '.62rem', color: '#a0aec0', fontWeight: '600', display: 'inline' }));
-            document.querySelectorAll('.handoff-sor-confidence').forEach(c =>
-              Object.assign(c.style, { fontSize: '.58rem', color: '#63b3ed', display: 'inline' }));
-            document.querySelectorAll('.handoff-finding-list').forEach(fl =>
-              Object.assign(fl.style, { display: 'inline-flex', flexWrap: 'wrap', gap: '.2rem', alignItems: 'center' }));
-            document.querySelectorAll('.handoff-finding').forEach(f => {
-              const isHigh = f.classList.contains('severity-high');
-              const isMed  = f.classList.contains('severity-med');
-              Object.assign(f.style, {
-                fontSize: '.6rem', padding: '.05rem .3rem', borderRadius: '3px',
-                fontWeight: '500', whiteSpace: 'nowrap',
-                background: isHigh ? 'rgba(252,129,74,.12)' : isMed ? 'rgba(236,201,75,.1)' : 'rgba(160,174,192,.1)',
-                color:      isHigh ? '#fc8181'               : isMed ? '#ecc94b'             : '#a0aec0',
-              });
-            });
-            // Hide the original Discovery Runs standalone section
-            const drTitle = Array.from(document.querySelectorAll('.section-title'))
-              .find(el => el.textContent.trim() === 'Discovery Runs');
-            const drSection = drTitle?.closest('.section') || drTitle?.parentElement;
-            if (drSection && !drSection.id) {
-              drSection.id = 'aod-runs-original';
-              drSection.style.setProperty('display', 'none', 'important');
-            }
-          } // end _applyHandoffStyles
-          // ════════════════════════════════════════════════════════════
-          // HELPER: wire click-to-drill on fabric plane + SOR chips
-          // ════════════════════════════════════════════════════════════
-          function _wireChipDrills(drillPanel) {
-            function showDrill(html) {
-              drillPanel.innerHTML = html;
-              drillPanel.style.display = 'block';
-            }
-            function drillRow(key, val) {
-              return `<div style="display:flex;justify-content:space-between;
-                                  padding:.16rem 0;border-bottom:1px solid #1e2a3a;">
-                        <span style="color:#718096;">${key}</span>
-                        <span style="color:#e2e8f0;font-weight:500;">${val}</span>
-                      </div>`;
-            }
-            const closeBtn = `<span onclick="document.getElementById('chipDrillPanel').style.display='none'"
-                                   style="cursor:pointer;color:#4a5568;font-size:.8rem;padding:.1rem .3rem;">✕</span>`;
-            // Fabric plane chips
-            document.querySelectorAll('.fabric-plane-chip').forEach(chip => {
-              chip.style.cursor = 'pointer';
-              chip.addEventListener('click', () => {
-                const type   = chip.querySelector('.plane-type')?.textContent?.trim()   || '—';
-                const vendor = chip.querySelector('.plane-vendor')?.textContent?.trim() || '—';
-                const health = chip.querySelector('.health-badge')?.textContent?.trim() || '—';
-                const source = chip.querySelector('.source-badge')?.textContent?.trim() || '—';
-                showDrill(`
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
-                    <span style="font-size:.72rem;font-weight:700;color:#63b3ed;">📋 ${type} — ${vendor}</span>
-                    ${closeBtn}
-                  </div>
-                  ${drillRow('Type',   type)}
-                  ${drillRow('Vendor', vendor)}
-                  ${drillRow('Health', health)}
-                  ${drillRow('Source', source)}`);
-                document.querySelectorAll('.fabric-plane-chip')
-                  .forEach(c => { c.style.borderColor = '#1e2a3a'; });
-                chip.style.borderColor = '#4299e1';
-              });
-            });
-            // SOR chips
-            document.querySelectorAll('.sor-chip').forEach(chip => {
-              chip.style.cursor = 'pointer';
-              chip.addEventListener('click', () => {
-                const domain     = chip.querySelector('.sor-domain')?.textContent?.trim()      || '—';
-                const name       = chip.querySelector('.sor-name')?.textContent?.trim()        || '—';
-                const type       = chip.querySelector('.sor-type')?.textContent?.trim()        || '—';
-                const confidence = chip.querySelector('.confidence-badge')?.textContent?.trim() || '—';
-                const source     = chip.querySelector('.source-badge')?.textContent?.trim()    || '—';
-                showDrill(`
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
-                    <span style="font-size:.72rem;font-weight:700;color:#9f7aea;">🗃 ${domain} — ${name}</span>
-                    ${closeBtn}
-                  </div>
-                  ${drillRow('Domain',     domain)}
-                  ${drillRow('System',     name)}
-                  ${drillRow('Type',       type)}
-                  ${drillRow('Confidence', confidence)}
-                  ${drillRow('Source',     source)}`);
-                document.querySelectorAll('.sor-chip')
-                  .forEach(c => { c.style.borderColor = '#1e2a3a'; });
-                chip.style.borderColor = '#9f7aea';
-              });
-            });
-          } // end _wireChipDrills
-        } // end initConsoleRedesign
-
+        
         (async function initConsoleTab() {
             loadObservationPlaneCounts(null);
             // Ensure farm status is checked before populating tenants
             await checkFarmStatus();
             await populateTenantsFromFarm();
-            // Initialize redesigned Console UI overlay after data is populated
-            try {
-                initConsoleRedesign();
-            } catch (e) {
-                console.error('[Console Redesign] Failed to initialize overlay:', e);
-            }
-        })();
+        })().then(() => {
+            // Build pipeline strip and wire interactive behaviors
+            if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
+        });
         
         setInterval(checkHealth, 30000);
         
@@ -4552,13 +3788,13 @@ ${JSON.stringify(technicalReport, null, 2)}
                 const activeTab = document.querySelector('.header-nav-tab.active');
                 const activeTabId = activeTab ? activeTab.dataset.tab : null;
 
-                if (activeTabId === 'triage') {
-                    await loadTriageRuns();
-                }
-                // Reload handoff data if a discovery run is selected
+                // Always refresh both Console runs and Discovery iframe
+                await loadRuns();
+                const iframe = document.getElementById('topologyIframe');
+                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
                 if (currentRunId) {
-                    const statusFilter = document.getElementById('handoffStatusFilter').value;
-                    await loadHandoffCandidates(currentRunId, statusFilter);
+                    const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
+                    await loadHandoffCandidates(currentRunId, sf);
                 }
 
                 showToast('Data refreshed', 'success');
@@ -4601,6 +3837,42 @@ ${JSON.stringify(technicalReport, null, 2)}
                     const consoleTab = document.querySelector('.header-nav-tab[data-tab="discovery"]');
                     if (consoleTab) consoleTab.classList.add('active');
                     document.getElementById('discoveryTabContent').classList.add('active');
+                } else if (event.data.action === 'runDiscovery') {
+                    // Programmatically trigger Run Discovery (same as clicking the button)
+                    const btn = document.getElementById('fetchFromFarm');
+                    if (btn) {
+                        console.log('[AOD] postMessage: runDiscovery — clicking fetchFromFarm');
+                        btn.click();
+                    }
+                } else if (event.data.action === 'triggerHandoff') {
+                    // Programmatically trigger Export to AAM
+                    if (typeof exportToAAM === 'function') {
+                        console.log('[AOD] postMessage: triggerHandoff — calling exportToAAM()');
+                        exportToAAM();
+                    } else {
+                        // Fallback: click the button
+                        const btn = document.getElementById('exportToAAMBtn');
+                        if (btn) btn.click();
+                    }
+                } else if (event.data.action === 'snapshotGenerated') {
+                    // Farm generated a new snapshot — refresh tenants and auto-run discovery
+                    console.log('[AOD] postMessage: snapshotGenerated — refreshing and running discovery');
+                    (async () => {
+                        await populateTenantsFromFarm();
+                        // Select the tenant from the event if provided
+                        if (event.data.tenant_id) {
+                            const select = document.getElementById('tenantSelect');
+                            if (select) {
+                                select.value = event.data.tenant_id;
+                                await handleTenantChange();
+                            }
+                        } else {
+                            await handleTenantChange();
+                        }
+                        // Trigger discovery run (same as clicking "Run Discovery")
+                        const btn = document.getElementById('fetchFromFarm');
+                        if (btn) btn.click();
+                    })();
                 }
             }
         });

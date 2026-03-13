@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
 import type { Node, Edge, Options } from 'vis-network/standalone'
-import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter, Loader2 } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filter, Loader2, Info } from 'lucide-react'
 
 /* ─── Types ─── */
 interface PipelineNode extends Node {
@@ -41,6 +41,9 @@ interface RunData {
     rejected: number
     ambiguous_matches: number
     findings_generated: number
+    iron_dome_rejected?: number
+    domain_merged?: number
+    entities_normalized?: number
   }
   stage_timings?: Record<string, number>
 }
@@ -73,7 +76,7 @@ function drawDatabaseNode({ ctx, x, y, state: { selected, hover }, style, label 
   const bgColor = (style.color?.background || C.cyan) as string
   const borderColor = (style.color?.border || bgColor) as string
   const fontColor = (style.color?.fontColor || C.bgDark) as string
-  const fontSize = 11
+  const fontSize = Math.max(9, Math.min(12, style.size * 0.55))
 
   return {
     drawNode() {
@@ -156,7 +159,7 @@ function drawSourceNode({ ctx, x, y, state: { selected, hover }, style, label }:
         ctx.shadowOffsetX = 0
         ctx.shadowOffsetY = 0
       }
-      ctx.strokeStyle = selected ? C.cyan : hover ? C.slate400 : C.slate600
+      ctx.strokeStyle = selected ? C.cyan : hover ? C.slate400 : (style.color?.border || C.amber)
       ctx.lineWidth = selected ? 2.5 : 1.5
       ctx.stroke()
       ctx.restore()
@@ -310,55 +313,67 @@ function buildNodes(run: RunData): PipelineNode[] {
 
   const nodes: PipelineNode[] = [
     // Level 0 — Hub: tenant name rendered inside a custom hexagon
-    { id: 'aod', label: run.tenant_id, level: 0, shape: 'custom', ctxRenderer: drawTenantNode, color: { background: C.cyan, border: C.cyan }, size: 42, stage: 'Discovery', nodeType: 'hexagon', metadata: { tenant: run.tenant_id, run_id: run.run_id, snapshot_id: run.input_meta.snapshot_id, status: run.status, scale: run.input_meta.scale, profile: run.input_meta.enterprise_profile, started_at: run.started_at } },
+    { id: 'aod', label: run.tenant_id, level: 0, shape: 'custom', ctxRenderer: drawTenantNode, color: { background: C.cyan, border: C.cyan }, size: 42, stage: 'Discovery', nodeType: 'hexagon', metadata: { tenant: run.tenant_id, run_id: run.run_id, snapshot_id: run.input_meta.snapshot_id, status: run.status, scale: run.input_meta.scale, profile: run.input_meta.enterprise_profile, started_at: run.started_at, description: 'Central discovery hub — orchestrates evidence collection across all observation planes for this tenant' } },
 
     // Level 2 — Ingested
-    { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
+    { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
 
-    // Level 3 — Validated / Rejected
-    { id: 'validated', label: `Validated\n${rc.candidates_out}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { count: rc.candidates_out, description: 'Passed format checks and deduplication' } },
-    { id: 'rejected',  label: `Rejected\n${rc.rejected}`,       level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 14, stage: 'Classification', nodeType: 'database', metadata: { count: rc.rejected, description: 'Failed validation — format errors or duplicates' } },
+    // Level 3 — Normalization funnel: rejected + duplicates + unique entities
+    { id: 'rejected', label: `Rejected\n${(rc.iron_dome_rejected || 0) + rc.rejected}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: (rc.iron_dome_rejected || 0) + rc.rejected, iron_dome: rc.iron_dome_rejected || 0, admission_failed: rc.rejected, description: `Observations that could not be admitted to the catalog. Iron Dome (${rc.iron_dome_rejected || 0}): blocked at normalization — internal hostnames, invalid TLDs, malformed domains, or empty identifiers. Admission failed (${rc.rejected}): passed normalization but lacked sufficient governance evidence — no IdP, CMDB, cloud, finance, or discovery signals met the admission threshold.` } },
+    ...(rc.domain_merged ? [{ id: 'domain-merged', label: `Duplicates\n${rc.domain_merged}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.amber, border: C.amber, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.domain_merged, description: 'Observations merged — multiple signals from different planes resolved to the same entity' } }] : []) as PipelineNode[],
 
-    // Level 4 — Cataloged
-    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 4, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
+    // Level 3 — Cataloged (same level, main flow)
+    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
 
-    // Level 5 — Handoff hub (cataloged flows directly here)
-    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 5, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
+    // Level 4 — Handoff hub
+    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
   ]
 
   // Level 1 — Observation plane nodes (multicolored triangleDown with 3D shading)
   planes.forEach((p, i) => {
     const col = observationColors[i % observationColors.length]
     nodes.push({
-      id: p.id, label: `${p.label}\n${p.count.toLocaleString()} signals`, level: 1,
+      id: p.id, label: `*${p.label}*\n_${p.count.toLocaleString()}_`, level: 1,
       shape: 'triangleDown', size: 18,
+      font: {
+        multi: 'markdown',
+        color: C.white, size: 13, face: 'Quicksand, sans-serif',
+        bold: { color: col, size: 14, face: 'Quicksand, sans-serif', vadjust: -2 },
+        ital: { color: C.white, size: 12, face: 'Quicksand, sans-serif' },
+      } as any,
       color: { background: col, border: col, highlight: { background: col, border: C.white } },
       shadow: { enabled: true, color: col + '40', size: 8, x: 2, y: 3 },
       borderWidth: 2,
       stage: 'Discovery', nodeType: 'triangleDown',
-      metadata: { type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count },
+      metadata: { tenant: run.tenant_id, run_id: run.run_id, type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count, description: `Collects ${p.label.replace('\n', ' ').toLowerCase()} evidence from ${p.examples} and similar systems` },
     })
   })
 
-  // Level 6 — Fabric planes from input_meta.fabric_planes
+  // Level 5 — Fabric planes from input_meta.fabric_planes
   run.input_meta.fabric_planes.forEach((fp, i) => {
     const label = planeLabels[fp.plane_type] || fp.plane_type
     nodes.push({
-      id: `fabric-${i}`, label: `${label}\n${fp.vendor}`, level: 6, shape: 'diamond',
+      id: `fabric-${i}`, label: `*${label}*\n_${fp.vendor}_`, level: 5, shape: 'diamond',
+      font: {
+        multi: 'markdown',
+        color: C.white, size: 13, face: 'Quicksand, sans-serif',
+        bold: { color: planeColors[i % planeColors.length], size: 14, face: 'Quicksand, sans-serif', vadjust: -2 },
+        ital: { color: C.white, size: 12, face: 'Quicksand, sans-serif' },
+      } as any,
       color: { background: planeColors[i % planeColors.length], border: planeColors[i % planeColors.length] },
       size: 16, stage: 'Handoff', nodeType: 'diamond',
-      metadata: { vendor: fp.vendor, type: label, healthy: fp.is_healthy ? 'Yes' : 'No' },
+      metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: fp.vendor, type: label, healthy: fp.is_healthy ? 'Yes' : 'No', description: 'Target integration plane — routes cataloged assets to downstream systems via this vendor\'s connection fabric' },
     })
   })
 
-  // Level 7 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
+  // Level 6 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
   const sorMapping = getSorMapping(run)
   sorMapping.forEach((m, sortedIdx) => {
     const s = run.input_meta.sors[m.sorIndex]
     nodes.push({
-      id: `sor-${sortedIdx}`, label: s.sor_name, level: 7, shape: 'custom', ctxRenderer: drawSourceNode,
+      id: `sor-${sortedIdx}`, label: s.sor_name, level: 6, shape: 'custom', ctxRenderer: drawSourceNode,
       color: { background: C.slate800, border: C.amber }, size: 22, stage: 'Handoff', nodeType: 'sor',
-      metadata: { vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence },
+      metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence, description: 'System of Record — the authoritative source of truth for this data domain in the enterprise' },
     })
   })
 
@@ -367,6 +382,7 @@ function buildNodes(run: RunData): PipelineNode[] {
 
 function buildEdges(run: RunData): Edge[] {
   const raw: Omit<Edge, 'id'>[] = []
+  const rc = run.counts
   const planeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
 
   // Hub → Observation planes
@@ -375,12 +391,10 @@ function buildEdges(run: RunData): Edge[] {
   // Observation planes → Ingested
   planeIds.forEach((p) => raw.push({ from: p, to: 'ingested', width: 1.5 }))
 
-  // Ingested → Validated / Rejected
-  raw.push({ from: 'ingested', to: 'validated', width: 2 })
+  // Ingested → Rejected / Duplicates / Cataloged
   raw.push({ from: 'ingested', to: 'rejected', width: 1.5, color: { color: C.red, opacity: 0.8 } })
-
-  // Validated → Cataloged
-  raw.push({ from: 'validated', to: 'cataloged', width: 2 })
+  if (rc.domain_merged) raw.push({ from: 'ingested', to: 'domain-merged', width: 1.5, color: { color: C.amber, opacity: 0.8 } })
+  raw.push({ from: 'ingested', to: 'cataloged', width: 2 })
 
   // Cataloged → Handoff
   raw.push({ from: 'cataloged', to: 'handoff-aam', width: 2 })
@@ -527,11 +541,14 @@ function getBaseOptions(): Options {
 
 /* ─── Legend entries ─── */
 const legendItems = [
-  { shape: 'hexagon',      color: C.cyan,   label: 'Tenant' },
-  { shape: 'triangleDown', color: C.violet, label: 'Observation plane' },
-  { shape: 'database',     color: C.cyan,   label: 'Pipeline stage' },
-  { shape: 'diamond',      color: C.orange, label: 'Fabric plane' },
-  { shape: 'rect',         color: C.amber,  label: 'System of Record' },
+  { shape: 'hexagon',      color: C.cyan,    label: 'Tenant' },
+  { shape: 'triangleDown', color: C.violet,  label: 'Observation plane' },
+  { shape: 'database',     color: C.cyan,    label: 'Lifecycle stage' },
+  { shape: 'line',         color: C.red,     label: 'Rejected' },
+  { shape: 'line',         color: C.amber,   label: 'Duplicates' },
+  { shape: 'diamond',      color: C.orange,  label: 'Handoff' },
+  { shape: 'diamond',      color: C.violet,  label: 'Fabric plane' },
+  { shape: 'rect',         color: C.amber,   label: 'System of Record' },
 ]
 
 /* ─── Stage filter config (matches Pipeline.tsx 3-stage model) ─── */
@@ -571,6 +588,11 @@ export default function Discovery() {
   const [loading, setLoading] = useState(true)
   const [loadingMessage, setLoadingMessage] = useState<string | null>('Loading pipeline data...')
   const [error, setError] = useState<string | null>(null)
+  const [calloutModal, setCalloutModal] = useState<string | null>(null)
+  const [planeCalloutPos, setPlaneCalloutPos] = useState<{ x: number; y: number } | null>(null)
+  const planeCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
+  const [fabricCalloutPos, setFabricCalloutPos] = useState<{ x: number; y: number } | null>(null)
+  const fabricCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
 
   // Fetch latest run data, then initialize network
   useEffect(() => {
@@ -584,7 +606,7 @@ export default function Discovery() {
         if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
         const runs: RunData[] = await runsRes.json()
         if (runs.length === 0) throw new Error('No discovery runs found')
-        const run = runs[0]
+        const run = runs.find(r => r.status.startsWith('completed')) || runs[0]
 
         if (destroyed) return
 
@@ -612,11 +634,34 @@ export default function Discovery() {
         const settle = () => {
           if (settled || destroyed) return
           settled = true
+          const positions = network.getPositions()
           network.setOptions({ physics: { enabled: false } })
           setPhysicsEnabled(false)
+          // Compute callout position under observation plane nodes
+          const planeNodeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
+          const planePositions = planeNodeIds.map(id => positions[id]).filter(Boolean)
+          planeCanvasCenterRef.current = planePositions.length > 0 ? {
+            x: planePositions.reduce((s, p) => s + p.x, 0) / planePositions.length,
+            y: Math.max(...planePositions.map(p => p.y)) + 80,
+          } : null
+          // Compute fabric plane callout position
+          const fabricIds = Object.keys(positions).filter(id => id.startsWith('fabric-'))
+          const fabricPositions = fabricIds.map(id => positions[id]).filter(Boolean)
+          fabricCanvasCenterRef.current = fabricPositions.length > 0 ? {
+            x: fabricPositions.reduce((s, p) => s + p.x, 0) / fabricPositions.length,
+            y: Math.max(...fabricPositions.map(p => p.y)) + 80,
+          } : null
           // Wait for one canvas redraw with final positions, then fit
           network.once('afterDrawing', () => {
             network.fit({ animation: false })
+            if (planeCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(planeCanvasCenterRef.current)
+              setPlaneCalloutPos({ x: dom.x, y: dom.y })
+            }
+            if (fabricCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
+              setFabricCalloutPos({ x: dom.x, y: dom.y })
+            }
             setLoadingMessage(null)
             setLoading(false)
           })
@@ -646,6 +691,24 @@ export default function Discovery() {
           }
         })
 
+        // Release node on mouseup so it doesn't stay draggable after click
+        network.on('dragEnd', (params) => {
+          if (params.nodes.length > 0) {
+            network.unselectAll()
+            // Re-select for the details panel without triggering drag
+            const nodeId = params.nodes[0]
+            const node = nodes.get(nodeId) as unknown as PipelineNode | null
+            if (node) {
+              setSelectedNode({
+                label: (node.label || '').replace('\n', ' '),
+                stage: node.stage,
+                nodeType: node.nodeType,
+                metadata: node.metadata,
+              })
+            }
+          }
+        })
+
         // Selection glow
         network.on('selectNode', (params) => {
           params.nodes.forEach((id: string) => {
@@ -657,6 +720,21 @@ export default function Discovery() {
             nodes.update({ id, shadow: false } as any)
           })
         })
+
+        // Update callout positions on zoom/pan/drag
+        const updateCalloutPos = () => {
+          if (planeCanvasCenterRef.current) {
+            const dom = network.canvasToDOM(planeCanvasCenterRef.current)
+            setPlaneCalloutPos({ x: dom.x, y: dom.y })
+          }
+          if (fabricCanvasCenterRef.current) {
+            const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
+            setFabricCalloutPos({ x: dom.x, y: dom.y })
+          }
+        }
+        network.on('zoom', updateCalloutPos)
+        network.on('dragEnd', updateCalloutPos)
+        network.on('dragging', updateCalloutPos)
       } catch (err: any) {
         if (!destroyed) {
           setError(err.message || 'Failed to load pipeline data')
@@ -945,14 +1023,139 @@ export default function Discovery() {
       <div className="absolute bottom-4 left-4 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg px-4 py-3 z-10">
         <div className="text-xs text-slate-400 font-[Quicksand] font-semibold uppercase tracking-wider mb-2">Legend</div>
         <div className="flex flex-col gap-1.5">
-          {legendItems.map((item) => (
-            <div key={item.label} className="flex items-center gap-2 text-xs text-white font-[Quicksand]">
+          {legendItems.map((item, i) => (
+            <div key={`${item.shape}-${item.label}-${i}`} className="flex items-center gap-2 text-xs text-white font-[Quicksand]">
               <LegendShape shape={item.shape} color={item.color} />
               <span>{item.label}</span>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Callout: Observation Planes — anchored under the triangle column */}
+      {!loading && planeCalloutPos && (
+        <button
+          onClick={() => setCalloutModal('observation-planes')}
+          className="absolute z-10 group flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-violet-500/40 rounded-full pl-2.5 pr-3.5 py-1.5 hover:border-violet-400 hover:bg-slate-700/90 transition-all duration-200"
+          style={{ left: planeCalloutPos.x, top: planeCalloutPos.y, transform: 'translateX(-50%)' }}
+        >
+          <Info size={14} className="text-violet-400 group-hover:text-violet-300 transition-colors" />
+          <span className="text-xs text-violet-300 group-hover:text-violet-200 font-[Quicksand] font-medium transition-colors whitespace-nowrap">Why 7 observation planes?</span>
+        </button>
+      )}
+
+      {/* Callout Modal */}
+      {calloutModal === 'observation-planes' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center" onClick={() => setCalloutModal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-lg w-full mx-4 animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white font-[Quicksand]">The 7 Observation Planes</h3>
+                  <p className="text-xs text-slate-400 font-[Quicksand] mt-0.5">Why AOD collects evidence from exactly these sources</p>
+                </div>
+                <button onClick={() => setCalloutModal(null)} className="text-slate-400 hover:text-white transition-colors p-1 -mr-1 -mt-1">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-slate-300 font-[Quicksand] leading-relaxed">
+                No single enterprise system has a complete picture of what software an organization actually uses. AOD solves this by collecting evidence from seven independent observation planes — each providing a different lens on the IT landscape.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { name: 'Discovery', color: C.cyan, desc: 'Web traffic, SaaS login pages, and browser-observed applications. Catches shadow IT that no official system tracks.' },
+                  { name: 'Identity Provider', color: C.violet, desc: 'SSO configurations, SCIM provisioning, and service principals from Okta, Azure AD, etc. The strongest governance signal — if it\'s in IdP, someone sanctioned it.' },
+                  { name: 'CMDB', color: C.orange, desc: 'Configuration items from ServiceNow, Jira Assets, and similar. The official IT inventory — but often incomplete or stale.' },
+                  { name: 'Cloud Inventory', color: C.green, desc: 'Resource inventories from AWS, Azure, and GCP. Reveals infrastructure-level dependencies invisible to other planes.' },
+                  { name: 'Network', color: C.blue, desc: 'DNS records, proxy logs, and TLS certificates. Provides independent verification of what systems are actually communicating.' },
+                  { name: 'Finance', color: C.amber, desc: 'Vendor contracts, purchase orders, and transaction records. If the company is paying for it, it exists — even if IT doesn\'t know about it.' },
+                  { name: 'Endpoint', color: C.red, desc: 'Device management and installed application inventories. Reveals locally installed software that never touches the network.' },
+                ].map((plane) => (
+                  <div key={plane.name} className="flex gap-3">
+                    <div className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: plane.color }} />
+                    <div>
+                      <span className="text-sm font-semibold font-[Quicksand]" style={{ color: plane.color }}>{plane.name}</span>
+                      <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed mt-0.5">{plane.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-700/50 pt-4">
+                <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed italic">
+                  The power is in the intersection. An application seen only in Discovery is shadow IT. One seen in IdP + CMDB + Finance is fully governed. AOD triangulates across all seven planes to classify every asset on the Governed / Shadow / Zombie spectrum.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Callout: Fabric Planes — anchored under the diamond column */}
+      {!loading && fabricCalloutPos && (
+        <button
+          onClick={() => setCalloutModal('fabric-planes')}
+          className="absolute z-10 group flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-orange-500/40 rounded-full pl-2.5 pr-3.5 py-1.5 hover:border-orange-400 hover:bg-slate-700/90 transition-all duration-200"
+          style={{ left: fabricCalloutPos.x, top: fabricCalloutPos.y, transform: 'translateX(-50%)' }}
+        >
+          <Info size={14} className="text-orange-400 group-hover:text-orange-300 transition-colors" />
+          <span className="text-xs text-orange-300 group-hover:text-orange-200 font-[Quicksand] font-medium transition-colors whitespace-nowrap">Why fabric planes?</span>
+        </button>
+      )}
+
+      {/* Fabric Planes Modal */}
+      {calloutModal === 'fabric-planes' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center" onClick={() => setCalloutModal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-lg w-full mx-4 animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white font-[Quicksand]">Fabric Planes</h3>
+                  <p className="text-xs text-slate-400 font-[Quicksand] mt-0.5">How AOD routes cataloged assets to downstream systems</p>
+                </div>
+                <button onClick={() => setCalloutModal(null)} className="text-slate-400 hover:text-white transition-colors p-1 -mr-1 -mt-1">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-slate-300 font-[Quicksand] leading-relaxed">
+                Fabric planes are the integration highways that connect enterprise systems. After AOD discovers and catalogs an asset, it needs to understand <em>how</em> that asset is wired into the enterprise — which integration fabric carries its data, and which system of record is authoritative for it.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { name: 'iPaaS', color: C.cyan, desc: 'Integration Platform as a Service (MuleSoft, Workato, Boomi). The middleware layer — if two systems exchange data, iPaaS is usually the broker. Most enterprise integration runs through here.' },
+                  { name: 'API Gateway', color: C.violet, desc: 'Managed API endpoints (Kong, Apigee, AWS API Gateway). Governs who can call what, with rate limits and auth policies. Reveals the real dependency graph between services.' },
+                  { name: 'Event Bus', color: C.orange, desc: 'Asynchronous messaging (Kafka, EventBridge, RabbitMQ). The real-time nervous system — events flow here before they reach databases. Catches integration patterns invisible to request-based monitoring.' },
+                  { name: 'Data Warehouse', color: C.green, desc: 'Analytical data stores (Snowflake, BigQuery, Redshift). Where business data lands for reporting. If a system feeds the warehouse, it is operationally critical — even if IT classifies it as shadow.' },
+                ].map((plane) => (
+                  <div key={plane.name} className="flex gap-3">
+                    <div className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: plane.color }} />
+                    <div>
+                      <span className="text-sm font-semibold font-[Quicksand]" style={{ color: plane.color }}>{plane.name}</span>
+                      <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed mt-0.5">{plane.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-700/50 pt-4">
+                <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed italic">
+                  Fabric planes bridge discovery and action. AOD doesn't just find assets — it maps how they connect through real integration infrastructure, so AAM can build pipe blueprints that follow the enterprise's actual wiring, not a theoretical architecture diagram.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Details panel (right sidebar) */}
       {selectedNode && (
@@ -999,6 +1202,13 @@ export default function Discovery() {
         .animate-slide-in {
           animation: slideIn 0.2s ease-out;
         }
+        @keyframes modalIn {
+          from { transform: scale(0.95) translateY(8px); opacity: 0; }
+          to   { transform: scale(1) translateY(0);      opacity: 1; }
+        }
+        .animate-modal-in {
+          animation: modalIn 0.2s ease-out;
+        }
       `}</style>
     </div>
   )
@@ -1007,6 +1217,14 @@ export default function Discovery() {
 /* ─── Legend shape helper ─── */
 function LegendShape({ shape, color }: { shape: string; color: string }) {
   const size = 12
+  if (shape === 'line') {
+    return (
+      <svg width={size} height={4} viewBox="0 0 12 4">
+        <line x1="0" y1="2" x2="12" y2="2" stroke={color} strokeWidth="2.5" />
+        <polygon points="9,0 12,2 9,4" fill={color} />
+      </svg>
+    )
+  }
   if (shape === 'hexagon') {
     return (
       <svg width={size} height={size} viewBox="0 0 12 12">

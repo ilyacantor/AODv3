@@ -743,7 +743,12 @@ async def execute_pipeline(
                     started_at.isoformat()
                 ))
             await db.create_rejections_batch(iron_dome_batch)
-        
+
+        run_log.counts.iron_dome_rejected = len(iron_dome_rejections)
+        run_log.counts.entities_normalized = len(candidates)
+        # Observations merged = obs_in - unique entities - iron dome rejections
+        run_log.counts.domain_merged = len(observations) - len(candidates) - len(iron_dome_rejections)
+
         synthetic_candidates = _synthesize_fabric_plane_candidates(
             snapshot, input_meta.get("fabric_planes", []), candidates
         )

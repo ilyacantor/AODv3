@@ -1,5 +1,8 @@
 """AOD Fresh - AutonomOS Discover Main Application"""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import logging
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, Security
@@ -117,8 +120,15 @@ if CONFIG_DIR.exists():
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database on startup"""
-    await get_db_direct()
+    """Initialize database on startup — non-blocking so health check passes"""
+    import asyncio
+    try:
+        await asyncio.wait_for(get_db_direct(), timeout=15)
+        logger.info("startup.db_ready")
+    except asyncio.TimeoutError:
+        logger.warning("startup.db_timeout — DB init timed out after 15s, will retry lazily on first request")
+    except Exception as e:
+        logger.warning("startup.db_error — %s — will retry lazily on first request", str(e))
 
 
 @app.on_event("shutdown")

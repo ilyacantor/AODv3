@@ -577,6 +577,14 @@ export default function Discovery() {
   const [layoutOpen, setLayoutOpen] = useState(false)
   const [hiddenStages, setHiddenStages] = useState<Set<Stage>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const close = () => { setLayoutOpen(false); setFilterOpen(false) }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [])
+
   const [loading, setLoading] = useState(true)
   const [loadingMessage, setLoadingMessage] = useState<string | null>('Loading pipeline data...')
   const [error, setError] = useState<string | null>(null)
@@ -918,7 +926,7 @@ export default function Discovery() {
         {/* Layout selector */}
         <div className="pointer-events-auto relative">
           <button
-            onClick={() => setLayoutOpen(!layoutOpen)}
+            onClick={(e) => { e.stopPropagation(); setLayoutOpen(!layoutOpen); setFilterOpen(false) }}
             className="flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-[Quicksand] hover:border-cyan-500/50 transition-colors"
           >
             {layout === 'hierarchical' ? 'Hierarchical LR' : layout === 'force' ? 'Force-directed' : 'Circular'}
@@ -952,7 +960,7 @@ export default function Discovery() {
         {/* Stage filter */}
         <div className="pointer-events-auto relative">
           <button
-            onClick={() => setFilterOpen(!filterOpen)}
+            onClick={(e) => { e.stopPropagation(); setFilterOpen(!filterOpen); setLayoutOpen(false) }}
             className={`flex items-center gap-1.5 bg-slate-800/90 backdrop-blur border rounded-lg px-3 py-2 text-sm font-[Quicksand] hover:border-cyan-500/50 transition-colors ${hiddenStages.size > 0 ? 'border-cyan-500/60 text-cyan-400' : 'border-slate-700 text-white'}`}
           >
             <Filter size={14} />

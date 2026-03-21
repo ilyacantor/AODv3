@@ -17,6 +17,11 @@ class FarmRunRequest(BaseModel):
         description="Industry vertical for fabric generation (e.g., 'finance', 'healthcare'). "
                     "When provided, fabric planes are weighted by industry-specific vendor preferences."
     )
+    entity_id: str | None = Field(
+        default=None,
+        description="Business entity identifier for triple store writes. "
+                    "Falls back to snapshot meta.entity_id or AOD_DEFAULT_ENTITY_ID env var."
+    )
 
 
 class RunResponse(BaseModel):

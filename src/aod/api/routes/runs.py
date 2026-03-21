@@ -36,6 +36,59 @@ from .utils import (
     generate_ambiguous_explanation as _generate_ambiguous_explanation,
 )
 from ...pipeline.sor_scoring import batch_score_sor
+from ...converters.triple_converter import convert_discovery_to_triples
+from ...converters.triple_writer import write_triples_to_pg
+from ...converters.entity_resolver import resolve_entity_id
+
+
+async def _emit_discovery_triples(
+    result,
+    db: Database,
+    run_id: str,
+    snapshot_data: dict | None = None,
+    request_entity_id: str | None = None,
+) -> None:
+    """Convert discovery output to EAV triples and write to PG.
+
+    Additive step — does not block or replace the AAM handoff.
+    If triple conversion or write fails, logs the error and continues.
+    The scan result is returned to the caller regardless.
+    """
+    if not result.success or not result.assets:
+        return
+
+    try:
+        entity_id = resolve_entity_id(
+            snapshot_data=snapshot_data,
+            request_entity_id=request_entity_id,
+        )
+        fabric_plane_registry = result.run_log.input_meta.get(
+            "_aod_fabric_plane_registry", []
+        )
+        triples = convert_discovery_to_triples(
+            assets=result.assets,
+            findings=result.findings,
+            fabric_plane_registry=fabric_plane_registry,
+            entity_id=entity_id,
+            tenant_id=result.run_log.tenant_id,
+            run_id=run_id,
+        )
+        if triples:
+            pool = await db.get_pool()
+            count = await write_triples_to_pg(triples, pool)
+            logger.info(
+                "triple_conversion.complete",
+                extra={
+                    "run_id": run_id,
+                    "triples_written": count,
+                    "entity_id": entity_id,
+                },
+            )
+    except Exception as e:
+        logger.error(
+            "triple_conversion.failed",
+            extra={"run_id": run_id, "error": str(e)},
+        )
 
 
 router = APIRouter(prefix="/runs")
@@ -67,7 +120,9 @@ async def create_run(file: UploadFile = File(...)):
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
             raise HTTPException(status_code=400, detail=result.error)
         raise HTTPException(status_code=500, detail=result.error)
-    
+
+    await _emit_discovery_triples(result, db, run_id, snapshot_data=data)
+
     return RunResponse(
         run_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
@@ -102,7 +157,9 @@ async def create_run_json(snapshot: dict[str, Any]):
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
             raise HTTPException(status_code=400, detail=result.error)
         raise HTTPException(status_code=500, detail=result.error)
-    
+
+    await _emit_discovery_triples(result, db, run_id, snapshot_data=snapshot)
+
     return RunResponse(
         run_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
@@ -184,6 +241,12 @@ async def create_run_from_farm(request: FarmRunRequest):
         if result.run_log.status == RunStatus.INVALID_INPUT_CONTRACT:
             raise HTTPException(status_code=400, detail=result.error)
         raise HTTPException(status_code=500, detail=result.error)
+
+    await _emit_discovery_triples(
+        result, db, run_id,
+        snapshot_data=snapshot_data,
+        request_entity_id=request.entity_id,
+    )
 
     # Cache snapshot for offline resilience (write-through)
     # Only cache Farm-sourced snapshots, not re-cached data

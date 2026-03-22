@@ -1,4 +1,10 @@
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
+
+        function discoveryIframeUrl() {
+            const tid = document.getElementById('tenantSelect')?.value;
+            const q = tid ? '?tenant_id=' + encodeURIComponent(tid) + '&v=' + Date.now() : '?v=' + Date.now();
+            return '/static/overview/index.html' + q;
+        }
         let drillStack = [];
         let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], validated: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
@@ -144,8 +150,53 @@
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
                     if (targetTab === 'triage') loadTriageRuns();
                     if (targetTab === 'handoff') loadHandoffRuns();
+                    // Check for new data on tab switch — updates Console + Discovery if stale
+                    checkForNewData(targetTab);
                 });
             });
+        }
+
+        async function checkForNewData(activeTab) {
+            const tenantId = document.getElementById('tenantSelect')?.value;
+            if (!tenantId) return;
+            try {
+                // 1. Check for new discovery runs
+                const runsRes = await fetch('/api/runs');
+                if (!runsRes.ok) return;
+                const runs = await runsRes.json();
+                runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+
+                if (runs.length > 0 && runs[0].run_id !== currentRunId) {
+                    // New run exists — refresh both tabs
+                    await loadRuns();
+                    await selectRun(runs[0].run_id);
+                    await populateTenantsFromFarm();
+                    await handleTenantChange();
+                    if (activeTab === 'topology') {
+                        const iframe = document.getElementById('topologyIframe');
+                        if (iframe) iframe.src = discoveryIframeUrl();
+                    }
+                    return;
+                }
+
+                // 2. Check for new Farm snapshot not yet processed into a run
+                const snapRes = await fetch('/api/farm/snapshots?tenant_id=' + encodeURIComponent(tenantId));
+                if (!snapRes.ok) return;
+                const snapData = await snapRes.json();
+                if (!snapData.snapshots || snapData.snapshots.length === 0) return;
+                const latestSnapId = snapData.snapshots[0].snapshot_id || snapData.snapshots[0].id;
+
+                const alreadyProcessed = runs.some(r =>
+                    r.input_meta && r.input_meta.snapshot_id === latestSnapId
+                );
+                if (!alreadyProcessed) {
+                    // New snapshot — auto-trigger discovery (same as snapshotGenerated handler)
+                    await populateTenantsFromFarm();
+                    await handleTenantChange();
+                    const btn = document.getElementById('fetchFromFarm');
+                    if (btn && !btn.disabled) btn.click();
+                }
+            } catch (e) { /* data check — non-critical */ }
         }
         
         function initTriageTab() {
@@ -3672,7 +3723,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 await loadRuns();
                 await selectRun(result.run_id);
                 const iframe = document.getElementById('topologyIframe');
-                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+                if (iframe) iframe.src = discoveryIframeUrl();
 
                 // Auto-trigger handoff to AAM after successful discovery
                 if (result.status === 'completed' && typeof exportToAAM === 'function') {
@@ -3765,10 +3816,21 @@ ${JSON.stringify(technicalReport, null, 2)}
         })().then(() => {
             // Build pipeline strip and wire interactive behaviors
             if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
+            // Load Discovery graph with the selected tenant
+            const iframe = document.getElementById('topologyIframe');
+            if (iframe) iframe.src = discoveryIframeUrl();
         });
         
         setInterval(checkHealth, 30000);
-        
+
+        // Also check on browser tab switch (e.g., returning from Farm)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                const activeTab = document.querySelector('.header-nav-tab.active');
+                checkForNewData(activeTab ? activeTab.dataset.tab : null);
+            }
+        });
+
         if (typeof TourManager !== 'undefined') {
             TourManager.checkResume();
             const guidedTourBtn = document.getElementById('guidedTourBtn');
@@ -3791,7 +3853,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 // Always refresh both Console runs and Discovery iframe
                 await loadRuns();
                 const iframe = document.getElementById('topologyIframe');
-                if (iframe) iframe.src = '/static/overview/index.html?v=' + Date.now();
+                if (iframe) iframe.src = discoveryIframeUrl();
                 if (currentRunId) {
                     const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
                     await loadHandoffCandidates(currentRunId, sf);

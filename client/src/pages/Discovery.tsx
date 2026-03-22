@@ -573,6 +573,7 @@ export default function Discovery() {
   const [searchTerm, setSearchTerm] = useState('')
   // Defaults: hierarchical LR with physics on — physics auto-disables after stabilization
   const [layout, setLayout] = useState<LayoutKey>('hierarchical')
+  const [refreshKey, setRefreshKey] = useState(0)
   const [physicsEnabled, setPhysicsEnabled] = useState(true)
   const [layoutOpen, setLayoutOpen] = useState(false)
   const [hiddenStages, setHiddenStages] = useState<Set<Stage>>(new Set())
@@ -598,11 +599,14 @@ export default function Discovery() {
   useEffect(() => {
     if (!containerRef.current) return
     let destroyed = false
+    let rafId: number | null = null
 
     async function init() {
       try {
-        // Fetch most recent run (first in list, sorted by recency)
-        const runsRes = await fetch('/api/runs')
+        // Fetch most recent run for the selected tenant
+        const tenantParam = new URLSearchParams(window.location.search).get('tenant_id')
+        const runsUrl = tenantParam ? `/api/runs?tenant_id=${encodeURIComponent(tenantParam)}` : '/api/runs'
+        const runsRes = await fetch(runsUrl)
         if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
         const runs: RunData[] = await runsRes.json()
         if (runs.length === 0) throw new Error('No discovery runs found')
@@ -721,16 +725,20 @@ export default function Discovery() {
           })
         })
 
-        // Update callout positions on zoom/pan/drag
+        // Update callout positions on zoom/pan/drag (RAF-throttled to avoid flash)
         const updateCalloutPos = () => {
-          if (planeCanvasCenterRef.current) {
-            const dom = network.canvasToDOM(planeCanvasCenterRef.current)
-            setPlaneCalloutPos({ x: dom.x, y: dom.y })
-          }
-          if (fabricCanvasCenterRef.current) {
-            const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
-            setFabricCalloutPos({ x: dom.x, y: dom.y })
-          }
+          if (rafId !== null) return
+          rafId = requestAnimationFrame(() => {
+            rafId = null
+            if (planeCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(planeCanvasCenterRef.current)
+              setPlaneCalloutPos({ x: dom.x, y: dom.y })
+            }
+            if (fabricCanvasCenterRef.current) {
+              const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
+              setFabricCalloutPos({ x: dom.x, y: dom.y })
+            }
+          })
         }
         network.on('zoom', updateCalloutPos)
         network.on('dragEnd', updateCalloutPos)
@@ -747,12 +755,13 @@ export default function Discovery() {
 
     return () => {
       destroyed = true
+      if (rafId !== null) cancelAnimationFrame(rafId)
       networkRef.current?.destroy()
       networkRef.current = null
       nodesRef.current = null
       edgesRef.current = null
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Layout changes
   useEffect(() => {
@@ -786,6 +795,15 @@ export default function Discovery() {
     // 4. Restart stabilization cleanly
     net.stabilize()
   }, [layout])
+
+  // Listen for parent postMessage to trigger data refresh via useEffect re-run
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.action === 'refreshData') setRefreshKey(k => k + 1)
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   // Search — dim non-matching nodes
   useEffect(() => {

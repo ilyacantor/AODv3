@@ -962,7 +962,7 @@ main { padding: 2rem; }
 }
 
 /* Overview Tab Styles */
-.overview-iframe { width: 100%; height: calc(100vh - 60px); border: none; display: block; }
+.overview-iframe { width: 100%; height: calc(100vh - 60px); border: none; display: block; background: #0f172a; }
 
 /* Toggle Switch */
 .toggle-switch {

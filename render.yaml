@@ -19,12 +19,12 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: FARM_URL
-        value: "https://farmv2.onrender.com"
+        sync: false
       - key: FARM_SHARED_SECRET
         sync: false
       # --- AAM integration ---
       - key: AAM_URL
-        value: "https://aos-aam.onrender.com"
+        sync: false          # Required for /aam/candidates export; 503 without this
       # --- API auth ---
       - key: AOD_API_KEY
         sync: false          # API key enforced by auth middleware

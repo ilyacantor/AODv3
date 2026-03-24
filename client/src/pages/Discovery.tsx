@@ -128,59 +128,6 @@ function drawDatabaseNode({ ctx, x, y, state: { selected, hover }, style, label 
   }
 }
 
-/* ─── Custom SOR node renderer (port of AAM drawSourceNode) ─── */
-function drawSourceNode({ ctx, x, y, state: { selected, hover }, style, label }: any) {
-  const sz = style.size
-  const r = 4
-  const fontSize = 12
-  const lineHeight = fontSize * 1.3
-  return {
-    drawNode() {
-      ctx.save()
-      ctx.beginPath()
-      ctx.moveTo(x - sz + r, y - sz)
-      ctx.lineTo(x + sz - r, y - sz)
-      ctx.quadraticCurveTo(x + sz, y - sz, x + sz, y - sz + r)
-      ctx.lineTo(x + sz, y + sz - r)
-      ctx.quadraticCurveTo(x + sz, y + sz, x + sz - r, y + sz)
-      ctx.lineTo(x - sz + r, y + sz)
-      ctx.quadraticCurveTo(x - sz, y + sz, x - sz, y + sz - r)
-      ctx.lineTo(x - sz, y - sz + r)
-      ctx.quadraticCurveTo(x - sz, y - sz, x - sz + r, y - sz)
-      ctx.closePath()
-      const grad = ctx.createLinearGradient(x, y - sz, x, y + sz)
-      grad.addColorStop(0, C.slate800)
-      grad.addColorStop(1, C.slate700)
-      ctx.fillStyle = grad
-      ctx.fill()
-      if (selected) {
-        ctx.shadowColor = 'rgba(34, 211, 238, 0.5)'
-        ctx.shadowBlur = 15
-        ctx.shadowOffsetX = 0
-        ctx.shadowOffsetY = 0
-      }
-      ctx.strokeStyle = selected ? C.cyan : hover ? C.slate400 : (style.color?.border || C.amber)
-      ctx.lineWidth = selected ? 2.5 : 1.5
-      ctx.stroke()
-      ctx.restore()
-      if (label) {
-        ctx.save()
-        ctx.font = `${fontSize}px Quicksand, sans-serif`
-        ctx.fillStyle = C.white
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        const lines = label.split('\n')
-        const startY = y + sz + 10 + lineHeight / 2
-        for (let i = 0; i < lines.length; i++) {
-          ctx.fillText(lines[i], x, startY + i * lineHeight)
-        }
-        ctx.restore()
-      }
-    },
-    nodeDimensions: { width: sz * 2, height: sz * 2 },
-  }
-}
-
 /* ─── Custom tenant hexagon renderer (auto-sizes to fit label) ─── */
 function drawTenantNode({ ctx, x, y, state: { selected, hover }, style, label }: any) {
   const fontSize = 12
@@ -264,34 +211,7 @@ function drawTenantNode({ ctx, x, y, state: { selected, hover }, style, label }:
   }
 }
 
-/* ─── Humanize plane type labels ─── */
-const planeLabels: Record<string, string> = {
-  ipaas: 'iPaaS', api_gateway: 'API Gateway', event_bus: 'Event Bus',
-  data_warehouse: 'Data Warehouse', etl: 'ETL', data_mesh: 'Data Mesh',
-}
-const planeColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
 const observationColors = [C.cyan, C.violet, C.orange, C.green, C.blue, C.amber, C.red]
-
-/* ─── Map SORs to fabric planes by domain, sorted by fabric plane index ─── */
-function getSorMapping(run: RunData): { sorIndex: number; fpIndex: number }[] {
-  const fpCount = run.input_meta.fabric_planes.length
-  const domainGroups = new Map<string, number[]>()
-  run.input_meta.sors.forEach((s, i) => {
-    const d = s.domain
-    if (!domainGroups.has(d)) domainGroups.set(d, [])
-    domainGroups.get(d)!.push(i)
-  })
-  const mapping: { sorIndex: number; fpIndex: number }[] = []
-  let fpIdx = 0
-  for (const sorIndices of domainGroups.values()) {
-    const targetFp = fpIdx % fpCount
-    for (const i of sorIndices) mapping.push({ sorIndex: i, fpIndex: targetFp })
-    fpIdx++
-  }
-  // Sort by fpIndex so SORs cluster under their parent fabric plane
-  mapping.sort((a, b) => a.fpIndex - b.fpIndex || a.sorIndex - b.sorIndex)
-  return mapping
-}
 
 /* ─── Build graph data from live run ─── */
 function buildNodes(run: RunData): PipelineNode[] {
@@ -326,7 +246,7 @@ function buildNodes(run: RunData): PipelineNode[] {
     { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
 
     // Level 4 — Handoff hub
-    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Handoff', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
+    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Classification', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
   ]
 
   // Level 1 — Observation plane nodes (multicolored triangleDown with 3D shading)
@@ -346,34 +266,6 @@ function buildNodes(run: RunData): PipelineNode[] {
       borderWidth: 2,
       stage: 'Discovery', nodeType: 'triangleDown',
       metadata: { tenant: run.tenant_id, run_id: run.run_id, type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count, description: `Collects ${p.label.replace('\n', ' ').toLowerCase()} evidence from ${p.examples} and similar systems` },
-    })
-  })
-
-  // Level 5 — Fabric planes from input_meta.fabric_planes
-  run.input_meta.fabric_planes.forEach((fp, i) => {
-    const label = planeLabels[fp.plane_type] || fp.plane_type
-    nodes.push({
-      id: `fabric-${i}`, label: `*${label}*\n_${fp.vendor}_`, level: 5, shape: 'diamond',
-      font: {
-        multi: 'markdown',
-        color: C.white, size: 13, face: 'Quicksand, sans-serif',
-        bold: { color: planeColors[i % planeColors.length], size: 14, face: 'Quicksand, sans-serif', vadjust: -2 },
-        ital: { color: C.white, size: 12, face: 'Quicksand, sans-serif' },
-      } as any,
-      color: { background: planeColors[i % planeColors.length], border: planeColors[i % planeColors.length] },
-      size: 16, stage: 'Handoff', nodeType: 'diamond',
-      metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: fp.vendor, type: label, healthy: fp.is_healthy ? 'Yes' : 'No', description: 'Target integration plane — routes cataloged assets to downstream systems via this vendor\'s connection fabric' },
-    })
-  })
-
-  // Level 6 — SOR nodes, sorted by fabric plane so hierarchical layout clusters them
-  const sorMapping = getSorMapping(run)
-  sorMapping.forEach((m, sortedIdx) => {
-    const s = run.input_meta.sors[m.sorIndex]
-    nodes.push({
-      id: `sor-${sortedIdx}`, label: s.sor_name, level: 6, shape: 'custom', ctxRenderer: drawSourceNode,
-      color: { background: C.slate800, border: C.amber }, size: 22, stage: 'Handoff', nodeType: 'sor',
-      metadata: { tenant: run.tenant_id, run_id: run.run_id, vendor: s.sor_name, domain: s.domain, type: s.sor_type, confidence: s.confidence, description: 'System of Record — the authoritative source of truth for this data domain in the enterprise' },
     })
   })
 
@@ -398,17 +290,6 @@ function buildEdges(run: RunData): Edge[] {
 
   // Cataloged → Handoff
   raw.push({ from: 'cataloged', to: 'handoff-aam', width: 2 })
-
-  // Handoff → Fabric planes
-  run.input_meta.fabric_planes.forEach((_, i) => {
-    raw.push({ from: 'handoff-aam', to: `fabric-${i}`, width: 2 })
-  })
-
-  // Fabric planes → SORs (sorted by fabric plane so edges don't cross)
-  const sorMapping = getSorMapping(run)
-  sorMapping.forEach((m, sortedIdx) => {
-    raw.push({ from: `fabric-${m.fpIndex}`, to: `sor-${sortedIdx}`, width: 1.5 })
-  })
 
   const withIds = raw.map((e, i) => ({ ...e, id: `e${i}` }))
   return assignEdgeCurves(withIds)
@@ -547,18 +428,15 @@ const legendItems = [
   { shape: 'line',         color: C.red,     label: 'Rejected' },
   { shape: 'line',         color: C.amber,   label: 'Duplicates' },
   { shape: 'diamond',      color: C.orange,  label: 'Handoff' },
-  { shape: 'diamond',      color: C.violet,  label: 'Fabric plane' },
-  { shape: 'rect',         color: C.amber,   label: 'System of Record' },
 ]
 
-/* ─── Stage filter config (matches Pipeline.tsx 3-stage model) ─── */
-const ALL_STAGES = ['Discovery', 'Classification', 'Handoff'] as const
+/* ─── Stage filter config ─── */
+const ALL_STAGES = ['Discovery', 'Classification'] as const
 type Stage = typeof ALL_STAGES[number]
 
 const stageColors: Record<Stage, string> = {
   'Discovery':      C.cyan,
   'Classification': C.purple,
-  'Handoff':        C.orange,
 }
 
 /* ─── Component ─── */
@@ -592,8 +470,6 @@ export default function Discovery() {
   const [calloutModal, setCalloutModal] = useState<string | null>(null)
   const [planeCalloutPos, setPlaneCalloutPos] = useState<{ x: number; y: number } | null>(null)
   const planeCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
-  const [fabricCalloutPos, setFabricCalloutPos] = useState<{ x: number; y: number } | null>(null)
-  const fabricCanvasCenterRef = useRef<{ x: number; y: number } | null>(null)
 
   // Fetch latest run data, then initialize network
   useEffect(() => {
@@ -648,23 +524,12 @@ export default function Discovery() {
             x: planePositions.reduce((s, p) => s + p.x, 0) / planePositions.length,
             y: Math.max(...planePositions.map(p => p.y)) + 80,
           } : null
-          // Compute fabric plane callout position
-          const fabricIds = Object.keys(positions).filter(id => id.startsWith('fabric-'))
-          const fabricPositions = fabricIds.map(id => positions[id]).filter(Boolean)
-          fabricCanvasCenterRef.current = fabricPositions.length > 0 ? {
-            x: fabricPositions.reduce((s, p) => s + p.x, 0) / fabricPositions.length,
-            y: Math.max(...fabricPositions.map(p => p.y)) + 80,
-          } : null
           // Wait for one canvas redraw with final positions, then fit
           network.once('afterDrawing', () => {
             network.fit({ animation: false })
             if (planeCanvasCenterRef.current) {
               const dom = network.canvasToDOM(planeCanvasCenterRef.current)
               setPlaneCalloutPos({ x: dom.x, y: dom.y })
-            }
-            if (fabricCanvasCenterRef.current) {
-              const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
-              setFabricCalloutPos({ x: dom.x, y: dom.y })
             }
             setLoadingMessage(null)
             setLoading(false)
@@ -733,10 +598,6 @@ export default function Discovery() {
             if (planeCanvasCenterRef.current) {
               const dom = network.canvasToDOM(planeCanvasCenterRef.current)
               setPlaneCalloutPos({ x: dom.x, y: dom.y })
-            }
-            if (fabricCanvasCenterRef.current) {
-              const dom = network.canvasToDOM(fabricCanvasCenterRef.current)
-              setFabricCalloutPos({ x: dom.x, y: dom.y })
             }
           })
         }
@@ -1114,66 +975,6 @@ export default function Discovery() {
         </div>
       )}
 
-      {/* Callout: Fabric Planes — anchored under the diamond column */}
-      {!loading && fabricCalloutPos && (
-        <button
-          onClick={() => setCalloutModal('fabric-planes')}
-          className="absolute z-10 group flex items-center gap-2 bg-slate-800/90 backdrop-blur border border-orange-500/40 rounded-full pl-2.5 pr-3.5 py-1.5 hover:border-orange-400 hover:bg-slate-700/90 transition-all duration-200"
-          style={{ left: fabricCalloutPos.x, top: fabricCalloutPos.y, transform: 'translateX(-50%)' }}
-        >
-          <Info size={14} className="text-orange-400 group-hover:text-orange-300 transition-colors" />
-          <span className="text-xs text-orange-300 group-hover:text-orange-200 font-[Quicksand] font-medium transition-colors whitespace-nowrap">Why fabric planes?</span>
-        </button>
-      )}
-
-      {/* Fabric Planes Modal */}
-      {calloutModal === 'fabric-planes' && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center" onClick={() => setCalloutModal(null)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div
-            className="relative bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-lg w-full mx-4 animate-modal-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-white font-[Quicksand]">Fabric Planes</h3>
-                  <p className="text-xs text-slate-400 font-[Quicksand] mt-0.5">How AOD routes cataloged assets to downstream systems</p>
-                </div>
-                <button onClick={() => setCalloutModal(null)} className="text-slate-400 hover:text-white transition-colors p-1 -mr-1 -mt-1">
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-              <p className="text-sm text-slate-300 font-[Quicksand] leading-relaxed">
-                Fabric planes are the integration highways that connect enterprise systems. After AOD discovers and catalogs an asset, it needs to understand <em>how</em> that asset is wired into the enterprise — which integration fabric carries its data, and which system of record is authoritative for it.
-              </p>
-              <div className="space-y-3">
-                {[
-                  { name: 'iPaaS', color: C.cyan, desc: 'Integration Platform as a Service (MuleSoft, Workato, Boomi). The middleware layer — if two systems exchange data, iPaaS is usually the broker. Most enterprise integration runs through here.' },
-                  { name: 'API Gateway', color: C.violet, desc: 'Managed API endpoints (Kong, Apigee, AWS API Gateway). Governs who can call what, with rate limits and auth policies. Reveals the real dependency graph between services.' },
-                  { name: 'Event Bus', color: C.orange, desc: 'Asynchronous messaging (Kafka, EventBridge, RabbitMQ). The real-time nervous system — events flow here before they reach databases. Catches integration patterns invisible to request-based monitoring.' },
-                  { name: 'Data Warehouse', color: C.green, desc: 'Analytical data stores (Snowflake, BigQuery, Redshift). Where business data lands for reporting. If a system feeds the warehouse, it is operationally critical — even if IT classifies it as shadow.' },
-                ].map((plane) => (
-                  <div key={plane.name} className="flex gap-3">
-                    <div className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: plane.color }} />
-                    <div>
-                      <span className="text-sm font-semibold font-[Quicksand]" style={{ color: plane.color }}>{plane.name}</span>
-                      <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed mt-0.5">{plane.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-slate-700/50 pt-4">
-                <p className="text-xs text-slate-400 font-[Quicksand] leading-relaxed italic">
-                  Fabric planes bridge discovery and action. AOD doesn't just find assets — it maps how they connect through real integration infrastructure, so AAM can build pipe blueprints that follow the enterprise's actual wiring, not a theoretical architecture diagram.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Details panel (right sidebar) */}
       {selectedNode && (

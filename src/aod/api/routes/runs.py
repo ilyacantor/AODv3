@@ -214,6 +214,10 @@ async def create_run_from_farm(request: FarmRunRequest):
     
     if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
         snapshot_data["meta"]["tenant_id"] = request.tenant_id
+    # Propagate entity_id from Console request into snapshot meta so
+    # pipeline_executor stores it on the RunLog for downstream handoff.
+    if request.entity_id and "meta" in snapshot_data:
+        snapshot_data["meta"]["entity_id"] = request.entity_id
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()
@@ -300,6 +304,7 @@ async def create_run_from_farm(request: FarmRunRequest):
     return RunResponse(
         run_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
+        entity_id=result.run_log.entity_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
         message=f"Discovery completed from Farm. {result.run_log.counts.assets_admitted} assets admitted, {result.run_log.counts.findings_generated} findings generated.",

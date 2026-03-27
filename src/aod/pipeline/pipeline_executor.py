@@ -686,9 +686,12 @@ async def execute_pipeline(
     if provenance:
         input_meta["provenance"] = provenance
     
+    entity_id = input_meta.get("entity_id") or data.get("meta", {}).get("entity_id")
+
     run_log = RunLog(
         run_id=run_id,
         tenant_id=tenant_id,
+        entity_id=entity_id,
         status=RunStatus.RUNNING,
         started_at=started_at,
         input_meta=input_meta,

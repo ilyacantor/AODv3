@@ -579,7 +579,7 @@
                 completedRuns.forEach((run, idx) => {
                     const opt = document.createElement('option');
                     opt.value = run.run_id;
-                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                    const tenant = run.entity_id || run.tenant_name || 'Unknown';
                     const dateStr = run.started_at || run.created_at;
                     const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
                     const latest = idx === 0 ? ' (Latest)' : '';
@@ -1312,7 +1312,7 @@
                         .forEach(run => {
                             const opt = document.createElement('option');
                             opt.value = run.run_id;
-                            const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                            const tenant = run.entity_id || run.tenant_name || 'Unknown';
                             const dateStr = run.started_at || run.created_at;
                             const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
                             opt.textContent = `${tenant} - ${date}`;
@@ -1537,7 +1537,7 @@
                 displayRuns.forEach((run, idx) => {
                     const opt = document.createElement('option');
                     opt.value = run.run_id;
-                    const tenant = run.tenant_id || run.tenant_name || 'Unknown';
+                    const tenant = run.entity_id || run.tenant_name || 'Unknown';
                     const dateStr = run.started_at || run.created_at;
                     const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
                     const latest = idx === 0 ? ' (Latest)' : '';

@@ -28,6 +28,7 @@ class RunResponse(BaseModel):
     """Response for run creation"""
     run_id: str
     tenant_id: str
+    entity_id: Optional[str] = None
     status: str
     counts: RunCounts
     message: str

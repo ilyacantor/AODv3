@@ -763,7 +763,9 @@ class AAMExportSOR(BaseModel):
 class AAMExportRequest(BaseModel):
     """Request body for AAM /api/handoff/aod/receive"""
     run_id: str
-    snapshot_name: Optional[str] = None
+    tenant_id: str
+    entity_id: str
+    snapshot_name: Optional[str] = None  # Deprecated: use entity_id. Kept for transition.
     candidates: List[AAMExportCandidate]
     fabric_planes: List[AAMExportFabricPlane] = []
     sors: List[AAMExportSOR] = []
@@ -953,9 +955,12 @@ async def export_to_aam(
             confidence=s.get("confidence"),
         ))
 
+    entity_id = run.entity_id or run.tenant_id
     export_payload = AAMExportRequest(
         run_id=run_id,
-        snapshot_name=run.tenant_id,
+        tenant_id=run.tenant_id,
+        entity_id=entity_id,
+        snapshot_name=entity_id,  # Deprecated field, mirrors entity_id for transition
         candidates=aam_candidates,
         fabric_planes=farm_fabric_planes,
         sors=farm_sors,
@@ -989,7 +994,7 @@ async def export_to_aam(
             _last_aam_export = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "run_id": run_id,
-                "snapshot_name": run.tenant_id,
+                "snapshot_name": entity_id,
                 "candidates_sent": len(aam_candidates),
                 "aam_status_code": response.status_code,
                 "aam_response": aam_response,

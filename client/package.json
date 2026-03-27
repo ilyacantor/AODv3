@@ -18,8 +18,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.2.0",
-    "vis-data": "^7.1.9",
-    "vis-network": "^9.1.9"
+    "vis-data": "^7.1.10",
+    "vis-network": "^9.1.13"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

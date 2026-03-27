@@ -5,6 +5,8 @@ import { Search, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, X, ChevronDown, Filte
 
 /* ─── Types ─── */
 interface PipelineNode extends Node {
+  id: string | number
+  label?: string
   level: number
   stage: string
   nodeType: string

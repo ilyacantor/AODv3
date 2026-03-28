@@ -70,6 +70,7 @@ async def initialize_schema(conn: asyncpg.Connection) -> None:
         ("assets", "sor_tagging", "ALTER TABLE assets ADD COLUMN IF NOT EXISTS sor_tagging TEXT"),
         ("runs", "stage_timings", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS stage_timings TEXT"),
         ("runs", "policy_snapshot", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT"),
+        ("runs", "entity_id", "ALTER TABLE runs ADD COLUMN IF NOT EXISTS entity_id TEXT"),
     ]
 
     for table, column, sql in migrations:

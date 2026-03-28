@@ -119,6 +119,7 @@ def deserialize_run_row(row: asyncpg.Record) -> RunLog:
     return RunLog(
         run_id=row["run_id"],
         tenant_id=row["tenant_id"],
+        entity_id=row.get("entity_id"),
         status=RunStatus(row["status"]),
         started_at=datetime.fromisoformat(row["started_at"]),
         completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,

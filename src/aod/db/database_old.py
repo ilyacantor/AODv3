@@ -261,7 +261,12 @@ class Database:
                 await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS policy_snapshot TEXT")
             except Exception as e:
                 logger.debug("Migration runs.policy_snapshot: %s", e)
-            
+
+            try:
+                await conn.execute("ALTER TABLE runs ADD COLUMN IF NOT EXISTS entity_id TEXT")
+            except Exception as e:
+                logger.debug("Migration runs.entity_id: %s", e)
+
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS artifacts (
                     artifact_id TEXT PRIMARY KEY,
@@ -396,11 +401,12 @@ class Database:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                INSERT INTO runs (run_id, tenant_id, entity_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
                 run.run_id,
                 run.tenant_id,
+                run.entity_id,
                 run.status.value,
                 run.started_at.isoformat(),
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -430,8 +436,9 @@ class Database:
                     sync_error = $6,
                     stage_timings = $7,
                     policy_snapshot = $8,
-                    input_meta = $9
-                WHERE run_id = $10
+                    input_meta = $9,
+                    entity_id = $10
+                WHERE run_id = $11
                 """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -442,6 +449,7 @@ class Database:
                 run.stage_timings.model_dump_json() if run.stage_timings else None,
                 json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
                 json.dumps(run.input_meta),
+                run.entity_id,
                 run.run_id
             )
         return run
@@ -467,6 +475,7 @@ class Database:
         return RunLog(
             run_id=row["run_id"],
             tenant_id=row["tenant_id"],
+            entity_id=row.get("entity_id"),
             status=RunStatus(row["status"]),
             started_at=datetime.fromisoformat(row["started_at"]),
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
@@ -478,7 +487,7 @@ class Database:
             sync_error=sync_error_val,
             policy_snapshot=json.loads(policy_snapshot_data) if policy_snapshot_data else None
         )
-    
+
     async def get_latest_run_for_tenant(
         self, tenant_id: str, snapshot_id: Optional[str] = None
     ) -> Optional[RunLog]:
@@ -523,6 +532,7 @@ class Database:
         return RunLog(
             run_id=row["run_id"],
             tenant_id=row["tenant_id"],
+            entity_id=row.get("entity_id"),
             status=RunStatus(row["status"]),
             started_at=datetime.fromisoformat(row["started_at"]),
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
@@ -553,6 +563,7 @@ class Database:
             runs.append(RunLog(
                 run_id=row["run_id"],
                 tenant_id=row["tenant_id"],
+                entity_id=row.get("entity_id"),
                 status=RunStatus(row["status"]),
                 started_at=datetime.fromisoformat(row["started_at"]),
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,

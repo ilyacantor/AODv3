@@ -25,11 +25,12 @@ class RunOperations:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO runs (run_id, tenant_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                INSERT INTO runs (run_id, tenant_id, entity_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
                 run.run_id,
                 run.tenant_id,
+                run.entity_id,
                 run.status.value,
                 run.started_at.isoformat(),
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -59,8 +60,9 @@ class RunOperations:
                     sync_error = $6,
                     stage_timings = $7,
                     policy_snapshot = $8,
-                    input_meta = $9
-                WHERE run_id = $10
+                    input_meta = $9,
+                    entity_id = $10
+                WHERE run_id = $11
                 """,
                 run.status.value,
                 run.completed_at.isoformat() if run.completed_at else None,
@@ -71,6 +73,7 @@ class RunOperations:
                 run.stage_timings.model_dump_json() if run.stage_timings else None,
                 json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
                 json.dumps(run.input_meta),
+                run.entity_id,
                 run.run_id
             )
         return run

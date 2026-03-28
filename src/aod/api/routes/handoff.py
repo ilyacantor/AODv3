@@ -955,7 +955,12 @@ async def export_to_aam(
             confidence=s.get("confidence"),
         ))
 
-    entity_id = run.entity_id or run.tenant_id
+    if not run.entity_id:
+        raise ValueError(
+            f"AOD handoff aborted: run {run_id} has no entity_id. "
+            "entity_id is required for AAM handoff — no fallback to tenant_id."
+        )
+    entity_id = run.entity_id
     export_payload = AAMExportRequest(
         run_id=run_id,
         tenant_id=run.tenant_id,

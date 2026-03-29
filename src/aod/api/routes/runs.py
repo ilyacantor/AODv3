@@ -214,10 +214,17 @@ async def create_run_from_farm(request: FarmRunRequest):
     
     if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
         snapshot_data["meta"]["tenant_id"] = request.tenant_id
-    # Propagate entity_id from Console request into snapshot meta so
-    # pipeline_executor stores it on the RunLog for downstream handoff.
-    if request.entity_id and "meta" in snapshot_data:
-        snapshot_data["meta"]["entity_id"] = request.entity_id
+    # Resolve entity_id: request > snapshot meta.  Fail loudly if missing.
+    entity_id = request.entity_id or snapshot_data.get("meta", {}).get("entity_id")
+    if not entity_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No entity_id available — provide entity_id in request or ensure "
+                   "Farm snapshot meta contains entity_id. "
+                   f"snapshot_id={request.snapshot_id}"
+        )
+    if "meta" in snapshot_data:
+        snapshot_data["meta"]["entity_id"] = entity_id
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     started_at = now_pst()

@@ -956,9 +956,10 @@ async def export_to_aam(
         ))
 
     if not run.entity_id:
-        raise ValueError(
-            f"AOD handoff aborted: run {run_id} has no entity_id. "
-            "entity_id is required for AAM handoff — no fallback to tenant_id."
+        raise HTTPException(
+            status_code=400,
+            detail=f"AOD handoff aborted: run {run_id} has no entity_id. "
+                   "entity_id is required for AAM handoff — no fallback to tenant_id."
         )
     entity_id = run.entity_id
     export_payload = AAMExportRequest(

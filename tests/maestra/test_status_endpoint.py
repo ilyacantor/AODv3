@@ -278,7 +278,7 @@ async def test_status_requires_tenant_id():
 
 
 # --------------------------------------------------------------------------
-# 5. Idempotency — same result on repeated calls (HARNESS_RULES B14)
+# 5. Idempotency — same result on repeated calls (CLAUDE.md B14)
 # --------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -290,5 +290,5 @@ async def test_status_idempotent():
         resp2 = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
     assert resp1.json() == resp2.json(), (
         "Two consecutive calls returned different results — non-deterministic endpoint. "
-        "HARNESS_RULES B14 requires identical results on repeated runs."
+        "CLAUDE.md B14 requires identical results on repeated runs."
     )

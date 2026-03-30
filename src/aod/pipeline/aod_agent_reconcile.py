@@ -42,6 +42,7 @@ from .aod_agent_reconcile_old import (
     # Main emitter
     emit_actual_results,
 )
+from ..constants import INFRASTRUCTURE_DOMAINS
 
 # Provide aliases for any code expecting non-underscore names
 utc_now = _utc_now
@@ -69,6 +70,8 @@ __all__ = [
     "_is_infrastructure_domain",
     "is_infrastructure_domain",
     "is_reconciliation_eligible",
+    # Constants
+    "INFRASTRUCTURE_DOMAINS",
     # Reason computation
     "compute_asset_reasons",
     # Domain helpers

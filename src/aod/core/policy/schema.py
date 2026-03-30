@@ -28,7 +28,7 @@ class FinanceThresholdsConfig:
 @dataclass
 class AdmissionGatesConfig:
     """Admission gate thresholds and switches."""
-    noise_floor: int = 1
+    noise_floor: int = 2  # Minimum discovery sources for admission (per design spec)
     require_sso_for_idp: bool = True
     require_valid_ci_type: bool = True
     require_valid_lifecycle: bool = True
@@ -36,7 +36,7 @@ class AdmissionGatesConfig:
     allow_finance_only_admission: bool = False
     enable_vendor_propagation: bool = True
     finance_requires_discovery: bool = True
-    require_corroboration: bool = False  # Match Farm: honor noise_floor=1
+    require_corroboration: bool = False
     stale_window_days: int = 30
 
 
@@ -202,7 +202,7 @@ class AdmissionConfig:
     Kept for backward compatibility - maps to new structure.
     """
     minimum_spend: float = 200.0
-    noise_floor: int = 1
+    noise_floor: int = 2  # Minimum discovery sources (per design spec)
     zombie_window_days: int = 90
     require_sso_for_idp: bool = True
     require_valid_ci_type: bool = True

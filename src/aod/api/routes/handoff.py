@@ -18,6 +18,7 @@ GUARDRAILS:
 
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 import httpx
 
@@ -78,12 +79,12 @@ class ProvisioningOrder(BaseModel):
 class AAMManifestResponse(BaseModel):
     """
     Target Manifest for AAM - what to connect to.
-    
-    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
+
+    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for aod_discovery_id,
     provided for clarity in the new DiscoveryScan terminology.
     """
-    run_id: str
-    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
+    aod_discovery_id: str
+    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for aod_discovery_id)")
     manifest_type: str = "provisioning_orders"
     orders: List[ProvisioningOrder]
     count: int
@@ -175,7 +176,7 @@ async def get_aam_manifest(
         ))
     
     return AAMManifestResponse(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         scan_session_id=run_id,
         manifest_type="provisioning_orders",
         orders=orders,
@@ -205,7 +206,7 @@ class AAMCandidatesResponse(BaseModel):
     """
     Response for AAM candidates export.
 
-    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for run_id,
+    Produced by AOD DiscoveryScan. The scan_session_id field is an alias for aod_discovery_id,
     provided for clarity in the new DiscoveryScan terminology.
 
     Includes Farm's authoritative fabric_planes and systems_of_record data.
@@ -214,8 +215,8 @@ class AAMCandidatesResponse(BaseModel):
     - evidence_leads: Connection hints for AAM to validate via plane crawl
     - fabric_plane_registry: Detected planes (AOD identifies, AAM connects)
     """
-    run_id: str
-    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for run_id)")
+    aod_discovery_id: str
+    scan_session_id: Optional[str] = Field(default=None, description="DiscoveryScan session ID (alias for aod_discovery_id)")
     candidates: List[ConnectionCandidate]
     count: int
     fabric_planes: List[FabricPlaneSummary] = Field(default_factory=list, description="Farm's authoritative fabric planes")
@@ -497,7 +498,7 @@ async def export_aam_candidates(
 
         if sor_assets:
             logger.info("handoff.aam_candidates.sor_inclusion", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "sor_assets_added": len(sor_assets),
                 "sor_names": [a.name for a in sor_assets[:10]],
                 "reason": "High/medium confidence SORs included regardless of provisioning status"
@@ -628,7 +629,7 @@ async def export_aam_candidates(
 
     if undiscovered_sors:
         logger.info("handoff.aam_candidates.undiscovered_sors_added", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "count": len(undiscovered_sors),
             "sor_names": [c.display_name for c in undiscovered_sors],
             "reason": "Farm-designated SORs not discovered by AOD but must be handed off"
@@ -684,7 +685,7 @@ async def export_aam_candidates(
             evidence_leads_out.append(EvidenceLead.model_validate(lead_data))
         except Exception as e:
             logger.warning("handoff.aam_candidates.evidence_lead_parse_error", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "error": str(e),
                 "lead_data": str(lead_data)[:200]
             })
@@ -696,7 +697,7 @@ async def export_aam_candidates(
             fabric_plane_registry_out.append(FabricPlaneRegistryEntry.model_validate(entry_data))
         except Exception as e:
             logger.warning("handoff.aam_candidates.registry_entry_parse_error", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "error": str(e),
                 "entry_data": str(entry_data)[:200]
             })
@@ -706,7 +707,7 @@ async def export_aam_candidates(
     preset_confidence = preset_context_raw.get("confidence", 0.0)
 
     logger.info("handoff.aam_candidates.exported", extra={
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "candidate_count": len(candidates),
         "fabric_plane_count": len(fabric_plane_summaries),
         "sor_count": len(sor_summaries),
@@ -717,7 +718,7 @@ async def export_aam_candidates(
     })
 
     return AAMCandidatesResponse(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         scan_session_id=run_id,
         candidates=candidates,
         count=len(candidates),
@@ -762,7 +763,7 @@ class AAMExportSOR(BaseModel):
 
 class AAMExportRequest(BaseModel):
     """Request body for AAM /api/handoff/aod/receive"""
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     entity_id: str
     snapshot_name: Optional[str] = None  # Deprecated: use entity_id. Kept for transition.
@@ -776,7 +777,11 @@ class AAMExportResponse(BaseModel):
     """Response from AOD export to AAM"""
     success: bool
     message: str
-    run_id: str
+    aod_discovery_id: str
+    handoff_id: str
+    source_aod_discovery_id: str
+    tenant_id: str
+    entity_id: str
     candidates_sent: int
     aam_response: Optional[dict] = None
 
@@ -784,7 +789,8 @@ class AAMExportResponse(BaseModel):
 @router.post("/aam/export", response_model=AAMExportResponse)
 async def export_to_aam(
     run_id: str,
-    status_filter: Optional[str] = Query("all", description="Filter by status: active, review, all")
+    source_aod_discovery_id: str = Query(..., description="aod_discovery_id from Step 2 discovery. Required for provenance chain (I3)."),
+    status_filter: Optional[str] = Query("all", description="Filter by status: active, review, all"),
 ):
     """
     Export ConnectionCandidates to AAM (Adaptive API Mesh).
@@ -796,6 +802,8 @@ async def export_to_aam(
     
     Requires AAM_URL environment variable to be set.
     """
+    handoff_id = str(uuid.uuid4())
+
     aam_url = os.environ.get("AAM_URL")
     if not aam_url:
         raise HTTPException(
@@ -885,7 +893,7 @@ async def export_to_aam(
 
     if farm_sor_candidates:
         logger.info("handoff.aam_export.farm_sor_candidates_added", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "count": len(farm_sor_candidates),
             "names": [c.display_name for c in farm_sor_candidates[:10]],
         })
@@ -963,7 +971,7 @@ async def export_to_aam(
         )
     entity_id = run.entity_id
     export_payload = AAMExportRequest(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         tenant_id=run.tenant_id,
         entity_id=entity_id,
         snapshot_name=entity_id,  # Deprecated field, mirrors entity_id for transition
@@ -985,7 +993,7 @@ async def export_to_aam(
             
             if response.status_code >= 400:
                 logger.error("handoff.aam_export.failed", extra={
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status_code": response.status_code,
                     "response": response.text[:500]
                 })
@@ -999,7 +1007,7 @@ async def export_to_aam(
             global _last_aam_export
             _last_aam_export = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "snapshot_name": entity_id,
                 "candidates_sent": len(aam_candidates),
                 "aam_status_code": response.status_code,
@@ -1008,7 +1016,7 @@ async def export_to_aam(
             }
             
             logger.info("handoff.aam_export.success", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "candidates_sent": len(aam_candidates),
                 "aam_status": response.status_code
             })
@@ -1016,13 +1024,17 @@ async def export_to_aam(
             return AAMExportResponse(
                 success=True,
                 message=f"Successfully exported {len(aam_candidates)} candidates to AAM",
-                run_id=run_id,
+                aod_discovery_id=run_id,
+                handoff_id=handoff_id,
+                source_aod_discovery_id=source_aod_discovery_id,
+                tenant_id=run.tenant_id,
+                entity_id=entity_id,
                 candidates_sent=len(aam_candidates),
-                aam_response=aam_response
+                aam_response=aam_response,
             )
     except httpx.RequestError as e:
         logger.error("handoff.aam_export.connection_error", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "error": str(e)
         })
         raise HTTPException(

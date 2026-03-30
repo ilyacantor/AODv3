@@ -22,7 +22,7 @@ async def get_findings(run_id: str, db: Database = Depends(get_db)):
     asset_map = {str(a.asset_id): a.name for a in assets}
     
     return FindingsResponse(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         findings=[
             {
                 "finding_id": str(f.finding_id),
@@ -52,7 +52,7 @@ async def get_artifacts(run_id: str, db: Database = Depends(get_db)):
     artifacts = await db.get_artifacts_by_run(run_id)
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "artifacts": [
             {
                 "artifact_id": str(a.artifact_id),

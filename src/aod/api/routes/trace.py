@@ -245,7 +245,7 @@ async def get_decision_traces(request: DecisionTraceRequest):
     ]
 
     return DecisionTraceResponse(
-        run_id=request.run_id,
+        aod_discovery_id=request.run_id,
         traces=traces_dict,
         count=len(traces),
         fields=fields

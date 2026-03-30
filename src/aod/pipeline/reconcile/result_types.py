@@ -107,7 +107,7 @@ class ActualResultsOutput:
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
-            "run_id": self.run_id,
+            "aod_discovery_id": self.run_id,
             "tenant_id": self.tenant_id,
             "generated_at": self.generated_at.isoformat(),
             "summary": {

@@ -77,7 +77,7 @@ async def get_triage_actions(run_id: str):
     
     actions = await db.get_triage_actions_by_run(run_id)
     
-    return {"run_id": run_id, "actions": actions}
+    return {"aod_discovery_id": run_id, "actions": actions}
 
 
 @router.delete("/action/{run_id}/{item_id}")

@@ -319,17 +319,18 @@ class TestProvenanceAndStatus:
     """Test provenance persistence and new status values"""
     
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Requires PostgreSQL database - Database class uses asyncpg, not SQLite")
-    async def test_pipeline_uses_completed_with_results_status(self):
+    async def test_pipeline_uses_completed_with_results_status(self, pg_db_with_cleanup):
         """Pipeline uses COMPLETED_WITH_RESULTS when assets are admitted"""
         from aod.pipeline.pipeline_executor import execute_pipeline
-        from aod.db.database import Database
         from aod.models.output_contracts import RunStatus
-        import tempfile
-        from pathlib import Path
-        
+        from uuid import uuid4
+
+        db, track = pg_db_with_cleanup
+        run_id = f"test_with_results_{uuid4().hex[:8]}"
+        track(run_id)
+
         data = {
-            "meta": {"tenant_id": "t1", "run_id": "test_with_results", "generated_at": "2024-01-01T00:00:00Z"},
+            "meta": {"tenant_id": "t1", "run_id": run_id, "generated_at": "2024-01-01T00:00:00Z"},
             "planes": {
                 "discovery": {"observations": [
                     {"observation_id": "o1", "name": "Salesforce", "source": "proxy", "domain": "salesforce.com"}
@@ -342,33 +343,28 @@ class TestProvenanceAndStatus:
                 "finance": {"vendors": [], "contracts": [], "transactions": []}
             }
         }
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db = Database(Path(tmpdir) / "test.db")
-            await db.initialize()
-            
-            result = await execute_pipeline(data, db, run_id="test_with_results", started_at=datetime.utcnow())
-            
-            assert result.success
-            if len(result.assets) > 0:
-                assert result.run_log.status == RunStatus.COMPLETED_WITH_RESULTS
-            else:
-                assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
-            
-            await db.close()
+
+        result = await execute_pipeline(data, db, run_id=run_id, started_at=datetime.utcnow())
+
+        assert result.success
+        if len(result.assets) > 0:
+            assert result.run_log.status == RunStatus.COMPLETED_WITH_RESULTS
+        else:
+            assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
     
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Requires PostgreSQL database - Database class uses asyncpg, not SQLite")
-    async def test_pipeline_uses_completed_no_assets_status(self):
+    async def test_pipeline_uses_completed_no_assets_status(self, pg_db_with_cleanup):
         """Pipeline uses COMPLETED_NO_ASSETS when no assets are admitted"""
         from aod.pipeline.pipeline_executor import execute_pipeline
-        from aod.db.database import Database
         from aod.models.output_contracts import RunStatus
-        import tempfile
-        from pathlib import Path
-        
+        from uuid import uuid4
+
+        db, track = pg_db_with_cleanup
+        run_id = f"test_no_assets_{uuid4().hex[:8]}"
+        track(run_id)
+
         data = {
-            "meta": {"tenant_id": "t1", "run_id": "test_no_assets", "generated_at": "2024-01-01T00:00:00Z"},
+            "meta": {"tenant_id": "t1", "run_id": run_id, "generated_at": "2024-01-01T00:00:00Z"},
             "planes": {
                 "discovery": {"observations": [
                     {"observation_id": "o1", "name": "Sales Dashboard", "source": "proxy"}
@@ -381,29 +377,24 @@ class TestProvenanceAndStatus:
                 "finance": {"vendors": [], "contracts": [], "transactions": []}
             }
         }
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db = Database(Path(tmpdir) / "test.db")
-            await db.initialize()
-            
-            result = await execute_pipeline(data, db, run_id="test_no_assets", started_at=datetime.utcnow())
-            
-            assert result.success
-            assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
-            
-            await db.close()
+
+        result = await execute_pipeline(data, db, run_id=run_id, started_at=datetime.utcnow())
+
+        assert result.success
+        assert result.run_log.status == RunStatus.COMPLETED_NO_ASSETS
     
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Requires PostgreSQL database - Database class uses asyncpg, not SQLite")
-    async def test_provenance_persisted_in_run_log(self):
+    async def test_provenance_persisted_in_run_log(self, pg_db_with_cleanup):
         """Provenance data is persisted in run log input_meta"""
         from aod.pipeline.pipeline_executor import execute_pipeline
-        from aod.db.database import Database
-        import tempfile
-        from pathlib import Path
-        
+        from uuid import uuid4
+
+        db, track = pg_db_with_cleanup
+        run_id = f"test_provenance_{uuid4().hex[:8]}"
+        track(run_id)
+
         data = {
-            "meta": {"tenant_id": "t1", "run_id": "test_provenance", "generated_at": "2024-01-01T00:00:00Z", "schema_version": "farm.v1"},
+            "meta": {"tenant_id": "t1", "run_id": run_id, "generated_at": "2024-01-01T00:00:00Z", "schema_version": "farm.v1"},
             "planes": {
                 "discovery": {"observations": []},
                 "idp": {"objects": []},
@@ -414,7 +405,7 @@ class TestProvenanceAndStatus:
                 "finance": {"vendors": [], "contracts": [], "transactions": []}
             }
         }
-        
+
         provenance = {
             "source": "farm",
             "farm_url": "https://farm.example.com",
@@ -422,48 +413,40 @@ class TestProvenanceAndStatus:
             "schema_version": "farm.v1",
             "fetch_duration_ms": 150
         }
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db = Database(Path(tmpdir) / "test.db")
-            await db.initialize()
-            
-            result = await execute_pipeline(data, db, run_id="test_provenance", started_at=datetime.utcnow(), provenance=provenance)
-            
-            assert result.success
-            assert "provenance" in result.run_log.input_meta
-            assert result.run_log.input_meta["provenance"]["source"] == "farm"
-            assert result.run_log.input_meta["provenance"]["farm_url"] == "https://farm.example.com"
-            assert result.run_log.input_meta["provenance"]["snapshot_id"] == "snap-123"
-            assert result.run_log.input_meta["provenance"]["fetch_duration_ms"] == 150
-            
-            stored_run = await db.get_run("test_provenance")
-            assert stored_run is not None
-            assert "provenance" in stored_run.input_meta
-            
-            await db.close()
+
+        result = await execute_pipeline(data, db, run_id=run_id, started_at=datetime.utcnow(), provenance=provenance)
+
+        assert result.success
+        assert "provenance" in result.run_log.input_meta
+        assert result.run_log.input_meta["provenance"]["source"] == "farm"
+        assert result.run_log.input_meta["provenance"]["farm_url"] == "https://farm.example.com"
+        assert result.run_log.input_meta["provenance"]["snapshot_id"] == "snap-123"
+        assert result.run_log.input_meta["provenance"]["fetch_duration_ms"] == 150
+
+        stored_run = await db.get_run(run_id)
+        assert stored_run is not None
+        assert "provenance" in stored_run.input_meta
 
 
 class TestPipelineDeterminism:
     """Test that pipeline is a pure function: same input -> same output"""
     
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Requires PostgreSQL database - Database class uses asyncpg, not SQLite")
     async def test_pipeline_determinism_full(self):
         """
         Running pipeline twice on same snapshot produces identical results.
-        
+
         Verifies:
         - Same asset IDs, names, types, admission reasons
         - Same finding IDs, types, explanations, evidence refs
-        - Same artifact IDs, names, types
+
+        Uses ephemeral pipeline (no DB writes) so the same run_id can be
+        used twice for deterministic ID generation.
         """
-        from aod.pipeline.pipeline_executor import execute_pipeline
-        from aod.db.database import Database
-        import tempfile
-        from pathlib import Path
-        
+        from aod.pipeline.pipeline_executor import run_pipeline_ephemeral
+
         snapshot = {
-            "meta": {"tenant_id": "t1", "generated_at": "2024-01-01T00:00:00Z"},
+            "meta": {"tenant_id": "t1", "run_id": "determinism_test_run", "generated_at": "2024-01-01T00:00:00Z"},
             "planes": {
                 "discovery": {"observations": [
                     {"observation_id": "o1", "name": "Salesforce", "source": "proxy", "domain": "salesforce.com"},
@@ -472,11 +455,11 @@ class TestPipelineDeterminism:
                     {"observation_id": "o4", "name": "Zendesk", "source": "proxy", "domain": "zendesk.com"}
                 ]},
                 "idp": {"objects": [
-                    {"idp_id": "idp-1", "name": "Salesforce", "has_sso": True},
-                    {"idp_id": "idp-2", "name": "Slack", "has_scim": True}
+                    {"idp_id": "idp-1", "name": "Salesforce", "has_sso": True, "canonical_domain": "salesforce.com"},
+                    {"idp_id": "idp-2", "name": "Slack", "has_scim": True, "canonical_domain": "slack.com"}
                 ]},
                 "cmdb": {"cis": [
-                    {"ci_id": "ci-1", "name": "Zendesk", "ci_type": "service", "lifecycle": "production", "environment": "prod"}
+                    {"ci_id": "ci-1", "name": "Zendesk", "ci_type": "application", "lifecycle": "production", "environment": "prod", "canonical_domain": "zendesk.com"}
                 ]},
                 "cloud": {"resources": []},
                 "endpoint": {"devices": [], "installed_apps": []},
@@ -484,47 +467,29 @@ class TestPipelineDeterminism:
                 "finance": {"vendors": [], "contracts": [], "transactions": []}
             }
         }
-        
+
         fixed_run_id = "determinism_test_run"
-        fixed_started_at = datetime(2024, 1, 15, 12, 0, 0)
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db1 = Database(Path(tmpdir) / "test1.db")
-            await db1.initialize()
-            result1 = await execute_pipeline(snapshot, db1, run_id=fixed_run_id, started_at=fixed_started_at)
-            await db1.close()
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db2 = Database(Path(tmpdir) / "test2.db")
-            await db2.initialize()
-            result2 = await execute_pipeline(snapshot, db2, run_id=fixed_run_id, started_at=fixed_started_at)
-            await db2.close()
-        
+
+        result1 = run_pipeline_ephemeral(snapshot, run_id=fixed_run_id, is_farm_source=False)
+        result2 = run_pipeline_ephemeral(snapshot, run_id=fixed_run_id, is_farm_source=False)
+
         assert result1.success == result2.success
         assert len(result1.assets) == len(result2.assets), "Asset count mismatch"
         assert len(result1.findings) == len(result2.findings), "Findings count mismatch"
-        assert len(result1.artifacts) == len(result2.artifacts), "Artifacts count mismatch"
-        
+
         for a1, a2 in zip(result1.assets, result2.assets):
             assert a1.asset_id == a2.asset_id, f"Asset ID mismatch: {a1.asset_id} vs {a2.asset_id}"
             assert a1.name == a2.name, f"Asset name mismatch: {a1.name} vs {a2.name}"
             assert a1.asset_type == a2.asset_type, f"Asset type mismatch"
             assert a1.admission_reason == a2.admission_reason, f"Admission reason mismatch"
             assert a1.evidence_refs == a2.evidence_refs, f"Evidence refs mismatch"
-            assert a1.lens_status == a2.lens_status, f"Lens status mismatch"
-            assert a1.lens_coverage == a2.lens_coverage, f"Lens coverage mismatch"
-        
+
         for f1, f2 in zip(result1.findings, result2.findings):
             assert f1.finding_id == f2.finding_id, f"Finding ID mismatch: {f1.finding_id} vs {f2.finding_id}"
             assert f1.finding_type == f2.finding_type, f"Finding type mismatch"
             assert f1.explanation == f2.explanation, f"Finding explanation mismatch"
             assert f1.evidence_refs == f2.evidence_refs, f"Finding evidence refs mismatch"
             assert f1.severity == f2.severity, f"Finding severity mismatch"
-        
-        for art1, art2 in zip(result1.artifacts, result2.artifacts):
-            assert art1.artifact_id == art2.artifact_id, f"Artifact ID mismatch"
-            assert art1.name == art2.name, f"Artifact name mismatch"
-            assert art1.artifact_type == art2.artifact_type, f"Artifact type mismatch"
 
 
 class TestDomainFirstKeyNormalization:

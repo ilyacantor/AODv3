@@ -124,6 +124,28 @@ def check_idp_admission(
                     )
                 continue  # Skip this record, try next
 
+            # INVARIANT 2: Domain alignment required for governance
+            # IdP governance requires explicit domain on the IdP record that
+            # aligns with the entity domain. Cross-domain matches do not
+            # provide governance (I3 provenance rule).
+            # No-domain IdP records cannot grant governance — name-only
+            # matches are for enrichment/correlation, not security assertion.
+            idp_domain = _extract_idp_domain(record)
+            if idp_domain is None:
+                if debug_match:
+                    logging.info(
+                        f"[GOVERNANCE_GATE] IdP record has no domain - cannot grant governance: "
+                        f"entity={entity_registered_domain} idp_name={record.name}"
+                    )
+                continue  # No-domain IdP records are informational only
+            if not _idp_domain_matches_entity(idp_domain, entity_registered_domain, record.name):
+                if debug_match:
+                    logging.info(
+                        f"[GOVERNANCE_GATE] IdP domain not aligned: entity={entity_registered_domain} "
+                        f"idp_domain={idp_domain} idp_name={record.name}"
+                    )
+                continue  # Skip this record, try next
+
             # GOVERNANCE INVARIANT (Jan 2026 - Phase C, with Policy Variable)
             # SSO is the governance signal from IdP.
             # 
@@ -148,10 +170,10 @@ def check_idp_admission(
             if record.has_sso:
                 if debug_match:
                     logging.info(
-                        f"[GOVERNANCE_GATE] IdP SSO governance granted: entity={entity_registered_domain} "
+                        f"[GOVERNANCE_GATE] IdP domain-aligned SSO governance granted: entity={entity_registered_domain} "
                         f"idp_name={record.name} is_heuristic={is_heuristic_match}"
                     )
-                return True, "IdP match with SSO enabled"
+                return True, "domain-aligned IdP match with SSO enabled"
             
             # No SSO - check if this match can still grant governance
             if not requires_sso:
@@ -161,14 +183,14 @@ def check_idp_admission(
                             f"[GOVERNANCE_GATE] IdP authoritative governance granted (no SSO required): entity={entity_registered_domain} "
                             f"idp_name={record.name} method={idp_match_method}"
                         )
-                    return True, "IdP authoritative match (SSO not required for authoritative)"
+                    return True, "domain-aligned IdP authoritative match (SSO not required for authoritative)"
                 else:
                     if debug_match:
                         logging.info(
                             f"[GOVERNANCE_GATE] IdP heuristic governance granted (no SSO required): entity={entity_registered_domain} "
                             f"idp_name={record.name} is_heuristic={is_heuristic_match}"
                         )
-                    return True, "IdP heuristic match (SSO not required by policy)"
+                    return True, "domain-aligned IdP heuristic match (SSO not required by policy)"
             
             # No SSO - this IdP record does not provide governance (SCIM alone is not enough)
             if debug_match:

@@ -167,7 +167,7 @@ async def debug_timestamp_coverage(request: TimestampCoverageRequest):
 
     return TimestampCoverageResponse(
         snapshot_id=request.snapshot_id,
-        run_id=request.run_id,
+        aod_discovery_id=request.run_id,
         planes=results,
         summary={
             "total_raw_records": total_raw_count,

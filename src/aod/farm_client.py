@@ -95,11 +95,11 @@ class FarmClient:
                     "status": response.status_code, "up": is_up
                 })
                 return is_up
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError):
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
             logger.info("farm.probe.down", extra={"timeout": FARM_PROBE_TIMEOUT})
-            return False
-        except Exception:
-            return False
+            raise RuntimeError(f"Farm unreachable during probe: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Farm probe failed unexpectedly: {e}") from e
 
     async def _make_request_with_retry(self, url: str, context: str = "request") -> tuple[httpx.Response | None, str | None]:
         """
@@ -196,13 +196,6 @@ class FarmClient:
         
         content_type = response.headers.get("content-type", "")
         if "json" not in content_type.lower():
-            # Check for HTML response (Replit proxy page)
-            if "html" in content_type.lower() or response.text.strip().startswith("<!"):
-                return FarmListResult(
-                    success=False,
-                    error="FARM_WAKING_OR_DOWN",
-                    error_type="FARM_WAKING_OR_DOWN"
-                )
             logger.warning("farm.list_snapshots.invalid_content_type", extra={
                 "tenant_id": tenant_id, "content_type": content_type
             })
@@ -286,13 +279,6 @@ class FarmClient:
         
         content_type = response.headers.get("content-type", "")
         if "json" not in content_type.lower():
-            # Check for HTML response (Replit proxy page)
-            if "html" in content_type.lower() or response.text.strip().startswith("<!"):
-                return FarmFetchResult(
-                    success=False,
-                    error="FARM_WAKING_OR_DOWN",
-                    error_type="FARM_WAKING_OR_DOWN"
-                )
             logger.warning("farm.fetch_snapshot.invalid_content_type", extra={
                 "snapshot_id": snapshot_id, "content_type": content_type
             })

@@ -55,6 +55,8 @@ from .domain_extraction import (
     validate_cmdb_domain_for_identity,
     _extract_all_domains_from_correlation,
     _extract_domain_from_correlation,
+    _resolve_effective_domain_from_record,
+    _clean_url_to_domain,
 )
 
 # Activity extraction
@@ -118,6 +120,8 @@ __all__ = [
     'validate_cmdb_domain_for_identity',
     '_extract_all_domains_from_correlation',
     '_extract_domain_from_correlation',
+    '_resolve_effective_domain_from_record',
+    '_clean_url_to_domain',
 
     # Activity
     'extract_activity_timestamps',

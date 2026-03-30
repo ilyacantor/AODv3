@@ -10,7 +10,8 @@ import asyncio
 import pytest
 import sys
 from uuid import uuid4
-sys.path.insert(0, '/home/runner/workspace/src')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aod.db.database import get_db_direct
 from aod.pipeline.normalize_observations import normalize_observations, CandidateEntity
@@ -85,81 +86,73 @@ async def test_split_brain_merge():
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Requires database with existing data - run manually in integration tests")
-async def test_ownership_persistence():
+async def test_ownership_persistence(pg_db_with_cleanup):
     """
     TEST: Triage 'Assign Owner' updates asset.owner in database
-    
-    1. Find asset with owner=NULL
-    2. Call update_asset_owner
-    3. Verify asset.owner is updated
-    4. Verify governance_gap logic would skip this asset (asset.owner is set)
+
+    Seeds a pipeline run to create assets, then tests ownership update.
     """
-    print("\n" + "="*60)
-    print("TEST 2: Ownership Persistence")
-    print("="*60)
-    
-    db = await get_db_direct()
-    
-    runs = await db.get_all_runs()
-    if not runs:
-        print("RESULT: SKIP - No runs available for testing")
-        return None
-    
-    run = runs[0]
-    assets = await db.get_assets_by_run(run.run_id)
-    
-    test_asset = None
-    for a in assets:
-        if a.owner is None and a.provisioning_status == ProvisioningStatus.ACTIVE:
-            test_asset = a
-            break
-    
-    if not test_asset:
-        print("RESULT: SKIP - No unowned ACTIVE assets to test")
-        return None
-    
-    print(f"Selected asset: {test_asset.name} (ID: {test_asset.asset_id})")
-    print(f"Current owner: {test_asset.owner}")
-    
+    from aod.pipeline.pipeline_executor import execute_pipeline
+    from datetime import datetime
+
+    db, track = pg_db_with_cleanup
+    run_id = f"test_ownership_{uuid4().hex[:8]}"
+    track(run_id)
+
+    # Seed: run pipeline to create assets with owner=NULL
+    # Use domain-aligned IdP + CMDB data to guarantee admission
+    snapshot = {
+        "meta": {"tenant_id": "t1", "run_id": run_id, "generated_at": "2024-01-01T00:00:00Z"},
+        "planes": {
+            "discovery": {"observations": [
+                {"observation_id": "o1", "name": "Salesforce", "source": "proxy", "domain": "salesforce.com"},
+                {"observation_id": "o2", "name": "Slack", "source": "proxy", "domain": "slack.com"}
+            ]},
+            "idp": {"objects": [
+                {"idp_id": "idp-1", "name": "Salesforce", "has_sso": True, "canonical_domain": "salesforce.com"},
+                {"idp_id": "idp-2", "name": "Slack", "has_sso": True, "canonical_domain": "slack.com"}
+            ]},
+            "cmdb": {"cis": [
+                {"ci_id": "ci-1", "name": "Salesforce CRM", "ci_type": "application", "lifecycle": "production", "environment": "prod", "canonical_domain": "salesforce.com"},
+                {"ci_id": "ci-2", "name": "Slack", "ci_type": "application", "lifecycle": "production", "environment": "prod", "canonical_domain": "slack.com"}
+            ]},
+            "cloud": {"resources": []},
+            "endpoint": {"devices": [], "installed_apps": []},
+            "network": {"dns": [], "proxy": [], "certs": []},
+            "finance": {"vendors": [], "contracts": [], "transactions": []}
+        }
+    }
+
+    result = await execute_pipeline(snapshot, db, run_id=run_id, started_at=datetime.utcnow())
+    assert result.success, f"Pipeline seed failed: {result.error}"
+
+    assets = await db.get_assets_by_run(run_id)
+    assert len(assets) > 0, "Pipeline should produce at least one asset"
+
+    # Find an asset with no owner
+    test_asset = next((a for a in assets if a.owner is None), None)
+    assert test_asset is not None, "Should have at least one unowned asset"
+
+    # Update ownership
     test_owner = "jane@company.com"
     success = await db.update_asset_owner(str(test_asset.asset_id), test_owner)
-    
-    if not success:
-        print("RESULT: FAIL - update_asset_owner returned False")
-        return False
-    
+    assert success, "update_asset_owner should return True"
+
+    # Verify persistence
     updated_asset = await db.get_asset_by_id(str(test_asset.asset_id))
-    
-    if updated_asset.owner != test_owner:
-        print(f"RESULT: FAIL - Owner not persisted. Expected '{test_owner}', got '{updated_asset.owner}'")
-        return False
-    
-    print(f"Owner updated to: {updated_asset.owner}")
-    
-    if updated_asset.owner:
-        print("Governance gap check: asset.owner is set, finding would be suppressed")
-        print("\nRESULT: PASS - Owner persisted and finding would be suppressed")
-        return True
-    else:
-        print("\nRESULT: FAIL - Owner not set after update")
-        return False
+    assert updated_asset is not None, "Asset should still exist after update"
+    assert updated_asset.owner == test_owner, f"Owner should be '{test_owner}', got '{updated_asset.owner}'"
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Requires database with existing data - run manually in integration tests")
 async def test_status_based_suppression():
     """
     TEST: QUARANTINE assets only get primary triage item, NOT secondary findings
-    
+
     1. Create a QUARANTINE asset with owner=NULL
     2. Run findings engine
     3. ASSERT: No governance_gap, cmdb_gap, etc. findings for this asset
     """
-    print("\n" + "="*60)
-    print("TEST 3: Status-Based Finding Suppression")
-    print("="*60)
-    
     test_asset_id = uuid4()
     quarantine_asset = Asset(
         asset_id=test_asset_id,
@@ -187,13 +180,7 @@ async def test_status_based_suppression():
         has_critical_gap=False,
         owner=None
     )
-    
-    print(f"Created test asset: {quarantine_asset.name}")
-    print(f"  Provisioning status: {quarantine_asset.provisioning_status.value}")
-    print(f"  Owner: {quarantine_asset.owner}")
-    print(f"  IdP status: {quarantine_asset.lens_status.idp}")
-    print(f"  CMDB status: {quarantine_asset.lens_status.cmdb}")
-    
+
     test_entity = CandidateEntity(
         entity_id="dropbox-test-entity",
         canonical_name="dropbox",
@@ -205,9 +192,9 @@ async def test_status_based_suppression():
     test_correlation = CorrelationResult(
         entity=test_entity
     )
-    
+
     empty_indexes = PlaneIndexes()
-    
+
     findings = generate_findings(
         assets=[quarantine_asset],
         correlations=[test_correlation],
@@ -216,19 +203,13 @@ async def test_status_based_suppression():
         run_id="test-run",
         snapshot_id="test-snapshot"
     )
-    
+
     asset_findings = [f for f in findings if f.asset_id == test_asset_id]
-    
-    print(f"\nFindings generated for QUARANTINE asset: {len(asset_findings)}")
-    for f in asset_findings:
-        print(f"  - {f.finding_type.value}: {f.explanation[:50]}...")
-    
-    if len(asset_findings) == 0:
-        print("\nRESULT: PASS - No secondary findings generated for QUARANTINE asset")
-        return True
-    else:
-        print(f"\nRESULT: FAIL - {len(asset_findings)} findings generated (should be 0)")
-        return False
+
+    assert len(asset_findings) == 0, (
+        f"QUARANTINE asset should get 0 secondary findings, got {len(asset_findings)}: "
+        f"{[f.finding_type.value for f in asset_findings]}"
+    )
 
 
 async def run_all_tests():

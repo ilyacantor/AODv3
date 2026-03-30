@@ -79,7 +79,7 @@ async def _emit_discovery_triples(
             logger.info(
                 "triple_conversion.complete",
                 extra={
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "triples_written": count,
                     "entity_id": entity_id,
                 },
@@ -87,7 +87,7 @@ async def _emit_discovery_triples(
     except Exception as e:
         logger.error(
             "triple_conversion.failed",
-            extra={"run_id": run_id, "error": str(e)},
+            extra={"aod_discovery_id": run_id, "error": str(e)},
         )
 
 
@@ -124,7 +124,7 @@ async def create_run(file: UploadFile = File(...)):
     await _emit_discovery_triples(result, db, run_id, snapshot_data=data)
 
     return RunResponse(
-        run_id=result.run_log.run_id,
+        aod_discovery_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
@@ -161,7 +161,7 @@ async def create_run_json(snapshot: dict[str, Any]):
     await _emit_discovery_triples(result, db, run_id, snapshot_data=snapshot)
 
     return RunResponse(
-        run_id=result.run_log.run_id,
+        aod_discovery_id=result.run_log.run_id,
         tenant_id=result.run_log.tenant_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
@@ -227,8 +227,9 @@ async def create_run_from_farm(request: FarmRunRequest):
         snapshot_data["meta"]["entity_id"] = entity_id
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
+    aod_discovery_id = str(uuid.uuid4())
     started_at = now_pst()
-    
+
     snapshot_generated_at = _parse_snapshot_generated_at(snapshot_data)
     
     # Extract snapshot fingerprint for drift detection (Jan 2026)
@@ -309,7 +310,8 @@ async def create_run_from_farm(request: FarmRunRequest):
         sync_error = result.run_log.sync_error
     
     return RunResponse(
-        run_id=result.run_log.run_id,
+        aod_discovery_id=aod_discovery_id,
+        consumed_snapshot_id=request.snapshot_id,
         tenant_id=result.run_log.tenant_id,
         entity_id=result.run_log.entity_id,
         status=result.run_log.status.value,
@@ -383,7 +385,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     )
     
     return ResyncResponse(
-        run_id=request.run_id,
+        aod_discovery_id=request.run_id,
         sync_status=run.sync_status.value,
         sync_error=run.sync_error,
         shadow_asset_keys=actual_results.shadow_actual,
@@ -407,7 +409,7 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
         raise HTTPException(status_code=404, detail=f"No run found for tenant {tenant_id}" + (f" and snapshot {snapshot_id}" if snapshot_id else ""))
 
     return RunDetailResponse(
-        run_id=run.run_id,
+        aod_discovery_id=run.run_id,
         tenant_id=run.tenant_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),
@@ -432,7 +434,7 @@ async def list_runs(tenant_id: Optional[str] = None):
 
     return [
         RunDetailResponse(
-            run_id=run.run_id,
+            aod_discovery_id=run.run_id,
             tenant_id=run.tenant_id,
             status=run.status.value,
             started_at=run.started_at.isoformat(),
@@ -457,7 +459,7 @@ async def get_run(run_id: str, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     return RunDetailResponse(
-        run_id=run.run_id,
+        aod_discovery_id=run.run_id,
         tenant_id=run.tenant_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),
@@ -483,7 +485,7 @@ async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
     items, total = await db.get_observation_samples_by_run(run_id, limit=limit, offset=offset)
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "items": items,
         "count": len(items),
         "total": total
@@ -507,7 +509,7 @@ async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
         enriched_items.append(item)
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "items": enriched_items,
         "count": len(enriched_items),
         "total": total
@@ -526,7 +528,7 @@ async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
     items, total = await db.get_rejections_by_run(run_id, limit=limit, offset=offset)
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "items": items,
         "count": len(items),
         "total": total
@@ -555,7 +557,7 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "assets": [
             {
                 "asset_id": str(a.asset_id),
@@ -594,7 +596,7 @@ async def get_run_summary(run_id: str):
     derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "tenant_id": run.tenant_id,
         "status": run.status.value,
         "started_at": run.started_at.isoformat(),
@@ -628,7 +630,7 @@ async def get_classifications(run_id: str):
     derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
 
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "shadow_count": derived.shadow_count,
         "zombie_count": derived.zombie_count,
         "shadow_assets": [a["name"] for a in derived.shadow_assets],
@@ -692,7 +694,7 @@ async def get_lens_summary(run_id: str):
         lens_counts["finance"][asset.lens_status.finance.value] += 1
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "total_assets": len(assets),
         "lens_counts": lens_counts
     }
@@ -748,7 +750,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
     stage1_metrics = _compute_stage1_asset_metrics(assets)
 
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "activity_window_days": activity_window_days,
         "snapshot_as_of": snapshot_as_of.isoformat() if snapshot_as_of else None,
         "shadow_count": summary.shadow_count,
@@ -989,7 +991,7 @@ async def get_run_artifacts(run_id: str):
         }
 
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "industry": industry,
         "fabric_planes": fabric_response,
         "systems_of_record": sor_response
@@ -1053,7 +1055,7 @@ async def get_run_policy(run_id: str):
     captured_at = run.started_at.isoformat() if run.started_at else None
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "policy_hash": policy_hash,
         "captured_at": captured_at,
         "policy": run.policy_snapshot

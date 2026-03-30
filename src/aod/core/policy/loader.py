@@ -86,7 +86,7 @@ def _load_from_master(data: dict) -> PolicyConfig:
     
     ag_section = data.get("admission_gates", {})
     admission_gates = AdmissionGatesConfig(
-        noise_floor=_extract_value(ag_section, "noise_floor", 1),
+        noise_floor=_extract_value(ag_section, "noise_floor", 2),
         require_sso_for_idp=_extract_value(ag_section, "require_sso_for_idp", True),
         require_valid_ci_type=_extract_value(ag_section, "require_valid_ci_type", True),
         require_valid_lifecycle=_extract_value(ag_section, "require_valid_lifecycle", True),
@@ -238,7 +238,7 @@ def _load_from_legacy(data: dict) -> PolicyConfig:
     adm_data = data.get("admission", {})
     admission = AdmissionConfig(
         minimum_spend=adm_data.get("minimum_spend", 200.0),
-        noise_floor=adm_data.get("noise_floor", 1),
+        noise_floor=adm_data.get("noise_floor", 2),
         zombie_window_days=adm_data.get("zombie_window_days", 90),
         require_sso_for_idp=adm_data.get("require_sso_for_idp", True),
         require_valid_ci_type=adm_data.get("require_valid_ci_type", True),
@@ -495,5 +495,5 @@ def save_config(config: PolicyConfig, path: Optional[str] = None) -> bool:
             json.dump(data, f, indent=2)
         _master_config_data = data
         return True
-    except IOError:
-        return False
+    except IOError as e:
+        raise IOError(f"Failed to save policy config to {config_path}: {e}") from e

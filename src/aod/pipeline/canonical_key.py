@@ -85,21 +85,15 @@ ALIAS_DOMAINS_TO_COLLAPSE: set[str] = {
     # Stage 4: gstatic.com is a distinct CDN service - NOT collapsed (produces stable key)
     # "gstatic.com",  # REMOVED - produces stable standalone key
     # NOTE: googleusercontent.com is a PaaS root (multi-tenant), NOT collapsed - preserve subdomain identity
-    #
-    # Zoom family - Jan 2026 Phase D: STANDALONE per Farm reconciliation
-    # Farm expects zoom.us, zoomapp.io, zoom-meetings.net, zoom-video.com as separate cataloged assets.
-    # Do NOT collapse these - they should remain standalone.
-    # "zoom.us",  # REMOVED - standalone per Farm reconciliation
-    # "zoom-video.com",  # REMOVED - standalone per Farm
-    # "zoom-meetings.net",  # REMOVED - standalone per Farm
-    # "zoomapp.io",  # REMOVED - standalone per Farm
-    #
-    # Atlassian family - Jan 2026 Phase D: STANDALONE per Farm reconciliation
-    # Farm expects atlassian.net, trello.com, bitbucket.org as separate cataloged assets.
-    # These are distinct products with separate attack surfaces.
-    # "atlassian.net",  # REMOVED - standalone per Farm (Jira Cloud)
-    # "trello.com",     # REMOVED - standalone per Farm (distinct product)
-    # "bitbucket.org",  # REMOVED - standalone per Farm (distinct product)
+    # Zoom family - collapse to zoom.com
+    "zoom.us",
+    "zoom-video.com",
+    "zoom-meetings.net",
+    "zoomapp.io",
+    # Atlassian family - collapse to atlassian.com
+    "atlassian.net",
+    "trello.com",
+    "bitbucket.org",
     "jira.com",
     "confluence.com",
     "opsgenie.com",

@@ -59,7 +59,7 @@
   "admission_gates": {
     "description": "Switches controlling admission gate behavior",
     "noise_floor": {
-      "value": 1,
+      "value": 2,
       "type": "integer",
       "min": 1,
       "max": 10,

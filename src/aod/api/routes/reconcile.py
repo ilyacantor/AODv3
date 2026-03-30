@@ -34,8 +34,8 @@ def _parse_iso_datetime(ts_str: str | None) -> datetime | None:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed
-    except (ValueError, TypeError):
-        return None
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Cannot parse timestamp '{ts_str}': {e}") from e
 
 
 def _get_run_snapshot_as_of(run) -> datetime | None:
@@ -130,7 +130,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     )
 
     return AODActualResultsResponse(
-        run_id=result.run_id,
+        aod_discovery_id=result.run_id,
         shadow_actual=result.shadow_actual,
         zombie_actual=result.zombie_actual,
         admission_actual=result.admission_actual,
@@ -382,7 +382,7 @@ async def catalog_invariant_check(run_id: str):
     
     assets = await db.get_assets_by_run(run_id)
     if not assets:
-        return {"run_id": run_id, "status": "NO_ASSETS", "violations": []}
+        return {"aod_discovery_id": run_id, "status": "NO_ASSETS", "violations": []}
     
     violations = []
     valid_count = 0
@@ -437,7 +437,7 @@ async def catalog_invariant_check(run_id: str):
     violations = sorted(violations, key=lambda x: x.get("name", ""))[:20]
     
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "status": "VIOLATIONS_FOUND" if violations else "ALL_VALID",
         "total_assets": len(assets),
         "valid_count": valid_count,
@@ -472,61 +472,61 @@ async def snapshot_drift_check(run_id: str):
     
     if not snapshot_id:
         return {
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "status": "NO_SNAPSHOT_ID",
             "detail": "Run has no snapshot_id in input_meta"
         }
-    
+
     from ..deps import get_farm_url as _get_farm_url
     farm_url = _get_farm_url()
     if not farm_url:
         return {
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "status": "NO_FARM_URL",
             "detail": "FARM_URL not configured"
         }
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{farm_url.rstrip('/')}/api/snapshots?snapshot_id={snapshot_id}")
             if resp.status_code != 200:
                 return {
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status": "FARM_ERROR",
                     "detail": f"Farm returned {resp.status_code}"
                 }
-            
+
             snapshots = resp.json()
             if isinstance(snapshots, dict):
                 snapshots = snapshots.get("snapshots", [])
-            
+
             current_snapshot = None
             for s in snapshots:
                 if s.get("snapshot_id") == snapshot_id:
                     current_snapshot = s
                     break
-            
+
             if not current_snapshot:
                 return {
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status": "SNAPSHOT_NOT_FOUND",
                     "detail": f"Snapshot {snapshot_id} not found in Farm"
                 }
-            
+
             current_fingerprint = current_snapshot.get("snapshot_fingerprint")
-            
+
             if not stored_fingerprint:
                 return {
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status": "NO_STORED_FINGERPRINT",
                     "stored_fingerprint": None,
                     "current_fingerprint": current_fingerprint,
                     "detail": "Run was created before fingerprint tracking was added"
                 }
-            
+
             if stored_fingerprint == current_fingerprint:
                 return {
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status": "OK",
                     "stored_fingerprint": stored_fingerprint,
                     "current_fingerprint": current_fingerprint,
@@ -534,16 +534,16 @@ async def snapshot_drift_check(run_id: str):
                 }
             else:
                 return {
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "status": "DRIFT_DETECTED",
                     "stored_fingerprint": stored_fingerprint,
                     "current_fingerprint": current_fingerprint,
                     "detail": "CRITICAL: Farm snapshot has been regenerated since this run was created. Assets may have stale correlation data (IdP/CMDB matches that no longer exist)."
                 }
-                
+
     except Exception as e:
         return {
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "status": "ERROR",
             "detail": f"Failed to check Farm: {str(e)}"
         }

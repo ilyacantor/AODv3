@@ -26,7 +26,8 @@ class FarmRunRequest(BaseModel):
 
 class RunResponse(BaseModel):
     """Response for run creation"""
-    run_id: str
+    aod_discovery_id: str
+    consumed_snapshot_id: Optional[str] = None
     tenant_id: str
     entity_id: Optional[str] = None
     status: str
@@ -38,7 +39,7 @@ class RunResponse(BaseModel):
 
 class RunDetailResponse(BaseModel):
     """Response for run detail"""
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     status: str
     started_at: str
@@ -53,14 +54,14 @@ class RunDetailResponse(BaseModel):
 
 class CatalogResponse(BaseModel):
     """Response for catalog"""
-    run_id: str
+    aod_discovery_id: str
     assets: list[dict[str, Any]]
     count: int
 
 
 class FindingsResponse(BaseModel):
     """Response for findings"""
-    run_id: str
+    aod_discovery_id: str
     findings: list[dict[str, Any]]
     count: int
 
@@ -91,7 +92,7 @@ class ResyncRequest(BaseModel):
 
 class ResyncResponse(BaseModel):
     """Response for re-sync operation"""
-    run_id: str
+    aod_discovery_id: str
     sync_status: str
     sync_error: Optional[str] = None
     shadow_asset_keys: list[str]
@@ -124,7 +125,7 @@ class KeyExplanation(BaseModel):
 
 class ZombieExplainResponse(BaseModel):
     """Response for zombie explanation"""
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     window_days: int
     explanations: list[KeyExplanation]
@@ -142,7 +143,7 @@ class ZombieReconcileRequest(BaseModel):
 
 class ZombieReconcileResponse(BaseModel):
     """Response for zombie reconciliation report"""
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     window_days: int
     expected_count: int
@@ -174,7 +175,7 @@ class PlaneCoverage(BaseModel):
 class TimestampCoverageResponse(BaseModel):
     """Response for timestamp coverage report"""
     snapshot_id: str
-    run_id: Optional[str]
+    aod_discovery_id: Optional[str]
     planes: dict[str, PlaneCoverage]
     summary: dict
     conclusion: str
@@ -189,20 +190,20 @@ class AODActualResultsRequest(BaseModel):
 class AODActualResultsResponse(BaseModel):
     """
     AOD Actual Results Response - Pure Emitter
-    
+
     DESIGN PRINCIPLE:
     - Farm owns reconciliation UI (has expected + actual + diffs)
     - AOD owns its structured "actual" output only
     - Farm displays side-by-side and runs the RCA reducer
-    
+
     DATA FLOW:
     - AOD publishes: shadow_actual, zombie_actual, admission_actual, actual_reason_codes
     - Farm already has: shadow_expected, zombie_expected, expected_reason_codes
     - Farm computes: extra, missed, rca_code per mismatch
-    
+
     HARD RULE: AOD NEVER consumes Farm expected/rca data
     """
-    run_id: str
+    aod_discovery_id: str
     shadow_actual: list[str]
     zombie_actual: list[str]
     admission_actual: dict[str, str]
@@ -318,7 +319,7 @@ class DecisionTraceRequest(BaseModel):
 
 class DecisionTraceResponse(BaseModel):
     """Response with decision traces for all assets"""
-    run_id: str
+    aod_discovery_id: str
     traces: dict[str, dict]
     count: int
     fields: list[str]

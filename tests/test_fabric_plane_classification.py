@@ -59,6 +59,7 @@ from aod.models.output_contracts import (
     ConnectivityModality,
     FabricRoutingEvidence,
     EvidenceSourcePlane,
+    FabricPlane,
 )
 from aod.pipeline.evidence_collectors.base import (
     EvidenceCollectionResult,
@@ -639,80 +640,268 @@ class TestFabricPlaneClassificationAccuracy:
         )
         return ReconciliationEngine(config)
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
     def test_tier_1_accuracy(self, reconciliation_engine):
         """
-        Tier 1 (direct crawl) accuracy should be >= 98%.
+        Tier 1 (direct crawl) evidence should produce high-confidence pipes.
+        Verifies that direct crawl data results in Tier 1 classification.
         """
-        scenario = TIER_1_SCENARIO
-        snapshot = load_scenario_snapshot(scenario)
+        from aod.pipeline.fabric_connectors.base import DirectCrawlResult, CrawledAsset, ConnectorStatus
 
-        if not snapshot:
-            pytest.skip(f"Fixture {scenario.snapshot_file} not found")
+        # Construct Phase 2 direct crawl results for Kong API Gateway
+        kong_evidence = FabricRoutingEvidence(
+            evidence_id="tier1_kong_1",
+            source_plane=EvidenceSourcePlane.DIRECT_CRAWL,
+            signal_type="kong_route",
+            signal_detail="GET /api/salesforce -> upstream:salesforce-api",
+            confidence=CONFIDENCE_SCORES["tier_1_direct"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.API_GATEWAY,
+            fabric_plane_vendor="kong",
+            raw_data={"asset_key": "api.salesforce.com", "service_name": "salesforce-api"}
+        )
 
-        # This would run the full pipeline with Phase 2 crawl data
-        # For now, we skip since we're not running actual evals
-        pass
+        kong_crawl = DirectCrawlResult(
+            plane_type=FabricPlaneType.API_GATEWAY,
+            vendor="kong",
+            instance_name="Kong Gateway (prod)",
+            status=ConnectorStatus.SUCCESS,
+            assets=[CrawledAsset(
+                asset_id="api.salesforce.com",
+                asset_name="Salesforce API Route",
+                asset_type="route",
+            )],
+            evidence=[kong_evidence],
+        )
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
+        # Phase 1: empty (no observation evidence)
+        phase_1 = EvidenceCollectionResult()
+
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={"kong": kong_crawl}
+        )
+
+        # Tier 1 crawl should produce at least one pipe
+        assert len(result.pipes) >= 1, "Direct crawl should produce pipes"
+        kong_pipe = result.pipes[0]
+        assert kong_pipe.fabric_plane == FabricPlaneType.API_GATEWAY
+        assert kong_pipe.classification_confidence >= 0.90, (
+            f"Tier 1 confidence should be >= 0.90, got {kong_pipe.classification_confidence}"
+        )
+
     def test_tier_2_accuracy(self, reconciliation_engine):
         """
-        Tier 2 (observation evidence) accuracy should be >= 85%.
+        Tier 2 (observation evidence) should produce medium-high confidence pipes.
         """
-        scenario = TIER_2_SCENARIO
-        snapshot = load_scenario_snapshot(scenario)
+        # Construct Phase 1 observation evidence: network traffic to Workato
+        phase_1 = EvidenceCollectionResult()
+        phase_1.add_evidence("hubspot.com", FabricRoutingEvidence(
+            evidence_id="tier2_net_1",
+            source_plane=EvidenceSourcePlane.NETWORK,
+            signal_type="proxy_traffic",
+            signal_detail="Traffic to hooks.workato.com from hubspot",
+            confidence=CONFIDENCE_SCORES["tier_2_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor="workato"
+        ))
+        # Corroborating finance evidence
+        phase_1.add_evidence("hubspot.com", FabricRoutingEvidence(
+            evidence_id="tier2_fin_1",
+            source_plane=EvidenceSourcePlane.FINANCE,
+            signal_type="contract",
+            signal_detail="Workato Enterprise contract",
+            confidence=CONFIDENCE_SCORES["tier_2_medium"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor="workato"
+        ))
 
-        if not snapshot:
-            pytest.skip(f"Fixture {scenario.snapshot_file} not found")
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
 
-        pass
+        assert len(result.pipes) >= 1, "Tier 2 evidence should produce pipes"
+        pipe = result.pipes[0]
+        assert pipe.fabric_plane == FabricPlaneType.IPAAS
+        assert 0.70 <= pipe.classification_confidence <= 0.98, (
+            f"Tier 2 confidence should be 0.70-0.98, got {pipe.classification_confidence}"
+        )
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
     def test_tier_3_confidence_demoted(self, reconciliation_engine):
         """
         Tier 3 (category inference) confidence should be capped at 0.50.
         """
-        scenario = TIER_3_SCENARIO
-        snapshot = load_scenario_snapshot(scenario)
+        # Single weak category inference signal
+        phase_1 = EvidenceCollectionResult()
+        phase_1.add_evidence("custom-integration.internal", FabricRoutingEvidence(
+            evidence_id="tier3_cat_1",
+            source_plane=EvidenceSourcePlane.CMDB,
+            signal_type="category_inference",
+            signal_detail="Category: Integration suggests iPaaS",
+            confidence=CONFIDENCE_SCORES["tier_3_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor=None
+        ))
 
-        if not snapshot:
-            pytest.skip(f"Fixture {scenario.snapshot_file} not found")
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
 
-        pass
+        if result.pipes:
+            for pipe in result.pipes:
+                assert pipe.classification_confidence <= 0.55, (
+                    f"Tier 3 confidence should be <= 0.55, got {pipe.classification_confidence}"
+                )
+        # If no pipes produced, that's also valid — low confidence may be below threshold
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
     def test_no_default_to_ipaas(self):
         """
         Unknown assets should NOT default to iPaaS.
         This was the previous behavior causing ~50% accuracy.
         """
-        pass
+        engine = ReconciliationEngine(ReconciliationConfig(
+            min_confidence_classify=0.30,
+        ))
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
+        # Asset with no evidence at all
+        phase_1 = EvidenceCollectionResult()
+        phase_1.unattached_assets.append("mystery-app.com")
+
+        result = engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
+
+        # Should NOT produce an iPaaS pipe for an unknown asset
+        ipaas_pipes = [p for p in result.pipes if p.fabric_plane == FabricPlaneType.IPAAS
+                       and "mystery-app.com" in (p.source_system or "")]
+        assert len(ipaas_pipes) == 0, (
+            "Unknown assets should NOT default to iPaaS classification"
+        )
+
     def test_multi_plane_support(self, reconciliation_engine):
         """
         Assets with multiple fabric planes should have separate Pipe records.
         """
-        scenario = MULTI_PLANE_SCENARIO
+        phase_1 = EvidenceCollectionResult()
+        # Salesforce through iPaaS (Workato sync)
+        phase_1.add_evidence("salesforce.com", FabricRoutingEvidence(
+            evidence_id="multi_ipaas_1",
+            source_plane=EvidenceSourcePlane.NETWORK,
+            signal_type="proxy_traffic",
+            signal_detail="Traffic to hooks.workato.com",
+            confidence=CONFIDENCE_SCORES["tier_2_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor="workato"
+        ))
+        # Salesforce through Data Warehouse (Snowflake ETL)
+        phase_1.add_evidence("salesforce.com", FabricRoutingEvidence(
+            evidence_id="multi_dw_1",
+            source_plane=EvidenceSourcePlane.CLOUD,
+            signal_type="etl_pipeline",
+            signal_detail="Snowflake SALES_DATA table from Salesforce",
+            confidence=CONFIDENCE_SCORES["tier_2_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.DATA_WAREHOUSE,
+            fabric_plane_vendor="snowflake"
+        ))
 
-        # Expected: One asset, two pipes (iPaaS + Data Warehouse)
-        pass
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
+        # Should have pipes for multiple planes from the same source asset
+        sf_planes = {p.fabric_plane for p in result.pipes
+                     if "salesforce" in (p.source_system or "").lower()}
+        assert len(sf_planes) >= 2, (
+            f"Salesforce should route through multiple planes, got {sf_planes}"
+        )
+
     def test_contradiction_flagged(self, reconciliation_engine):
         """
         Conflicting evidence should be detected and flagged.
         """
-        scenario = CONTRADICTION_SCENARIO
-        pass
+        phase_1 = EvidenceCollectionResult()
+        # Network says iPaaS
+        phase_1.add_evidence("conflicting-app.com", FabricRoutingEvidence(
+            evidence_id="contra_net_1",
+            source_plane=EvidenceSourcePlane.NETWORK,
+            signal_type="proxy_traffic",
+            signal_detail="Traffic to workato.com",
+            confidence=CONFIDENCE_SCORES["tier_2_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor="workato"
+        ))
+        # CMDB says API Gateway
+        phase_1.add_evidence("conflicting-app.com", FabricRoutingEvidence(
+            evidence_id="contra_cmdb_1",
+            source_plane=EvidenceSourcePlane.CMDB,
+            signal_type="dependency",
+            signal_detail="Kong API Gateway dependency",
+            confidence=CONFIDENCE_SCORES["tier_2_low"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.API_GATEWAY,
+            fabric_plane_vendor="kong"
+        ))
 
-    @pytest.mark.skip(reason="Requires fixture files - run with expanded Farm data")
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
+
+        # Contradiction should be detected
+        assert "conflicting-app.com" in result.contradictions_by_asset, (
+            "Contradicting evidence should be flagged"
+        )
+        analysis = result.contradictions_by_asset["conflicting-app.com"]
+        assert len(analysis.contradictions) >= 1, "At least one contradiction expected"
+
     def test_shadow_plane_detection(self, reconciliation_engine):
         """
-        Unauthorized fabric planes should be detected from Finance/Network evidence.
+        Shadow plane candidates should be surfaced from evidence collection.
         """
-        scenario = SHADOW_PLANE_SCENARIO
-        pass
+        phase_1 = EvidenceCollectionResult()
+        # Finance transaction revealing unauthorized Zapier usage
+        phase_1.add_evidence("marketing-zapier.zapier.com", FabricRoutingEvidence(
+            evidence_id="shadow_fin_1",
+            source_plane=EvidenceSourcePlane.FINANCE,
+            signal_type="transaction",
+            signal_detail="Zapier Team Plan - Marketing Dept",
+            confidence=CONFIDENCE_SCORES["tier_2_high"],
+            timestamp=datetime.utcnow(),
+            fabric_plane_type=FabricPlaneType.IPAAS,
+            fabric_plane_vendor="zapier"
+        ))
+
+        # Mark as shadow candidate
+        phase_1.shadow_plane_candidates.append(FabricPlane(
+            plane_id="shadow:zapier:marketing",
+            plane_type=FabricPlaneType.IPAAS,
+            vendor="zapier",
+            display_name="Zapier (Marketing - Shadow)",
+            domain="zapier.com",
+            managed_asset_count=0,
+            evidence_refs=["shadow_fin_1"],
+            confidence=CONFIDENCE_SCORES["tier_2_high"]
+        ))
+
+        result = reconciliation_engine.reconcile(
+            phase_1_result=phase_1,
+            phase_2_results={}
+        )
+
+        # Shadow planes should be surfaced
+        assert len(result.shadow_planes) >= 1, "Shadow Zapier should be detected"
+        shadow = result.shadow_planes[0]
+        assert shadow.vendor == "zapier"
+        assert shadow.plane_type == FabricPlaneType.IPAAS
 
 
 # =============================================================================

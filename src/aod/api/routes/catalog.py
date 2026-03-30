@@ -48,7 +48,7 @@ async def get_catalog(
         assets = [a for a in assets if a.provisioning_status.value.upper() == status_filter]
     
     return CatalogResponse(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         assets=[
             {
                 "asset_id": str(a.asset_id),
@@ -100,7 +100,7 @@ async def get_approved_assets(run_id: str):
     active_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
     
     return CatalogResponse(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         assets=[
             {
                 "asset_id": str(a.asset_id),

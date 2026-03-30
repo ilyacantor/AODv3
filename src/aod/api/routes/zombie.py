@@ -207,7 +207,7 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
             ))
 
     return ZombieExplainResponse(
-        run_id=request.run_id,
+        aod_discovery_id=request.run_id,
         tenant_id=request.tenant_id,
         window_days=request.window_days,
         explanations=explanations,
@@ -358,7 +358,7 @@ async def debug_zombie_reconcile(request: ZombieReconcileRequest):
         sample = extra_details[0]
 
     return ZombieReconcileResponse(
-        run_id=request.run_id,
+        aod_discovery_id=request.run_id,
         tenant_id=request.tenant_id,
         window_days=request.window_days,
         expected_count=len(request.expected_zombie_keys),

@@ -76,7 +76,9 @@ def _compute_provisioning_status(
     idp_can_admit: bool,
     cmdb_can_admit: bool,
     discovery_admitted: bool,
+    cloud_admitted: bool,
     finance_can_admit: bool,
+    has_any_discovery: bool,
     observations: Optional[list[Observation]],
     stale_window_days: int
 ) -> ProvisioningStatus:
@@ -84,7 +86,7 @@ def _compute_provisioning_status(
     Compute provisioning status using Traffic Light rules.
 
     Traffic Light precedence:
-    - GREEN (ACTIVE): IdP OR CMDB (with discovery) OR Discovery-only
+    - GREEN (ACTIVE): IdP OR CMDB (with discovery) OR Discovery-only OR Cloud+Discovery
     - AMBER (REVIEW): CMDB + stale activity, OR Finance
     - RED (QUARANTINE): Cloud/Finance only without corroboration
     """
@@ -109,6 +111,8 @@ def _compute_provisioning_status(
             return ProvisioningStatus.REVIEW
         return ProvisioningStatus.ACTIVE
     elif discovery_admitted:
+        return ProvisioningStatus.ACTIVE
+    elif cloud_admitted and has_any_discovery:
         return ProvisioningStatus.ACTIVE
     elif finance_can_admit:
         return ProvisioningStatus.REVIEW
@@ -267,10 +271,12 @@ def _collect_admission_evidence(
     if allow_finance_only:
         finance_can_admit = finance_admitted
     elif not finance_requires_discovery:
+        # Finance + any corroboration (IdP, CMDB, cloud, or discovery)
         finance_can_admit = finance_admitted and (
-            idp_admitted or cmdb_admitted or cloud_admitted or True
+            idp_admitted or cmdb_admitted or cloud_admitted or discovery_admitted
         )
     else:
+        # Finance requires corroboration from another gate
         finance_can_admit = finance_admitted and (
             idp_admitted or cmdb_admitted or cloud_admitted or discovery_admitted
         )
@@ -571,13 +577,13 @@ def apply_admission_criteria(
         require_valid_lifecycle=policy_config.admission_gates.require_valid_lifecycle
     )
 
-    # GATE 2: Infrastructure domains without governance
+    # GATE 2: Infrastructure domains without governance → policy-forbidden
     if is_infrastructure_domain(registered_domain):
         if not (idp_admitted or cmdb_admitted):
             return AdmissionResult(
                 admitted=False,
-                provisioning_status=ProvisioningStatus.IGNORED,
-                rejection_reason=f"Infrastructure domain without governance: {registered_domain} (from {effective_domain})"
+                provisioning_status=ProvisioningStatus.BLOCKED,
+                rejection_reason=f"policy-forbidden: infrastructure domain {registered_domain} (from {effective_domain})"
             )
 
     # STEP 3: Collect all admission evidence
@@ -613,7 +619,9 @@ def apply_admission_criteria(
         idp_can_admit=evidence.idp_can_admit,
         cmdb_can_admit=evidence.cmdb_can_admit,
         discovery_admitted=evidence.discovery_admitted,
+        cloud_admitted=evidence.cloud_admitted,
         finance_can_admit=evidence.finance_can_admit,
+        has_any_discovery=len(evidence.footprint.discovery_sources) >= 1,
         observations=observations,
         stale_window_days=stale_window_days
     )

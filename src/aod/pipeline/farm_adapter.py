@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 META_MAPPING = {
     "tenant_id": {"sources": ["tenant_id"], "required": True},
-    "run_id": {"sources": ["run_id"], "default": None},  # synthesize if missing
+    "run_id": {"sources": ["farm_manifest_id", "run_id"], "default": None},  # meta mapping — DB column; prefer farm_manifest_id, fall back to run_id during transition
     "generated_at": {"sources": ["created_at"], "required": True},
     "schema_version": {"sources": ["schema_version"], "required": True},
     "seed": {"sources": ["seed"], "default": None},

@@ -154,43 +154,50 @@ def _idp_domain_matches_entity(
     """
     Check if IdP domain matches entity domain for activity and governance purposes.
 
-    Strict domain-aligned IdP governance matching.
-
-    IdP governance requires an EXPLICIT DOMAIN on the IdP record. Name-only IdP
-    entries cannot grant governance (enrichment only, not security assertion).
+    Domain-aligned IdP governance matching with strict name-based fallback.
 
     Domains match if:
     1. Exact domain match (e.g., salesforce.com == salesforce.com)
     2. Same vendor via DOMAIN_TO_VENDOR (e.g., teamsuite.cloud and teamsuite.org both map to "TeamSuite")
+    3. Name-based fallback (Option B): If IdP has no domain, normalized IdP name
+       must exactly equal entity base token, and base token must be >= 5 chars.
 
     Examples:
     - salesforce.com (entity) vs salesforce.com (IdP) → MATCH (exact domain)
     - teamsuite.cloud (entity) vs teamsuite.org (IdP) → MATCH IF both map to same vendor
     - smartsuite.cloud (entity) vs smartsuite.org (IdP) → NO MATCH (no vendor mapping)
     - fastbox.cloud (entity) vs fastbox.ai (IdP) → NO MATCH (different TLD, no vendor link)
-    - linkify.dev (entity) vs IdP "Linkify" with no domain → NO MATCH (IdP has no domain)
+    - coreio.ai (entity) vs IdP "Coreio" with no domain → MATCH (exact name, 6 chars >= 5)
+    - test.com (entity) vs IdP "Test" with no domain → NO MATCH (4 chars < 5 minimum)
 
     Matching rules:
-    1. IdP has no domain → False (cannot grant governance)
+    1. IdP has no domain → name-based fallback (exact match, >= 5 chars)
     2. Entity has no domain → True (allow match)
     3. Exact registered domain match → True
     4. Same vendor (via DOMAIN_TO_VENDOR) → True
     5. Different domains, no vendor link → False
     """
-    # Jan 2026 FIX: DISABLED name-based IdP fallback.
-    #
-    # Previously, if IdP had no domain but its name matched entity's base token
-    # (e.g., IdP "Linkify" → entity "linkify.dev"), we granted governance.
-    #
-    # This caused 29 MISSED SHADOWS in HelixSystems reconciliation:
-    # - Farm: NO_IDP (Shadow IT risk)
-    # - AOD: HAS_IDP (incorrectly governed via name match)
-    #
-    # Policy alignment: IdP governance requires EXPLICIT DOMAIN on the IdP record.
-    # Name-only IdP entries are for enrichment/visibility, not governance assertion.
-    #
-    # If IdP has no domain, it cannot grant governance - return False
+    # Name-based fallback (Option B): If IdP has no domain, allow exact name
+    # match against entity base token with strict rules:
+    # 1. Entity base token must be >= 5 chars (avoid short-token collisions)
+    # 2. Normalized IdP name must EXACTLY equal entity base token (no startswith)
+    # 3. Normalization: lowercase, strip dashes/underscores/spaces
     if not idp_registered_domain:
+        if not idp_name or not entity_registered_domain:
+            return False
+
+        # Extract entity base token (part before first dot)
+        entity_base = entity_registered_domain.split('.')[0].lower().strip()
+        if len(entity_base) < 5:
+            return False
+
+        # Normalize IdP name: lowercase, strip dashes, underscores, spaces
+        import re
+        normalized_idp = re.sub(r'[-_\s]', '', idp_name.lower().strip())
+
+        if normalized_idp == entity_base:
+            return True
+
         return False
 
     # If entity has no domain, allow the match

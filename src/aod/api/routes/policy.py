@@ -42,11 +42,9 @@ async def _notify_farm_webhook(webhook_url: str, config_dict: dict) -> bool:
             logger.info(f"Farm webhook notification sent successfully to {webhook_url}")
             return True
     except httpx.HTTPError as e:
-        logger.error(f"Farm webhook notification failed: {e}")
-        return False
+        raise RuntimeError(f"Farm webhook notification failed: {e}") from e
     except Exception as e:
-        logger.error(f"Unexpected error sending Farm webhook: {e}")
-        return False
+        raise RuntimeError(f"Unexpected error sending Farm webhook: {e}") from e
 
 
 @router.get("/config")
@@ -342,7 +340,7 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     
     idh = config.infrastructure_domain_handling
     return {
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "run_status": run.status.value,
         "total_rejections": total,
         "policy_impact": policy_impact,

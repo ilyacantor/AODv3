@@ -1120,7 +1120,7 @@ class AllocationSummary(BaseModel):
 
 class FabricAllocationAuditResponse(BaseModel):
     """Complete fabric allocation audit trail"""
-    run_id: str
+    aod_discovery_id: str
     scan_session_id: Optional[str] = None
     generated_at: str
     summary: AllocationSummary
@@ -1235,8 +1235,8 @@ def _format_evidence_tier(pipe) -> Optional[str]:
     return tier_display
 
 
-@router.get("/fabric-allocation-audit/{run_id}", response_model=FabricAllocationAuditResponse)
-async def get_fabric_allocation_audit(run_id: str):
+@router.get("/fabric-allocation-audit/{aod_discovery_id}", response_model=FabricAllocationAuditResponse)
+async def get_fabric_allocation_audit(aod_discovery_id: str):
     """
     Get fabric allocation audit trail for a discovery scan.
 
@@ -1252,11 +1252,11 @@ async def get_fabric_allocation_audit(run_id: str):
 
     db = await get_db_direct()
 
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
 
-    all_assets = await db.get_assets_by_run(run_id)
+    all_assets = await db.get_assets_by_run(aod_discovery_id)
 
     # Build allocation decisions
     decisions: List[AllocationDecision] = []
@@ -1373,8 +1373,8 @@ async def get_fabric_allocation_audit(run_id: str):
     )
 
     return FabricAllocationAuditResponse(
-        run_id=run_id,
-        scan_session_id=run_id,
+        aod_discovery_id=aod_discovery_id,
+        scan_session_id=aod_discovery_id,
         generated_at=datetime.now(timezone.utc).isoformat(),
         summary=summary,
         decisions=decisions

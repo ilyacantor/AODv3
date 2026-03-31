@@ -35,14 +35,14 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
 
     db = await get_db_direct()
 
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {request.aod_discovery_id} not found")
 
     if run.tenant_id != request.tenant_id:
-        raise HTTPException(status_code=400, detail=f"Run {request.run_id} belongs to tenant {run.tenant_id}, not {request.tenant_id}")
+        raise HTTPException(status_code=400, detail=f"Run {request.aod_discovery_id} belongs to tenant {run.tenant_id}, not {request.tenant_id}")
 
-    assets = await db.get_assets_by_run(request.run_id)
+    assets = await db.get_assets_by_run(request.aod_discovery_id)
 
     asset_key_map: dict[str, list[Asset]] = {}
     for asset in assets:
@@ -207,7 +207,7 @@ async def debug_zombie_explain(request: ZombieExplainRequest):
             ))
 
     return ZombieExplainResponse(
-        aod_discovery_id=request.run_id,
+        aod_discovery_id=request.aod_discovery_id,
         tenant_id=request.tenant_id,
         window_days=request.window_days,
         explanations=explanations,
@@ -228,11 +228,11 @@ async def debug_zombie_reconcile(request: ZombieReconcileRequest):
     """
     db = await get_db_direct()
 
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {request.aod_discovery_id} not found")
 
-    assets = await db.get_assets_by_run(request.run_id)
+    assets = await db.get_assets_by_run(request.aod_discovery_id)
 
     asset_key_map: dict[str, list[Asset]] = {}
     for asset in assets:
@@ -333,7 +333,7 @@ async def debug_zombie_reconcile(request: ZombieReconcileRequest):
 
     report_lines = [
         f"=== Zombie Reconciliation Report ===",
-        f"Run: {request.run_id}",
+        f"Run: {request.aod_discovery_id}",
         f"Tenant: {request.tenant_id}",
         f"Window: {request.window_days} days",
         f"",
@@ -358,7 +358,7 @@ async def debug_zombie_reconcile(request: ZombieReconcileRequest):
         sample = extra_details[0]
 
     return ZombieReconcileResponse(
-        aod_discovery_id=request.run_id,
+        aod_discovery_id=request.aod_discovery_id,
         tenant_id=request.tenant_id,
         window_days=request.window_days,
         expected_count=len(request.expected_zombie_keys),

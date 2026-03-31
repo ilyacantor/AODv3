@@ -38,13 +38,13 @@ async def trace_asset(request: AssetTraceRequest) -> AssetTraceResponse:
 
     asset_row = await db.fetchrow(
         "SELECT * FROM assets WHERE run_id = $1 AND asset_id = $2",
-        request.run_id, request.asset_key
+        request.aod_discovery_id, request.asset_key
     )
 
     if not asset_row:
         asset_row = await db.fetchrow(
             "SELECT * FROM assets WHERE run_id = $1 AND (name ILIKE $2 OR asset_id ILIKE $2)",
-            request.run_id, f"%{request.asset_key}%"
+            request.aod_discovery_id, f"%{request.asset_key}%"
         )
 
     obs_rows = await db.fetch(
@@ -52,7 +52,7 @@ async def trace_asset(request: AssetTraceRequest) -> AssetTraceResponse:
            WHERE run_id = $1
            AND (name ILIKE $2 OR domain ILIKE $2 OR observation_id ILIKE $2)
            LIMIT 50""",
-        request.run_id, f"%{request.asset_key}%"
+        request.aod_discovery_id, f"%{request.asset_key}%"
     )
 
     raw_domains: list[str] = []
@@ -228,11 +228,11 @@ async def get_decision_traces(request: DecisionTraceRequest):
 
     db = await get_db_direct()
 
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {request.aod_discovery_id} not found")
 
-    assets = await db.get_assets_by_run(request.run_id)
+    assets = await db.get_assets_by_run(request.aod_discovery_id)
 
     traces = [compute_decision_trace(a, request.activity_window_days) for a in assets]
     traces_dict = decision_traces_to_dict(traces)
@@ -245,7 +245,7 @@ async def get_decision_traces(request: DecisionTraceRequest):
     ]
 
     return DecisionTraceResponse(
-        aod_discovery_id=request.run_id,
+        aod_discovery_id=request.aod_discovery_id,
         traces=traces_dict,
         count=len(traces),
         fields=fields

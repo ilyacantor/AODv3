@@ -86,7 +86,7 @@ class TenantListResponse(BaseModel):
 
 class ResyncRequest(BaseModel):
     """Request for re-syncing a run to Farm"""
-    run_id: str
+    aod_discovery_id: str
     mode: str = "sprawl"
 
 
@@ -103,7 +103,7 @@ class ResyncResponse(BaseModel):
 class ZombieExplainRequest(BaseModel):
     """Request for zombie explanation"""
     tenant_id: str
-    run_id: str
+    aod_discovery_id: str
     keys: list[str]
     window_days: int = 30
 
@@ -135,7 +135,7 @@ class ZombieExplainResponse(BaseModel):
 class ZombieReconcileRequest(BaseModel):
     """Request for zombie reconciliation report"""
     tenant_id: str
-    run_id: str
+    aod_discovery_id: str
     expected_zombie_keys: list[str]
     extra_zombie_keys: list[str]
     window_days: int = 30
@@ -158,7 +158,7 @@ class TimestampCoverageRequest(BaseModel):
     """Request for timestamp coverage report"""
     tenant_id: str
     snapshot_id: str
-    run_id: Optional[str] = None
+    aod_discovery_id: Optional[str] = None
 
 
 class PlaneCoverage(BaseModel):
@@ -183,7 +183,7 @@ class TimestampCoverageResponse(BaseModel):
 
 class AODActualResultsRequest(BaseModel):
     """Request for AOD actual results (pure emitter - no expected data consumed)"""
-    run_id: str
+    aod_discovery_id: str
     activity_window_days: int = 90
 
 
@@ -265,7 +265,7 @@ class RunTestsResponse(BaseModel):
 
 class AssetTraceRequest(BaseModel):
     """Request for single-asset trace debugging"""
-    run_id: str
+    aod_discovery_id: str
     asset_key: str
 
 
@@ -313,7 +313,7 @@ class TwoPathDiffResponse(BaseModel):
 
 class DecisionTraceRequest(BaseModel):
     """Request for decision trace"""
-    run_id: str
+    aod_discovery_id: str
     activity_window_days: int = 90
 
 
@@ -327,7 +327,7 @@ class DecisionTraceResponse(BaseModel):
 
 class TriageActionRequest(BaseModel):
     """Request to record a triage action"""
-    run_id: str
+    aod_discovery_id: str
     item_id: str
     item_type: str
     action: str

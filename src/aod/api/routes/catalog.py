@@ -23,7 +23,7 @@ ACTION_TO_STATUS = {
 
 @router.get("", response_model=CatalogResponse)
 async def get_catalog(
-    run_id: str,
+    aod_discovery_id: str,
     provisioning_status: Optional[str] = Query(None, description="Filter by provisioning status (active, review, quarantine)")
 ):
     """
@@ -36,11 +36,11 @@ async def get_catalog(
     """
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     
     # Apply provisioning status filter if provided
     if provisioning_status:
@@ -48,7 +48,7 @@ async def get_catalog(
         assets = [a for a in assets if a.provisioning_status.value.upper() == status_filter]
     
     return CatalogResponse(
-        aod_discovery_id=run_id,
+        aod_discovery_id=aod_discovery_id,
         assets=[
             {
                 "asset_id": str(a.asset_id),
@@ -77,7 +77,7 @@ async def get_catalog(
 
 
 @router.get("/approved-assets", response_model=CatalogResponse)
-async def get_approved_assets(run_id: str):
+async def get_approved_assets(aod_discovery_id: str):
     """
     Approved Assets Export - Only ACTIVE provisioned assets.
     
@@ -90,17 +90,17 @@ async def get_approved_assets(run_id: str):
     """
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    all_assets = await db.get_assets_by_run(run_id)
+    all_assets = await db.get_assets_by_run(aod_discovery_id)
     
     # GUARDRAIL: Only ACTIVE assets flow to DCL
     active_assets = [a for a in all_assets if a.provisioning_status == ProvisioningStatus.ACTIVE]
     
     return CatalogResponse(
-        aod_discovery_id=run_id,
+        aod_discovery_id=aod_discovery_id,
         assets=[
             {
                 "asset_id": str(a.asset_id),
@@ -125,18 +125,18 @@ async def get_approved_assets(run_id: str):
 
 
 @router.get("/view", response_class=HTMLResponse)
-async def view_catalog(run_id: str):
+async def view_catalog(aod_discovery_id: str):
     """Display catalog as HTML page"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     
-    triage_actions = await db.get_triage_actions_by_run(run_id)
-    findings = await db.get_findings_by_run(run_id)
+    triage_actions = await db.get_triage_actions_by_run(aod_discovery_id)
+    findings = await db.get_findings_by_run(aod_discovery_id)
     
     finding_to_asset = {str(f.finding_id): str(f.asset_id) for f in findings if f.asset_id}
     
@@ -385,7 +385,7 @@ async def view_catalog(run_id: str):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Asset Catalog - Run {run_id[:8]}</title>
+        <title>Asset Catalog - Run {aod_discovery_id[:8]}</title>
         <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -473,7 +473,7 @@ async def view_catalog(run_id: str):
                     <div>
                         <div class="title">Asset Catalog</div>
                         <div class="subtitle">
-                            Run: {run_id[:8]}... | 
+                            Run: {aod_discovery_id[:8]}... | 
                             Tenant: {run.tenant_id} | 
                             {run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else 'In Progress'}
                         </div>
@@ -498,7 +498,7 @@ async def view_catalog(run_id: str):
                             <div class="stat-label">Governed</div>
                         </div>
                     </div>
-                    <a href="/api/catalog?run_id={run_id}" class="export-btn" target="_blank">
+                    <a href="/api/catalog?aod_discovery_id={aod_discovery_id}" class="export-btn" target="_blank">
                         Export JSON ↗
                     </a>
                 </div>

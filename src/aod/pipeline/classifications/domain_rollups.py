@@ -13,7 +13,7 @@ from ...core.policy import get_current_config
 def compute_domain_rollups(
     assets: list[Asset],
     activity_window_days: Optional[int] = None,
-    run_id: Optional[str] = None
+    aod_discovery_id: Optional[str] = None
 ) -> dict[str, DomainRollup]:
     """
     Compute domain-level rollups using OR logic across entities.
@@ -31,7 +31,7 @@ def compute_domain_rollups(
     Args:
         assets: List of assets to aggregate
         activity_window_days: Activity window for zombie classification (default from policy config)
-        run_id: Optional run ID for caching (recommended for API routes)
+        aod_discovery_id: Optional run ID for caching (recommended for API routes)
 
     Returns:
         Dictionary mapping domain keys to DomainRollup objects
@@ -39,10 +39,10 @@ def compute_domain_rollups(
     if activity_window_days is None:
         activity_window_days = get_current_config().activity_windows.default_activity_window_days
 
-    # Check cache if run_id is provided
+    # Check cache if aod_discovery_id is provided
     cache = get_domain_rollups_cache()
-    if run_id:
-        cache_key = f"run:{run_id}:window:{activity_window_days}"
+    if aod_discovery_id:
+        cache_key = f"run:{aod_discovery_id}:window:{activity_window_days}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
@@ -111,9 +111,9 @@ def compute_domain_rollups(
                 if parent_activity is None or (subdomain_activity and subdomain_activity > parent_activity):
                     parent_rollup.latest_activity_at = subdomain_activity
 
-    # Store in cache if run_id is provided
-    if run_id:
-        cache_key = f"run:{run_id}:window:{activity_window_days}"
+    # Store in cache if aod_discovery_id is provided
+    if aod_discovery_id:
+        cache_key = f"run:{aod_discovery_id}:window:{activity_window_days}"
         cache.set(cache_key, rollups)
 
     return rollups

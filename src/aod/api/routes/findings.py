@@ -9,20 +9,20 @@ router = APIRouter(prefix="")
 
 
 @router.get("/findings", response_model=FindingsResponse)
-async def get_findings(run_id: str, db: Database = Depends(get_db)):
+async def get_findings(aod_discovery_id: str, db: Database = Depends(get_db)):
     """Get findings for a run"""
-    
-    run = await db.get_run(run_id)
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    findings = await db.get_findings_by_run(run_id)
-    assets = await db.get_assets_by_run(run_id)
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    findings = await db.get_findings_by_run(aod_discovery_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     
     asset_map = {str(a.asset_id): a.name for a in assets}
     
     return FindingsResponse(
-        aod_discovery_id=run_id,
+        aod_discovery_id=aod_discovery_id,
         findings=[
             {
                 "finding_id": str(f.finding_id),
@@ -42,17 +42,17 @@ async def get_findings(run_id: str, db: Database = Depends(get_db)):
 
 
 @router.get("/artifacts")
-async def get_artifacts(run_id: str, db: Database = Depends(get_db)):
+async def get_artifacts(aod_discovery_id: str, db: Database = Depends(get_db)):
     """Get artifacts for a run"""
-    
-    run = await db.get_run(run_id)
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    artifacts = await db.get_artifacts_by_run(run_id)
-    
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    artifacts = await db.get_artifacts_by_run(aod_discovery_id)
+
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "artifacts": [
             {
                 "artifact_id": str(a.artifact_id),

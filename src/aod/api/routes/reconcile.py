@@ -107,22 +107,22 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
 
     db = await get_db_direct()
 
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run not found: {request.run_id}")
+        raise HTTPException(status_code=404, detail=f"Run not found: {request.aod_discovery_id}")
 
-    assets = await db.get_assets_by_run(request.run_id)
+    assets = await db.get_assets_by_run(request.aod_discovery_id)
 
-    rejections_result = await db.get_rejections_by_run(request.run_id, limit=get_current_config().query_limits.default_rejection_limit)
+    rejections_result = await db.get_rejections_by_run(request.aod_discovery_id, limit=get_current_config().query_limits.default_rejection_limit)
     rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
 
     if not assets and not rejections:
-        raise HTTPException(status_code=404, detail=f"No assets or rejections found for run_id: {request.run_id}")
+        raise HTTPException(status_code=404, detail=f"No assets or rejections found for aod_discovery_id: {request.aod_discovery_id}")
 
     snapshot_as_of = _get_run_snapshot_as_of(run)
 
     result = emit_actual_results(
-        run_id=request.run_id,
+        run_id=request.aod_discovery_id,
         assets=assets or [],
         activity_window_days=request.activity_window_days,
         rejections=rejections,
@@ -354,7 +354,7 @@ async def explain_nonflag(request: ExplainNonflagRequest):
 
 
 @router.get("/debug/catalog-invariant-check")
-async def catalog_invariant_check(run_id: str):
+async def catalog_invariant_check(aod_discovery_id: str):
     """
     Clean-room invariant check: Find assets in catalog that violate admission criteria.
     
@@ -373,16 +373,16 @@ async def catalog_invariant_check(run_id: str):
     run = None
     for r in runs:
         r_run_id = getattr(r, 'aod_discovery_id', None) if hasattr(r, 'aod_discovery_id') else (r.get("aod_discovery_id") if isinstance(r, dict) else None)
-        if r_run_id == run_id:
+        if r_run_id == aod_discovery_id:
             run = r
             break
-    
+
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
-    
-    assets = await db.get_assets_by_run(run_id)
+        raise HTTPException(status_code=404, detail=f"Run not found: {aod_discovery_id}")
+
+    assets = await db.get_assets_by_run(aod_discovery_id)
     if not assets:
-        return {"aod_discovery_id": run_id, "status": "NO_ASSETS", "violations": []}
+        return {"aod_discovery_id": aod_discovery_id, "status": "NO_ASSETS", "violations": []}
     
     violations = []
     valid_count = 0
@@ -437,7 +437,7 @@ async def catalog_invariant_check(run_id: str):
     violations = sorted(violations, key=lambda x: x.get("name", ""))[:20]
     
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "status": "VIOLATIONS_FOUND" if violations else "ALL_VALID",
         "total_assets": len(assets),
         "valid_count": valid_count,
@@ -448,23 +448,23 @@ async def catalog_invariant_check(run_id: str):
 
 
 @router.get("/debug/snapshot-drift-check")
-async def snapshot_drift_check(run_id: str):
+async def snapshot_drift_check(aod_discovery_id: str):
     """
     Detect if a run's source snapshot has changed since ingestion.
-    
+
     Compares stored snapshot fingerprint against current Farm snapshot fingerprint.
     If they differ, the run's assets may be stale (based on old snapshot data).
-    
+
     This is critical for detecting Farm snapshot regeneration which invalidates
     correlated plane matches (IdP, CMDB, etc.) stored in asset records.
     """
     import os
     import httpx
-    
+
     db = await get_db_direct()
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        raise HTTPException(status_code=404, detail=f"Run not found: {aod_discovery_id}")
     
     input_meta = run.input_meta if hasattr(run, 'input_meta') else {}
     snapshot_id = input_meta.get("snapshot_id")
@@ -472,7 +472,7 @@ async def snapshot_drift_check(run_id: str):
     
     if not snapshot_id:
         return {
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "status": "NO_SNAPSHOT_ID",
             "detail": "Run has no snapshot_id in input_meta"
         }
@@ -481,7 +481,7 @@ async def snapshot_drift_check(run_id: str):
     farm_url = _get_farm_url()
     if not farm_url:
         return {
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "status": "NO_FARM_URL",
             "detail": "FARM_URL not configured"
         }
@@ -491,7 +491,7 @@ async def snapshot_drift_check(run_id: str):
             resp = await client.get(f"{farm_url.rstrip('/')}/api/snapshots?snapshot_id={snapshot_id}")
             if resp.status_code != 200:
                 return {
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status": "FARM_ERROR",
                     "detail": f"Farm returned {resp.status_code}"
                 }
@@ -508,7 +508,7 @@ async def snapshot_drift_check(run_id: str):
 
             if not current_snapshot:
                 return {
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status": "SNAPSHOT_NOT_FOUND",
                     "detail": f"Snapshot {snapshot_id} not found in Farm"
                 }
@@ -517,7 +517,7 @@ async def snapshot_drift_check(run_id: str):
 
             if not stored_fingerprint:
                 return {
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status": "NO_STORED_FINGERPRINT",
                     "stored_fingerprint": None,
                     "current_fingerprint": current_fingerprint,
@@ -526,7 +526,7 @@ async def snapshot_drift_check(run_id: str):
 
             if stored_fingerprint == current_fingerprint:
                 return {
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status": "OK",
                     "stored_fingerprint": stored_fingerprint,
                     "current_fingerprint": current_fingerprint,
@@ -534,7 +534,7 @@ async def snapshot_drift_check(run_id: str):
                 }
             else:
                 return {
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status": "DRIFT_DETECTED",
                     "stored_fingerprint": stored_fingerprint,
                     "current_fingerprint": current_fingerprint,
@@ -543,7 +543,7 @@ async def snapshot_drift_check(run_id: str):
 
     except Exception as e:
         return {
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "status": "ERROR",
             "detail": f"Failed to check Farm: {str(e)}"
         }

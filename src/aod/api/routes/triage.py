@@ -22,9 +22,9 @@ async def record_triage_action(request: TriageActionRequest):
     
     db = await get_db_direct()
     
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {request.aod_discovery_id} not found")
     
     state_map = {
         "acknowledge": "acknowledged",
@@ -43,7 +43,7 @@ async def record_triage_action(request: TriageActionRequest):
     
     result = await db.save_triage_action(
         tenant_id=run.tenant_id,
-        run_id=request.run_id,
+        run_id=request.aod_discovery_id,
         item_id=request.item_id,
         item_type=request.item_type,
         action=request.action,
@@ -66,29 +66,29 @@ async def record_triage_action(request: TriageActionRequest):
     )
 
 
-@router.get("/actions/{run_id}")
-async def get_triage_actions(run_id: str):
+@router.get("/actions/{aod_discovery_id}")
+async def get_triage_actions(aod_discovery_id: str):
     """Get all triage actions for a run"""
     db = await get_db_direct()
-    
-    run = await db.get_run(run_id)
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    actions = await db.get_triage_actions_by_run(run_id)
-    
-    return {"aod_discovery_id": run_id, "actions": actions}
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    actions = await db.get_triage_actions_by_run(aod_discovery_id)
+
+    return {"aod_discovery_id": aod_discovery_id, "actions": actions}
 
 
-@router.delete("/action/{run_id}/{item_id}")
-async def revert_triage_action(run_id: str, item_id: str):
+@router.delete("/action/{aod_discovery_id}/{item_id}")
+async def revert_triage_action(aod_discovery_id: str, item_id: str):
     """Revert/undo a triage action by deleting it"""
     db = await get_db_direct()
-    
-    run = await db.get_run(run_id)
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    deleted = await db.delete_triage_action(run_id, item_id)
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    deleted = await db.delete_triage_action(aod_discovery_id, item_id)
     
     return {"success": True, "deleted": deleted, "item_id": item_id}

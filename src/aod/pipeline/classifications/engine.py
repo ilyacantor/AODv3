@@ -19,7 +19,7 @@ from ...core.policy import get_current_config
 def compute_derived_classifications(
     assets: list[Asset],
     activity_window_days: Optional[int] = None,
-    run_id: Optional[str] = None,
+    aod_discovery_id: Optional[str] = None,
     snapshot_as_of: Optional[datetime] = None
 ) -> DerivedClassificationSummary:
     """
@@ -34,7 +34,7 @@ def compute_derived_classifications(
     Args:
         assets: List of assets to classify
         activity_window_days: Number of days to consider for recent activity
-        run_id: Optional run ID for caching (recommended for API routes)
+        aod_discovery_id: Optional run ID for caching (recommended for API routes)
         snapshot_as_of: Reference time for recency calculation
 
     Returns:
@@ -67,7 +67,7 @@ def compute_derived_classifications(
             domain_to_assets[domain_key] = []
         domain_to_assets[domain_key].append(asset)
 
-    domain_rollups = compute_domain_rollups(assets, activity_window_days, run_id=run_id)
+    domain_rollups = compute_domain_rollups(assets, activity_window_days, aod_discovery_id=aod_discovery_id)
 
     shadow_assets = []
     zombie_assets = []

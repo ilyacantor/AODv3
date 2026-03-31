@@ -254,7 +254,7 @@ async def notify_farm() -> dict:
 
 
 @router.get("/impact")
-async def get_policy_impact(run_id: str | None = None) -> dict:
+async def get_policy_impact(aod_discovery_id: str | None = None) -> dict:
     """
     Get the impact of current policy configuration on a specific run.
     
@@ -263,7 +263,7 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     the real-world effect of their policy settings.
     
     Args:
-        run_id: Optional run ID. If not provided, uses the latest run.
+        aod_discovery_id: Optional run ID. If not provided, uses the latest run.
     
     Returns:
         Policy impact summary including blocked domains by policy rule
@@ -272,7 +272,7 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     
     db = await get_db_direct()
     
-    if not run_id:
+    if not aod_discovery_id:
         runs = await db.get_all_runs()
         if not runs:
             return {
@@ -280,14 +280,14 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
                 "message": "No runs available to analyze policy impact"
             }
         runs.sort(key=lambda r: r.started_at or "", reverse=True)
-        run_id = runs[0].aod_discovery_id
-    
-    run = await db.get_run(run_id)
+        aod_discovery_id = runs[0].aod_discovery_id
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    rejections, total = await db.get_rejections_by_run(run_id, limit=2000)
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    rejections, total = await db.get_rejections_by_run(aod_discovery_id, limit=2000)
     
     policy_impact = {
         "shared_infrastructure": {"count": 0, "domains": []},
@@ -340,7 +340,7 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
     
     idh = config.infrastructure_domain_handling
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "run_status": run.status.value,
         "total_rejections": total,
         "policy_impact": policy_impact,

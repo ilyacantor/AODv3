@@ -333,10 +333,10 @@ async def resync_run_to_farm(request: ResyncRequest):
     Returns the sync status and a sample of the payload that was sent.
     """
     db = await get_db_direct()
-    run = await db.get_run(request.run_id)
+    run = await db.get_run(request.aod_discovery_id)
     
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {request.run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {request.aod_discovery_id} not found")
     
     farm_url = get_farm_url()
     if not farm_url:
@@ -346,9 +346,9 @@ async def resync_run_to_farm(request: ResyncRequest):
     if not snapshot_id:
         raise HTTPException(status_code=400, detail="Run has no snapshot_id in metadata")
     
-    assets = await db.get_assets_by_run(request.run_id)
-    findings = await db.get_findings_by_run(request.run_id)
-    rejections, _ = await db.get_rejections_by_run(request.run_id, limit=get_current_config().query_limits.default_rejection_limit)
+    assets = await db.get_assets_by_run(request.aod_discovery_id)
+    findings = await db.get_findings_by_run(request.aod_discovery_id)
+    rejections, _ = await db.get_rejections_by_run(request.aod_discovery_id, limit=get_current_config().query_limits.default_rejection_limit)
     
     mode = request.mode or "sprawl"
     
@@ -376,7 +376,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     
     from ...pipeline.aod_agent_reconcile import emit_actual_results
     actual_results = emit_actual_results(
-        run_id=request.run_id,
+        run_id=request.aod_discovery_id,
         assets=assets,
         activity_window_days=get_current_config().activity_windows.default_activity_window_days,
         rejections=rejections,
@@ -385,7 +385,7 @@ async def resync_run_to_farm(request: ResyncRequest):
     )
     
     return ResyncResponse(
-        aod_discovery_id=request.run_id,
+        aod_discovery_id=request.aod_discovery_id,
         sync_status=run.sync_status.value,
         sync_error=run.sync_error,
         shadow_asset_keys=actual_results.shadow_actual,
@@ -450,13 +450,13 @@ async def list_runs(tenant_id: Optional[str] = None):
     ]
 
 
-@router.get("/{run_id}", response_model=RunDetailResponse)
-async def get_run(run_id: str, db: Database = Depends(get_db)):
+@router.get("/{aod_discovery_id}", response_model=RunDetailResponse)
+async def get_run(aod_discovery_id: str, db: Database = Depends(get_db)):
     """Get run detail + counts"""
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
     return RunDetailResponse(
         aod_discovery_id=run.aod_discovery_id,
@@ -473,35 +473,35 @@ async def get_run(run_id: str, db: Database = Depends(get_db)):
     )
 
 
-@router.get("/{run_id}/observations")
-async def get_observations(run_id: str, limit: int = 100, offset: int = 0):
+@router.get("/{aod_discovery_id}/observations")
+async def get_observations(aod_discovery_id: str, limit: int = 100, offset: int = 0):
     """Get observation samples for a run"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    items, total = await db.get_observation_samples_by_run(run_id, limit=limit, offset=offset)
-    
+    items, total = await db.get_observation_samples_by_run(aod_discovery_id, limit=limit, offset=offset)
+
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "items": items,
         "count": len(items),
         "total": total
     }
 
 
-@router.get("/{run_id}/ambiguous")
-async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
+@router.get("/{aod_discovery_id}/ambiguous")
+async def get_ambiguous(aod_discovery_id: str, limit: int = 100, offset: int = 0):
     """Get ambiguous matches for a run"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    items, total = await db.get_ambiguous_matches_by_run(run_id, limit=limit, offset=offset)
+    items, total = await db.get_ambiguous_matches_by_run(aod_discovery_id, limit=limit, offset=offset)
     
     enriched_items = []
     for item in items:
@@ -509,46 +509,46 @@ async def get_ambiguous(run_id: str, limit: int = 100, offset: int = 0):
         enriched_items.append(item)
     
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "items": enriched_items,
         "count": len(enriched_items),
         "total": total
     }
 
 
-@router.get("/{run_id}/rejections")
-async def get_rejections(run_id: str, limit: int = 100, offset: int = 0):
+@router.get("/{aod_discovery_id}/rejections")
+async def get_rejections(aod_discovery_id: str, limit: int = 100, offset: int = 0):
     """Get rejections for a run"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    items, total = await db.get_rejections_by_run(run_id, limit=limit, offset=offset)
-    
+    items, total = await db.get_rejections_by_run(aod_discovery_id, limit=limit, offset=offset)
+
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "items": items,
         "count": len(items),
         "total": total
     }
 
 
-@router.get("/{run_id}/assets")
-async def get_run_assets(run_id: str, classification: Optional[str] = None):
+@router.get("/{aod_discovery_id}/assets")
+async def get_run_assets(aod_discovery_id: str, classification: Optional[str] = None):
     """Get assets for a run, optionally filtered by classification"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
 
     if classification:
-        summary = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
+        summary = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, aod_discovery_id=aod_discovery_id, snapshot_as_of=snapshot_as_of)
         if classification == "zombie":
             asset_ids = {a["asset_id"] for a in summary.zombie_assets}
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
@@ -557,7 +557,7 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
             assets = [a for a in assets if str(a.asset_id) in asset_ids]
     
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "assets": [
             {
                 "asset_id": str(a.asset_id),
@@ -581,22 +581,22 @@ async def get_run_assets(run_id: str, classification: Optional[str] = None):
     }
 
 
-@router.get("/{run_id}/summary")
-async def get_run_summary(run_id: str):
+@router.get("/{aod_discovery_id}/summary")
+async def get_run_summary(aod_discovery_id: str):
     """Get summary for a run including derived classifications"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
-    findings = await db.get_findings_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
+    findings = await db.get_findings_by_run(aod_discovery_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
-    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
+    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, aod_discovery_id=aod_discovery_id, snapshot_as_of=snapshot_as_of)
 
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "tenant_id": run.tenant_id,
         "status": run.status.value,
         "started_at": run.started_at.isoformat(),
@@ -616,21 +616,21 @@ async def get_run_summary(run_id: str):
     }
 
 
-@router.get("/{run_id}/classifications")
-async def get_classifications(run_id: str):
+@router.get("/{aod_discovery_id}/classifications")
+async def get_classifications(aod_discovery_id: str):
     """Get shadow/zombie classifications for a run"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
 
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
-    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
+    derived = compute_derived_classifications(assets, activity_window_days=get_current_config().activity_windows.default_activity_window_days, aod_discovery_id=aod_discovery_id, snapshot_as_of=snapshot_as_of)
 
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "shadow_count": derived.shadow_count,
         "zombie_count": derived.zombie_count,
         "shadow_assets": [a["name"] for a in derived.shadow_assets],
@@ -638,8 +638,8 @@ async def get_classifications(run_id: str):
     }
 
 
-@router.get("/{run_id}/reconcile-payload")
-async def get_reconcile_payload(run_id: str):
+@router.get("/{aod_discovery_id}/reconcile-payload")
+async def get_reconcile_payload(aod_discovery_id: str):
     """Get the reconcile payload that would be sent to Farm.
     
     Uses build_reconcile_payload() from farm_reconcile module.
@@ -650,14 +650,14 @@ async def get_reconcile_payload(run_id: str):
     
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
-    findings = await db.get_findings_by_run(run_id)
-    rejections, _ = await db.get_rejections_by_run(run_id, limit=get_current_config().query_limits.default_rejection_limit)
-    
+    assets = await db.get_assets_by_run(aod_discovery_id)
+    findings = await db.get_findings_by_run(aod_discovery_id)
+    rejections, _ = await db.get_rejections_by_run(aod_discovery_id, limit=get_current_config().query_limits.default_rejection_limit)
+
     snapshot_id = run.input_meta.get("snapshot_id") if run.input_meta else None
     
     return build_reconcile_payload(
@@ -669,16 +669,16 @@ async def get_reconcile_payload(run_id: str):
     )
 
 
-@router.get("/{run_id}/lens")
-async def get_lens_summary(run_id: str):
+@router.get("/{aod_discovery_id}/lens")
+async def get_lens_summary(aod_discovery_id: str):
     """Get lens status summary for a run"""
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     
     lens_counts = {
         "idp": {"matched": 0, "unmatched": 0, "indeterminate": 0},
@@ -694,7 +694,7 @@ async def get_lens_summary(run_id: str):
         lens_counts["finance"][asset.lens_status.finance.value] += 1
     
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "total_assets": len(assets),
         "lens_counts": lens_counts
     }
@@ -717,8 +717,8 @@ async def clear_caches():
     return {"message": "All caches cleared"}
 
 
-@router.get("/{run_id}/derived")
-async def get_derived_classifications(run_id: str, activity_window_days: int = 90):
+@router.get("/{aod_discovery_id}/derived")
+async def get_derived_classifications(aod_discovery_id: str, activity_window_days: int = 90):
     """
     Get derived classifications (Shadow/Zombie) for a run.
     
@@ -730,19 +730,19 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
                    OR has no recent activity within the activity window
     
     Args:
-        run_id: The run to get classifications for
+        aod_discovery_id: The run to get classifications for
         activity_window_days: Number of days to consider for recent activity (default 90)
     """
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
 
-    assets = await db.get_assets_by_run(run_id)
+    assets = await db.get_assets_by_run(aod_discovery_id)
     snapshot_as_of = _get_run_snapshot_as_of(run)
 
-    summary = compute_derived_classifications(assets, activity_window_days, run_id=run_id, snapshot_as_of=snapshot_as_of)
+    summary = compute_derived_classifications(assets, activity_window_days, aod_discovery_id=aod_discovery_id, snapshot_as_of=snapshot_as_of)
 
     # Stage 1 Metrics: Check for CMDB external_ref domain leakage
     # After Stage 1, reference_domains should contain CMDB external_ref domains
@@ -750,7 +750,7 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
     stage1_metrics = _compute_stage1_asset_metrics(assets)
 
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "activity_window_days": activity_window_days,
         "snapshot_as_of": snapshot_as_of.isoformat() if snapshot_as_of else None,
         "shadow_count": summary.shadow_count,
@@ -770,8 +770,8 @@ async def get_derived_classifications(run_id: str, activity_window_days: int = 9
     }
 
 
-@router.get("/{run_id}/artifacts")
-async def get_run_artifacts(run_id: str):
+@router.get("/{aod_discovery_id}/artifacts")
+async def get_run_artifacts(aod_discovery_id: str):
     """
     Get discovered artifacts for a run: Fabric Planes and Systems of Record.
 
@@ -789,9 +789,9 @@ async def get_run_artifacts(run_id: str):
     """
     db = await get_db_direct()
 
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
 
     # Get industry from input_meta
     industry = None
@@ -850,7 +850,7 @@ async def get_run_artifacts(run_id: str):
         }
     else:
         # Fallback: Compute from assets (legacy behavior)
-        assets = await db.get_assets_by_run(run_id)
+        assets = await db.get_assets_by_run(aod_discovery_id)
         fabric_planes = []
         fabric_plane_assets = []
         plane_vendor_counts: dict[str, dict] = {}
@@ -953,7 +953,7 @@ async def get_run_artifacts(run_id: str):
         try:
             assets_for_sor = assets  # type: ignore
         except NameError:
-            assets_for_sor = await db.get_assets_by_run(run_id)
+            assets_for_sor = await db.get_assets_by_run(aod_discovery_id)
 
         sor_results = batch_score_sor(assets_for_sor)
         sor_assets = []
@@ -991,7 +991,7 @@ async def get_run_artifacts(run_id: str):
         }
 
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "industry": industry,
         "fabric_planes": fabric_response,
         "systems_of_record": sor_response
@@ -1015,8 +1015,8 @@ def _group_planes_by_type(fabric_planes: list[dict]) -> dict:
     return by_type
 
 
-@router.get("/{run_id}/policy")
-async def get_run_policy(run_id: str):
+@router.get("/{aod_discovery_id}/policy")
+async def get_run_policy(aod_discovery_id: str):
     """
     Get the policy snapshot used for a specific run.
     
@@ -1025,12 +1025,12 @@ async def get_run_policy(run_id: str):
     grading - Farm can fetch this endpoint to grade with identical policy.
     
     Contract:
-        200 OK: { run_id, policy_hash, captured_at, policy }
+        200 OK: { aod_discovery_id, policy_hash, captured_at, policy }
         404: Run not found
         410: Policy snapshot expired/garbage collected (future)
     
     Args:
-        run_id: The run to get the policy snapshot for
+        aod_discovery_id: The run to get the policy snapshot for
     
     Returns:
         The policy configuration used for this run
@@ -1039,9 +1039,9 @@ async def get_run_policy(run_id: str):
     
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
     
     if not run.policy_snapshot:
         raise HTTPException(
@@ -1055,7 +1055,7 @@ async def get_run_policy(run_id: str):
     captured_at = run.started_at.isoformat() if run.started_at else None
     
     return {
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "policy_hash": policy_hash,
         "captured_at": captured_at,
         "policy": run.policy_snapshot

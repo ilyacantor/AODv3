@@ -50,7 +50,7 @@ def deserialize_asset_row(row: asyncpg.Record) -> Asset:
     return Asset(
         asset_id=UUID(row["asset_id"]),
         tenant_id=row["tenant_id"],
-        run_id=row["run_id"],
+        aod_discovery_id=row["run_id"],
         name=row["name"],
         asset_type=AssetType(row["asset_type"]),
         identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
@@ -79,7 +79,7 @@ def deserialize_artifact_row(row: asyncpg.Record) -> Artifact:
     return Artifact(
         artifact_id=UUID(row["artifact_id"]),
         tenant_id=row["tenant_id"],
-        run_id=row["run_id"],
+        aod_discovery_id=row["run_id"],
         parent_asset_id=UUID(row["parent_asset_id"]) if row["parent_asset_id"] else None,
         name=row["name"],
         artifact_type=ArtifactType(row["artifact_type"]),
@@ -95,7 +95,7 @@ def deserialize_finding_row(row: asyncpg.Record) -> Finding:
         finding_id=UUID(row["finding_id"]),
         asset_id=UUID(row["asset_id"]) if row["asset_id"] else None,
         tenant_id=row["tenant_id"],
-        run_id=row["run_id"],
+        aod_discovery_id=row["run_id"],
         finding_type=FindingType(row["finding_type"]),
         category=FindingCategory(row["category"]) if row.get("category") else FindingCategory.GOVERNANCE_FINDING,
         severity=Severity(row["severity"]),
@@ -117,7 +117,7 @@ def deserialize_run_row(row: asyncpg.Record) -> RunLog:
     policy_snapshot_data = row.get("policy_snapshot")
 
     return RunLog(
-        run_id=row["run_id"],
+        aod_discovery_id=row["run_id"],
         tenant_id=row["tenant_id"],
         entity_id=row.get("entity_id"),
         status=RunStatus(row["status"]),

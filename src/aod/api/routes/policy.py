@@ -280,7 +280,7 @@ async def get_policy_impact(run_id: str | None = None) -> dict:
                 "message": "No runs available to analyze policy impact"
             }
         runs.sort(key=lambda r: r.started_at or "", reverse=True)
-        run_id = runs[0].run_id
+        run_id = runs[0].aod_discovery_id
     
     run = await db.get_run(run_id)
     if not run:

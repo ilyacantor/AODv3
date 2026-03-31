@@ -578,7 +578,7 @@
                 completedRuns.sort((a, b) => new Date(b.started_at || b.created_at) - new Date(a.started_at || a.created_at));
                 completedRuns.forEach((run, idx) => {
                     const opt = document.createElement('option');
-                    opt.value = run.run_id;
+                    opt.value = run.aod_discovery_id;
                     const tenant = run.entity_id || run.tenant_name || 'Unknown';
                     const dateStr = run.started_at || run.created_at;
                     const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
@@ -586,7 +586,7 @@
                     opt.textContent = `${tenant} - ${date}${latest}`;
                     select.appendChild(opt);
                 });
-                if (currentRunId && completedRuns.some(r => r.run_id === currentRunId)) {
+                if (currentRunId && completedRuns.some(r => r.aod_discovery_id === currentRunId)) {
                     select.value = currentRunId;
                     loadTriageData();
                 } else if (completedRuns.length > 0) {
@@ -1311,7 +1311,7 @@
                     runs.filter(r => r.status === 'completed_with_results' || r.status === 'COMPLETED_WITH_RESULTS')
                         .forEach(run => {
                             const opt = document.createElement('option');
-                            opt.value = run.run_id;
+                            opt.value = run.aod_discovery_id;
                             const tenant = run.entity_id || run.tenant_name || 'Unknown';
                             const dateStr = run.started_at || run.created_at;
                             const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
@@ -1536,7 +1536,7 @@
                 console.log('Handoff: loaded', completedRuns.length, 'runs, showing', displayRuns.length);
                 displayRuns.forEach((run, idx) => {
                     const opt = document.createElement('option');
-                    opt.value = run.run_id;
+                    opt.value = run.aod_discovery_id;
                     const tenant = run.entity_id || run.tenant_name || 'Unknown';
                     const dateStr = run.started_at || run.created_at;
                     const date = dateStr ? new Date(dateStr).toLocaleDateString() : '';
@@ -1545,7 +1545,7 @@
                     select.appendChild(opt);
                 });
                 // Populate dropdown only — Console's selectRun() handles candidate loading
-                if (currentRunId && displayRuns.some(r => r.run_id === currentRunId)) {
+                if (currentRunId && displayRuns.some(r => r.aod_discovery_id === currentRunId)) {
                     select.value = currentRunId;
                 } else if (displayRuns.length > 0) {
                     select.value = displayRuns[0].run_id;
@@ -3386,12 +3386,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                         const profile = run.input_meta?.enterprise_profile || '-';
                         const isCompleted = run.status.toLowerCase().includes('completed');
                         const catalogLink = isCompleted
-                            ? `<a href="/api/catalog/view?run_id=${run.run_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
+                            ? `<a href="/api/catalog/view?run_id=${run.aod_discovery_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
                             : '';
                         const timingBadge = run.stage_timings && run.stage_timings.total
                             ? `<span class="run-timing" title="Pipeline execution time">${run.stage_timings.total.toFixed(1)}s</span>`
                             : '';
-                        return `<div class="run-item ${run.run_id === currentRunId ? 'selected' : ''}" data-run-id="${run.run_id}">
+                        return `<div class="run-item ${run.aod_discovery_id === currentRunId ? 'selected' : ''}" data-run-id="${run.aod_discovery_id}">
                             <div class="run-info">
                                 <span class="run-tenant">${tenant}${latestTag}</span>
                                 <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}${timingBadge}
@@ -3454,7 +3454,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         async function loadRunDetails(runId) {
             try {
                 const r = await fetch(`/api/runs/${runId}`); const run = await r.json();
-                document.getElementById('descRunId').textContent = run.run_id;
+                document.getElementById('descRunId').textContent = run.aod_discovery_id;
                 document.getElementById('descTenant').textContent = run.tenant_id;
                 document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
                 document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';

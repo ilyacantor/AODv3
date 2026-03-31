@@ -93,7 +93,7 @@ def generate_data_conflict_findings(
             finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, f"data_conflict_{field_name}"),
             asset_id=asset.asset_id,
             tenant_id=tenant_id,
-            run_id=run_id,
+            aod_discovery_id=run_id,
             finding_type=FindingType.DATA_CONFLICT,
             category=get_category(FindingType.DATA_CONFLICT),
             severity=Severity.MED,

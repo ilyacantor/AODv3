@@ -124,7 +124,7 @@ async def create_run(file: UploadFile = File(...)):
     await _emit_discovery_triples(result, db, run_id, snapshot_data=data)
 
     return RunResponse(
-        aod_discovery_id=result.run_log.run_id,
+        aod_discovery_id=result.run_log.aod_discovery_id,
         tenant_id=result.run_log.tenant_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
@@ -161,7 +161,7 @@ async def create_run_json(snapshot: dict[str, Any]):
     await _emit_discovery_triples(result, db, run_id, snapshot_data=snapshot)
 
     return RunResponse(
-        aod_discovery_id=result.run_log.run_id,
+        aod_discovery_id=result.run_log.aod_discovery_id,
         tenant_id=result.run_log.tenant_id,
         status=result.run_log.status.value,
         counts=result.run_log.counts,
@@ -227,7 +227,7 @@ async def create_run_from_farm(request: FarmRunRequest):
         snapshot_data["meta"]["entity_id"] = entity_id
     
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    aod_discovery_id = str(uuid.uuid4())
+    aod_discovery_id = run_id
     started_at = now_pst()
 
     snapshot_generated_at = _parse_snapshot_generated_at(snapshot_data)
@@ -409,7 +409,7 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
         raise HTTPException(status_code=404, detail=f"No run found for tenant {tenant_id}" + (f" and snapshot {snapshot_id}" if snapshot_id else ""))
 
     return RunDetailResponse(
-        aod_discovery_id=run.run_id,
+        aod_discovery_id=run.aod_discovery_id,
         tenant_id=run.tenant_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),
@@ -434,7 +434,7 @@ async def list_runs(tenant_id: Optional[str] = None):
 
     return [
         RunDetailResponse(
-            aod_discovery_id=run.run_id,
+            aod_discovery_id=run.aod_discovery_id,
             tenant_id=run.tenant_id,
             status=run.status.value,
             started_at=run.started_at.isoformat(),
@@ -459,7 +459,7 @@ async def get_run(run_id: str, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     
     return RunDetailResponse(
-        aod_discovery_id=run.run_id,
+        aod_discovery_id=run.aod_discovery_id,
         tenant_id=run.tenant_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),

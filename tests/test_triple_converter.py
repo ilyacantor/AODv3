@@ -36,7 +36,7 @@ def _make_asset(
     return Asset(
         asset_id=asset_id,
         tenant_id="test-tenant",
-        run_id="run_test123",
+        aod_discovery_id="run_test123",
         name=name,
         asset_type=asset_type,
         identifiers=AssetIdentifiers(),
@@ -68,7 +68,7 @@ def _make_finding(
         finding_id=uuid4(),
         asset_id=asset_id,
         tenant_id="test-tenant",
-        run_id="run_test123",
+        aod_discovery_id="run_test123",
         finding_type=finding_type,
         category=FindingCategory.IDENTITY_ACCESS,
         severity=severity,

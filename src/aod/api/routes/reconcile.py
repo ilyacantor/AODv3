@@ -130,7 +130,7 @@ async def debug_aod_agent_reconcile(request: AODActualResultsRequest):
     )
 
     return AODActualResultsResponse(
-        aod_discovery_id=result.run_id,
+        aod_discovery_id=result.aod_discovery_id,
         shadow_actual=result.shadow_actual,
         zombie_actual=result.zombie_actual,
         admission_actual=result.admission_actual,
@@ -180,7 +180,7 @@ async def explain_nonflag(request: ExplainNonflagRequest):
             explanations=explanations
         )
 
-    run_id = matching_run.run_id if hasattr(matching_run, 'run_id') else matching_run.get("run_id")
+    run_id = matching_run.aod_discovery_id if hasattr(matching_run, 'aod_discovery_id') else matching_run.get("aod_discovery_id")
     assets = await db.get_assets_by_run(run_id)
     rejections_result = await db.get_rejections_by_run(run_id)
     rejections = rejections_result[0] if isinstance(rejections_result, tuple) else rejections_result
@@ -372,7 +372,7 @@ async def catalog_invariant_check(run_id: str):
     runs = await db.get_all_runs()
     run = None
     for r in runs:
-        r_run_id = getattr(r, 'run_id', None) if hasattr(r, 'run_id') else (r.get("run_id") if isinstance(r, dict) else None)
+        r_run_id = getattr(r, 'aod_discovery_id', None) if hasattr(r, 'aod_discovery_id') else (r.get("aod_discovery_id") if isinstance(r, dict) else None)
         if r_run_id == run_id:
             run = r
             break

@@ -26,7 +26,7 @@ class ArtifactOperations:
                 """,
                 str(artifact.artifact_id),
                 artifact.tenant_id,
-                artifact.run_id,
+                artifact.aod_discovery_id,
                 str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
                 artifact.name,
                 artifact.artifact_type.value,
@@ -58,7 +58,7 @@ class ArtifactOperations:
             rows.append((
                 str(artifact.artifact_id),
                 artifact.tenant_id,
-                artifact.run_id,
+                artifact.aod_discovery_id,
                 str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
                 artifact.name,
                 artifact.artifact_type.value,

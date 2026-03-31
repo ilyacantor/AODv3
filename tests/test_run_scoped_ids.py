@@ -94,7 +94,7 @@ class TestRunScopedIds:
 
         assert run1 is not None, "Run 1 should still exist after Run 2"
         assert run2 is not None, "Run 2 should exist"
-        assert run1.run_id != run2.run_id, "Run IDs should be distinct"
+        assert run1.aod_discovery_id != run2.aod_discovery_id, "Run IDs should be distinct"
 
     @pytest.mark.asyncio
     async def test_drill_sample_counts_match(self, pg_db_with_cleanup):

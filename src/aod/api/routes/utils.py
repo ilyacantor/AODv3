@@ -17,8 +17,14 @@ def parse_iso_datetime(dt_str: str) -> Optional[datetime]:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed
-    except (ValueError, TypeError):
-        return None
+    except (ValueError, TypeError) as e:
+        logger.warning(
+            "parse_iso_datetime.invalid_format",
+            extra={"input": dt_str, "error": str(e)},
+        )
+        raise ValueError(
+            f"Could not parse ISO datetime string '{dt_str}': {e}"
+        ) from e
 
 
 def parse_snapshot_generated_at(snapshot_data: dict) -> Optional[datetime]:

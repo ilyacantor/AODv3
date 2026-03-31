@@ -729,7 +729,7 @@ class ConnectionCandidatePayload(BaseModel):
     - AOD is A/R for: asset discovery, fabric plane identification, evidence lead generation
     - AAM is A/R for: plane crawl, pipe creation, connection provisioning
     """
-    run_id: str = Field(description="Discovery run identifier")
+    aod_discovery_id: str = Field(description="Discovery run identifier")
     tenant_id: str = Field(description="Tenant identifier")
     timestamp: datetime = Field(default_factory=now_pst, description="Handoff timestamp")
 
@@ -789,7 +789,7 @@ class Asset(BaseModel):
     """Asset in the catalog - systems only"""
     asset_id: UUID
     tenant_id: str
-    run_id: str
+    aod_discovery_id: str
     name: str
     asset_type: AssetType = AssetType.UNKNOWN
     identifiers: AssetIdentifiers = Field(default_factory=AssetIdentifiers)
@@ -845,7 +845,7 @@ class Artifact(BaseModel):
     """Artifact - non-system objects like dashboards, reports, etc."""
     artifact_id: UUID
     tenant_id: str
-    run_id: str
+    aod_discovery_id: str
     parent_asset_id: Optional[UUID] = None
     name: str
     artifact_type: ArtifactType
@@ -918,7 +918,7 @@ class Finding(BaseModel):
     finding_id: UUID
     asset_id: Optional[UUID] = None
     tenant_id: str
-    run_id: str
+    aod_discovery_id: str
     finding_type: FindingType
     category: FindingCategory
     severity: Severity
@@ -984,11 +984,11 @@ class PipelineStageTimings(BaseModel):
 class RunLog(BaseModel):
     """
     Run log entry for a DiscoveryScan session.
-    
-    The run_id field also serves as the scan_session_id for downstream handoffs to AAM.
+
+    The aod_discovery_id field also serves as the scan_session_id for downstream handoffs to AAM.
     The scan_session_id property is provided as an alias for clarity in the new terminology.
     """
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     entity_id: Optional[str] = Field(default=None, description="Business entity key (e.g. 'meridian'). Set from Console request.")
     status: RunStatus
@@ -1004,8 +1004,8 @@ class RunLog(BaseModel):
     
     @property
     def scan_session_id(self) -> str:
-        """Alias for run_id - the unique identifier for this DiscoveryScan session."""
-        return self.run_id
+        """Alias for aod_discovery_id - the unique identifier for this DiscoveryScan session."""
+        return self.aod_discovery_id
 
 
 # Backward-compatible type alias

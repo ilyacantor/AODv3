@@ -545,7 +545,7 @@ def _merge_assets(assets: list[Asset], merge_key: str, log: logging.Logger) -> A
     merged_asset = Asset(
         asset_id=winner.asset_id,
         tenant_id=winner.tenant_id,
-        run_id=winner.run_id,
+        aod_discovery_id=winner.aod_discovery_id,
         name=winner.name,
         asset_type=winner.asset_type,
         environment=winner.environment,

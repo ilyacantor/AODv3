@@ -29,7 +29,7 @@ def make_asset(
     return Asset(
         asset_id=uuid4(),
         tenant_id="test",
-        run_id="test-run",
+        aod_discovery_id="test-run",
         name="Test App",
         asset_type=AssetType.SAAS,
         identifiers=AssetIdentifiers(domains=[domain]),

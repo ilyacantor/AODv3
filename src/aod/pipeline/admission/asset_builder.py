@@ -502,7 +502,7 @@ def _build_admitted_asset(
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, run_id, "asset", asset_key),
         tenant_id=tenant_id,
-        run_id=run_id,
+        aod_discovery_id=run_id,
         name=entity.original_name,
         asset_type=determine_asset_type(correlation, entity),
         identifiers=identifiers,

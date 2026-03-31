@@ -52,7 +52,7 @@ class AssetOperations:
                 """,
                 str(asset.asset_id),
                 asset.tenant_id,
-                asset.run_id,
+                asset.aod_discovery_id,
                 asset.name,
                 asset.asset_type.value,
                 asset.identifiers.model_dump_json(),
@@ -153,7 +153,7 @@ class AssetOperations:
             rows.append((
                 str(asset.asset_id),
                 asset.tenant_id,
-                asset.run_id,
+                asset.aod_discovery_id,
                 asset.name,
                 asset.asset_type.value,
                 asset.identifiers.model_dump_json(),

@@ -306,7 +306,7 @@ class PipelineResult:
     Result of DiscoveryScan execution (formerly "pipeline execution").
     
     Contains the run log, discovered assets, artifacts, and findings.
-    Use `run_log.run_id` as the scan_session_id for downstream handoffs.
+    Use `run_log.aod_discovery_id` as the scan_session_id for downstream handoffs.
     """
     success: bool
     run_log: RunLog
@@ -589,19 +589,19 @@ def run_pipeline_ephemeral(
         # Determine organizational integration pattern for AAM connection strategy
         preset_context = infer_preset(assets, fabric_planes)
         logger.info("preset_inference.complete", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "preset": preset_context.preset.value,
             "confidence": preset_context.confidence,
             "primary_plane": preset_context.primary_plane,
             "fabric_planes_detected": len(fabric_planes)
         })
-        
+
         # Stage 1 Metrics: Track CMDB external_ref domain injection
         # cmdb_external_ref_domains_extracted_total: How many domains from CMDB external_ref
         # domains_added_to_identifiers_from_cmdb_external_ref_total: Should be 0 after Stage 1
         stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)
         logger.info("stage1.cmdb_external_ref_metrics", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "cmdb_external_ref_domains_extracted_total": stage1_metrics["cmdb_external_ref_domains_extracted_total"],
             "domains_added_to_identifiers_from_cmdb_external_ref_total": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"],
             "stage1_effective": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"] == 0
@@ -689,7 +689,7 @@ async def execute_pipeline(
     entity_id = input_meta.get("entity_id") or data.get("meta", {}).get("entity_id")
 
     run_log = RunLog(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         tenant_id=tenant_id,
         entity_id=entity_id,
         status=RunStatus.RUNNING,
@@ -731,7 +731,7 @@ async def execute_pipeline(
         
         if iron_dome_rejections:
             logger.info("pipeline.iron_dome_rejections", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "rejected_count": len(iron_dome_rejections),
                 "sample_rejections": iron_dome_rejections[:5]
             })
@@ -758,7 +758,7 @@ async def execute_pipeline(
         if synthetic_candidates:
             candidates = candidates + synthetic_candidates
             logger.info("pipeline.fabric_candidates_injected", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "count": len(synthetic_candidates),
                 "names": [c.original_name for c in synthetic_candidates]
             })
@@ -870,7 +870,7 @@ async def execute_pipeline(
         run_log.policy_snapshot = policy_config.to_dict()
         
         if use_policy_engine:
-            logger.info("policy_engine.primary_mode", extra={"run_id": run_id})
+            logger.info("policy_engine.primary_mode", extra={"aod_discovery_id": run_id})
 
         t_start = time.perf_counter()
         assets = []
@@ -981,7 +981,7 @@ async def execute_pipeline(
             run_log.counts.assets_admitted = post_merge_count
             if post_merge_count != pre_merge_count:
                 logger.info("pipeline.domain_merge_applied", extra={
-                    "run_id": run_id,
+                    "aod_discovery_id": run_id,
                     "pre_merge_count": pre_merge_count,
                     "post_merge_count": post_merge_count,
                     "merged_count": pre_merge_count - post_merge_count
@@ -1004,7 +1004,7 @@ async def execute_pipeline(
         )
         assets = apply_fabric_plane_tags(assets, asset_plane_tags)
         logger.info("fabric_detection.complete", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "fabric_planes_count": len(fabric_planes),
             "asset_plane_tags_count": len(asset_plane_tags),
             "pipes_count": len(pipes),
@@ -1017,7 +1017,7 @@ async def execute_pipeline(
         preset_context = infer_preset(assets, fabric_planes)
         timings['preset_inference'] = time.perf_counter() - t_start
         logger.info("preset_inference.complete", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "preset": preset_context.preset.value,
             "confidence": preset_context.confidence,
             "primary_plane": preset_context.primary_plane,
@@ -1030,7 +1030,7 @@ async def execute_pipeline(
         evidence_result = collect_all_evidence(snapshot)
         timings['evidence_collection'] = time.perf_counter() - t_start
         logger.info("evidence_collection.complete", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "evidence_lead_count": evidence_result.evidence_lead_count,
             "fabric_planes_detected": len(evidence_result.fabric_plane_registry.planes),
             "shadow_candidates": len(evidence_result.shadow_plane_candidates)
@@ -1076,7 +1076,7 @@ async def execute_pipeline(
         # Stage 1 Metrics: Track CMDB external_ref domain injection
         stage1_metrics = _compute_stage1_metrics(assets, correlation_by_entity_id)
         logger.info("stage1.cmdb_external_ref_metrics", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "cmdb_external_ref_domains_extracted_total": stage1_metrics["cmdb_external_ref_domains_extracted_total"],
             "domains_added_to_identifiers_from_cmdb_external_ref_total": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"],
             "stage1_effective": stage1_metrics["domains_added_to_identifiers_from_cmdb_external_ref_total"] == 0
@@ -1152,20 +1152,20 @@ async def execute_pipeline(
         
         timings['sor_scoring'] = time.perf_counter() - t_start
         logger.info("pipeline.sor_scoring_complete", extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "assets_scored": sor_scored_count,
             "high_confidence_sors": sor_high_confidence_count
         })
-        
+
         if policy_mismatches:
             logger.warning("policy_engine.mismatch_detected", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "mismatch_count": len(policy_mismatches),
                 "mismatches": policy_mismatches[:10],
             })
         else:
             logger.info("policy_engine.validation_passed", extra={
-                "run_id": run_id,
+                "aod_discovery_id": run_id,
                 "candidates_evaluated": len(filtered_candidates),
             })
         

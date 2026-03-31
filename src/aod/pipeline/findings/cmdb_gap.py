@@ -35,7 +35,7 @@ def generate_cmdb_gap_finding(
         finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "cmdb_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
-        run_id=run_id,
+        aod_discovery_id=run_id,
         finding_type=FindingType.CMDB_GAP,
         category=get_category(FindingType.CMDB_GAP),
         severity=Severity.MED,

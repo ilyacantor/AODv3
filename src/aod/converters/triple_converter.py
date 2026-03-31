@@ -81,7 +81,7 @@ def _make_triple(
         "source_table": source_table,
         "source_field": source_field,
         "pipe_id": None,
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "source_run_tag": None,
         "confidence_score": confidence_score,
         "confidence_tier": confidence_tier,
@@ -352,7 +352,7 @@ def convert_discovery_to_triples(
     logger.info(
         "triple_converter.converted",
         extra={
-            "run_id": run_id,
+            "aod_discovery_id": run_id,
             "entity_id": entity_id,
             "asset_count": len(assets),
             "finding_count": len(findings),

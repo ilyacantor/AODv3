@@ -226,7 +226,9 @@ async def _fetch_from_farm() -> Optional[FarmDefinitions]:
 
     except Exception as e:
         logger.exception("definitions.fetch_error", extra={"error": str(e)})
-        return None
+        raise RuntimeError(
+            f"Failed to fetch definitions from Farm: {e}"
+        ) from e
 
 
 def _parse_farm_response(data: dict) -> FarmDefinitions:

@@ -77,7 +77,7 @@ class ActualResultsOutput:
     Contains all classified assets (shadow, zombie, parked, active),
     rejections, and summary statistics.
     """
-    run_id: str
+    aod_discovery_id: str
     tenant_id: str
     generated_at: datetime
 
@@ -107,7 +107,7 @@ class ActualResultsOutput:
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
-            "aod_discovery_id": self.run_id,
+            "aod_discovery_id": self.aod_discovery_id,
             "tenant_id": self.tenant_id,
             "generated_at": self.generated_at.isoformat(),
             "summary": {

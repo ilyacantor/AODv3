@@ -637,7 +637,7 @@ async def update_asset_provisioning(
     
     await db.save_triage_action(
         tenant_id=tenant_id,
-        run_id=asset.run_id,
+        run_id=asset.aod_discovery_id,
         item_id=asset_id,
         item_type=item_type,
         action=action.lower(),

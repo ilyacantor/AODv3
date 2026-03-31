@@ -16,7 +16,7 @@ from src.aod.models.output_contracts import (
 @pytest.fixture
 def sample_run_log():
     return RunLog(
-        run_id="run_test123",
+        aod_discovery_id="run_test123",
         tenant_id="tenant1",
         status=RunStatus.COMPLETED_WITH_RESULTS,
         started_at=datetime.utcnow(),
@@ -36,7 +36,7 @@ def sample_assets():
         Asset(
             asset_id=uuid4(),
             tenant_id="tenant1",
-            run_id="run_test123",
+            aod_discovery_id="run_test123",
             name="Slack",
             asset_type=AssetType.SAAS,
             environment=Environment.PROD,
@@ -54,7 +54,7 @@ def sample_findings():
         Finding(
             finding_id=uuid4(),
             tenant_id="tenant1",
-            run_id="run_test123",
+            aod_discovery_id="run_test123",
             finding_type=FindingType.GOVERNANCE_GAP,
             category=FindingCategory.GOVERNANCE_FINDING,
             severity=Severity.CRITICAL,

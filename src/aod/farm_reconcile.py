@@ -9,10 +9,13 @@ FARM NOTIFICATION (Dec 2025):
 - No action required on Farm side
 """
 
+import logging
 import os
 import httpx
 from typing import Optional, Any
 from datetime import datetime, timezone, timedelta
+
+logger = logging.getLogger(__name__)
 
 PST = timezone(timedelta(hours=-8))
 
@@ -51,7 +54,7 @@ def build_reconcile_payload(
         The reconcile payload dict ready to be sent to Farm or returned via API
     """
     actual_results = emit_actual_results(
-        run_id=run_log.run_id,
+        run_id=run_log.aod_discovery_id,
         assets=assets,
         activity_window_days=90,
         rejections=rejections,
@@ -108,7 +111,7 @@ def build_reconcile_payload(
         "asset_summaries_count": len(asset_summaries),
         "snapshot_id": snapshot_id,
         "tenant_id": run_log.tenant_id,
-        "aod_run_id": run_log.run_id,
+        "aod_run_id": run_log.aod_discovery_id,
         "aod_status": run_log.status.value,
         "aod_callback_url": aod_callback_url,
         "completed_at": run_log.completed_at.isoformat() if run_log.completed_at else now_pst().isoformat(),
@@ -193,6 +196,9 @@ async def reconcile_to_farm(
     
     reconcile_url = f"{base_url.rstrip('/')}/api/reconcile"
     
+    success = True
+    error_msg = None
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -200,16 +206,26 @@ async def reconcile_to_farm(
                 json=reconcile_payload,
                 headers=headers
             )
-            
+
             if response.status_code in (200, 201, 202, 204):
-                return True, None
+                pass
             else:
                 error_text = response.text[:200] if response.text else f"HTTP {response.status_code}"
-                return False, f"Farm returned {response.status_code}: {error_text}"
-                
+                success = False
+                error_msg = f"Farm returned {response.status_code}: {error_text}"
+                logger.error("Farm reconcile HTTP error at %s: %s", reconcile_url, error_msg)
+
     except httpx.ConnectError as e:
-        return False, f"Connection error: {str(e)[:100]}"
+        error_msg = f"Connection error: {str(e)[:100]}"
+        logger.error("Farm reconcile connection failed at %s: %s", reconcile_url, e)
+        success = False
     except httpx.TimeoutException:
-        return False, "Request timed out"
+        error_msg = "Request timed out after 30s"
+        logger.error("Farm reconcile timed out at %s", reconcile_url)
+        success = False
     except Exception as e:
-        return False, f"Unexpected error: {str(e)[:100]}"
+        error_msg = f"Unexpected error: {type(e).__name__}: {str(e)[:100]}"
+        logger.error("Farm reconcile unexpected error at %s: %s: %s", reconcile_url, type(e).__name__, e)
+        success = False
+
+    return success, error_msg

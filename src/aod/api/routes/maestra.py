@@ -130,8 +130,8 @@ async def maestra_status(tenant_id: str = Query(..., description="Tenant ID to q
         }
 
     # Fetch assets and findings for this run
-    assets = await db.get_assets_by_run(run.run_id)
-    findings = await db.get_findings_by_run(run.run_id)
+    assets = await db.get_assets_by_run(run.aod_discovery_id)
+    findings = await db.get_findings_by_run(run.aod_discovery_id)
 
     # Discovery phase
     discovery_phase = _map_run_status_to_phase(run.status)

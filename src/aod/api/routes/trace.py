@@ -187,7 +187,7 @@ async def two_path_diff(request: TwoPathDiffRequest) -> TwoPathDiffResponse:
         asset = Asset(
             asset_id=uuid_lib.uuid4(),
             tenant_id="test-tenant",
-            run_id="test",
+            aod_discovery_id="test",
             name=domain,
             identifiers=AssetIdentifiers(domains=[]),
             vendor=None,

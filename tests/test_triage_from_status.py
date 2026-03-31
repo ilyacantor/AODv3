@@ -64,7 +64,7 @@ def make_test_asset(
     return Asset(
         asset_id=uuid4(),
         tenant_id="test-tenant",
-        run_id="test-run",
+        aod_discovery_id="test-run",
         name=f"test-asset-{provisioning_status.value}",
         asset_type=AssetType.SAAS,
         identifiers=AssetIdentifiers(domains=["test.example.com"]),

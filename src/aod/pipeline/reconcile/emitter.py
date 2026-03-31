@@ -80,7 +80,7 @@ def emit_actual_results(
         activity_window_days = get_current_config().activity_windows.default_activity_window_days
 
     logger.info("emit_actual_results.start", extra={
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "asset_count": len(assets),
         "correlation_count": len(correlations),
         "activity_window_days": activity_window_days,
@@ -168,7 +168,7 @@ def emit_actual_results(
 
     # Phase 6: Build output
     output = ActualResultsOutput(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         tenant_id=tenant_id,
         generated_at=utc_now(),
         shadow_assets=shadow_assets,
@@ -187,7 +187,7 @@ def emit_actual_results(
     )
 
     logger.info("emit_actual_results.complete", extra={
-        "run_id": run_id,
+        "aod_discovery_id": run_id,
         "shadow_count": output.shadow_count,
         "zombie_count": output.zombie_count,
         "parked_count": output.parked_count,

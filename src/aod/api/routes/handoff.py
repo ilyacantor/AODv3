@@ -788,7 +788,7 @@ class AAMExportResponse(BaseModel):
 
 @router.post("/aam/export", response_model=AAMExportResponse)
 async def export_to_aam(
-    run_id: str,
+    aod_discovery_id: str,
     source_aod_discovery_id: str = Query(..., description="aod_discovery_id from Step 2 discovery. Required for provenance chain (I3)."),
     status_filter: Optional[str] = Query("all", description="Filter by status: active, review, all"),
 ):
@@ -802,7 +802,7 @@ async def export_to_aam(
     
     Requires AAM_URL environment variable to be set.
     """
-    handoff_id = str(uuid.uuid4())
+    handoff_id = aod_discovery_id
 
     aam_url = os.environ.get("AAM_URL")
     if not aam_url:
@@ -810,15 +810,15 @@ async def export_to_aam(
             status_code=503,
             detail="AAM_URL environment variable not configured. Please set AAM_URL to the AAM service URL."
         )
-    
+
     db = await get_db_direct()
-    
-    run = await db.get_run(run_id)
+
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    all_assets = await db.get_assets_by_run(run_id)
-    all_findings = await db.get_findings_by_run(run_id)
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    all_assets = await db.get_assets_by_run(aod_discovery_id)
+    all_findings = await db.get_findings_by_run(aod_discovery_id)
     
     findings_by_asset = {}
     for f in all_findings:
@@ -856,7 +856,7 @@ async def export_to_aam(
             known_endpoints=known_endpoints,
             execution_allowed=execution_allowed,
             action_type=action_type,
-            aod_run_id=run_id,
+            aod_run_id=aod_discovery_id,
             aod_asset_id=str(asset.asset_id)
         )
         aam_candidates.append(aam_candidate)
@@ -885,7 +885,7 @@ async def export_to_aam(
                 known_endpoints=[],
                 execution_allowed=True,
                 action_type="provision",  # Farm-designated SOR: clear for provisioning
-                aod_run_id=run_id,
+                aod_run_id=aod_discovery_id,
                 aod_asset_id=f"farm_sor_{sor_name_lower}",
             )
             aam_candidates.append(farm_sor_candidate)
@@ -893,7 +893,7 @@ async def export_to_aam(
 
     if farm_sor_candidates:
         logger.info("handoff.aam_export.farm_sor_candidates_added", extra={
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "count": len(farm_sor_candidates),
             "names": [c.display_name for c in farm_sor_candidates[:10]],
         })
@@ -966,12 +966,12 @@ async def export_to_aam(
     if not run.entity_id:
         raise HTTPException(
             status_code=400,
-            detail=f"AOD handoff aborted: run {run_id} has no entity_id. "
+            detail=f"AOD handoff aborted: run {aod_discovery_id} has no entity_id. "
                    "entity_id is required for AAM handoff — no fallback to tenant_id."
         )
     entity_id = run.entity_id
     export_payload = AAMExportRequest(
-        aod_discovery_id=run_id,
+        aod_discovery_id=aod_discovery_id,
         tenant_id=run.tenant_id,
         entity_id=entity_id,
         snapshot_name=entity_id,  # Deprecated field, mirrors entity_id for transition
@@ -993,7 +993,7 @@ async def export_to_aam(
             
             if response.status_code >= 400:
                 logger.error("handoff.aam_export.failed", extra={
-                    "aod_discovery_id": run_id,
+                    "aod_discovery_id": aod_discovery_id,
                     "status_code": response.status_code,
                     "response": response.text[:500]
                 })
@@ -1007,7 +1007,7 @@ async def export_to_aam(
             global _last_aam_export
             _last_aam_export = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "aod_discovery_id": run_id,
+                "aod_discovery_id": aod_discovery_id,
                 "snapshot_name": entity_id,
                 "candidates_sent": len(aam_candidates),
                 "aam_status_code": response.status_code,
@@ -1016,7 +1016,7 @@ async def export_to_aam(
             }
             
             logger.info("handoff.aam_export.success", extra={
-                "aod_discovery_id": run_id,
+                "aod_discovery_id": aod_discovery_id,
                 "candidates_sent": len(aam_candidates),
                 "aam_status": response.status_code
             })
@@ -1024,7 +1024,7 @@ async def export_to_aam(
             return AAMExportResponse(
                 success=True,
                 message=f"Successfully exported {len(aam_candidates)} candidates to AAM",
-                aod_discovery_id=run_id,
+                aod_discovery_id=aod_discovery_id,
                 handoff_id=handoff_id,
                 source_aod_discovery_id=source_aod_discovery_id,
                 tenant_id=run.tenant_id,
@@ -1034,7 +1034,7 @@ async def export_to_aam(
             )
     except httpx.RequestError as e:
         logger.error("handoff.aam_export.connection_error", extra={
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "error": str(e)
         })
         raise HTTPException(

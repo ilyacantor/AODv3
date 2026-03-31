@@ -131,7 +131,7 @@ class ActualResultsOutput:
     
     This is what AOD emits - Farm consumes this and computes diffs/RCA.
     """
-    run_id: str
+    aod_discovery_id: str
     shadow_actual: list[str]
     zombie_actual: list[str]
     parked_actual: list[str]
@@ -483,8 +483,11 @@ def _extract_registered_domain(asset: Asset) -> str | None:
         result = compute_canonical_key(domains=domains, vendor=vendor, name=name)
         # Only return domain if is_canonical (not name-derived)
         return result.primary_key if result.is_canonical else None
-    except ValueError:
-        return None
+    except ValueError as e:
+        raise ValueError(
+            f"compute_canonical_key failed for asset '{name}' "
+            f"(domains={domains}, vendor={vendor}): {e}"
+        ) from e
 
 
 def classify_actual(
@@ -1264,7 +1267,7 @@ def emit_actual_results(
     }
     
     return ActualResultsOutput(
-        run_id=run_id,
+        aod_discovery_id=run_id,
         shadow_actual=shadow_actual,
         zombie_actual=zombie_actual,
         parked_actual=parked_actual,

@@ -83,7 +83,7 @@ def _deserialize_asset_row(row: asyncpg.Record) -> Asset:
     return Asset(
         asset_id=UUID(row["asset_id"]),
         tenant_id=row["tenant_id"],
-        run_id=row["run_id"],
+        aod_discovery_id=row["run_id"],
         name=row["name"],
         asset_type=AssetType(row["asset_type"]),
         identifiers=AssetIdentifiers.model_validate_json(row["identifiers"]),
@@ -404,7 +404,7 @@ class Database:
                 INSERT INTO runs (run_id, tenant_id, entity_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
-                run.run_id,
+                run.aod_discovery_id,
                 run.tenant_id,
                 run.entity_id,
                 run.status.value,
@@ -450,10 +450,10 @@ class Database:
                 json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
                 json.dumps(run.input_meta),
                 run.entity_id,
-                run.run_id
+                run.aod_discovery_id
             )
         return run
-    
+
     async def get_run(self, run_id: str) -> Optional[RunLog]:
         """Get a run log entry by ID"""
         pool = await self.get_pool()
@@ -473,7 +473,7 @@ class Database:
         policy_snapshot_data = row.get("policy_snapshot")
         
         return RunLog(
-            run_id=row["run_id"],
+            aod_discovery_id=row["run_id"],
             tenant_id=row["tenant_id"],
             entity_id=row.get("entity_id"),
             status=RunStatus(row["status"]),
@@ -530,7 +530,7 @@ class Database:
         policy_snapshot_data = row.get("policy_snapshot")
 
         return RunLog(
-            run_id=row["run_id"],
+            aod_discovery_id=row["run_id"],
             tenant_id=row["tenant_id"],
             entity_id=row.get("entity_id"),
             status=RunStatus(row["status"]),
@@ -561,7 +561,7 @@ class Database:
             stage_timings_data = row.get("stage_timings")
             policy_snapshot_data = row.get("policy_snapshot")
             runs.append(RunLog(
-                run_id=row["run_id"],
+                aod_discovery_id=row["run_id"],
                 tenant_id=row["tenant_id"],
                 entity_id=row.get("entity_id"),
                 status=RunStatus(row["status"]),
@@ -665,7 +665,7 @@ class Database:
                 """,
                 str(asset.asset_id),
                 asset.tenant_id,
-                asset.run_id,
+                asset.aod_discovery_id,
                 asset.name,
                 asset.asset_type.value,
                 asset.identifiers.model_dump_json(),
@@ -768,7 +768,7 @@ class Database:
                 """,
                 str(artifact.artifact_id),
                 artifact.tenant_id,
-                artifact.run_id,
+                artifact.aod_discovery_id,
                 str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
                 artifact.name,
                 artifact.artifact_type.value,
@@ -792,7 +792,7 @@ class Database:
             Artifact(
                 artifact_id=UUID(row["artifact_id"]),
                 tenant_id=row["tenant_id"],
-                run_id=row["run_id"],
+                aod_discovery_id=row["run_id"],
                 parent_asset_id=UUID(row["parent_asset_id"]) if row["parent_asset_id"] else None,
                 name=row["name"],
                 artifact_type=ArtifactType(row["artifact_type"]),
@@ -819,7 +819,7 @@ class Database:
                 str(finding.finding_id),
                 str(finding.asset_id) if finding.asset_id else None,
                 finding.tenant_id,
-                finding.run_id,
+                finding.aod_discovery_id,
                 finding.finding_type.value,
                 finding.category.value,
                 finding.severity.value,
@@ -848,7 +848,7 @@ class Database:
                 finding_id=UUID(row["finding_id"]),
                 asset_id=UUID(row["asset_id"]) if row["asset_id"] else None,
                 tenant_id=row["tenant_id"],
-                run_id=row["run_id"],
+                aod_discovery_id=row["run_id"],
                 finding_type=FindingType(row["finding_type"]),
                 category=FindingCategory(row["category"]) if row.get("category") else FindingCategory.GOVERNANCE_FINDING,
                 severity=Severity(row["severity"]),
@@ -1076,7 +1076,7 @@ class Database:
             rows.append((
                 str(asset.asset_id),
                 asset.tenant_id,
-                asset.run_id,
+                asset.aod_discovery_id,
                 asset.name,
                 asset.asset_type.value,
                 asset.identifiers.model_dump_json(),
@@ -1143,7 +1143,7 @@ class Database:
                 str(f.finding_id),
                 str(f.asset_id) if f.asset_id else None,
                 f.tenant_id,
-                f.run_id,
+                f.aod_discovery_id,
                 f.finding_type.value,
                 f.category.value,
                 f.severity.value,
@@ -1180,7 +1180,7 @@ class Database:
             rows.append((
                 str(artifact.artifact_id),
                 artifact.tenant_id,
-                artifact.run_id,
+                artifact.aod_discovery_id,
                 str(artifact.parent_asset_id) if artifact.parent_asset_id else None,
                 artifact.name,
                 artifact.artifact_type.value,

@@ -363,7 +363,11 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
                 parsed = urlparse(value if '://' in value else f'https://{value}')
                 return parsed.netloc or None
             except Exception:
-                return None
+                logger.warning(
+                    "domain_extraction.url_parse_failed",
+                    extra={"value": value, "entity": entity_key},
+                )
+                raise
         return value
 
     def _is_valid_domain_candidate(value: Optional[str]) -> bool:

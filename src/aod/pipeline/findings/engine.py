@@ -49,7 +49,7 @@ def generate_findings(
         List of findings, deterministically sorted
     """
     logger.info("findings_engine.generate.start", extra={
-        "tenant_id": tenant_id, "run_id": run_id, "asset_count": len(assets),
+        "tenant_id": tenant_id, "aod_discovery_id": run_id, "asset_count": len(assets),
         "correlation_count": len(correlations)
     })
 
@@ -142,7 +142,7 @@ def generate_findings(
             critical_gap_count += 1
 
     logger.info("findings_engine.generate.complete", extra={
-        "tenant_id": tenant_id, "run_id": run_id, "total_findings": len(findings),
+        "tenant_id": tenant_id, "aod_discovery_id": run_id, "total_findings": len(findings),
         "identity_gap": identity_gap_count, "cmdb_gap": cmdb_gap_count,
         "governance_gap": governance_gap_count, "duplication_risk": duplication_risk_count,
         "data_conflict": data_conflict_count, "finance_gap": len(finance_gaps),

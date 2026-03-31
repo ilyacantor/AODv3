@@ -176,7 +176,7 @@ class TestPrimaryRegisteredDomain:
         return Asset(
             asset_id=uuid.uuid4(),
             tenant_id="test-tenant",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name=name,
             identifiers=AssetIdentifiers(domains=domains),
             lens_status=LensStatuses(),

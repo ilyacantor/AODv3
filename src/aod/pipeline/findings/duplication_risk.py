@@ -37,7 +37,7 @@ def generate_duplication_risk_finding(
         finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "duplication_risk"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
-        run_id=run_id,
+        aod_discovery_id=run_id,
         finding_type=FindingType.DUPLICATION_RISK,
         category=get_category(FindingType.DUPLICATION_RISK),
         severity=Severity.MED,

@@ -48,7 +48,7 @@ def generate_governance_gap_finding(
         finding_id=deterministic_uuid(snapshot_id, run_id, asset.name, "governance_gap"),
         asset_id=asset.asset_id,
         tenant_id=tenant_id,
-        run_id=run_id,
+        aod_discovery_id=run_id,
         finding_type=FindingType.GOVERNANCE_GAP,
         category=get_category(FindingType.GOVERNANCE_GAP),
         severity=Severity.MED,

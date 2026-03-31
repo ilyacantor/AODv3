@@ -535,7 +535,11 @@ def _extract_domain_from_correlation(correlation: CorrelationResult, debug_log: 
                 parsed = urlparse(value if '://' in value else f'https://{value}')
                 return parsed.netloc or None
             except Exception:
-                return None
+                logger.warning(
+                    "domain_extraction.url_parse_failed",
+                    extra={"value": value, "entity": entity_key},
+                )
+                raise
         return value
     
     def _is_valid_domain_candidate(value: Optional[str]) -> bool:
@@ -2437,7 +2441,7 @@ def _build_admitted_asset(
     asset = Asset(
         asset_id=deterministic_uuid(snapshot_id, run_id, "asset", asset_key),
         tenant_id=tenant_id,
-        run_id=run_id,
+        aod_discovery_id=run_id,
         name=entity.original_name,
         asset_type=determine_asset_type(correlation, entity),
         identifiers=identifiers,

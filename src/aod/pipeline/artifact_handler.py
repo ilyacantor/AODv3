@@ -105,7 +105,7 @@ def handle_artifacts(
             artifact = Artifact(
                 artifact_id=deterministic_uuid(snapshot_id, run_id, "artifact", entity.original_name),
                 tenant_id=tenant_id,
-                run_id=run_id,
+                aod_discovery_id=run_id,
                 parent_asset_id=None,
                 name=entity.original_name,
                 artifact_type=artifact_type,

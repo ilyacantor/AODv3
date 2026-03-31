@@ -149,7 +149,7 @@ def generate_finance_gap_findings(
             finding_id=deterministic_uuid(snapshot_id, run_id, aggregate_key, "finance_gap"),
             asset_id=None,
             tenant_id=tenant_id,
-            run_id=run_id,
+            aod_discovery_id=run_id,
             finding_type=FindingType.FINANCE_GAP,
             category=get_category(FindingType.FINANCE_GAP),
             severity=Severity.MED,

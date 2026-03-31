@@ -91,7 +91,7 @@ class TestAssetKeyExtraction:
         return Asset(
             asset_id=uuid.uuid4(),
             tenant_id="test-tenant",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name=name,
             identifiers=AssetIdentifiers(domains=domains or []),
             vendor=vendor,
@@ -210,7 +210,7 @@ class TestTwoPathEquivalence:
             asset = Asset(
                 asset_id=uuid.uuid4(),
                 tenant_id="test-tenant",
-                run_id="test",
+                aod_discovery_id="test",
                 name=domain,
                 identifiers=AssetIdentifiers(domains=[domain]),
                 vendor=None,
@@ -234,7 +234,7 @@ class TestTwoPathEquivalence:
             asset = Asset(
                 asset_id=uuid.uuid4(),
                 tenant_id="test-tenant",
-                run_id="test",
+                aod_discovery_id="test",
                 name=subdomain,
                 identifiers=AssetIdentifiers(domains=[subdomain]),
                 vendor=None,
@@ -250,7 +250,7 @@ class TestTwoPathEquivalence:
             asset = Asset(
                 asset_id=uuid.uuid4(),
                 tenant_id="test-tenant",
-                run_id="test",
+                aod_discovery_id="test",
                 name=domain,
                 identifiers=AssetIdentifiers(domains=[domain]),
                 vendor=None,

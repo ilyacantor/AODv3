@@ -31,7 +31,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Stale SSO App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.REVIEW,
@@ -75,7 +75,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Unmanaged Paid App",
             asset_type=AssetType.SAAS,
             identifiers=AssetIdentifiers(domains=["unmanagedapp.com"]),
@@ -119,7 +119,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Active SSO App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.ACTIVE,
@@ -162,7 +162,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Managed App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.ACTIVE,
@@ -203,7 +203,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="No Timestamp App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.QUARANTINE,
@@ -247,7 +247,7 @@ class TestShadowZombieTimestamps:
         zombie_asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Zombie App",
             asset_type=AssetType.SAAS,
             identifiers=AssetIdentifiers(domains=["zombieapp.com"]),
@@ -272,7 +272,7 @@ class TestShadowZombieTimestamps:
         shadow_asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Shadow App",
             asset_type=AssetType.SAAS,
             identifiers=AssetIdentifiers(domains=["shadowapp.com"]),
@@ -298,7 +298,7 @@ class TestShadowZombieTimestamps:
         indeterminate_asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Indeterminate App",
             asset_type=AssetType.SAAS,
             lens_status=LensStatuses(
@@ -346,7 +346,7 @@ class TestShadowZombieTimestamps:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="45-Day Old Activity App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.REVIEW,
@@ -372,7 +372,7 @@ class TestShadowZombieTimestamps:
         asset_active = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="45-Day Old Activity App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.ACTIVE,
@@ -409,7 +409,7 @@ class TestZombieNoPresenceEvidence:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="CMDB Only App",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.REVIEW,
@@ -442,7 +442,7 @@ class TestZombieNoPresenceEvidence:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="IdP App No Timestamps",
             asset_type=AssetType.SAAS,
             provisioning_status=ProvisioningStatus.REVIEW,
@@ -485,7 +485,7 @@ class TestDiscoverySourcesInvariant:
         asset_with_discovery = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="App With Discovery",
             asset_type=AssetType.SAAS,
             lens_status=LensStatuses(
@@ -505,7 +505,7 @@ class TestDiscoverySourcesInvariant:
         asset_without_discovery = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="App Without Discovery",
             asset_type=AssetType.SAAS,
             lens_status=LensStatuses(

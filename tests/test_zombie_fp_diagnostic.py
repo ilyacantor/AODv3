@@ -71,7 +71,7 @@ class TestZombieFPDiagnostic:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="Test App",
             asset_type=AssetType.SAAS,
             identifiers=AssetIdentifiers(domains=["testapp.com"]),
@@ -130,7 +130,7 @@ class TestZombieFPDiagnostic:
         asset = Asset(
             asset_id=uuid4(),
             tenant_id="test",
-            run_id="test-run",
+            aod_discovery_id="test-run",
             name="testapp.com",
             asset_type=AssetType.SAAS,
             identifiers=AssetIdentifiers(domains=["testapp.com"]),

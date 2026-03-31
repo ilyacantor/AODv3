@@ -28,7 +28,7 @@ class RunOperations:
                 INSERT INTO runs (run_id, tenant_id, entity_id, status, started_at, completed_at, input_meta, counts, failure_reasons, sync_status, sync_error, stage_timings, policy_snapshot)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
-                run.run_id,
+                run.aod_discovery_id,
                 run.tenant_id,
                 run.entity_id,
                 run.status.value,
@@ -74,7 +74,7 @@ class RunOperations:
                 json.dumps(run.policy_snapshot) if run.policy_snapshot else None,
                 json.dumps(run.input_meta),
                 run.entity_id,
-                run.run_id
+                run.aod_discovery_id
             )
         return run
 

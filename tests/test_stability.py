@@ -157,7 +157,7 @@ async def test_status_based_suppression():
     quarantine_asset = Asset(
         asset_id=test_asset_id,
         tenant_id="test-tenant",
-        run_id="test-run",
+        aod_discovery_id="test-run",
         name="dropbox",
         asset_type=AssetType.SAAS,
         identifiers=AssetIdentifiers(

@@ -281,7 +281,7 @@
                 const response = await fetch('/api/triage/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ run_id: runId, item_id: itemId, item_type: itemType, action, ...extra })
+                    body: JSON.stringify({ aod_discovery_id: runId, item_id: itemId, item_type: itemType, action, ...extra })
                 });
                 
                 if (!response.ok) {
@@ -616,10 +616,10 @@
             
             try {
                 const [findingsRes, derivedRes, actionsRes, catalogRes] = await Promise.all([
-                    fetch(`/api/findings?run_id=${runId}`),
+                    fetch(`/api/findings?aod_discovery_id=${runId}`),
                     fetch(`/api/runs/${runId}/derived`),
                     fetch(`/api/triage/actions/${runId}`),
-                    fetch(`/api/catalog?run_id=${runId}`)
+                    fetch(`/api/catalog?aod_discovery_id=${runId}`)
                 ]);
                 
                 const findingsData = await findingsRes.json();
@@ -1385,7 +1385,7 @@
                     const response = await fetch('/api/debug/decision-trace', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ run_id: runId, activity_window_days: 90 })
+                        body: JSON.stringify({ aod_discovery_id: runId, activity_window_days: 90 })
                     });
                     const data = await response.json();
                     
@@ -1567,13 +1567,14 @@
             if (auditBtn) auditBtn.disabled = true;
             
             try {
-                const response = await fetch(`/api/handoff/aam/candidates?run_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/candidates?aod_discovery_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`Failed to load candidates: ${response.status}`);
+                    const errBody = await response.json().catch(() => ({}));
+                    throw new Error(errBody.detail || `HTTP ${response.status}`);
                 }
                 
                 const data = await response.json();
@@ -2252,7 +2253,7 @@ ALLOCATION DECISIONS
                 const technicalReport = {
                     report_type: 'fabric_allocation_audit',
                     generated_at: new Date().toISOString(),
-                    run_id: runId,
+                    aod_discovery_id: runId,
                     summary: summary,
                     decisions: decisions,
                     methodology: {
@@ -2773,7 +2774,7 @@ ${JSON.stringify(technicalReport, null, 2)}
             const catalogLinkEl = document.getElementById('drillCatalogLink');
             if (currentState.rootType === 'assets' && currentRunId) {
                 catalogLinkEl.innerHTML = `
-                    <a href="/api/catalog/view?run_id=${currentRunId}" target="_blank" 
+                    <a href="/api/catalog/view?aod_discovery_id=${currentRunId}" target="_blank" 
                        style="font-size: 0.8rem; color: var(--cyan-400); text-decoration: none; display: flex; align-items: center; gap: 0.35rem;">
                         <span>View Full Catalog</span>
                         <span style="font-size: 0.7rem;">↗</span>
@@ -2819,10 +2820,10 @@ ${JSON.stringify(technicalReport, null, 2)}
                             <div style="font-size: 0.75rem; color: var(--slate-400);">${result.items.length} assets cataloged • ${runInfo}</div>
                         </div>
                         <div style="display: flex; gap: 0.5rem;">
-                            <a href="/api/catalog/view?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem;">
+                            <a href="/api/catalog/view?aod_discovery_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem;">
                                 Full Catalog ↗
                             </a>
-                            <a href="/api/catalog?run_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem; opacity: 0.7;">
+                            <a href="/api/catalog?aod_discovery_id=${currentRunId}" target="_blank" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.75rem; opacity: 0.7;">
                                 JSON
                             </a>
                         </div>
@@ -3386,7 +3387,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                         const profile = run.input_meta?.enterprise_profile || '-';
                         const isCompleted = run.status.toLowerCase().includes('completed');
                         const catalogLink = isCompleted
-                            ? `<a href="/api/catalog/view?run_id=${run.aod_discovery_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
+                            ? `<a href="/api/catalog/view?aod_discovery_id=${run.aod_discovery_id}" target="_blank" class="catalog-link" onclick="event.stopPropagation();" title="View Asset Catalog">View Catalog ↗</a>`
                             : '';
                         const timingBadge = run.stage_timings && run.stage_timings.total
                             ? `<span class="run-timing" title="Pipeline execution time">${run.stage_timings.total.toFixed(1)}s</span>`
@@ -3518,7 +3519,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         async function loadAssets(runId) {
             try {
-                const r = await fetch(`/api/catalog?run_id=${runId}`); catalogData = await r.json();
+                const r = await fetch(`/api/catalog?aod_discovery_id=${runId}`); catalogData = await r.json();
                 const { data: normalized, errors } = normalizeResponse('assets', catalogData.assets || []);
                 normalizedData.assets = normalized;
                 if (errors.length > 0) console.warn('Asset normalization errors:', errors);
@@ -3533,7 +3534,7 @@ ${JSON.stringify(technicalReport, null, 2)}
             const GOVERNANCE_CATEGORIES = ['visibility_gap', 'governance_hygiene', 'governance_finding'];
             
             try {
-                const r = await fetch(`/api/findings?run_id=${runId}`); const data = await r.json();
+                const r = await fetch(`/api/findings?aod_discovery_id=${runId}`); const data = await r.json();
                 const allFindings = data.findings || [];
                 
                 const securityRisks = allFindings.filter(f => SECURITY_CATEGORIES.includes(f.category));
@@ -3590,7 +3591,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         async function loadArtifacts(runId) {
             // Load general artifacts (legacy endpoint)
             try {
-                const r = await fetch(`/api/artifacts?run_id=${runId}`);
+                const r = await fetch(`/api/artifacts?aod_discovery_id=${runId}`);
                 if (r.ok) {
                     const data = await r.json();
                     const { data: normalized, errors } = normalizeResponse('artifacts', data.artifacts || []);

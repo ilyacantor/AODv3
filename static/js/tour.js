@@ -721,7 +721,7 @@ const TourManager = (function() {
             try {
                 const resp = await fetch('/api/runs');
                 const runs = await resp.json();
-                existingRunIds = new Set(runs.map(r => r.run_id));
+                existingRunIds = new Set(runs.map(r => r.aod_discovery_id));
             } catch (e) {
                 console.error('TourManager: Failed to get existing runs', e);
             }
@@ -765,12 +765,12 @@ const TourManager = (function() {
                 const runs = await resp.json();
                 
                 // Find a run that didn't exist before
-                const newRun = runs.find(r => !existingRunIds.has(r.run_id));
+                const newRun = runs.find(r => !existingRunIds.has(r.aod_discovery_id));
                 
                 if (newRun) {
                     // Check if it's completed
                     if (newRun.status && newRun.status.toLowerCase().includes('completed')) {
-                        return newRun.run_id;
+                        return newRun.aod_discovery_id;
                     }
                 }
             } catch (e) {

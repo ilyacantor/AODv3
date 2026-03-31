@@ -22,7 +22,7 @@ interface DetailsData {
 }
 
 interface RunData {
-  run_id: string
+  aod_discovery_id: string
   tenant_id: string
   status: string
   started_at: string
@@ -235,20 +235,20 @@ function buildNodes(run: RunData): PipelineNode[] {
 
   const nodes: PipelineNode[] = [
     // Level 0 — Hub: tenant name rendered inside a custom hexagon
-    { id: 'aod', label: run.tenant_id, level: 0, shape: 'custom', ctxRenderer: drawTenantNode, color: { background: C.cyan, border: C.cyan }, size: 42, stage: 'Discovery', nodeType: 'hexagon', metadata: { tenant: run.tenant_id, run_id: run.run_id, snapshot_id: run.input_meta.snapshot_id, status: run.status, scale: run.input_meta.scale, profile: run.input_meta.enterprise_profile, started_at: run.started_at, description: 'Central discovery hub — orchestrates evidence collection across all observation planes for this tenant' } },
+    { id: 'aod', label: run.tenant_id, level: 0, shape: 'custom', ctxRenderer: drawTenantNode, color: { background: C.cyan, border: C.cyan }, size: 42, stage: 'Discovery', nodeType: 'hexagon', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, snapshot_id: run.input_meta.snapshot_id, status: run.status, scale: run.input_meta.scale, profile: run.input_meta.enterprise_profile, started_at: run.started_at, description: 'Central discovery hub — orchestrates evidence collection across all observation planes for this tenant' } },
 
     // Level 2 — Ingested
-    { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
+    { id: 'ingested', label: `Ingested\n${rc.observations_in}`, level: 2, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan, border: C.cyan } as any, size: 22, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, count: rc.observations_in, description: 'Raw evidence collected from all observation planes' } },
 
     // Level 3 — Normalization funnel: rejected + duplicates + unique entities
-    { id: 'rejected', label: `Rejected\n${(rc.iron_dome_rejected || 0) + rc.rejected}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: (rc.iron_dome_rejected || 0) + rc.rejected, iron_dome: rc.iron_dome_rejected || 0, admission_failed: rc.rejected, description: `Observations that could not be admitted to the catalog. Iron Dome (${rc.iron_dome_rejected || 0}): blocked at normalization — internal hostnames, invalid TLDs, malformed domains, or empty identifiers. Admission failed (${rc.rejected}): passed normalization but lacked sufficient governance evidence — no IdP, CMDB, cloud, finance, or discovery signals met the admission threshold.` } },
-    ...(rc.domain_merged ? [{ id: 'domain-merged', label: `Duplicates\n${rc.domain_merged}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.amber, border: C.amber, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: rc.domain_merged, description: 'Observations merged — multiple signals from different planes resolved to the same entity' } }] : []) as PipelineNode[],
+    { id: 'rejected', label: `Rejected\n${(rc.iron_dome_rejected || 0) + rc.rejected}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.red, border: C.red, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, count: (rc.iron_dome_rejected || 0) + rc.rejected, iron_dome: rc.iron_dome_rejected || 0, admission_failed: rc.rejected, description: `Observations that could not be admitted to the catalog. Iron Dome (${rc.iron_dome_rejected || 0}): blocked at normalization — internal hostnames, invalid TLDs, malformed domains, or empty identifiers. Admission failed (${rc.rejected}): passed normalization but lacked sufficient governance evidence — no IdP, CMDB, cloud, finance, or discovery signals met the admission threshold.` } },
+    ...(rc.domain_merged ? [{ id: 'domain-merged', label: `Duplicates\n${rc.domain_merged}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.amber, border: C.amber, fontColor: C.white } as any, size: 18, stage: 'Discovery', nodeType: 'database', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, count: rc.domain_merged, description: 'Observations merged — multiple signals from different planes resolved to the same entity' } }] : []) as PipelineNode[],
 
     // Level 3 — Cataloged (same level, main flow)
-    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, run_id: run.run_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
+    { id: 'cataloged', label: `Cataloged\n${totalAssets}`, level: 3, shape: 'custom', ctxRenderer: drawDatabaseNode, color: { background: C.cyan700, border: C.cyan700, fontColor: C.white } as any, size: 20, stage: 'Classification', nodeType: 'database', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, count: totalAssets, description: 'Confirmed assets admitted to catalog' } },
 
     // Level 4 — Handoff hub
-    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Classification', nodeType: 'diamond', metadata: { tenant: run.tenant_id, run_id: run.run_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
+    { id: 'handoff-aam',    label: 'Handoff\n→ AAM',           level: 4, shape: 'diamond',  color: { background: C.orange, border: C.orange },  size: 20, stage: 'Classification', nodeType: 'diamond', metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, description: 'ConnectionCandidate handoff to AAM', target: 'AAM module' } },
   ]
 
   // Level 1 — Observation plane nodes (multicolored triangleDown with 3D shading)
@@ -267,7 +267,7 @@ function buildNodes(run: RunData): PipelineNode[] {
       shadow: { enabled: true, color: col + '40', size: 8, x: 2, y: 3 },
       borderWidth: 2,
       stage: 'Discovery', nodeType: 'triangleDown',
-      metadata: { tenant: run.tenant_id, run_id: run.run_id, type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count, description: `Collects ${p.label.replace('\n', ' ').toLowerCase()} evidence from ${p.examples} and similar systems` },
+      metadata: { tenant: run.tenant_id, aod_discovery_id: run.aod_discovery_id, type: p.label.replace('\n', ' '), examples: p.examples, tier: p.tier, signals: p.count, description: `Collects ${p.label.replace('\n', ' ').toLowerCase()} evidence from ${p.examples} and similar systems` },
     })
   })
 

@@ -81,7 +81,7 @@ def _make_triple(
         "source_table": source_table,
         "source_field": source_field,
         "pipe_id": None,
-        "aod_discovery_id": run_id,
+        "run_id": run_id,  # DB column — not an API response field. Do not rename.
         "source_run_tag": None,
         "confidence_score": confidence_score,
         "confidence_tier": confidence_tier,

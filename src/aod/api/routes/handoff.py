@@ -129,7 +129,7 @@ def infer_auth_method(asset) -> Optional[str]:
 
 @router.get("/aam-manifest", response_model=AAMManifestResponse)
 async def get_aam_manifest(
-    run_id: str,
+    aod_discovery_id: str,
     status_filter: Optional[str] = Query(None, description="Filter by status: active, review, all")
 ):
     """
@@ -145,11 +145,11 @@ async def get_aam_manifest(
     """
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
-    all_assets = await db.get_assets_by_run(run_id)
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
+    all_assets = await db.get_assets_by_run(aod_discovery_id)
     
     if status_filter == "all":
         filtered_assets = all_assets
@@ -176,8 +176,8 @@ async def get_aam_manifest(
         ))
     
     return AAMManifestResponse(
-        aod_discovery_id=run_id,
-        scan_session_id=run_id,
+        aod_discovery_id=aod_discovery_id,
+        scan_session_id=aod_discovery_id,
         manifest_type="provisioning_orders",
         orders=orders,
         count=len(orders)
@@ -419,7 +419,7 @@ def build_pipe_evidence_for_asset(asset) -> tuple[list[CandidatePipeEvidence], O
 
 @router.post("/aam/candidates", response_model=AAMCandidatesResponse)
 async def export_aam_candidates(
-    run_id: str,
+    aod_discovery_id: str,
     status_filter: Optional[str] = Query(None, description="Filter by status: active, review, all")
 ):
     """
@@ -433,10 +433,10 @@ async def export_aam_candidates(
     """
     db = await get_db_direct()
     
-    run = await db.get_run(run_id)
+    run = await db.get_run(aod_discovery_id)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
+        raise HTTPException(status_code=404, detail=f"Run {aod_discovery_id} not found")
+
     input_meta = run.input_meta or {}
     farm_sors = input_meta.get("sors", [])
     farm_fabric_planes = input_meta.get("fabric_planes", [])
@@ -453,8 +453,8 @@ async def export_aam_candidates(
         if vendor:
             farm_fabric_by_vendor[vendor] = plane
     
-    all_assets = await db.get_assets_by_run(run_id)
-    all_findings = await db.get_findings_by_run(run_id)
+    all_assets = await db.get_assets_by_run(aod_discovery_id)
+    all_findings = await db.get_findings_by_run(aod_discovery_id)
     
     findings_by_asset = {}
     for f in all_findings:
@@ -498,7 +498,7 @@ async def export_aam_candidates(
 
         if sor_assets:
             logger.info("handoff.aam_candidates.sor_inclusion", extra={
-                "aod_discovery_id": run_id,
+                "aod_discovery_id": aod_discovery_id,
                 "sor_assets_added": len(sor_assets),
                 "sor_names": [a.name for a in sor_assets[:10]],
                 "reason": "High/medium confidence SORs included regardless of provisioning status"
@@ -629,7 +629,7 @@ async def export_aam_candidates(
 
     if undiscovered_sors:
         logger.info("handoff.aam_candidates.undiscovered_sors_added", extra={
-            "aod_discovery_id": run_id,
+            "aod_discovery_id": aod_discovery_id,
             "count": len(undiscovered_sors),
             "sor_names": [c.display_name for c in undiscovered_sors],
             "reason": "Farm-designated SORs not discovered by AOD but must be handed off"
@@ -685,7 +685,7 @@ async def export_aam_candidates(
             evidence_leads_out.append(EvidenceLead.model_validate(lead_data))
         except Exception as e:
             logger.warning("handoff.aam_candidates.evidence_lead_parse_error", extra={
-                "aod_discovery_id": run_id,
+                "aod_discovery_id": aod_discovery_id,
                 "error": str(e),
                 "lead_data": str(lead_data)[:200]
             })
@@ -697,7 +697,7 @@ async def export_aam_candidates(
             fabric_plane_registry_out.append(FabricPlaneRegistryEntry.model_validate(entry_data))
         except Exception as e:
             logger.warning("handoff.aam_candidates.registry_entry_parse_error", extra={
-                "aod_discovery_id": run_id,
+                "aod_discovery_id": aod_discovery_id,
                 "error": str(e),
                 "entry_data": str(entry_data)[:200]
             })
@@ -707,7 +707,7 @@ async def export_aam_candidates(
     preset_confidence = preset_context_raw.get("confidence", 0.0)
 
     logger.info("handoff.aam_candidates.exported", extra={
-        "aod_discovery_id": run_id,
+        "aod_discovery_id": aod_discovery_id,
         "candidate_count": len(candidates),
         "fabric_plane_count": len(fabric_plane_summaries),
         "sor_count": len(sor_summaries),
@@ -718,8 +718,8 @@ async def export_aam_candidates(
     })
 
     return AAMCandidatesResponse(
-        aod_discovery_id=run_id,
-        scan_session_id=run_id,
+        aod_discovery_id=aod_discovery_id,
+        scan_session_id=aod_discovery_id,
         candidates=candidates,
         count=len(candidates),
         fabric_planes=fabric_plane_summaries,

@@ -166,10 +166,10 @@
                 const runs = await runsRes.json();
                 runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
 
-                if (runs.length > 0 && runs[0].run_id !== currentRunId) {
+                if (runs.length > 0 && runs[0].aod_discovery_id !== currentRunId) {
                     // New run exists — refresh both tabs
                     await loadRuns();
-                    await selectRun(runs[0].run_id);
+                    await selectRun(runs[0].aod_discovery_id);
                     await populateTenantsFromFarm();
                     await handleTenantChange();
                     if (activeTab === 'topology') {
@@ -590,7 +590,7 @@
                     select.value = currentRunId;
                     loadTriageData();
                 } else if (completedRuns.length > 0) {
-                    select.value = completedRuns[0].run_id;
+                    select.value = completedRuns[0].aod_discovery_id;
                     loadTriageData();
                 }
             } catch (err) {
@@ -1548,7 +1548,7 @@
                 if (currentRunId && displayRuns.some(r => r.aod_discovery_id === currentRunId)) {
                     select.value = currentRunId;
                 } else if (displayRuns.length > 0) {
-                    select.value = displayRuns[0].run_id;
+                    select.value = displayRuns[0].aod_discovery_id;
                 }
             } catch (err) {
                 console.error('Failed to load handoff runs:', err);
@@ -2026,7 +2026,7 @@
             exportBtn.textContent = 'Exporting...';
 
             try {
-                const response = await fetch(`/api/handoff/aam/export?run_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/export?aod_discovery_id=${runId}&source_aod_discovery_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -3406,7 +3406,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                     document.querySelectorAll('.run-item').forEach(item => item.addEventListener('click', () => selectRun(item.dataset.runId)));
                     
                     if (autoSelect && runs.length > 0 && !currentRunId) {
-                        await selectRun(runs[0].run_id);
+                        await selectRun(runs[0].aod_discovery_id);
                     }
                 }
             } catch (err) {
@@ -3719,9 +3719,9 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
                 
                 showOutcome(result.status, result.message);
-                currentRunId = result.run_id;
+                currentRunId = result.aod_discovery_id;
                 await loadRuns();
-                await selectRun(result.run_id);
+                await selectRun(result.aod_discovery_id);
                 const iframe = document.getElementById('topologyIframe');
                 if (iframe) iframe.src = discoveryIframeUrl();
 

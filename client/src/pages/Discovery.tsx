@@ -481,12 +481,22 @@ export default function Discovery() {
 
     async function init() {
       try {
-        // Fetch most recent run for the selected tenant
+        // Fetch most recent run for the selected tenant (retry up to 3 times
+        // with the same tenant filter — pipeline may still be writing)
         const tenantParam = new URLSearchParams(window.location.search).get('tenant_id')
         const runsUrl = tenantParam ? `/api/runs?tenant_id=${encodeURIComponent(tenantParam)}` : '/api/runs'
-        const runsRes = await fetch(runsUrl)
-        if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
-        const runs: RunData[] = await runsRes.json()
+        let runs: RunData[] = []
+        const maxRetries = 3
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const runsRes = await fetch(runsUrl)
+          if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
+          runs = await runsRes.json()
+          if (runs.length > 0 || destroyed) break
+          if (attempt < maxRetries) {
+            setLoadingMessage(`Waiting for discovery runs (attempt ${attempt}/${maxRetries})...`)
+            await new Promise(r => setTimeout(r, 1500))
+          }
+        }
         if (runs.length === 0) throw new Error('No discovery runs found')
         const run = runs.find(r => r.status.startsWith('completed')) || runs[0]
 

@@ -5,6 +5,12 @@
             const q = tid ? '?tenant_id=' + encodeURIComponent(tid) + '&v=' + Date.now() : '?v=' + Date.now();
             return '/static/overview/index.html' + q;
         }
+        function loadDiscoveryIframe() {
+            const iframe = document.getElementById('topologyIframe');
+            if (iframe) iframe.src = discoveryIframeUrl();
+            const preloader = document.getElementById('topologyPreloader');
+            if (preloader) preloader.style.display = 'none';
+        }
         let drillStack = [];
         let normalizedData = { assets: [], security_risks: [], governance_hygiene: [], artifacts: [], observations: [], validated: [], ambiguous: [], rejections: [], shadow: [], zombie: [] };
         let detailPagination = { page: 0, pageSize: 25, items: [], rootType: null, itemIndex: 0 };
@@ -132,7 +138,9 @@
                         farmWakeCheckInterval = null;
                         dismissToast();
                         farmWakingToast = null;
-                        loadTenants(); // Reload tenants
+                        await populateTenantsFromFarm();
+                        // Reload Discovery iframe with the now-selected tenant
+                        loadDiscoveryIframe();
                     }
                 } catch (e) {
                     // Still waking, keep polling
@@ -173,8 +181,7 @@
                     await populateTenantsFromFarm();
                     await handleTenantChange();
                     if (activeTab === 'topology') {
-                        const iframe = document.getElementById('topologyIframe');
-                        if (iframe) iframe.src = discoveryIframeUrl();
+                        loadDiscoveryIframe();
                     }
                     return;
                 }
@@ -3270,6 +3277,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                     errorStr.includes('UNAVAILABLE');
                 if (isFarmWaking && !tenantsData.tenants) {
                     console.warn('Farm unavailable');
+                    showFarmWakingToast();
                     return;
                 }
                 
@@ -3307,10 +3315,13 @@ ${JSON.stringify(technicalReport, null, 2)}
                     select.appendChild(opt);
                 });
                 
-                // Auto-select the latest tenant
+                // Auto-select the latest tenant, or fall back to first available
                 if (latestTenant && tenants.includes(latestTenant)) {
                     select.value = latestTenant;
-                    // Trigger change to load observation counts
+                } else if (tenants.length > 0) {
+                    select.value = tenants[0];
+                }
+                if (select.value) {
                     await handleTenantChange();
                 }
             } catch (e) {
@@ -3723,8 +3734,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 currentRunId = result.aod_discovery_id;
                 await loadRuns();
                 await selectRun(result.aod_discovery_id);
-                const iframe = document.getElementById('topologyIframe');
-                if (iframe) iframe.src = discoveryIframeUrl();
+                loadDiscoveryIframe();
 
                 // Auto-trigger handoff to AAM after successful discovery
                 if (result.status === 'completed' && typeof exportToAAM === 'function') {
@@ -3818,8 +3828,7 @@ ${JSON.stringify(technicalReport, null, 2)}
             // Build pipeline strip and wire interactive behaviors
             if (typeof initConsoleRedesign === 'function') initConsoleRedesign();
             // Load Discovery graph with the selected tenant
-            const iframe = document.getElementById('topologyIframe');
-            if (iframe) iframe.src = discoveryIframeUrl();
+            loadDiscoveryIframe();
         });
         
         setInterval(checkHealth, 30000);
@@ -3853,8 +3862,7 @@ ${JSON.stringify(technicalReport, null, 2)}
 
                 // Always refresh both Console runs and Discovery iframe
                 await loadRuns();
-                const iframe = document.getElementById('topologyIframe');
-                if (iframe) iframe.src = discoveryIframeUrl();
+                loadDiscoveryIframe();
                 if (currentRunId) {
                     const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
                     await loadHandoffCandidates(currentRunId, sf);

@@ -25,9 +25,6 @@ services:
       # --- AAM integration ---
       - key: AAM_URL
         sync: false          # Required for /aam/candidates export; 503 without this
-      # --- API auth ---
-      - key: AOD_API_KEY
-        sync: false          # API key enforced by auth middleware
       # --- Environment / CORS ---
       - key: AOD_ENVIRONMENT
         sync: false          # e.g. "production" — controls environment-specific branching

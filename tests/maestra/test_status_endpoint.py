@@ -20,14 +20,12 @@ from main import app
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    """Disable API key auth and reset DB singleton between tests.
+    """Reset DB singleton between tests.
 
     The DB pool is bound to an event loop. pytest-asyncio creates a new loop
     per test function, so we must reset the singleton to avoid
     'Future attached to a different loop' errors.
     """
-    monkeypatch.delenv("AOD_API_KEY", raising=False)
-
     yield
 
     # Reset DB singleton so next test gets a fresh pool on its own event loop

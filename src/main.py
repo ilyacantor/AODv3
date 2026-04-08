@@ -5,64 +5,16 @@ load_dotenv()
 
 import os
 import logging
-from fastapi import FastAPI, Request, Response, Depends, HTTPException, Security
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import APIKeyHeader
 from pathlib import Path
 
 from aod.api.routes import router
 from aod.db.database import get_db_direct
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# SECURITY: API Key Authentication
-# =============================================================================
-# When AOD_API_KEY is set, all /api/* endpoints require X-API-Key header.
-# When not set (development), authentication is bypassed.
-# =============================================================================
-
-API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def verify_api_key(request: Request, api_key: str = Security(API_KEY_HEADER)):
-    """
-    Verify API key for protected endpoints.
-
-    Behavior:
-    - If AOD_API_KEY env var is NOT set: Allow all requests (dev mode)
-    - If AOD_API_KEY env var IS set: Require matching X-API-Key header
-    - Same-origin browser requests (Referer from served UI) are exempt
-    """
-    expected_key = os.environ.get("AOD_API_KEY")
-
-    if not expected_key:
-        # No key configured = dev mode, allow all
-        return True
-
-    # Allow same-origin requests from the served UI
-    referer = request.headers.get("referer", "")
-    host = request.headers.get("host", "")
-    if referer and host and host in referer:
-        return True
-
-    if not api_key:
-        logger.warning("api.auth.missing_key", extra={"path": "api"})
-        raise HTTPException(
-            status_code=401,
-            detail="API key required. Provide X-API-Key header."
-        )
-
-    if api_key != expected_key:
-        logger.warning("api.auth.invalid_key", extra={"path": "api"})
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key."
-        )
-
-    return True
 
 
 # =============================================================================
@@ -104,8 +56,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router with authentication dependency
-app.include_router(router, dependencies=[Depends(verify_api_key)])
+# Include API router
+app.include_router(router)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"

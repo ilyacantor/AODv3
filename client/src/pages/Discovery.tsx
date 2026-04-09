@@ -481,23 +481,22 @@ export default function Discovery() {
 
     async function init() {
       try {
-        // Fetch most recent run for the selected tenant (retry up to 3 times
-        // with the same tenant filter — pipeline may still be writing)
+        // Fetch most recent run for the selected tenant. Single fetch:
+        // if there are no runs yet, show a clear empty state pointing at
+        // the Run Discovery action. Refresh / post-run reload of this iframe
+        // is what brings new runs into view.
         const tenantParam = new URLSearchParams(window.location.search).get('tenant_id')
         const runsUrl = tenantParam ? `/api/runs?tenant_id=${encodeURIComponent(tenantParam)}` : '/api/runs'
-        let runs: RunData[] = []
-        const maxRetries = 3
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          const runsRes = await fetch(runsUrl)
-          if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
-          runs = await runsRes.json()
-          if (runs.length > 0 || destroyed) break
-          if (attempt < maxRetries) {
-            setLoadingMessage(`Waiting for discovery runs (attempt ${attempt}/${maxRetries})...`)
-            await new Promise(r => setTimeout(r, 1500))
-          }
+        const runsRes = await fetch(runsUrl)
+        if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
+        const runs: RunData[] = await runsRes.json()
+        if (destroyed) return
+        if (runs.length === 0) {
+          setLoadingMessage(null)
+          setLoading(false)
+          setError('No discovery runs yet — click Run Discovery in the Console tab to start')
+          return
         }
-        if (runs.length === 0) throw new Error('No discovery runs found')
         const run = runs.find(r => r.status.startsWith('completed')) || runs[0]
 
         if (destroyed) return

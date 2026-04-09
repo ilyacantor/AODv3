@@ -1,8 +1,11 @@
-"""Farm-related route module with offline cache fallback.
+"""Farm-related route module with cache-first page loads.
 
-Feb 2026: Added transparent cache layer for Farm resilience.
-When Farm is up: normal flow + write-through cache update.
-When Farm is down: serve from cache immediately, no blocking wait.
+Apr 2026: Cache-first on page load. The four read endpoints return the
+last known cached state immediately without contacting Farm, and are
+write-through on the Farm path so successful fetches keep the cache
+fresh. The Refresh button passes force=true to bypass the cache and
+re-pull from Farm; on force, a Farm failure is surfaced as 503 — no
+silent fallback.
 """
 
 import logging
@@ -44,13 +47,25 @@ async def get_farm_url_endpoint():
 
 
 @router.get("/tenants")
-async def list_farm_tenants():
+async def list_farm_tenants(force: bool = False):
     """
     List available tenants from Farm.
 
-    Fetches all snapshots and extracts unique tenant_ids.
-    Falls back to cached snapshot list if Farm is unavailable.
+    Cache-first: if the snapshot list cache has data and force is false,
+    returns tenants from cache immediately without contacting Farm.
+    Only calls Farm when cache is empty or force=true is passed (e.g. from
+    the Refresh button). On force, a Farm failure is surfaced loud as 503.
+    Non-force falls through to the runs DB as a last resort when both
+    cache and Farm are empty.
     """
+    # Cache-first: page load returns immediately from cache, no Farm call
+    if not force:
+        cached_list = read_snapshot_list_cache()
+        if cached_list:
+            tenants = sorted(set(s.get("tenant_id", "") for s in cached_list if s.get("tenant_id")))
+            logger.info("farm.tenants.cache_first_hit", extra={"count": len(tenants)})
+            return TenantListResponse(tenants=tenants, count=len(tenants))
+
     farm_client = get_farm_client()
     if not farm_client:
         return _farm_error_response("NO_FARM_URL", "No Farm URL configured")
@@ -59,17 +74,16 @@ async def list_farm_tenants():
 
     if result.success:
         snapshots = result.snapshots or []
+        # Write-through: keep the cache fresh on every successful Farm fetch
+        write_snapshot_list_cache(snapshots)
         tenants = sorted(set(s.get("tenant_id", "") for s in snapshots if s.get("tenant_id")))
         return TenantListResponse(tenants=tenants, count=len(tenants))
 
-    # Farm unavailable - try cache
-    cached_list = read_snapshot_list_cache()
-    if cached_list:
-        tenants = sorted(set(s.get("tenant_id", "") for s in cached_list if s.get("tenant_id")))
-        logger.info("farm.tenants.from_cache", extra={"count": len(tenants)})
-        return TenantListResponse(tenants=tenants, count=len(tenants))
+    # force=true bypasses cache on both directions - raise loud
+    if force:
+        return _farm_error_response(result.error_type, result.error)
 
-    # Cache empty - fall back to recent tenants from runs table
+    # Non-force path: cache was empty at top, try the runs DB as a last resort
     try:
         db = await get_db_direct()
         db_tenants = await db.get_recent_tenants(limit=5)
@@ -83,13 +97,21 @@ async def list_farm_tenants():
 
 
 @router.get("/all-snapshots")
-async def list_all_farm_snapshots():
+async def list_all_farm_snapshots(force: bool = False):
     """
     List all available snapshots from Farm (no tenant filter).
 
-    Returns all snapshots sorted by created_at descending.
-    If Farm is unavailable, serves from cache with offline_mode flag.
+    Cache-first: returns cached snapshot list immediately on page load.
+    Only contacts Farm when cache is empty or force=true. On force, the
+    successful Farm response is written through to the cache.
     """
+    # Cache-first: page load returns the last known list instantly
+    if not force:
+        cached_list = read_snapshot_list_cache()
+        if cached_list:
+            logger.info("farm.all_snapshots.cache_first_hit", extra={"count": len(cached_list)})
+            return cached_list
+
     farm_client = get_farm_client()
     if not farm_client:
         return _farm_error_response("NO_FARM_URL", "No Farm URL configured")
@@ -102,31 +124,31 @@ async def list_all_farm_snapshots():
         write_snapshot_list_cache(snapshots)
         return snapshots
 
-    # Farm unavailable - fall back to cache
-    cached_list = read_snapshot_list_cache()
-    if cached_list:
-        meta = get_cache_meta()
-        cached_at = meta.get("cached_at", "unknown") if meta else "unknown"
-        logger.info("farm.all_snapshots.from_cache", extra={
-            "count": len(cached_list), "cached_at": cached_at
-        })
-        return JSONResponse(content={
-            "snapshots": cached_list,
-            "offline_mode": True,
-            "cached_at": cached_at,
-            "detail": "Farm unavailable. Showing cached snapshot list.",
-        })
-
+    # force=true bypasses cache on both directions - raise loud
+    # Non-force only reaches here on cache-miss, so no cache fallback to offer
     return _farm_error_response(result.error_type, result.error)
 
 
 @router.get("/snapshots")
-async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
+async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None, force: bool = False):
     """
     List available snapshots from Farm for a tenant.
 
-    Falls back to cached list filtered by tenant_id if Farm is unavailable.
+    Cache-first: returns the cached snapshot list filtered by tenant_id
+    on page load. Only contacts Farm when cache is empty, the tenant is
+    not represented in the cache, or force=true.
     """
+    # Cache-first: page load returns filtered cached list instantly
+    if not force:
+        cached_list = read_snapshot_list_cache()
+        if cached_list:
+            filtered = [s for s in cached_list if s.get("tenant_id") == tenant_id]
+            if filtered:
+                logger.info("farm.snapshots.cache_first_hit", extra={
+                    "tenant_id": tenant_id, "count": len(filtered)
+                })
+                return SnapshotListResponse(snapshots=filtered, count=len(filtered))
+
     farm_client = get_farm_client()
     if not farm_client:
         return _farm_error_response("NO_FARM_URL", "No Farm URL configured")
@@ -140,29 +162,32 @@ async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None):
             count=len(snapshots)
         )
 
-    # Farm unavailable - try cache filtered by tenant
-    cached_list = read_snapshot_list_cache()
-    if cached_list:
-        filtered = [s for s in cached_list if s.get("tenant_id") == tenant_id]
-        logger.info("farm.snapshots.from_cache", extra={
-            "tenant_id": tenant_id, "count": len(filtered)
-        })
-        return SnapshotListResponse(
-            snapshots=filtered,
-            count=len(filtered)
-        )
-
+    # force=true bypasses cache on both directions - raise loud
+    # Non-force only reaches here on cache-miss, so no cache fallback to offer
     return _farm_error_response(result.error_type, result.error)
 
 
 @router.get("/snapshot")
-async def get_farm_snapshot(snapshot_id: str, tenant_id: Optional[str] = None):
+async def get_farm_snapshot(snapshot_id: str, tenant_id: Optional[str] = None, force: bool = False):
     """
     Fetch a specific snapshot from Farm.
 
-    Falls back to cached snapshot if Farm is unavailable
-    and cached snapshot matches the requested snapshot_id.
+    Cache-first: if the cached snapshot matches the requested snapshot_id
+    and force is false, returns from cache immediately without contacting
+    Farm. Only calls Farm on cache mismatch or force=true. Falls back to
+    cache if Farm is unavailable and the cached snapshot matches.
     """
+    # Cache-first: page load returns cached snapshot instantly on match
+    if not force and has_cached_snapshot():
+        meta = get_cache_meta()
+        if meta and meta.get("snapshot_id") == snapshot_id:
+            cached = read_snapshot_cache()
+            if cached:
+                logger.info("farm.snapshot.cache_first_hit", extra={
+                    "snapshot_id": snapshot_id
+                })
+                return cached
+
     farm_client = get_farm_client()
     if not farm_client:
         return _farm_error_response("NO_FARM_URL", "No Farm URL configured")
@@ -172,17 +197,8 @@ async def get_farm_snapshot(snapshot_id: str, tenant_id: Optional[str] = None):
     if result.success:
         return result.data
 
-    # Farm unavailable - check if cached snapshot matches
-    if has_cached_snapshot():
-        meta = get_cache_meta()
-        if meta and meta.get("snapshot_id") == snapshot_id:
-            cached = read_snapshot_cache()
-            if cached:
-                logger.info("farm.snapshot.from_cache", extra={
-                    "snapshot_id": snapshot_id
-                })
-                return cached
-
+    # force=true bypasses cache on both directions - raise loud
+    # Non-force only reaches here on cache-miss, so no cache fallback to offer
     if result.error_type == "FARM_SNAPSHOT_NOT_FOUND":
         return JSONResponse(status_code=404, content={"detail": "Not Found", "error": result.error})
     return _farm_error_response(result.error_type, result.error)

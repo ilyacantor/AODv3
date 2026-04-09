@@ -124,22 +124,24 @@
         
         function showFarmWakingToast() {
             if (farmWakingToast) return; // Already showing
-            
+
             farmWakingToast = showToast('Waking up Farm...', 'info', true);
-            
-            // Poll Farm until it responds
+
+            // Poll Farm via the 1s-timeout probe until it responds.
+            // /api/farm/tenants can't be used here because it's cache-first
+            // and would return 200 even while Farm is still cold.
             farmWakeCheckInterval = setInterval(async () => {
                 try {
-                    const r = await fetch('/api/farm/tenants');
+                    const r = await fetch('/api/farm/status');
                     const data = await r.json();
-                    if (data.ok !== false && !data.error) {
-                        // Farm is awake!
+                    if (data.farm_available) {
                         clearInterval(farmWakeCheckInterval);
                         farmWakeCheckInterval = null;
                         dismissToast();
                         farmWakingToast = null;
-                        await populateTenantsFromFarm();
-                        // Reload Discovery iframe with the now-selected tenant
+                        window.farmLiveMode = true;
+                        // Farm just came back — refresh cache with real data
+                        await populateTenantsFromFarm(true);
                         loadDiscoveryIframe();
                     }
                 } catch (e) {
@@ -158,6 +160,23 @@
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
                     if (targetTab === 'triage') loadTriageRuns();
                     if (targetTab === 'handoff') loadHandoffRuns();
+                    // Keep Discovery iframe in sync with the Console tab's tenant
+                    // selection. If the user picked a different tenant in Console
+                    // and then switches to Discovery, the iframe needs to reload
+                    // so it reflects the selected tenant instead of whatever was
+                    // loaded at init.
+                    if (targetTab === 'topology') {
+                        const iframe = document.getElementById('topologyIframe');
+                        const selectedTenant = document.getElementById('tenantSelect')?.value || '';
+                        const iframeSrc = iframe?.getAttribute('src') || '';
+                        let iframeTenant = '';
+                        try {
+                            iframeTenant = new URL(iframeSrc, window.location.origin).searchParams.get('tenant_id') || '';
+                        } catch (e) { /* invalid URL */ }
+                        if (selectedTenant && iframeTenant !== selectedTenant) {
+                            loadDiscoveryIframe();
+                        }
+                    }
                     // Check for new data on tab switch — updates Console + Discovery if stale
                     checkForNewData(targetTab);
                 });
@@ -168,26 +187,31 @@
             const tenantId = document.getElementById('tenantSelect')?.value;
             if (!tenantId) return;
             try {
-                // 1. Check for new discovery runs
+                // 1. Check for new discovery runs (DB only, always fast)
                 const runsRes = await fetch('/api/runs');
                 if (!runsRes.ok) return;
                 const runs = await runsRes.json();
                 runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
 
                 if (runs.length > 0 && runs[0].aod_discovery_id !== currentRunId) {
-                    // New run exists — refresh both tabs
+                    // New run exists — refresh both tabs.
+                    // force=true so the snapshot_list cache is also updated.
                     await loadRuns();
                     await selectRun(runs[0].aod_discovery_id);
-                    await populateTenantsFromFarm();
-                    await handleTenantChange();
+                    await populateTenantsFromFarm(true);
+                    await handleTenantChange(true);
                     if (activeTab === 'topology') {
                         loadDiscoveryIframe();
                     }
                     return;
                 }
 
-                // 2. Check for new Farm snapshot not yet processed into a run
-                const snapRes = await fetch('/api/farm/snapshots?tenant_id=' + encodeURIComponent(tenantId));
+                // 2. Check Farm for a new snapshot not yet processed into a run.
+                // Gated on farmLiveMode so we don't slam a cold Farm on every
+                // tab switch. force=true so we actually hit Farm (otherwise
+                // the cache-first endpoint would return stale data forever).
+                if (!window.farmLiveMode) return;
+                const snapRes = await fetch('/api/farm/snapshots?tenant_id=' + encodeURIComponent(tenantId) + '&force=true');
                 if (!snapRes.ok) return;
                 const snapData = await snapRes.json();
                 if (!snapData.snapshots || snapData.snapshots.length === 0) return;
@@ -197,9 +221,8 @@
                     r.input_meta && r.input_meta.snapshot_id === latestSnapId
                 );
                 if (!alreadyProcessed) {
-                    // New snapshot — auto-trigger discovery (same as snapshotGenerated handler)
-                    await populateTenantsFromFarm();
-                    await handleTenantChange();
+                    // New snapshot — auto-trigger discovery. fetchFromFarm click
+                    // does its own force=true Farm fetch + cache refresh.
                     const btn = document.getElementById('fetchFromFarm');
                     if (btn && !btn.disabled) btn.click();
                 }
@@ -3255,12 +3278,14 @@ ${JSON.stringify(technicalReport, null, 2)}
             } catch { dot.classList.add('error'); text.textContent = 'Offline'; }
         }
         
-        async function populateTenantsFromFarm() {
-            // Always try to fetch - backend handles cache fallback
+        async function populateTenantsFromFarm(force = false) {
+            // Cache-first on page load. force=true is used by the Refresh
+            // button to bypass the cache and re-pull from Farm.
             const select = document.getElementById('tenantSelect');
-            
+            const forceQs = force ? '?force=true' : '';
+
             try {
-                const tenantsRes = await fetch('/api/farm/tenants');
+                const tenantsRes = await fetch(`/api/farm/tenants${forceQs}`);
                 let tenantsData;
                 try {
                     tenantsData = await tenantsRes.json();
@@ -3268,10 +3293,10 @@ ${JSON.stringify(technicalReport, null, 2)}
                     console.warn('Farm unavailable for tenant list');
                     return;
                 }
-                
+
                 const errorStr = JSON.stringify(tenantsData).toUpperCase();
                 const isFarmWaking = !tenantsRes.ok ||
-                    tenantsData.ok === false || 
+                    tenantsData.ok === false ||
                     tenantsData.error === 'FARM_WAKING_OR_DOWN' ||
                     errorStr.includes('FARM_WAKING') ||
                     errorStr.includes('UNAVAILABLE');
@@ -3280,16 +3305,16 @@ ${JSON.stringify(technicalReport, null, 2)}
                     showFarmWakingToast();
                     return;
                 }
-                
+
                 const tenants = tenantsData.tenants || [];
-                
+
                 // Clear dropdown and add placeholder
                 select.innerHTML = '<option value="">Select a tenant...</option>';
-                
+
                 // Fetch all snapshots to find the latest one
                 let latestTenant = null;
                 try {
-                    const snapshotsRes = await fetch('/api/farm/all-snapshots');
+                    const snapshotsRes = await fetch(`/api/farm/all-snapshots${forceQs}`);
                     const rawData = await snapshotsRes.json();
                     // Backend returns a raw array when Farm is up,
                     // or { snapshots: [...], offline_mode: true } when cached/offline
@@ -3302,7 +3327,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                 } catch (e) {
                     console.warn('Could not fetch snapshot dates:', e);
                 }
-                
+
                 // Add tenants to dropdown, marking the latest with ★
                 tenants.forEach(t => {
                     const opt = document.createElement('option');
@@ -3314,7 +3339,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                     }
                     select.appendChild(opt);
                 });
-                
+
                 // Auto-select the latest tenant, or fall back to first available
                 if (latestTenant && tenants.includes(latestTenant)) {
                     select.value = latestTenant;
@@ -3322,24 +3347,25 @@ ${JSON.stringify(technicalReport, null, 2)}
                     select.value = tenants[0];
                 }
                 if (select.value) {
-                    await handleTenantChange();
+                    await handleTenantChange(force);
                 }
             } catch (e) {
                 console.warn('Could not fetch Farm tenants:', e);
             }
         }
-        
-        async function handleTenantChange() {
+
+        async function handleTenantChange(force = false) {
             const tenantId = document.getElementById('tenantSelect').value;
+            const forceQs = force ? '&force=true' : '';
 
             if (tenantId) {
                 try {
-                    const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                    const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}${forceQs}`);
                     if (snapshotsRes.ok) {
                         const snapshotsData = await snapshotsRes.json();
                         if (snapshotsData.snapshots && snapshotsData.snapshots.length > 0) {
                             const latestSnapshot = snapshotsData.snapshots[0];
-                            const snapshotRes = await fetch(`/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantId)}&snapshot_id=${encodeURIComponent(latestSnapshot.snapshot_id)}`);
+                            const snapshotRes = await fetch(`/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantId)}&snapshot_id=${encodeURIComponent(latestSnapshot.snapshot_id)}${forceQs}`);
                             if (snapshotRes.ok) {
                                 const snapshotData = await snapshotRes.json();
                                 loadObservationPlaneCounts(snapshotData);
@@ -3686,38 +3712,42 @@ ${JSON.stringify(technicalReport, null, 2)}
         
         document.getElementById('fetchFromFarm').addEventListener('click', async () => {
             const tenantId = document.getElementById('tenantSelect').value;
-            
+
             hideOutcome();
-            
-            if (!tenantId) { 
+
+            if (!tenantId) {
                 showToast('Please select a Tenant', 'error');
-                return; 
+                return;
             }
-            
-            const btn = document.getElementById('fetchFromFarm'); 
-            btn.disabled = true; 
+
+            const btn = document.getElementById('fetchFromFarm');
+            btn.disabled = true;
             btn.textContent = 'Running Discovery...';
-            
+
             try {
-                const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}`);
+                // force=true: Run Discovery must see the latest snapshot_id
+                // from Farm right now, not from the cached dropdown list.
+                // Otherwise clicking "Run Discovery" re-runs against an old snapshot.
+                const snapshotsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantId)}&force=true`);
                 const snapshotsData = await snapshotsRes.json();
-                
-                if (!snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
-                    showToast('No snapshots found for this tenant', 'error');
+
+                if (!snapshotsRes.ok || !snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
+                    const detail = snapshotsData && snapshotsData.detail ? snapshotsData.detail : 'No snapshots found for this tenant';
+                    showToast(detail, 'error');
                     return;
                 }
-                
+
                 const latestSnapshot = snapshotsData.snapshots[0];
                 const snapshotId = latestSnapshot.snapshot_id || latestSnapshot.id;
-                
-                const r = await fetch('/api/runs/from-farm', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId }) 
+
+                const r = await fetch('/api/runs/from-farm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenant_id: tenantId, snapshot_id: snapshotId })
                 });
-                
+
                 const result = await r.json();
-                
+
                 if (!r.ok) {
                     const errorDetail = result.detail || 'Farm fetch failed';
                     if (errorDetail.includes('UPSTREAM_ERROR') || errorDetail.includes('FARM_')) {
@@ -3729,11 +3759,14 @@ ${JSON.stringify(technicalReport, null, 2)}
                     }
                     return;
                 }
-                
+
                 showOutcome(result.status, result.message);
                 currentRunId = result.aod_discovery_id;
                 await loadRuns();
                 await selectRun(result.aod_discovery_id);
+                // Refresh snapshot_list cache so next page load sees the new run
+                // without another Farm round-trip.
+                await populateTenantsFromFarm(true);
                 loadDiscoveryIframe();
 
                 // Auto-trigger handoff to AAM after successful discovery
@@ -3832,6 +3865,8 @@ ${JSON.stringify(technicalReport, null, 2)}
         });
         
         setInterval(checkHealth, 30000);
+        // Keep farmLiveMode current so checkForNewData knows whether to force-hit Farm
+        setInterval(checkFarmStatus, 30000);
 
         // Also check on browser tab switch (e.g., returning from Farm)
         document.addEventListener('visibilitychange', () => {
@@ -3852,9 +3887,10 @@ ${JSON.stringify(technicalReport, null, 2)}
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
-                // Always refresh tenant/snapshot data (Overview tab)
-                await populateTenantsFromFarm();
-                await handleTenantChange();
+                // Refresh button bypasses the cache and re-pulls from Farm.
+                // Page load / wake / postMessage flows stay cache-fast.
+                await populateTenantsFromFarm(true);
+                await handleTenantChange(true);
 
                 // Refresh whichever tab is currently active
                 const activeTab = document.querySelector('.header-nav-tab.active');

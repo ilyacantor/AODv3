@@ -25,7 +25,7 @@ from ...farm_client import FarmClient, validate_schema_version
 from ...farm_reconcile import reconcile_to_farm
 from ...pipeline.pipeline_executor import execute_pipeline
 from ...models.output_contracts import RunStatus, SyncStatus
-from ...cache import write_snapshot_cache
+from ...cache import write_snapshot_cache, upsert_snapshot_list_entry
 from ...pipeline.derived_classifications import compute_derived_classifications, classify_zombie, compute_zombie_status
 from ...pipeline.cache import invalidate_run_caches, get_domain_rollups_cache, get_derived_classifications_cache
 from ...core.policy import get_current_config
@@ -212,8 +212,18 @@ async def create_run_from_farm(request: FarmRunRequest):
     
     schema_version = snapshot_data.get("meta", {}).get("schema_version", "unknown")
     
-    if "meta" in snapshot_data and "tenant_id" not in snapshot_data["meta"]:
-        snapshot_data["meta"]["tenant_id"] = request.tenant_id
+    # Resolve tenant_id: request > snapshot meta.  Fail loudly if missing.
+    tenant_id = request.tenant_id or snapshot_data.get("meta", {}).get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No tenant_id available — provide tenant_id in request or ensure "
+                   "Farm snapshot meta contains tenant_id. "
+                   f"snapshot_id={request.snapshot_id}"
+        )
+    if "meta" in snapshot_data:
+        snapshot_data["meta"]["tenant_id"] = tenant_id
+
     # Resolve entity_id: request > snapshot meta.  Fail loudly if missing.
     entity_id = request.entity_id or snapshot_data.get("meta", {}).get("entity_id")
     if not entity_id:
@@ -272,6 +282,15 @@ async def create_run_from_farm(request: FarmRunRequest):
             asset_count=result.run_log.counts.assets_admitted,
             finding_count=result.run_log.counts.findings_generated,
             run_id=run_id,
+        )
+        # Keep the snapshot_list cache consistent so the next page load
+        # sees this snapshot without another Farm round trip.
+        created_at = snapshot_data.get("meta", {}).get("created_at", "")
+        upsert_snapshot_list_entry(
+            snapshot_id=request.snapshot_id,
+            tenant_id=result.run_log.tenant_id,
+            created_at=created_at,
+            name=snapshot_name,
         )
     except Exception as e:
         # Cache write failure is non-fatal - log and continue
@@ -411,6 +430,7 @@ async def get_latest_run(tenant_id: str, snapshot_id: Optional[str] = None):
     return RunDetailResponse(
         aod_discovery_id=run.aod_discovery_id,
         tenant_id=run.tenant_id,
+        entity_id=run.entity_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),
         completed_at=run.completed_at.isoformat() if run.completed_at else None,
@@ -436,6 +456,7 @@ async def list_runs(tenant_id: Optional[str] = None):
         RunDetailResponse(
             aod_discovery_id=run.aod_discovery_id,
             tenant_id=run.tenant_id,
+            entity_id=run.entity_id,
             status=run.status.value,
             started_at=run.started_at.isoformat(),
             completed_at=run.completed_at.isoformat() if run.completed_at else None,
@@ -461,6 +482,7 @@ async def get_run(aod_discovery_id: str, db: Database = Depends(get_db)):
     return RunDetailResponse(
         aod_discovery_id=run.aod_discovery_id,
         tenant_id=run.tenant_id,
+        entity_id=run.entity_id,
         status=run.status.value,
         started_at=run.started_at.isoformat(),
         completed_at=run.completed_at.isoformat() if run.completed_at else None,

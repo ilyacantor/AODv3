@@ -17,14 +17,16 @@ from fastapi.responses import JSONResponse
 from ..schemas import TenantListResponse, SnapshotListResponse
 from ..deps import get_farm_url, get_farm_client
 from ...cache import (
+    write_snapshot_cache,
     write_snapshot_list_cache,
+    upsert_snapshot_list_entry,
     read_snapshot_list_cache,
     read_snapshot_cache,
     get_cache_meta,
     has_cached_snapshot,
     has_cached_snapshot_list,
 )
-from ...db.database import get_db_direct
+from ...farm_client import validate_schema_version
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +56,8 @@ async def list_farm_tenants(force: bool = False):
     Cache-first: if the snapshot list cache has data and force is false,
     returns tenants from cache immediately without contacting Farm.
     Only calls Farm when cache is empty or force=true is passed (e.g. from
-    the Refresh button). On force, a Farm failure is surfaced loud as 503.
-    Non-force falls through to the runs DB as a last resort when both
-    cache and Farm are empty.
+    the Refresh button). On Farm failure, surface loudly as 503 — no
+    silent fallback to DB.
     """
     # Cache-first: page load returns immediately from cache, no Farm call
     if not force:
@@ -79,20 +80,9 @@ async def list_farm_tenants(force: bool = False):
         tenants = sorted(set(s.get("tenant_id", "") for s in snapshots if s.get("tenant_id")))
         return TenantListResponse(tenants=tenants, count=len(tenants))
 
-    # force=true bypasses cache on both directions - raise loud
-    if force:
-        return _farm_error_response(result.error_type, result.error)
-
-    # Non-force path: cache was empty at top, try the runs DB as a last resort
-    try:
-        db = await get_db_direct()
-        db_tenants = await db.get_recent_tenants(limit=5)
-        if db_tenants:
-            logger.info("farm.tenants.from_runs_db", extra={"count": len(db_tenants)})
-            return TenantListResponse(tenants=db_tenants, count=len(db_tenants))
-    except Exception as e:
-        logger.warning("farm.tenants.db_fallback_failed", extra={"error": str(e)})
-
+    # Farm failed — surface loud. The snapshot-list cache was checked at the
+    # top of the function; if we got here with a cache miss, the operator
+    # sees Farm-offline state rather than synthesized data.
     return _farm_error_response(result.error_type, result.error)
 
 
@@ -157,6 +147,19 @@ async def list_farm_snapshots(tenant_id: str, size: Optional[str] = None, force:
 
     if result.success:
         snapshots = result.snapshots or []
+        # Write-through: upsert each returned snapshot into the list cache
+        # so this tenant's entries are fresh without dropping other tenants.
+        # Never overwrite the whole list — that would clobber other tenants.
+        for s in snapshots:
+            snap_id = s.get("snapshot_id") or s.get("id")
+            if not snap_id:
+                continue
+            upsert_snapshot_list_entry(
+                snapshot_id=snap_id,
+                tenant_id=s.get("tenant_id", tenant_id),
+                created_at=s.get("created_at", ""),
+                name=s.get("name", ""),
+            )
         return SnapshotListResponse(
             snapshots=snapshots,
             count=len(snapshots)
@@ -194,7 +197,34 @@ async def get_farm_snapshot(snapshot_id: str, tenant_id: Optional[str] = None, f
 
     result = await farm_client.fetch_snapshot(snapshot_id)
 
-    if result.success:
+    if result.success and result.data is not None:
+        # Write-through: replace cached snapshot blob, but ONLY after schema
+        # validation passes. A partial or invalid response must never overwrite
+        # a good cache — existing cache is the fallback when Farm is degraded.
+        schema_valid, schema_error = validate_schema_version(result.data)
+        if schema_valid:
+            snapshot_meta = result.data.get("meta", {})
+            write_snapshot_cache(
+                snapshot_data=result.data,
+                snapshot_id=snapshot_id,
+                snapshot_name=snapshot_meta.get("name", snapshot_id),
+                tenant_id=snapshot_meta.get("tenant_id") or (tenant_id or ""),
+                # counts left at defaults (0) — they reflect discovery output,
+                # not snapshot content. They'll be populated when discovery runs
+                # against this snapshot via create_run_from_farm.
+            )
+            # Keep the list cache consistent so the dropdown reflects this
+            # snapshot without another Farm round trip.
+            upsert_snapshot_list_entry(
+                snapshot_id=snapshot_id,
+                tenant_id=snapshot_meta.get("tenant_id") or (tenant_id or ""),
+                created_at=snapshot_meta.get("created_at", ""),
+                name=snapshot_meta.get("name", ""),
+            )
+        else:
+            logger.warning("farm.snapshot.schema_invalid_no_cache_write", extra={
+                "snapshot_id": snapshot_id, "error": schema_error
+            })
         return result.data
 
     # force=true bypasses cache on both directions - raise loud
@@ -222,27 +252,10 @@ async def get_farm_status():
     cache_meta = get_cache_meta()
     has_cache = has_cached_snapshot() or has_cached_snapshot_list()
 
-    db_tenants_available = False
-    try:
-        db = await get_db_direct()
-        db_tenants = await db.get_recent_tenants(limit=5)
-        db_tenants_available = len(db_tenants) > 0
-    except Exception as e:
-        logger.warning("DB tenant availability check failed: %s", e, exc_info=True)
-
-    if farm_up:
-        mode = "live"
-    elif has_cache:
-        mode = "cached"
-    elif db_tenants_available:
-        mode = "cached"
-    else:
-        mode = "unavailable"
-
     return {
         "farm_available": farm_up,
         "farm_url": get_farm_url(),
-        "cache_available": has_cache or db_tenants_available,
+        "cache_available": has_cache,
         "cache_meta": cache_meta,
-        "mode": mode,
+        "mode": "live" if farm_up else ("cached" if has_cache else "unavailable"),
     }

@@ -41,7 +41,7 @@
                 } else {
                     light.className = 'farm-status-light';
                     light.title = 'Farm Offline';
-                    window.farmLiveMode = data.cache_available || false;
+                    window.farmLiveMode = false;
                 }
             } catch (e) {
                 light.className = 'farm-status-light';
@@ -226,7 +226,13 @@
                     const btn = document.getElementById('fetchFromFarm');
                     if (btn && !btn.disabled) btn.click();
                 }
-            } catch (e) { /* data check — non-critical */ }
+            } catch (e) {
+                // A1: surface loudly, don't swallow. checkForNewData is
+                // triggered on refresh and tab switches — a silent failure
+                // here hid the "refresh not replacing cache" bug for weeks.
+                console.error('[AOD] checkForNewData failed:', e);
+                showToast('Data check failed: ' + (e.message || e), 'error');
+            }
         }
         
         function initTriageTab() {
@@ -3340,8 +3346,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                     select.appendChild(opt);
                 });
 
-                // Auto-select the latest tenant, or fall back to first available
-                if (latestTenant && tenants.includes(latestTenant)) {
+                // Auto-select logic: preserve the user's current selection on
+                // force-refresh; only auto-pick latestTenant on initial load.
+                const prevSelected = select.value;
+                if (prevSelected && tenants.includes(prevSelected)) {
+                    select.value = prevSelected;
+                } else if (latestTenant && tenants.includes(latestTenant)) {
                     select.value = latestTenant;
                 } else if (tenants.length > 0) {
                     select.value = tenants[0];
@@ -3350,7 +3360,12 @@ ${JSON.stringify(technicalReport, null, 2)}
                     await handleTenantChange(force);
                 }
             } catch (e) {
-                console.warn('Could not fetch Farm tenants:', e);
+                // A1: surface loudly. On refresh (force=true), the user
+                // expects to see new data or a clear failure reason.
+                console.error('[AOD] populateTenantsFromFarm failed:', e);
+                if (force) {
+                    showToast('Farm unreachable: ' + (e.message || e), 'error');
+                }
             }
         }
 
@@ -3418,7 +3433,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                         const syncBadge = run.sync_status && run.sync_status !== 'not_applicable' 
                             ? `<span class="sync-status ${run.sync_status}" title="${run.sync_error || ''}">${run.sync_status === 'synced' ? 'SYNCED' : run.sync_status === 'failed' ? 'SYNC FAILED' : 'SYNCING'}</span>` 
                             : '';
-                        const tenant = run.tenant_id || '-';
+                        const entity = run.entity_id || '-';
                         const latestTag = idx === 0 ? ' <span class="latest-run-badge">(Latest)</span>' : '';
                         const size = run.input_meta?.scale || '-';
                         const profile = run.input_meta?.enterprise_profile || '-';
@@ -3431,7 +3446,7 @@ ${JSON.stringify(technicalReport, null, 2)}
                             : '';
                         return `<div class="run-item ${run.aod_discovery_id === currentRunId ? 'selected' : ''}" data-run-id="${run.aod_discovery_id}">
                             <div class="run-info">
-                                <span class="run-tenant">${tenant}${latestTag}</span>
+                                <span class="run-tenant">${entity}${latestTag}</span>
                                 <span class="run-status ${run.status}">${run.status.replace(/_/g, ' ')}</span>${syncBadge}${timingBadge}
                             </div>
                             <div class="run-meta">
@@ -3493,7 +3508,7 @@ ${JSON.stringify(technicalReport, null, 2)}
             try {
                 const r = await fetch(`/api/runs/${runId}`); const run = await r.json();
                 document.getElementById('descRunId').textContent = run.aod_discovery_id;
-                document.getElementById('descTenant').textContent = run.tenant_id;
+                document.getElementById('descTenant').textContent = run.entity_id || '-';
                 document.getElementById('descStatus').textContent = run.status.replace(/_/g, ' ');
                 document.getElementById('descCompleted').textContent = run.completed_at ? new Date(run.completed_at).toLocaleString() : '-';
                 const obsIn = run.counts.observations_in || 0;
@@ -3888,21 +3903,20 @@ ${JSON.stringify(technicalReport, null, 2)}
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
                 // Refresh button bypasses the cache and re-pulls from Farm.
-                // Page load / wake / postMessage flows stay cache-fast.
+                // populateTenantsFromFarm already calls handleTenantChange internally.
                 await populateTenantsFromFarm(true);
-                await handleTenantChange(true);
 
-                // Refresh whichever tab is currently active
-                const activeTab = document.querySelector('.header-nav-tab.active');
-                const activeTabId = activeTab ? activeTab.dataset.tab : null;
-
-                // Always refresh both Console runs and Discovery iframe
+                // Refresh Console runs and Discovery iframe
                 await loadRuns();
                 loadDiscoveryIframe();
                 if (currentRunId) {
                     const sf = document.getElementById('handoffStatusFilter')?.value || 'all';
                     await loadHandoffCandidates(currentRunId, sf);
                 }
+
+                // Catch up to any unprocessed Farm snapshots
+                const activeTab = document.querySelector('.header-nav-tab.active');
+                await checkForNewData(activeTab ? activeTab.dataset.tab : null);
 
                 showToast('Data refreshed', 'success');
             });
@@ -3965,16 +3979,16 @@ ${JSON.stringify(technicalReport, null, 2)}
                     // Farm generated a new snapshot — refresh tenants and auto-run discovery
                     console.log('[AOD] postMessage: snapshotGenerated — refreshing and running discovery');
                     (async () => {
-                        await populateTenantsFromFarm();
+                        await populateTenantsFromFarm(true);
                         // Select the tenant from the event if provided
                         if (event.data.tenant_id) {
                             const select = document.getElementById('tenantSelect');
                             if (select) {
                                 select.value = event.data.tenant_id;
-                                await handleTenantChange();
+                                await handleTenantChange(true);
                             }
                         } else {
-                            await handleTenantChange();
+                            await handleTenantChange(true);
                         }
                         // Trigger discovery run (same as clicking "Run Discovery")
                         const btn = document.getElementById('fetchFromFarm');

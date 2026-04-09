@@ -169,6 +169,28 @@ def write_snapshot_list_cache(snapshots: List[Dict[str, Any]]) -> bool:
     return ok
 
 
+def upsert_snapshot_list_entry(
+    snapshot_id: str,
+    tenant_id: str,
+    created_at: str,
+    name: str = "",
+) -> bool:
+    """Update or prepend a single snapshot in the list cache.
+
+    Called after a successful discovery run so the list cache stays
+    consistent with the runs DB without an extra Farm round trip.
+    """
+    existing = _read_json(_LIST_FILE) or {"snapshots": [], "cached_at": None, "count": 0}
+    snapshots = [s for s in existing.get("snapshots", []) if s.get("snapshot_id") != snapshot_id]
+    snapshots.insert(0, {
+        "snapshot_id": snapshot_id,
+        "tenant_id": tenant_id,
+        "created_at": created_at,
+        "name": name,
+    })
+    return write_snapshot_list_cache(snapshots)
+
+
 def read_snapshot_list_cache() -> Optional[List[Dict[str, Any]]]:
     """
     Read cached snapshot listing.

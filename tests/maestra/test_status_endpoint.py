@@ -10,6 +10,7 @@ No mocks. No test-only endpoints. No hardcoded expected counts.
 import time
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 import sys
@@ -18,23 +19,26 @@ sys.path.insert(0, "src")
 from main import app
 
 
-@pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
-    """Reset DB singleton between tests.
+@pytest_asyncio.fixture(autouse=True)
+async def clean_env():
+    """Reset DB singleton between tests and close the pool.
 
     The DB pool is bound to an event loop. pytest-asyncio creates a new loop
-    per test function, so we must reset the singleton to avoid
-    'Future attached to a different loop' errors.
+    per test function, so we must close the pool and reset the singleton to
+    avoid both 'Future attached to a different loop' errors AND asyncpg
+    connection leaks that exhaust the Supabase Session mode pool when many
+    tests run back-to-back.
     """
     yield
 
-    # Reset DB singleton so next test gets a fresh pool on its own event loop
+    # Close the pool (releases all asyncpg connections to Supabase) then
+    # reset the singleton so the next test gets a fresh pool on its own
+    # event loop. Do this in an async teardown so we have a live loop.
     import aod.db.database_old as db_mod
-    if db_mod._db_instance is not None:
-        # Pool close needs an event loop — but we're in sync teardown.
-        # Setting to None is safe: the pool will be GC'd and the next test
-        # will create a fresh one on its own loop.
-        db_mod._db_instance = None
+    instance = db_mod._db_instance
+    db_mod._db_instance = None
+    if instance is not None and instance._pool is not None:
+        await instance._pool.close()
 
 
 # Required fields per the session spec

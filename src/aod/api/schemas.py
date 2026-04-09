@@ -9,7 +9,11 @@ from ..models.output_contracts import RunCounts, PipelineStageTimings
 
 class FarmRunRequest(BaseModel):
     """Request for creating a run from Farm"""
-    tenant_id: str
+    tenant_id: str | None = Field(
+        default=None,
+        description="Tenant UUID. Optional — if omitted, derived from Farm "
+                    "snapshot meta.tenant_id. Fails 400 if neither is available."
+    )
     farm_base_url: str | None = None
     snapshot_id: str
     industry: str | None = Field(
@@ -41,6 +45,7 @@ class RunDetailResponse(BaseModel):
     """Response for run detail"""
     aod_discovery_id: str
     tenant_id: str
+    entity_id: Optional[str] = None
     status: str
     started_at: str
     completed_at: Optional[str]

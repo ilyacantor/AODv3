@@ -491,13 +491,54 @@ export default function Discovery() {
         if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
         const runs: RunData[] = await runsRes.json()
         if (destroyed) return
-        if (runs.length === 0) {
+        let run: RunData | null = runs.length > 0
+          ? (runs.find(r => r.status.startsWith('completed')) || runs[0])
+          : null
+
+        // No runs yet — piggyback on the cached Farm snapshot the Console tab loaded
+        if (!run && tenantParam) {
+          try {
+            const snapsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantParam)}`)
+            if (snapsRes.ok) {
+              const snapsData = await snapsRes.json()
+              const snapId = snapsData.snapshots?.[0]?.snapshot_id
+              if (snapId) {
+                const snapRes = await fetch(`/api/farm/snapshot?snapshot_id=${encodeURIComponent(snapId)}`)
+                if (snapRes.ok) {
+                  const snap = await snapRes.json()
+                  const meta = snap.meta || {}
+                  run = {
+                    aod_discovery_id: 'snapshot-preview',
+                    tenant_id: meta.tenant_id || tenantParam,
+                    status: 'snapshot_loaded',
+                    started_at: meta.created_at || new Date().toISOString(),
+                    completed_at: null,
+                    input_meta: {
+                      snapshot_id: snapId,
+                      scale: meta.scale || '',
+                      enterprise_profile: meta.enterprise_profile || '',
+                      created_at: meta.created_at || '',
+                      counts: meta.counts || {},
+                      fabric_planes: meta.fabric_planes || [],
+                      sors: meta.sors || [],
+                    },
+                    counts: {
+                      observations_in: 0, candidates_out: 0, assets_admitted: 0,
+                      rejected: 0, ambiguous_matches: 0, findings_generated: 0,
+                    },
+                  }
+                }
+              }
+            }
+          } catch { /* snapshot fetch failed — fall through to error */ }
+        }
+
+        if (!run) {
           setLoadingMessage(null)
           setLoading(false)
-          setError('No discovery runs yet — click Run Discovery in the Console tab to start')
+          setError('No snapshot loaded — select a tenant in the Console tab')
           return
         }
-        const run = runs.find(r => r.status.startsWith('completed')) || runs[0]
 
         if (destroyed) return
 

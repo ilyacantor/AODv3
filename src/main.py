@@ -3,18 +3,104 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import os
+import asyncio
 import logging
-from fastapi import FastAPI, Request, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
+import os
+import socket
+from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
+
+import httpx
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from aod.api.routes import router
 from aod.db.database import get_db_direct
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Boot-time downstream validation
+# =============================================================================
+# AOD calls Farm and AAM directly. Required env vars, no dev-host fallback —
+# a missing URL would silently route every workflow to a bogus host. Surface
+# the misconfig at module load so Render marks the deploy failed instead of
+# degrading silently when the first request comes in.
+
+FARM_URL = os.environ.get("FARM_URL", "")
+if not FARM_URL:
+    raise RuntimeError(
+        "FARM_URL environment variable is required. AOD discovery, "
+        "reconciliation, and runs all call Farm — a missing URL would "
+        "silently break every workflow."
+    )
+
+AAM_URL = os.environ.get("AAM_URL", "")
+if not AAM_URL:
+    raise RuntimeError(
+        "AAM_URL environment variable is required. AOD handoff to AAM "
+        "for connector provisioning needs an explicit AAM URL."
+    )
+
+
+async def _probe_one(client: httpx.AsyncClient, name: str, base_url: str, health_path: str) -> str | None:
+    """Probe a single downstream — DNS resolve + GET /health. Returns error string or None."""
+    parsed = urlparse(base_url)
+    host = parsed.hostname
+    if not host:
+        return f"{name}: cannot parse hostname from {base_url}"
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, socket.gethostbyname, host)
+    except socket.gaierror as exc:
+        return f"{name}: DNS resolution failed for {host}: {exc}"
+    try:
+        resp = await client.get(f"{base_url}{health_path}")
+    except httpx.ConnectError as exc:
+        return f"{name}: connection refused at {base_url}{health_path}: {exc}"
+    except httpx.TimeoutException:
+        return f"{name}: timeout reaching {base_url}{health_path} after 2s"
+    if resp.status_code != 200:
+        return f"{name}: HTTP {resp.status_code} from {base_url}{health_path}"
+    return None
+
+
+async def _probe_downstreams() -> None:
+    """Boot-time validation of every downstream AOD depends on."""
+    targets: list[tuple[str, str, str]] = [
+        ("Farm", FARM_URL, "/health"),
+        ("AAM", AAM_URL, "/health"),
+    ]
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        results = await asyncio.gather(
+            *[_probe_one(client, name, url, path) for name, url, path in targets]
+        )
+    failures = [r for r in results if r]
+    if failures:
+        raise RuntimeError(
+            "AOD cannot start — downstream probes failed:\n  " + "\n  ".join(failures)
+        )
+    logger.info("AOD downstream probes succeeded for %d services", len(targets))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown lifecycle."""
+    logger.info("AOD starting up")
+    await _probe_downstreams()
+    await asyncio.wait_for(get_db_direct(), timeout=15)
+    logger.info("startup.db_ready")
+
+    yield
+
+    from aod.api.deps import get_farm_client
+    farm_client = get_farm_client()
+    if farm_client:
+        await farm_client.close()
+        logger.info("shutdown.farm_client_closed")
 
 
 # =============================================================================
@@ -24,7 +110,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AOD Fresh",
     description="AutonomOS Discover - Enterprise Asset Discovery Module",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # =============================================================================
@@ -68,31 +155,6 @@ if STATIC_DIR.exists():
 
 if CONFIG_DIR.exists():
     app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
-
-
-@app.on_event("startup")
-async def startup():
-    """Initialize database on startup — non-blocking so health check passes"""
-    import asyncio
-    try:
-        await asyncio.wait_for(get_db_direct(), timeout=15)
-        logger.info("startup.db_ready")
-    except asyncio.TimeoutError:
-        logger.warning("startup.db_timeout — DB init timed out after 15s, will retry lazily on first request")
-    except Exception as e:
-        logger.warning("startup.db_error — %s — will retry lazily on first request", str(e))
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    """Cleanup resources on shutdown"""
-    from aod.api.deps import get_farm_client
-
-    # Close Farm HTTP client and cleanup connections
-    farm_client = get_farm_client()
-    if farm_client:
-        await farm_client.close()
-        logger.info("shutdown.farm_client_closed")
 
 
 @app.get("/health")

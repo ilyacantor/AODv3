@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # the misconfig at module load so Render marks the deploy failed instead of
 # degrading silently when the first request comes in.
 
-FARM_URL = os.environ.get("FARM_URL", "").rstrip("/")
+FARM_URL = os.environ.get("FARM_URL", "")
 if not FARM_URL:
     raise RuntimeError(
         "FARM_URL environment variable is required. AOD discovery, "
@@ -39,7 +39,7 @@ if not FARM_URL:
         "silently break every workflow."
     )
 
-AAM_URL = os.environ.get("AAM_URL", "").rstrip("/")
+AAM_URL = os.environ.get("AAM_URL", "")
 if not AAM_URL:
     raise RuntimeError(
         "AAM_URL environment variable is required. AOD handoff to AAM "

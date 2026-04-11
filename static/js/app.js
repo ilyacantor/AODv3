@@ -158,6 +158,7 @@
                     document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
                     tab.classList.add('active');
                     document.getElementById(targetTab + 'TabContent').classList.add('active');
+                    if (targetTab === 'discovery') loadRuns();
                     if (targetTab === 'triage') loadTriageRuns();
                     if (targetTab === 'handoff') loadHandoffRuns();
                     // Keep Discovery iframe in sync with the Console tab's tenant
@@ -175,6 +176,8 @@
                         } catch (e) { /* invalid URL */ }
                         if (selectedTenant && iframeTenant !== selectedTenant) {
                             loadDiscoveryIframe();
+                        } else if (iframe?.contentWindow) {
+                            iframe.contentWindow.postMessage({ action: 'refreshData' }, '*');
                         }
                     }
                     // Check for new data on tab switch — updates Console + Discovery if stale

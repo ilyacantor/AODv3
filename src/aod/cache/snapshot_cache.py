@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import re
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,17 +28,21 @@ _SNAPSHOT_FILE = "snapshot.json"
 _META_FILE = "meta.json"
 _LIST_FILE = "snapshot_list.json"
 
-_TENANT_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
+# Accept UUIDs and business-key tenant IDs (e.g. AeroHub-080G, test-tenant).
+# I2 says tenant_id should be UUID, but the existing AOD surface passes
+# Farm's business-key tenant names through; normalizing that is a separate
+# architectural fix. The regex is a safety filter for the cache path only —
+# it blocks path traversal (/, .., null) while allowing both formats.
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 def _validate_tenant_id(tenant_id: str) -> str:
     if not tenant_id or not isinstance(tenant_id, str):
         raise ValueError(f"tenant_id must be a non-empty string, got {tenant_id!r}")
-    try:
-        uuid.UUID(tenant_id)
-    except (ValueError, TypeError):
-        if not _TENANT_ID_RE.match(tenant_id):
-            raise ValueError(f"tenant_id must be a UUID, got {tenant_id!r}")
+    if not _TENANT_ID_RE.match(tenant_id):
+        raise ValueError(
+            f"tenant_id must match ^[A-Za-z0-9_-]{{1,128}}$, got {tenant_id!r}"
+        )
     return tenant_id
 
 

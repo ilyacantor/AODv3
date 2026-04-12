@@ -789,19 +789,15 @@ class AAMExportResponse(BaseModel):
 @router.post("/aam/export", response_model=AAMExportResponse)
 async def export_to_aam(
     aod_discovery_id: str,
-    source_aod_discovery_id: str = Query(..., description="aod_discovery_id from Step 2 discovery. Required for provenance chain (I3)."),
     status_filter: Optional[str] = Query("all", description="Filter by status: active, review, all"),
 ):
     """
     Export ConnectionCandidates to AAM (Adaptive API Mesh).
-    
-    This endpoint:
-    1. Fetches candidates for the given run
-    2. Formats them for AAM's expected schema
-    3. POSTs to AAM's /api/handoff/aod/receive endpoint
-    
-    Requires AAM_URL environment variable to be set.
+
+    I3 provenance: source_aod_discovery_id in the response is derived from
+    aod_discovery_id — they are the same identity, not a separate input.
     """
+    source_aod_discovery_id = aod_discovery_id
     handoff_id = aod_discovery_id
 
     aam_url = os.environ.get("AAM_URL")

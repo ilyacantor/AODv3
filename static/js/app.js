@@ -1,9 +1,14 @@
         let currentRunId = null, catalogData = null, loadedSnapshots = [];
+        window.currentSnapshotId = null;
 
         function discoveryIframeUrl() {
             const tid = document.getElementById('tenantSelect')?.value;
-            const q = tid ? '?tenant_id=' + encodeURIComponent(tid) + '&v=' + Date.now() : '?v=' + Date.now();
-            return '/static/overview/index.html' + q;
+            const sid = window.currentSnapshotId || '';
+            const params = new URLSearchParams();
+            if (tid) params.set('tenant_id', tid);
+            if (sid) params.set('snapshot_id', sid);
+            params.set('v', Date.now().toString());
+            return '/static/overview/index.html?' + params.toString();
         }
         function loadDiscoveryIframe() {
             const iframe = document.getElementById('topologyIframe');
@@ -127,9 +132,6 @@
 
             farmWakingToast = showToast('Waking up Farm...', 'info', true);
 
-            // Poll Farm via the 1s-timeout probe until it responds.
-            // /api/farm/tenants can't be used here because it's cache-first
-            // and would return 200 even while Farm is still cold.
             farmWakeCheckInterval = setInterval(async () => {
                 try {
                     const r = await fetch('/api/farm/status');
@@ -169,12 +171,18 @@
                     if (targetTab === 'topology') {
                         const iframe = document.getElementById('topologyIframe');
                         const selectedTenant = document.getElementById('tenantSelect')?.value || '';
+                        const selectedSnapshot = window.currentSnapshotId || '';
                         const iframeSrc = iframe?.getAttribute('src') || '';
                         let iframeTenant = '';
+                        let iframeSnapshot = '';
                         try {
-                            iframeTenant = new URL(iframeSrc, window.location.origin).searchParams.get('tenant_id') || '';
+                            const parsed = new URL(iframeSrc, window.location.origin).searchParams;
+                            iframeTenant = parsed.get('tenant_id') || '';
+                            iframeSnapshot = parsed.get('snapshot_id') || '';
                         } catch (e) { /* invalid URL */ }
-                        if (selectedTenant && iframeTenant !== selectedTenant) {
+                        const mismatch = (selectedTenant && iframeTenant !== selectedTenant)
+                            || (iframeSnapshot !== selectedSnapshot);
+                        if (mismatch) {
                             loadDiscoveryIframe();
                         } else if (iframe?.contentWindow) {
                             iframe.contentWindow.postMessage({ action: 'refreshData' }, '*');
@@ -211,8 +219,8 @@
 
                 // 2. Check Farm for a new snapshot not yet processed into a run.
                 // Gated on farmLiveMode so we don't slam a cold Farm on every
-                // tab switch. force=true so we actually hit Farm (otherwise
-                // the cache-first endpoint would return stale data forever).
+                // tab switch. force=true disables the per-tenant cache fallback
+                // so stale listings can't sneak in on a tab-switch probe.
                 if (!window.farmLiveMode) return;
                 const snapRes = await fetch('/api/farm/snapshots?tenant_id=' + encodeURIComponent(tenantId) + '&force=true');
                 if (!snapRes.ok) return;
@@ -2066,7 +2074,7 @@
             exportBtn.textContent = 'Exporting...';
 
             try {
-                const response = await fetch(`/api/handoff/aam/export?aod_discovery_id=${runId}&source_aod_discovery_id=${runId}&status_filter=${statusFilter}`, {
+                const response = await fetch(`/api/handoff/aam/export?aod_discovery_id=${runId}&status_filter=${statusFilter}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -3375,6 +3383,7 @@ ${JSON.stringify(technicalReport, null, 2)}
         async function handleTenantChange(force = false) {
             const tenantId = document.getElementById('tenantSelect').value;
             const forceQs = force ? '&force=true' : '';
+            window.currentSnapshotId = null;
 
             if (tenantId) {
                 try {
@@ -3383,9 +3392,11 @@ ${JSON.stringify(technicalReport, null, 2)}
                         const snapshotsData = await snapshotsRes.json();
                         if (snapshotsData.snapshots && snapshotsData.snapshots.length > 0) {
                             const latestSnapshot = snapshotsData.snapshots[0];
-                            const snapshotRes = await fetch(`/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantId)}&snapshot_id=${encodeURIComponent(latestSnapshot.snapshot_id)}${forceQs}`);
+                            const snapId = latestSnapshot.snapshot_id;
+                            const snapshotRes = await fetch(`/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantId)}&snapshot_id=${encodeURIComponent(snapId)}${forceQs}`);
                             if (snapshotRes.ok) {
                                 const snapshotData = await snapshotRes.json();
+                                window.currentSnapshotId = snapId;
                                 loadObservationPlaneCounts(snapshotData);
                                 if (typeof updatePipelineStrip === 'function') updatePipelineStrip();
                                 return;
@@ -3757,6 +3768,7 @@ ${JSON.stringify(technicalReport, null, 2)}
 
                 const latestSnapshot = snapshotsData.snapshots[0];
                 const snapshotId = latestSnapshot.snapshot_id || latestSnapshot.id;
+                window.currentSnapshotId = snapshotId;
 
                 const r = await fetch('/api/runs/from-farm', {
                     method: 'POST',

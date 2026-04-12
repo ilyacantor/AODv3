@@ -270,31 +270,24 @@ async def create_run_from_farm(request: FarmRunRequest):
         request_entity_id=request.entity_id,
     )
 
-    # Cache snapshot for offline resilience (write-through)
-    # Only cache Farm-sourced snapshots, not re-cached data
-    try:
-        snapshot_name = snapshot_data.get("meta", {}).get("name", request.snapshot_id)
-        write_snapshot_cache(
-            snapshot_data=snapshot_data,
-            snapshot_id=request.snapshot_id,
-            snapshot_name=snapshot_name,
-            tenant_id=result.run_log.tenant_id,
-            asset_count=result.run_log.counts.assets_admitted,
-            finding_count=result.run_log.counts.findings_generated,
-            run_id=run_id,
-        )
-        # Keep the snapshot_list cache consistent so the next page load
-        # sees this snapshot without another Farm round trip.
-        created_at = snapshot_data.get("meta", {}).get("created_at", "")
-        upsert_snapshot_list_entry(
-            snapshot_id=request.snapshot_id,
-            tenant_id=result.run_log.tenant_id,
-            created_at=created_at,
-            name=snapshot_name,
-        )
-    except Exception as e:
-        # Cache write failure is non-fatal - log and continue
-        logger.warning("cache.write_failed_nonfatal", extra={"error": str(e)})
+    # Write-through to per-tenant cache for offline resilience
+    snapshot_name = snapshot_data.get("meta", {}).get("name", request.snapshot_id)
+    write_snapshot_cache(
+        tenant_id=result.run_log.tenant_id,
+        snapshot_id=request.snapshot_id,
+        snapshot_data=snapshot_data,
+        snapshot_name=snapshot_name,
+        asset_count=result.run_log.counts.assets_admitted,
+        finding_count=result.run_log.counts.findings_generated,
+        discovery_id=run_id,
+    )
+    created_at = snapshot_data.get("meta", {}).get("created_at", "")
+    upsert_snapshot_list_entry(
+        tenant_id=result.run_log.tenant_id,
+        snapshot_id=request.snapshot_id,
+        created_at=created_at,
+        name=snapshot_name,
+    )
 
     sync_status = SyncStatus.PENDING
     sync_error = None

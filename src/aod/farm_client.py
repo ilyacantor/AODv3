@@ -9,9 +9,9 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # HTTP client configuration (environment-configurable)
-FARM_TIMEOUT = float(os.getenv("FARM_TIMEOUT", "25.0"))
+FARM_TIMEOUT = float(os.getenv("FARM_TIMEOUT", "10.0"))
 FARM_MAX_RETRIES = int(os.getenv("FARM_RETRIES", "3"))
-FARM_PROBE_TIMEOUT = float(os.getenv("FARM_PROBE_TIMEOUT", "1.0"))  # Fast probe for startup
+FARM_PROBE_TIMEOUT = float(os.getenv("FARM_PROBE_TIMEOUT", "10.0"))
 
 # Retryable HTTP status codes:
 # - 408: Request Timeout
@@ -77,12 +77,10 @@ class FarmClient:
         await self._client.aclose()
 
     async def probe(self) -> bool:
-        """
-        Fast health probe - is Farm reachable right now?
+        """Health probe - is Farm reachable right now?
 
-        Uses FARM_PROBE_TIMEOUT (default 1s) to avoid blocking startup.
-        No retries. If Farm doesn't respond in 1s, it's asleep.
-
+        Uses FARM_PROBE_TIMEOUT (10s) — long enough to wait out a Replit cold
+        start so the UI doesn't flip to "cached" mode prematurely. No retries.
         Returns True if Farm responds with any 2xx status.
         """
         url = f"{self.base_url}/api/snapshots?tenant_id=&limit=1"
@@ -121,17 +119,7 @@ class FarmClient:
                 # Use shared client with connection pooling
                 response = await self._client.get(url)
 
-                # Check for retryable status codes
                 if response.status_code in RETRYABLE_STATUS_CODES:
-                    # Check if response is HTML (Replit "app not running" page)
-                    content_type = response.headers.get("content-type", "")
-                    if "html" in content_type.lower() or response.text.strip().startswith("<!"):
-                        last_error = "FARM_WAKING_OR_DOWN"
-                        if not is_last_attempt:
-                            logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
-                            continue
-                        break
-
                     last_error = f"HTTP {response.status_code}"
                     if not is_last_attempt:
                         logger.info(f"farm.{context}.retry", extra={"url": url, "status": response.status_code, "attempt": attempt + 1})
@@ -141,7 +129,7 @@ class FarmClient:
                 return response, None
 
             except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
-                last_error = "FARM_WAKING_OR_DOWN"
+                last_error = f"Farm unreachable at {url} after {attempt + 1}/{max_attempts} attempts: {type(e).__name__}: {e}"
                 logger.warning(f"farm.{context}.network_error", extra={
                     "url": url, "attempt": attempt + 1, "max_attempts": max_attempts, "error": str(e)
                 })

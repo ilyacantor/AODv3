@@ -481,11 +481,15 @@ export default function Discovery() {
 
     async function init() {
       try {
-        // Fetch most recent run for the selected tenant. Single fetch:
-        // if there are no runs yet, show a clear empty state pointing at
-        // the Run Discovery action. Refresh / post-run reload of this iframe
-        // is what brings new runs into view.
-        const tenantParam = new URLSearchParams(window.location.search).get('tenant_id')
+        // The iframe receives canonical tenant_id + snapshot_id from app.js.
+        // Flow: (1) try /api/runs for a completed discovery run;
+        //       (2) if none and snapshot_id was provided, render a preview
+        //           from /api/farm/snapshot (Farm-first, cache fallback);
+        //       (3) otherwise show an explicit empty state.
+        const url = new URLSearchParams(window.location.search)
+        const tenantParam = url.get('tenant_id')
+        const snapshotIdParam = url.get('snapshot_id')
+
         const runsUrl = tenantParam ? `/api/runs?tenant_id=${encodeURIComponent(tenantParam)}` : '/api/runs'
         const runsRes = await fetch(runsUrl)
         if (!runsRes.ok) throw new Error(`Failed to fetch runs: ${runsRes.status}`)
@@ -495,48 +499,44 @@ export default function Discovery() {
           ? (runs.find(r => r.status.startsWith('completed')) || runs[0])
           : null
 
-        // No runs yet — piggyback on the cached Farm snapshot the Console tab loaded
-        if (!run && tenantParam) {
-          try {
-            const snapsRes = await fetch(`/api/farm/snapshots?tenant_id=${encodeURIComponent(tenantParam)}`)
-            if (snapsRes.ok) {
-              const snapsData = await snapsRes.json()
-              const snapId = snapsData.snapshots?.[0]?.snapshot_id
-              if (snapId) {
-                const snapRes = await fetch(`/api/farm/snapshot?snapshot_id=${encodeURIComponent(snapId)}`)
-                if (snapRes.ok) {
-                  const snap = await snapRes.json()
-                  const meta = snap.meta || {}
-                  run = {
-                    aod_discovery_id: 'snapshot-preview',
-                    tenant_id: meta.tenant_id || tenantParam,
-                    status: 'snapshot_loaded',
-                    started_at: meta.created_at || new Date().toISOString(),
-                    completed_at: null,
-                    input_meta: {
-                      snapshot_id: snapId,
-                      scale: meta.scale || '',
-                      enterprise_profile: meta.enterprise_profile || '',
-                      created_at: meta.created_at || '',
-                      counts: meta.counts || {},
-                      fabric_planes: meta.fabric_planes || [],
-                      sors: meta.sors || [],
-                    },
-                    counts: {
-                      observations_in: 0, candidates_out: 0, assets_admitted: 0,
-                      rejected: 0, ambiguous_matches: 0, findings_generated: 0,
-                    },
-                  }
-                }
-              }
-            }
-          } catch { /* snapshot fetch failed — fall through to error */ }
+        if (!run && tenantParam && snapshotIdParam) {
+          const snapRes = await fetch(
+            `/api/farm/snapshot?tenant_id=${encodeURIComponent(tenantParam)}&snapshot_id=${encodeURIComponent(snapshotIdParam)}`
+          )
+          if (!snapRes.ok) {
+            const body = await snapRes.text().catch(() => '')
+            throw new Error(`Snapshot fetch failed: HTTP ${snapRes.status} ${body.slice(0, 200)}`)
+          }
+          const snap = await snapRes.json()
+          const meta = snap.meta || {}
+          run = {
+            aod_discovery_id: 'snapshot-preview',
+            tenant_id: meta.tenant_id || tenantParam,
+            status: 'snapshot_loaded',
+            started_at: meta.created_at || new Date().toISOString(),
+            completed_at: null,
+            input_meta: {
+              snapshot_id: snapshotIdParam,
+              scale: meta.scale || '',
+              enterprise_profile: meta.enterprise_profile || '',
+              created_at: meta.created_at || '',
+              counts: meta.counts || {},
+              fabric_planes: meta.fabric_planes || [],
+              sors: meta.sors || [],
+            },
+            counts: {
+              observations_in: 0, candidates_out: 0, assets_admitted: 0,
+              rejected: 0, ambiguous_matches: 0, findings_generated: 0,
+            },
+          }
         }
 
         if (!run) {
           setLoadingMessage(null)
           setLoading(false)
-          setError('No snapshot loaded — select a tenant in the Console tab')
+          setError(tenantParam
+            ? 'No discovery run or snapshot loaded for this tenant'
+            : 'No tenant selected')
           return
         }
 

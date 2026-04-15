@@ -59,5 +59,5 @@ def resolve_entity_id(
         "Set entity_id in the API request, in the snapshot meta.entity_id field, "
         "or in the AOD_DEFAULT_ENTITY_ID environment variable. "
         "Do NOT query the triples table to resolve entity_id — "
-        "this is a banned anti-pattern (see maestra_platform_spec_v7.1 §10.1)."
+        "this is a banned anti-pattern (see mai_platform_spec_v7.1 §10.1)."
     )

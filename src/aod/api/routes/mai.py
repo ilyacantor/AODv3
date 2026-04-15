@@ -1,7 +1,7 @@
-"""Maestra status endpoint for AOD.
+"""Mai status endpoint for AOD.
 
 Provides a read-only window into AOD's current discovery state for a given tenant.
-Used by Maestra (the AI engagement lead for AOS Convergence) to understand
+Used by Mai (the AI engagement lead for AOS Convergence) to understand
 where each module stands before orchestrating cross-module workflows.
 """
 
@@ -18,11 +18,11 @@ from ..routes.utils import get_run_snapshot_as_of as _get_run_snapshot_as_of
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/maestra")
+router = APIRouter(prefix="/mai")
 
 
 def _map_run_status_to_phase(status: RunStatus) -> str:
-    """Map AOD RunStatus to Maestra's discovery_phase vocabulary."""
+    """Map AOD RunStatus to Mai's discovery_phase vocabulary."""
     if status in (RunStatus.PENDING,):
         return "pending"
     if status in (RunStatus.RUNNING,):
@@ -35,7 +35,7 @@ def _map_run_status_to_phase(status: RunStatus) -> str:
         return "complete"
     # FAILED, INVALID_SNAPSHOT, INVALID_INPUT_CONTRACT, UPSTREAM_ERROR
     # are terminal non-success states — report as complete (the run finished,
-    # but with errors). Maestra can check healthy=false for failure detail.
+    # but with errors). Mai can check healthy=false for failure detail.
     return "complete"
 
 
@@ -99,9 +99,9 @@ def _build_fabric_availability_from_assets(assets) -> dict:
 
 
 @router.get("/status")
-async def maestra_status(tenant_id: str = Query(..., description="Tenant ID to query status for")):
+async def mai_status(tenant_id: str = Query(..., description="Tenant ID to query status for")):
     """
-    Maestra status endpoint — read-only window into AOD discovery state.
+    Mai status endpoint — read-only window into AOD discovery state.
 
     Returns structured JSON describing the current discovery state for the
     given tenant. Queries existing AOD state only — no new business logic.

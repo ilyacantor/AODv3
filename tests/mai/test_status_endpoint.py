@@ -1,9 +1,9 @@
 """
-Maestra status endpoint tests for AOD.
+Mai status endpoint tests for AOD.
 
 Tests per session1_module_status.md spec and HARNESS_RULES.md.
 
-Tests call GET /api/maestra/status?tenant_id=<id> against the live FastAPI app.
+Tests call GET /api/mai/status?tenant_id=<id> against the live FastAPI app.
 No mocks. No test-only endpoints. No hardcoded expected counts.
 """
 
@@ -59,10 +59,10 @@ FABRIC_AVAILABILITY_FIELDS = {"identity", "collaboration", "operations", "data"}
 
 @pytest.mark.asyncio
 async def test_status_returns_200():
-    """GET /api/maestra/status returns HTTP 200."""
+    """GET /api/mai/status returns HTTP 200."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     assert resp.status_code == 200, (
         f"Expected 200, got {resp.status_code}: {resp.text}"
     )
@@ -73,7 +73,7 @@ async def test_status_returns_valid_json():
     """Response is valid JSON."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     assert isinstance(data, dict), f"Expected JSON object, got {type(data)}"
 
@@ -83,12 +83,12 @@ async def test_status_has_all_required_fields():
     """Response contains all required top-level fields per spec."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     missing = REQUIRED_TOP_LEVEL_FIELDS - set(data.keys())
     assert not missing, (
         f"Missing required fields: {missing}. "
-        f"User would see an incomplete Maestra status response."
+        f"User would see an incomplete Mai status response."
     )
 
 
@@ -97,11 +97,11 @@ async def test_status_module_field_is_aod():
     """module field must be 'aod'."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     assert data["module"] == "aod", (
         f"Expected module='aod', got module='{data.get('module')}'. "
-        f"Maestra would misidentify this module."
+        f"Mai would misidentify this module."
     )
 
 
@@ -110,11 +110,11 @@ async def test_status_healthy_is_boolean():
     """healthy field must be a boolean."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     assert isinstance(data["healthy"], bool), (
         f"Expected healthy to be bool, got {type(data['healthy']).__name__}={data['healthy']}. "
-        f"Maestra needs a boolean to make orchestration decisions."
+        f"Mai needs a boolean to make orchestration decisions."
     )
 
 
@@ -124,11 +124,11 @@ async def test_status_tenant_id_matches_request():
     test_tenant = "meridian"
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": test_tenant})
+        resp = await client.get("/api/mai/status", params={"tenant_id": test_tenant})
     data = resp.json()
     assert data["tenant_id"] == test_tenant, (
         f"Expected tenant_id='{test_tenant}', got '{data.get('tenant_id')}'. "
-        f"Maestra would associate this status with the wrong tenant."
+        f"Mai would associate this status with the wrong tenant."
     )
 
 
@@ -138,15 +138,15 @@ async def test_status_response_time_under_500ms():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Warmup: establish DB pool (cold start is infrastructure, not endpoint latency)
-        await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        await client.get("/api/mai/status", params={"tenant_id": "meridian"})
         # Measure warm response
         start = time.monotonic()
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
         elapsed_ms = (time.monotonic() - start) * 1000
     assert resp.status_code == 200
     assert elapsed_ms < 500, (
         f"Response took {elapsed_ms:.0f}ms, must be < 500ms. "
-        f"Maestra status checks must be fast for orchestration loops."
+        f"Mai status checks must be fast for orchestration loops."
     )
 
 
@@ -159,12 +159,12 @@ async def test_status_discovery_phase_is_valid():
     """discovery_phase must be one of: pending, running, complete."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     phase = data["discovery_phase"]
     assert phase in VALID_DISCOVERY_PHASES, (
         f"discovery_phase='{phase}' not in {VALID_DISCOVERY_PHASES}. "
-        f"Maestra can't interpret this phase value."
+        f"Mai can't interpret this phase value."
     )
 
 
@@ -177,7 +177,7 @@ async def test_status_systems_discovered_structure():
     """systems_discovered must have count (int) and list (list)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     sd = data["systems_discovered"]
     assert "count" in sd and "list" in sd, (
@@ -195,7 +195,7 @@ async def test_status_shadows_detected_structure():
     """shadows_detected must have count (int) and list (list)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     sh = data["shadows_detected"]
     assert "count" in sh and "list" in sh, (
@@ -213,7 +213,7 @@ async def test_status_governance_items_structure():
     """governance_items must have count (int) and items (list)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     gi = data["governance_items"]
     assert "count" in gi and "items" in gi, (
@@ -231,7 +231,7 @@ async def test_status_fabric_availability_structure():
     """fabric_availability must have identity, collaboration, operations, data — all boolean."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     data = resp.json()
     fa = data["fabric_availability"]
     missing = FABRIC_AVAILABILITY_FIELDS - set(fa.keys())
@@ -254,7 +254,7 @@ async def test_status_unknown_tenant_returns_pending():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get(
-            "/api/maestra/status",
+            "/api/mai/status",
             params={"tenant_id": "nonexistent_tenant_xyz_999"},
         )
     assert resp.status_code == 200
@@ -273,7 +273,7 @@ async def test_status_requires_tenant_id():
     """Missing tenant_id query parameter returns 422."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/maestra/status")
+        resp = await client.get("/api/mai/status")
     assert resp.status_code == 422, (
         f"Expected 422 for missing tenant_id, got {resp.status_code}: {resp.text}"
     )
@@ -288,8 +288,8 @@ async def test_status_idempotent():
     """Two consecutive calls return identical results (no non-determinism)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp1 = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
-        resp2 = await client.get("/api/maestra/status", params={"tenant_id": "meridian"})
+        resp1 = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
+        resp2 = await client.get("/api/mai/status", params={"tenant_id": "meridian"})
     assert resp1.json() == resp2.json(), (
         "Two consecutive calls returned different results — non-deterministic endpoint. "
         "CLAUDE.md B14 requires identical results on repeated runs."

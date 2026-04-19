@@ -347,9 +347,9 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
           hierarchical: {
             enabled: true,
             direction: 'LR',
-            levelSeparation: 120,
-            nodeSpacing: 65,
-            treeSpacing: 75,
+            levelSeparation: 210,
+            nodeSpacing: 95,
+            treeSpacing: 110,
             sortMethod: 'directed',
           },
         },
@@ -357,9 +357,9 @@ function getLayoutOptions(layout: LayoutKey): Partial<Options> {
           enabled: true,
           hierarchicalRepulsion: {
             centralGravity: 0.0,
-            springLength: 100,
+            springLength: 150,
             springConstant: 0.01,
-            nodeDistance: 70,
+            nodeDistance: 110,
           },
           stabilization: { iterations: 100 },
         },
@@ -559,6 +559,7 @@ export default function Discovery() {
 
         const network = new Network(containerRef.current!, { nodes, edges }, options)
         networkRef.current = network
+        ;(window as any).__discovery = { network, nodes, edges }
 
         // After stabilization: disable physics, then fit on the NEXT draw frame
         // so the canvas has final node positions before we calculate the viewport.
@@ -569,6 +570,25 @@ export default function Discovery() {
           const positions = network.getPositions()
           network.setOptions({ physics: { enabled: false } })
           setPhysicsEnabled(false)
+          // Hierarchical layout sets body.nodes[id].options.fixed.x (or .y) = true
+          // directly on live node objects. DataSet.update doesn't reach those,
+          // so flip the flags on the network body to allow free drag on both axes.
+          const body = (network as any).body?.nodes || {}
+          allNodes.forEach((n) => {
+            const bn = body[n.id as string]
+            if (bn?.options?.fixed) {
+              bn.options.fixed.x = false
+              bn.options.fixed.y = false
+            }
+          })
+          // Shift the tenant hub further left from the observation planes
+          const hubPos = positions['aod']
+          const planeX = positions['plane-discovery']?.x
+          if (hubPos && planeX !== undefined) {
+            const extra = 90
+            network.moveNode('aod', hubPos.x - extra, hubPos.y)
+            positions['aod'] = { x: hubPos.x - extra, y: hubPos.y }
+          }
           // Compute callout position under observation plane nodes
           const planeNodeIds = ['plane-discovery', 'plane-idp', 'plane-cmdb', 'plane-cloud', 'plane-network', 'plane-finance', 'plane-endpoint']
           const planePositions = planeNodeIds.map(id => positions[id]).filter(Boolean)
@@ -696,6 +716,16 @@ export default function Discovery() {
         net.setOptions({ physics: { enabled: false } })
         setPhysicsEnabled(false)
       }
+      // Release rank-axis lock on live node objects (hierarchical layout sets
+      // body.nodes[id].options.fixed.x/y directly; DataSet.update won't reach them)
+      const body = (net as any).body?.nodes || {}
+      allNodesRef.current.forEach((n) => {
+        const bn = body[n.id as string]
+        if (bn?.options?.fixed) {
+          bn.options.fixed.x = false
+          bn.options.fixed.y = false
+        }
+      })
       net.once('afterDrawing', () => {
         net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } })
       })

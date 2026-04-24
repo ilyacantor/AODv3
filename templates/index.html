@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=29">
+    <link rel="stylesheet" href="/static/css/main.css?v=31">
 </head>
 <body>
     <header>
@@ -30,6 +30,7 @@
                 <span class="timing-label">Last Run:</span>
                 <span class="timing-value" id="timingTotal">-</span>s
             </div>
+            <button class="btn-help" id="consoleGuideBtn" title="User guide" onclick="showUserGuidePage()" aria-label="User guide">?</button>
             <button class="btn-refresh" id="refreshBtn" title="Refresh page"><span>↻</span> Refresh</button>
         </div>
     </header>
@@ -58,56 +59,99 @@
         </div>
     </div>
 
+    <div id="userGuideTabContent" class="main-tab-content">
+        <main class="container user-guide-page">
+            <button class="guide-back" onclick="showLastTab()">← Back</button>
+            <h2 class="user-guide-page-title">User Guide</h2>
+
+            <h3>Console</h3>
+
+            <h4>What This Tab Does</h4>
+            <p>The Console is your command center for running asset discovery. Here you fetch data from various sources and process it through AOD's discovery engine to build a complete inventory of your organization's software assets.</p>
+
+            <h4>How Discovery Works</h4>
+            <p>AOD uses a <strong>3-Tier Evidence System</strong> to collect and rank signals from multiple sources — identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories. It then correlates these signals to identify unique applications and determine how they connect through fabric planes.</p>
+
+            <h4>3-Tier Evidence Confidence</h4>
+            <ul>
+                <li><strong>Tier 1 (0.95 confidence):</strong> Direct fabric plane catalog crawl — authoritative evidence from plane admin APIs (MuleSoft, Kong, Snowflake).</li>
+                <li><strong>Tier 2 (0.70-0.90 confidence):</strong> Observation plane signals — network traffic, cloud inventory, finance records, OAuth grants.</li>
+                <li><strong>Tier 3 (0.30-0.50 confidence):</strong> Category-based inference — last resort, explicitly flagged as hypothesis requiring investigation.</li>
+            </ul>
+
+            <h4>Key Concepts</h4>
+            <ul>
+                <li><strong>Tenant:</strong> Your organization or business unit. Each tenant has its own isolated data.</li>
+                <li><strong>Snapshot:</strong> A point-in-time collection of discovery data from Farm (test data) or production sources.</li>
+                <li><strong>Discovery Run:</strong> A single execution of the discovery pipeline that processes a snapshot into cataloged assets.</li>
+            </ul>
+
+            <h4>Lifecycle Metrics</h4>
+            <ul>
+                <li><strong>Ingested:</strong> Raw evidence collected from discovery sources (DNS, network, IdP, etc).</li>
+                <li><strong>Validated:</strong> Observations that passed format checks and are ready for processing.</li>
+                <li><strong>Rejected:</strong> Observations that failed validation — click to see why.</li>
+                <li><strong>Cataloged:</strong> Final confirmed assets admitted to your catalog.</li>
+            </ul>
+
+            <h4>Classifications</h4>
+            <ul>
+                <li><strong>Shadow:</strong> Assets in use but NOT governed — no SSO, not in CMDB. These are security blind spots.</li>
+                <li><strong>Zombie:</strong> Assets that are governed but inactive for 90+ days — potential cost savings.</li>
+                <li><strong>Security Risks:</strong> Identity gaps, shadow spending, and data conflicts requiring attention.</li>
+                <li><strong>Governance:</strong> CMDB coverage gaps, ownership issues, and duplicate records.</li>
+            </ul>
+
+            <div class="guide-tip">
+                <strong>Tip:</strong> Click any metric card to drill down and see the specific assets that make up that count.
+            </div>
+
+            <hr class="guide-section-divider">
+            <h3>Triage</h3>
+
+            <h4>What This Tab Does</h4>
+            <p>The Triage console is where you make decisions about discovered assets. AOD surfaces issues that need human judgment before assets can be safely connected to your integration platform (AAM). Think of it as a security checkpoint, with decisions informed by evidence confidence.</p>
+
+            <h4>How Evidence Tiers Affect Triage</h4>
+            <p>The 3-tier evidence system directly impacts which workqueue assets land in:</p>
+            <ul>
+                <li><strong>Tier 1 Evidence (0.95):</strong> High-confidence classifications rarely need triage. Direct fabric plane confirmation means AAM can auto-connect.</li>
+                <li><strong>Tier 2 Evidence (0.70-0.90):</strong> Good confidence from observation planes. May route to "Judgment Required" for validation before connection.</li>
+                <li><strong>Tier 3 Evidence (0.30-0.50):</strong> Low-confidence inferences always require human review. These appear in "Blocking" until validated.</li>
+            </ul>
+
+            <h4>The Three Workqueues</h4>
+            <ul>
+                <li><strong>Blocking — Cannot Connect:</strong> Critical issues that prevent automatic connection. Includes assets with identity gaps, unaccounted spending, conflicting data, or Tier 3 evidence only. AAM will not connect these until resolved.</li>
+                <li><strong>Judgment Required:</strong> Assets that could connect but need human review first. Includes zombies (inactive but still licensed), duplicates, ambiguous classifications, and assets with multiple conflicting pipes. You decide: keep, retire, or investigate further.</li>
+                <li><strong>Informational — Non-Blocking:</strong> Minor issues that don't prevent connection but should be acknowledged. CMDB gaps, missing ownership, governance hygiene items. These can be batch-acknowledged.</li>
+            </ul>
+
+            <h4>Available Actions</h4>
+            <ul>
+                <li><strong>Sanction:</strong> Approve a shadow IT asset for official use. This transitions it from "ungoverned" to "approved" status, allowing AAM to connect.</li>
+                <li><strong>Ban:</strong> Explicitly block an asset. Users should stop using it, and AAM will never connect to it. Use for security risks or policy violations.</li>
+                <li><strong>Deprovision:</strong> Retire a zombie asset. Confirms it's no longer needed and can be removed from licenses and access lists.</li>
+                <li><strong>Assign:</strong> Route an item to a specific team member for investigation. Useful when you need more information before deciding.</li>
+                <li><strong>Defer:</strong> Postpone a decision for a specified number of days. The item will reappear after the deferral period.</li>
+                <li><strong>Acknowledge:</strong> Mark informational items as seen. Confirms you're aware of the issue without taking action.</li>
+            </ul>
+
+            <h4>How Triage Affects AAM</h4>
+            <p>Every asset AOD discovers is sent to AAM (Adaptive API Mesh) as a "Connection Candidate." However, assets with blocking findings are flagged as <strong>inventory_only</strong> — AAM receives them for visibility but will not attempt to connect. Once you resolve the blocking issue (Sanction, Ban, or Override), the asset becomes <strong>provision-ready</strong>.</p>
+
+            <div class="guide-warning">
+                <strong>Important:</strong> Triage actions are run-scoped. Each discovery run creates a fresh set of assets. Actions taken on one run do not automatically carry forward to future runs.
+            </div>
+
+            <div class="guide-tip">
+                <strong>Tip:</strong> Use the batch "Acknowledge Selected" feature in the Informational section to quickly clear low-priority items.
+            </div>
+        </main>
+    </div>
+
     <div id="discoveryTabContent" class="main-tab-content">
     <main class="container">
-        <div class="user-guide" id="consoleGuide">
-            <div class="user-guide-header" onclick="toggleUserGuide('consoleGuide')">
-                <span class="user-guide-icon">▶</span>
-                <span>User Guide: Console</span>
-            </div>
-            <div class="user-guide-content">
-                <h4>What This Tab Does</h4>
-                <p>The Console is your command center for running asset discovery. Here you fetch data from various sources and process it through AOD's discovery engine to build a complete inventory of your organization's software assets.</p>
-                
-                <h4>How Discovery Works</h4>
-                <p>AOD uses a <strong>3-Tier Evidence System</strong> to collect and rank signals from multiple sources — identity providers (Okta, Azure AD), expense systems, browser telemetry, network logs, CMDBs, and cloud inventories. It then correlates these signals to identify unique applications and determine how they connect through fabric planes.</p>
-                
-                <h4>3-Tier Evidence Confidence</h4>
-                <ul>
-                    <li><strong>Tier 1 (0.95 confidence):</strong> Direct fabric plane catalog crawl — authoritative evidence from plane admin APIs (MuleSoft, Kong, Snowflake).</li>
-                    <li><strong>Tier 2 (0.70-0.90 confidence):</strong> Observation plane signals — network traffic, cloud inventory, finance records, OAuth grants.</li>
-                    <li><strong>Tier 3 (0.30-0.50 confidence):</strong> Category-based inference — last resort, explicitly flagged as hypothesis requiring investigation.</li>
-                </ul>
-                
-                <h4>Key Concepts</h4>
-                <ul>
-                    <li><strong>Tenant:</strong> Your organization or business unit. Each tenant has its own isolated data.</li>
-                    <li><strong>Snapshot:</strong> A point-in-time collection of discovery data from Farm (test data) or production sources.</li>
-                    <li><strong>Discovery Run:</strong> A single execution of the discovery pipeline that processes a snapshot into cataloged assets.</li>
-                </ul>
-                
-                <h4>Lifecycle Metrics</h4>
-                <ul>
-                    <li><strong>Ingested:</strong> Raw evidence collected from discovery sources (DNS, network, IdP, etc).</li>
-                    <li><strong>Validated:</strong> Observations that passed format checks and are ready for processing.</li>
-                    <li><strong>Rejected:</strong> Observations that failed validation — click to see why.</li>
-                    <li><strong>Cataloged:</strong> Final confirmed assets admitted to your catalog.</li>
-                </ul>
-                
-                <h4>Classifications</h4>
-                <ul>
-                    <li><strong>Shadow:</strong> Assets in use but NOT governed — no SSO, not in CMDB. These are security blind spots.</li>
-                    <li><strong>Zombie:</strong> Assets that are governed but inactive for 90+ days — potential cost savings.</li>
-                    <li><strong>Security Risks:</strong> Identity gaps, shadow spending, and data conflicts requiring attention.</li>
-                    <li><strong>Governance:</strong> CMDB coverage gaps, ownership issues, and duplicate records.</li>
-                </ul>
-                
-                <div class="guide-tip">
-                    <strong>Tip:</strong> Click any metric card to drill down and see the specific assets that make up that count.
-                </div>
-            </div>
-        </div>
-        
         <!-- ═══ Console Top Row: Obs Sources | Results ═══ -->
         <div class="console-top-row">
 
@@ -473,53 +517,6 @@
     
     <div id="triageTabContent" class="main-tab-content">
         <main class="container">
-            <div class="user-guide" id="triageGuide">
-                <div class="user-guide-header" onclick="toggleUserGuide('triageGuide')">
-                    <span class="user-guide-icon">▶</span>
-                    <span>User Guide: Triage</span>
-                </div>
-                <div class="user-guide-content">
-                    <h4>What This Tab Does</h4>
-                    <p>The Triage console is where you make decisions about discovered assets. AOD surfaces issues that need human judgment before assets can be safely connected to your integration platform (AAM). Think of it as a security checkpoint, with decisions informed by evidence confidence.</p>
-                    
-                    <h4>How Evidence Tiers Affect Triage</h4>
-                    <p>The 3-tier evidence system directly impacts which workqueue assets land in:</p>
-                    <ul>
-                        <li><strong>Tier 1 Evidence (0.95):</strong> High-confidence classifications rarely need triage. Direct fabric plane confirmation means AAM can auto-connect.</li>
-                        <li><strong>Tier 2 Evidence (0.70-0.90):</strong> Good confidence from observation planes. May route to "Judgment Required" for validation before connection.</li>
-                        <li><strong>Tier 3 Evidence (0.30-0.50):</strong> Low-confidence inferences always require human review. These appear in "Blocking" until validated.</li>
-                    </ul>
-                    
-                    <h4>The Three Workqueues</h4>
-                    <ul>
-                        <li><strong>Blocking — Cannot Connect:</strong> Critical issues that prevent automatic connection. Includes assets with identity gaps, unaccounted spending, conflicting data, or Tier 3 evidence only. AAM will not connect these until resolved.</li>
-                        <li><strong>Judgment Required:</strong> Assets that could connect but need human review first. Includes zombies (inactive but still licensed), duplicates, ambiguous classifications, and assets with multiple conflicting pipes. You decide: keep, retire, or investigate further.</li>
-                        <li><strong>Informational — Non-Blocking:</strong> Minor issues that don't prevent connection but should be acknowledged. CMDB gaps, missing ownership, governance hygiene items. These can be batch-acknowledged.</li>
-                    </ul>
-                    
-                    <h4>Available Actions</h4>
-                    <ul>
-                        <li><strong>Sanction:</strong> Approve a shadow IT asset for official use. This transitions it from "ungoverned" to "approved" status, allowing AAM to connect.</li>
-                        <li><strong>Ban:</strong> Explicitly block an asset. Users should stop using it, and AAM will never connect to it. Use for security risks or policy violations.</li>
-                        <li><strong>Deprovision:</strong> Retire a zombie asset. Confirms it's no longer needed and can be removed from licenses and access lists.</li>
-                        <li><strong>Assign:</strong> Route an item to a specific team member for investigation. Useful when you need more information before deciding.</li>
-                        <li><strong>Defer:</strong> Postpone a decision for a specified number of days. The item will reappear after the deferral period.</li>
-                        <li><strong>Acknowledge:</strong> Mark informational items as seen. Confirms you're aware of the issue without taking action.</li>
-                    </ul>
-                    
-                    <h4>How Triage Affects AAM</h4>
-                    <p>Every asset AOD discovers is sent to AAM (Adaptive API Mesh) as a "Connection Candidate." However, assets with blocking findings are flagged as <strong>inventory_only</strong> — AAM receives them for visibility but will not attempt to connect. Once you resolve the blocking issue (Sanction, Ban, or Override), the asset becomes <strong>provision-ready</strong>.</p>
-                    
-                    <div class="guide-warning">
-                        <strong>Important:</strong> Triage actions are run-scoped. Each discovery run creates a fresh set of assets. Actions taken on one run do not automatically carry forward to future runs.
-                    </div>
-                    
-                    <div class="guide-tip">
-                        <strong>Tip:</strong> Use the batch "Acknowledge Selected" feature in the Informational section to quickly clear low-priority items.
-                    </div>
-                </div>
-            </div>
-            
             <div class="triage-header">
                 <div>
                     <h2 class="section-title" style="margin-bottom:0.25rem;">Gatekeeper Console</h2>
@@ -930,6 +927,6 @@
 
     <script src="/static/js/tour.js?v=1"></script>
     <script src="/static/js/console-redesign.js?v=3"></script>
-    <script src="/static/js/app.js?v=51"></script>
+    <script src="/static/js/app.js?v=52"></script>
 </body>
 </html>

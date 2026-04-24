@@ -94,7 +94,23 @@
                 guide.classList.toggle('expanded');
             }
         }
-        
+
+        let _guideReturnTab = 'topology';
+
+        function showUserGuidePage() {
+            const active = document.querySelector('.header-nav-tab.active');
+            if (active) _guideReturnTab = active.dataset.tab;
+            document.querySelectorAll('.header-nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+            const target = document.getElementById('userGuideTabContent');
+            if (target) target.classList.add('active');
+        }
+
+        function showLastTab() {
+            const btn = document.querySelector(`.header-nav-tab[data-tab="${_guideReturnTab}"]`);
+            if (btn) btn.click();
+        }
+
         function showToast(message, type = 'error', persistent = false) {
             const existing = document.getElementById('app-toast');
             if (existing) existing.remove();

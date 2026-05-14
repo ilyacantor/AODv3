@@ -67,3 +67,6 @@ data/
 
 # Windows metadata
 *.Zone.Identifier
+
+# Test artifacts
+test-results/

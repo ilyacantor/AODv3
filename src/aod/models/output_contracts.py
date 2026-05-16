@@ -990,7 +990,7 @@ class RunLog(BaseModel):
     """
     aod_discovery_id: str
     tenant_id: str
-    entity_id: Optional[str] = Field(default=None, description="Business entity key (e.g. 'meridian'). Set from Console request.")
+    entity_id: Optional[str] = Field(default=None, description="Business entity key (e.g. 'finops-demo-co'). Set from Console request.")
     status: RunStatus
     started_at: datetime
     completed_at: Optional[datetime] = None

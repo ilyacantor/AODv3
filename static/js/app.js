@@ -3815,8 +3815,10 @@ ${JSON.stringify(technicalReport, null, 2)}
                 await populateTenantsFromFarm(true);
                 loadDiscoveryIframe();
 
-                // Auto-trigger handoff to AAM after successful discovery
-                if (result.status === 'completed' && typeof exportToAAM === 'function') {
+                // Auto-trigger handoff to AAM after successful discovery.
+                // Discovery success statuses are completed_with_results /
+                // completed_no_results — match the family, not a bare 'completed'.
+                if (result.status && result.status.startsWith('completed') && typeof exportToAAM === 'function') {
                     console.log('[AOD] Discovery completed — auto-triggering handoff to AAM');
                     await exportToAAM();
                 }

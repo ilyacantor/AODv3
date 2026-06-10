@@ -3340,6 +3340,9 @@ ${JSON.stringify(technicalReport, null, 2)}
                 }
 
                 const tenants = tenantsData.tenants || [];
+                // I2/I5: option VALUES stay machine tenant UUIDs; option TEXT
+                // shows the entity business key (pre-split rows label==tenant).
+                const entityLabels = tenantsData.entity_labels || {};
 
                 // Clear dropdown and add placeholder
                 select.innerHTML = '<option value="">Select a tenant...</option>';
@@ -3365,10 +3368,11 @@ ${JSON.stringify(technicalReport, null, 2)}
                 tenants.forEach(t => {
                     const opt = document.createElement('option');
                     opt.value = t;
+                    const label = entityLabels[t] || t;
                     if (t === latestTenant) {
-                        opt.textContent = `★ ${t} (Latest)`;
+                        opt.textContent = `★ ${label} (Latest)`;
                     } else {
-                        opt.textContent = t;
+                        opt.textContent = label;
                     }
                     select.appendChild(opt);
                 });

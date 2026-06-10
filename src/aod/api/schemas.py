@@ -84,9 +84,15 @@ class SnapshotListResponse(BaseModel):
 
 
 class TenantListResponse(BaseModel):
-    """Response for tenant listing"""
+    """Response for tenant listing.
+
+    tenants = machine tenant UUIDs (option values). entity_labels maps each
+    tenant_id to its displayed business-key entity_id (I2/I5: tenant is
+    machine-only, entity is what operators see). Pre-identity-split snapshots
+    have entity==tenant, so their label equals the tenant value."""
     tenants: list[str]
     count: int
+    entity_labels: dict[str, str] = {}
 
 
 class ResyncRequest(BaseModel):

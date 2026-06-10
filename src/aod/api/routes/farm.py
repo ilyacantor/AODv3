@@ -59,7 +59,15 @@ async def list_farm_tenants():
     if result.success:
         snapshots = result.snapshots or []
         tenants = sorted(set(s.get("tenant_id", "") for s in snapshots if s.get("tenant_id")))
-        return TenantListResponse(tenants=tenants, count=len(tenants))
+        # I2/I5: operators see the entity business key, never the tenant UUID.
+        # Farm's snapshot rows carry entity_id (pre-split rows: entity==tenant).
+        entity_labels = {}
+        for s_row in snapshots:
+            t = s_row.get("tenant_id", "")
+            if t and t not in entity_labels:
+                entity_labels[t] = s_row.get("entity_id") or t
+        return TenantListResponse(tenants=tenants, count=len(tenants),
+                                  entity_labels=entity_labels)
 
     return _farm_error_response(result.error_type, result.error)
 

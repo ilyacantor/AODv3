@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 from aod.api.routes import router
-from aod.db.database import get_db_direct
+from aod.db.database import get_db_direct, close_db
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,12 @@ async def shutdown():
     if farm_client:
         await farm_client.close()
         logger.info("shutdown.farm_client_closed")
+
+    # Release DB pool connections so the Supabase pooler reclaims the client
+    # slots immediately instead of leaving orphaned sessions that accumulate
+    # against the per-tenant cap across restarts/reloads.
+    await close_db()
+    logger.info("shutdown.db_pool_closed")
 
 
 @app.get("/health")

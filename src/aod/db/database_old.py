@@ -145,6 +145,21 @@ async def get_db_direct() -> "Database":
     return _db_instance
 
 
+async def close_db() -> None:
+    """Close the singleton DB pool. Call on app shutdown.
+
+    Without this, an unclosed asyncpg pool's connections linger on the
+    Supabase pooler after the worker stops. In session mode they hold client
+    slots against the per-tenant cap (pool_size 15) until the pooler reaps
+    them, so repeated restarts/reloads accumulate orphans and new runs fail
+    with EMAXCONNSESSION. Closing on shutdown releases them immediately.
+    """
+    global _db_instance
+    if _db_instance is not None:
+        await _db_instance.close()
+        _db_instance = None
+
+
 class Database:
     """PostgreSQL database for AOD persistence"""
     
@@ -155,7 +170,16 @@ class Database:
     async def get_pool(self) -> asyncpg.Pool:
         """Get database connection pool"""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
+            self._pool = await asyncpg.create_pool(
+                self.db_url,
+                min_size=1,
+                max_size=10,
+                # statement_cache_size=0 makes asyncpg safe behind a
+                # transaction-mode pooler (Supavisor :6543), which multiplexes
+                # server connections and breaks on cached named prepared
+                # statements. Harmless in session mode.
+                statement_cache_size=0,
+            )
         return self._pool
     
     async def close(self):

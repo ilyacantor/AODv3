@@ -21,6 +21,7 @@ from .database_old import (
     Database,
     get_db,
     get_db_direct,
+    close_db,
 )
 
 # Provide aliases
@@ -37,4 +38,5 @@ __all__ = [
     "Database",
     "get_db",
     "get_db_direct",
+    "close_db",
 ]

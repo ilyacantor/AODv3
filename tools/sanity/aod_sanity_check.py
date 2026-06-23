@@ -38,7 +38,7 @@ def find_repo_root() -> Path:
     """Find repository root by looking for known markers."""
     current = Path(__file__).resolve().parent
     for _ in range(10):
-        if (current / ".git").exists() or (current / "pyproject.toml").exists() or (current / "replit.md").exists():
+        if (current / ".git").exists() or (current / "pyproject.toml").exists():
             return current
         parent = current.parent
         if parent == current:
